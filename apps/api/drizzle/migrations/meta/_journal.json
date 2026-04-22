@@ -43,6 +43,13 @@
       "when": 1776852113454,
       "tag": "0005_majestic_nightcrawler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776852890565,
+      "tag": "0006_safe_risque",
+      "breakpoints": true
     }
   ]
 }

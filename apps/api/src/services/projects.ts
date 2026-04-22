@@ -7,6 +7,8 @@ import { getDb } from '../db/client.js';
 import { provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
 import { projects, projectMembers, type Project, type NewProject } from '../db/schema.js';
 import { log } from '../lib/logger.js';
+import { getTierForOwner } from './billing.js';
+import { assertProjectCreateAllowed } from './tiers.js';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -40,6 +42,9 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       slug,
     });
   }
+
+  const tier = await getTierForOwner(input.ownerId);
+  await assertProjectCreateAllowed(input.ownerId, tier);
 
   const projectId = newId('p');
   const row: NewProject = {

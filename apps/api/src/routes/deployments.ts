@@ -14,6 +14,7 @@ import {
 } from '../services/deployments.js';
 import { audit, hashIp } from '../services/audit.js';
 import { applySchema, type SchemaDef } from '../services/schema-apply.js';
+import { assertFunctionCountAllowed } from '../services/tiers.js';
 import { log } from '../lib/logger.js';
 
 type AppEnv = {
@@ -109,6 +110,12 @@ deploymentsRouter.post('/v1/projects/:id/deployments', async (c) => {
   const projectId = c.req.param('id');
   const user = c.get('user');
   const apiKeyId = c.get('apiKeyId');
+
+  if (parsed.data.functionCount != null) {
+    // Default free-tier cap. Once billing wires tier sync from Polar.sh,
+    // this reads projects.tier / subscriptions.tier for the owning account.
+    assertFunctionCountAllowed(parsed.data.functionCount, 'free');
+  }
 
   const deployment = await createDeployment({
     projectId,

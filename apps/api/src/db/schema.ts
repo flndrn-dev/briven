@@ -171,6 +171,35 @@ export const projectMembers = pgTable(
   }),
 );
 
+/* ─── billing / subscriptions ─────────────────────────────────────── */
+export const subscriptionStatus = ['trialing', 'active', 'past_due', 'canceled'] as const;
+export type SubscriptionStatus = (typeof subscriptionStatus)[number];
+
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: id(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // External id at Polar.sh — the source of truth.
+    polarSubscriptionId: text('polar_subscription_id'),
+    polarCustomerId: text('polar_customer_id'),
+    tier: text('tier').$type<ProjectTier>().notNull().default('free'),
+    status: text('status').$type<SubscriptionStatus>().notNull().default('active'),
+    currentPeriodEnd: ts('current_period_end'),
+    canceledAt: ts('canceled_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    ownerIdx: uniqueIndex('subscriptions_owner_idx').on(t.ownerId),
+    polarIdx: index('subscriptions_polar_idx').on(t.polarSubscriptionId),
+  }),
+);
+
+export type Subscription = typeof subscriptions.$inferSelect;
+
 /* ─── project_invitations ────────────────────────────────────────── */
 export const projectInvitations = pgTable(
   'project_invitations',
