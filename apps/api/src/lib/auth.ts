@@ -39,6 +39,13 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: 'briven',
     useSecureCookies: env.BRIVEN_ENV === 'production',
+    // `.briven.cloud` lets the session cookie set on api.briven.cloud be
+    // read by briven.cloud and every other subdomain (ws, docs, etc.).
+    // In non-prod the browser won't accept `.localhost`, so we skip it.
+    crossSubDomainCookies:
+      env.BRIVEN_ENV === 'production'
+        ? { enabled: true, domain: '.briven.cloud' }
+        : { enabled: false },
     defaultCookieAttributes: {
       sameSite: 'lax',
       httpOnly: true,
