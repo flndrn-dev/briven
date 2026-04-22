@@ -134,6 +134,7 @@ export async function runDeploy(argv: readonly string[]): Promise<number> {
           schemaSnapshot: nextSchema,
           functionCount: functions.count,
           functionNames: functions.names,
+          bundle: functions.bundle,
         },
       },
     );

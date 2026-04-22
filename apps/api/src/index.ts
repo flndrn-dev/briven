@@ -11,6 +11,7 @@ import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
 import { deploymentsRouter } from './routes/deployments.js';
 import { healthRouter } from './routes/health.js';
+import { internalRouter } from './routes/internal.js';
 import { invokeRouter } from './routes/invoke.js';
 import { meRouter } from './routes/me.js';
 import { membersRouter } from './routes/project-members.js';
@@ -51,6 +52,7 @@ app.route('/', apiKeysRouter);
 app.route('/', membersRouter);
 app.route('/', deploymentsRouter);
 app.route('/', invokeRouter);
+app.route('/', internalRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);

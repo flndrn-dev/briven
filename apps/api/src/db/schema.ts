@@ -1,9 +1,10 @@
 /**
  * Control-plane meta-DB schema.
  *
- * Per CLAUDE.md §8.1: every table has `id` (ULID varchar(26) PK — but prefixed
- * in practice, so varchar(30) for a prefix + underscore + 26-char ULID),
- * `created_at`, `updated_at`, and `deleted_at` (soft-delete).
+ * Per CLAUDE.md §8.1: every table has `id` (ULID PK), `created_at`,
+ * `updated_at`, and `deleted_at` (soft-delete). The id column is `text` —
+ * briven-managed rows store prefixed ULIDs (28 chars), Better Auth tables
+ * store its 32-char nanoids, both fit cleanly without a length cap.
  *
  * Better Auth also reads / writes `users`, `accounts`, `sessions`, `verifications`
  * via its drizzle adapter; schema here matches Better Auth's expected shape so
@@ -213,6 +214,11 @@ export const deployments = pgTable(
     schemaSnapshot: jsonb('schema_snapshot'),
     functionCount: varchar('function_count', { length: 12 }),
     functionNames: jsonb('function_names'),
+    // Map of `<relative path under briven/functions/>` → TS source. Runtime
+    // fetches this via the internal bundle endpoint and writes the files to
+    // a temp dir before importing. Phase 1 stores raw source; Phase 2 moves
+    // to a content-addressed tarball in MinIO once bundles exceed a few MB.
+    bundle: jsonb('bundle'),
     errorCode: text('error_code'),
     errorMessage: text('error_message'),
     startedAt: ts('started_at'),

@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 
@@ -36,6 +36,8 @@ export async function loadProjectSchema(cwd: string): Promise<SchemaDef | null> 
 export interface FunctionInfo {
   readonly names: readonly string[];
   readonly count: number;
+  /** Map of relative path → file source. Empty if no functions found. */
+  readonly bundle: Readonly<Record<string, string>>;
 }
 
 /**
@@ -49,11 +51,16 @@ export async function discoverFunctions(cwd: string): Promise<FunctionInfo> {
   try {
     await walk(dir, dir, names);
   } catch (err) {
-    if (isNotFound(err)) return { names: [], count: 0 };
+    if (isNotFound(err)) return { names: [], count: 0, bundle: {} };
     throw err;
   }
   names.sort();
-  return { names, count: names.length };
+
+  const bundle: Record<string, string> = {};
+  for (const rel of names) {
+    bundle[rel] = await readFile(resolve(dir, rel), 'utf8');
+  }
+  return { names, count: names.length, bundle };
 }
 
 async function walk(dir: string, root: string, out: string[]): Promise<void> {

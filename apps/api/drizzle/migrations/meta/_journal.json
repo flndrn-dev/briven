@@ -15,6 +15,13 @@
       "when": 1776835475276,
       "tag": "0001_wealthy_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776835881574,
+      "tag": "0002_clammy_deadpool",
+      "breakpoints": true
     }
   ]
 }

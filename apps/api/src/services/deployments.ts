@@ -17,6 +17,7 @@ export interface CreateDeploymentInput {
   schemaSnapshot?: Record<string, unknown>;
   functionCount?: number;
   functionNames?: readonly string[];
+  bundle?: Readonly<Record<string, string>>;
 }
 
 export async function createDeployment(input: CreateDeploymentInput): Promise<Deployment> {
@@ -30,11 +31,24 @@ export async function createDeployment(input: CreateDeploymentInput): Promise<De
     schemaSnapshot: input.schemaSnapshot ?? null,
     functionCount: input.functionCount != null ? String(input.functionCount) : null,
     functionNames: input.functionNames ? [...input.functionNames] : null,
+    bundle: input.bundle ? { ...input.bundle } : null,
   };
   const db = getDb();
   const [created] = await db.insert(deployments).values(row).returning();
   if (!created) throw new Error('deployment insert returned no row');
   return created;
+}
+
+export async function getDeploymentBundle(
+  deploymentId: string,
+): Promise<Readonly<Record<string, string>> | null> {
+  const db = getDb();
+  const [row] = await db
+    .select({ bundle: deployments.bundle })
+    .from(deployments)
+    .where(eq(deployments.id, deploymentId))
+    .limit(1);
+  return (row?.bundle as Record<string, string> | null) ?? null;
 }
 
 /**

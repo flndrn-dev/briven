@@ -15,7 +15,13 @@ const envSchema = z.object({
 
   // Shared secret between apps/api (control plane) and apps/runtime.
   // Every invoke from the api carries this in `Authorization: Bearer <secret>`.
+  // The runtime reuses it the other direction when fetching bundles from the
+  // api's /v1/internal/* endpoints.
   BRIVEN_RUNTIME_SHARED_SECRET: z.string().min(32).optional(),
+
+  // Internal apps/api URL, reachable on the swarm overlay network. Used
+  // only for bundle fetches; never the public api.briven.cloud hostname.
+  BRIVEN_API_INTERNAL_URL: z.string().url().default('http://localhost:3001'),
 });
 
 export type Env = z.infer<typeof envSchema>;

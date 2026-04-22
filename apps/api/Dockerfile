@@ -18,4 +18,4 @@ COPY --from=build --chown=app:app /repo /app
 USER app
 EXPOSE 3001
 WORKDIR /app/apps/api
-CMD ["bun", "run", "src/index.ts"]
+CMD ["sh", "/app/apps/api/scripts/start.sh"]
