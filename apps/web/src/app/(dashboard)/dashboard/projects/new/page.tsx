@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { apiFetch } from '../../../../../lib/api.js';
+import { apiFetch } from '../../../../../lib/api';
 
 export const metadata = {
   title: 'new project',

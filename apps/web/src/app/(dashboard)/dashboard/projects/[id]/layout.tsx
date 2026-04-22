@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { ApiError, apiJson } from '../../../../../lib/api.js';
-import { ProjectTabs } from './project-tabs.js';
+import { ApiError, apiJson } from '../../../../../lib/api';
+import { ProjectTabs } from './project-tabs';
 
 interface Project {
   id: string;

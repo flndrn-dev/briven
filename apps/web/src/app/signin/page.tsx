@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { SignInForm } from './sign-in-form.js';
+import { SignInForm } from './sign-in-form';
 
 export const metadata = {
   title: 'sign in',

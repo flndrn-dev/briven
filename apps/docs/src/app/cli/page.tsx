@@ -1,4 +1,4 @@
-import { DocsShell } from '../../components/shell.js';
+import { DocsShell } from '../../components/shell';
 
 export const metadata = {
   title: 'cli',

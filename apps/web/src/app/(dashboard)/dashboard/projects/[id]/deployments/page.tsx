@@ -1,4 +1,4 @@
-import { apiJson } from '../../../../../../lib/api.js';
+import { apiJson } from '../../../../../../lib/api';
 
 interface Deployment {
   id: string;

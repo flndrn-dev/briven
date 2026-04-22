@@ -1,4 +1,4 @@
-import { DocsShell } from './shell.js';
+import { DocsShell } from './shell';
 
 export function ComingSoon({ title, phase }: { title: string; phase: string }) {
   return (

@@ -1,4 +1,4 @@
-import { ComingSoon } from '../../components/coming-soon.js';
+import { ComingSoon } from '../../components/coming-soon';
 
 export const metadata = { title: 'schema dsl' };
 

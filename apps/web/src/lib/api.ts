@@ -1,6 +1,6 @@
 import { cookies, headers } from 'next/headers';
 
-import { apiOrigin } from './env.js';
+import { apiOrigin } from './env';
 
 /**
  * Server-side fetch against apps/api. Forwards the incoming request's cookies

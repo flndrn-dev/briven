@@ -1,5 +1,5 @@
-import { apiJson } from '../../../../../../lib/api.js';
-import { InvokePanel } from './invoke-panel.js';
+import { apiJson } from '../../../../../../lib/api';
+import { InvokePanel } from './invoke-panel';
 
 interface Deployment {
   id: string;

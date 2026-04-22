@@ -1,8 +1,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { SignOutButton } from './sign-out-button.js';
-import { requireUser } from '../../lib/session.js';
+import { SignOutButton } from './sign-out-button';
+import { requireUser } from '../../lib/session';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();

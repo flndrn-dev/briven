@@ -1,8 +1,8 @@
 import { revalidatePath } from 'next/cache';
 
-import { apiFetch, apiJson } from '../../../../../../lib/api.js';
-import { AddMemberForm } from './add-member-form.js';
-import { MemberActions } from './member-actions.js';
+import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { AddMemberForm } from './add-member-form';
+import { MemberActions } from './member-actions';
 
 type Role = 'owner' | 'admin' | 'developer' | 'viewer';
 

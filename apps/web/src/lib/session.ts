@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { ApiError, apiFetch } from './api.js';
+import { ApiError, apiFetch } from './api';
 
 export interface SessionUser {
   id: string;

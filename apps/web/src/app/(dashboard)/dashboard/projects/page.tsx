@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { apiJson } from '../../../../lib/api.js';
+import { apiJson } from '../../../../lib/api';
 
 interface Project {
   id: string;

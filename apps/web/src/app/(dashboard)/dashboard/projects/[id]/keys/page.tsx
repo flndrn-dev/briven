@@ -1,8 +1,8 @@
 import { revalidatePath } from 'next/cache';
 
-import { apiFetch, apiJson } from '../../../../../../lib/api.js';
-import { NewKeyDialog } from './new-key-dialog.js';
-import { RevokeButton } from './revoke-button.js';
+import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { NewKeyDialog } from './new-key-dialog';
+import { RevokeButton } from './revoke-button';
 
 interface ApiKey {
   id: string;

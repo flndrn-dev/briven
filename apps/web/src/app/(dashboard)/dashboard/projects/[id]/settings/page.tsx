@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
-import { apiFetch, apiJson } from '../../../../../../lib/api.js';
-import { DeleteProjectButton } from './delete-project-button.js';
+import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { DeleteProjectButton } from './delete-project-button';
 
 interface Project {
   id: string;
