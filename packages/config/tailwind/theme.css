@@ -112,6 +112,30 @@ body {
   border-radius: var(--radius-sm);
 }
 
+/*
+ * Tailwind v4 no longer ships the default `cursor: pointer` on buttons.
+ * Re-add it platform-wide so every clickable surface (buttons, anchors,
+ * aria role=button) signals affordance. Disabled elements opt out.
+ */
+button:not(:disabled),
+a[href],
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label[for],
+select:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
