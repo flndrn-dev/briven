@@ -1,23 +1,18 @@
+node_modules
 **/node_modules
+.next
 **/.next
+.turbo
 **/.turbo
+dist
 **/dist
-**/build
-**/coverage
-**/.pnpm-store
-**/*.log
 .git
 .github
 .vscode
 .idea
 .DS_Store
-# internal-only docs — mirrors /.gitignore behaviour
-/docs
-# env files never baked into images
 .env
-.env.local
-.env.*.local
-.env.development
-.env.production
-# local runtime data
-apps/**/data
+.env.*
+docs
+apps/runtime/data
+apps/api/data
