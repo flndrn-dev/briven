@@ -5,6 +5,11 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 FROM base AS build
 WORKDIR /repo
+# next.config.ts bakes the api-rewrite destination at build time, so the
+# env var MUST be set here (not only at container runtime). For production
+# it's always api.briven.cloud; override at docker-build time if staging.
+ARG BRIVEN_API_ORIGIN=https://api.briven.cloud
+ENV BRIVEN_API_ORIGIN=${BRIVEN_API_ORIGIN}
 COPY . .
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile

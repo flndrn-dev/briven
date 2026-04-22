@@ -18,7 +18,10 @@ function getResend(): Resend {
   return _resend;
 }
 
-const FROM = env.BRIVEN_ENV === 'production' ? 'briven <auth@briven.cloud>' : 'briven dev <onboarding@resend.dev>';
+const FROM =
+  env.BRIVEN_ENV === 'production'
+    ? 'briven <noreply@briven.cloud>'
+    : 'briven dev <onboarding@resend.dev>';
 
 export async function sendMagicLink(to: string, url: string): Promise<void> {
   // In dev without a Resend key, log the link so j can click it.
