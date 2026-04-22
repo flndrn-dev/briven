@@ -44,6 +44,37 @@ export async function sendMagicLink(to: string, url: string): Promise<void> {
   }
 }
 
+export async function sendInvitation(to: string, url: string): Promise<void> {
+  if (!env.BRIVEN_RESEND_API_KEY) {
+    log.warn('invitation_logged_only', { host: new URL(url).host });
+    process.stdout.write(`\n  invitation link (dev only):\n  ${url}\n\n`);
+    return;
+  }
+  const { error } = await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: 'you were invited to a briven project',
+    html: invitationHtml(url),
+    text: invitationText(url),
+  });
+  if (error) throw new Error(`resend send failed: ${error.message}`);
+}
+
+function invitationHtml(url: string): string {
+  return shell(
+    'you were invited to a briven project',
+    `
+    <p>accept the invitation to join the project on briven. the link expires in 7 days.</p>
+    ${cta('accept invitation', url)}
+    <p class="muted">if you weren't expecting this, ignore the email — nothing happens.</p>
+  `,
+  );
+}
+
+function invitationText(url: string): string {
+  return `you were invited to a briven project\n\n${url}\n\nexpires in 7 days.`;
+}
+
 export async function sendEmailVerification(to: string, url: string): Promise<void> {
   if (!env.BRIVEN_RESEND_API_KEY) {
     log.warn('verify_email_logged_only', { host: new URL(url).host });

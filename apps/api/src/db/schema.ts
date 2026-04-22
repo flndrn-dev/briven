@@ -40,6 +40,13 @@ export const users = pgTable(
     emailVerified: boolean('email_verified').default(false).notNull(),
     name: text('name'),
     image: text('image'),
+    // Platform super-admin. Step-up auth required for every admin action
+    // (CLAUDE.md §5.4). Defaults false; j flips the bit directly in
+    // postgres for the first admin.
+    isAdmin: boolean('is_admin').default(false).notNull(),
+    // Set by an admin to freeze all sign-in attempts + deploys. Sessions
+    // are invalidated on next request.
+    suspendedAt: ts('suspended_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -163,6 +170,36 @@ export const projectMembers = pgTable(
     pk: primaryKey({ columns: [t.projectId, t.userId] }),
   }),
 );
+
+/* ─── project_invitations ────────────────────────────────────────── */
+export const projectInvitations = pgTable(
+  'project_invitations',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: text('role').$type<MemberRole>().notNull().default('developer'),
+    // SHA-256 hash of the single-use accept token; plaintext only rides
+    // in the invite email and the recipient's URL.
+    tokenHash: text('token_hash').notNull(),
+    invitedBy: text('invited_by').references(() => users.id),
+    expiresAt: ts('expires_at').notNull(),
+    acceptedAt: ts('accepted_at'),
+    revokedAt: ts('revoked_at'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    projectEmailIdx: uniqueIndex('project_invitations_project_email_idx').on(
+      t.projectId,
+      t.email,
+    ),
+    tokenIdx: uniqueIndex('project_invitations_token_idx').on(t.tokenHash),
+  }),
+);
+
+export type ProjectInvitation = typeof projectInvitations.$inferSelect;
 
 /* ─── project_env_vars ────────────────────────────────────────────── */
 export const projectEnvVars = pgTable(
