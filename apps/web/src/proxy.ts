@@ -1,20 +1,26 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-const SESSION_COOKIE = 'briven.session_token';
+// Better Auth picks the cookie name based on secure mode: in production
+// it prefixes `__Secure-` (per the RFC-6265bis host-only rules). We
+// accept either so the proxy works behind TLS in prod and HTTP in dev.
+const SESSION_COOKIE_PROD = '__Secure-briven.session_token';
+const SESSION_COOKIE_DEV = 'briven.session_token';
 
 /**
- * Request-time gating. In Next.js 16 this file replaces middleware.ts — the
- * named/default export must be `proxy`, not `middleware`. The matcher shape
- * is unchanged from 15.x.
+ * Request-time gating. In Next.js 16 this file replaces middleware.ts —
+ * the named/default export must be `proxy`, not `middleware`. Matcher
+ * shape is unchanged from 15.x.
  *
- * Gate: any path under `/dashboard` requires a Better Auth session cookie.
- * Missing cookie → 302 to /signin?next=<original-path>. We intentionally do
- * not validate the cookie here — cheap check at the edge, authoritative
- * validation happens in the page via `requireUser()` calling apps/api.
+ * Gate: any path under `/dashboard` requires a Better Auth session
+ * cookie. Missing cookie → 302 to /signin?next=<original-path>. We
+ * intentionally do not validate the cookie here — cheap check at the
+ * edge, authoritative validation happens in the page via `requireUser()`
+ * calling apps/api.
  */
 export default function proxy(req: NextRequest): NextResponse {
   const { nextUrl } = req;
-  const hasSession = req.cookies.has(SESSION_COOKIE);
+  const hasSession =
+    req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);
 
   if (!hasSession) {
     const url = nextUrl.clone();
