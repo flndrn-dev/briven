@@ -21,6 +21,7 @@ export const auth = betterAuth({
   secret: env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-insecure-fallback-change-in-prod',
   baseURL: env.BRIVEN_API_ORIGIN,
   basePath: '/v1/auth',
+  trustedOrigins: env.BRIVEN_TRUSTED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
 
   database: drizzleAdapter(getDb(), { provider: 'pg' }),
 

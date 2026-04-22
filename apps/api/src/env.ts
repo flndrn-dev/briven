@@ -50,6 +50,10 @@ const envSchema = z.object({
   // Web origin for email link callbacks.
   BRIVEN_WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
 
+  // Comma-separated list of origins Better Auth will accept as `callbackURL`.
+  // Must include every public hostname that serves the dashboard.
+  BRIVEN_TRUSTED_ORIGINS: z.string().default('http://localhost:3000'),
+
   // Runtime — apps/runtime's invoke endpoint. The shared secret must match
   // BRIVEN_RUNTIME_SHARED_SECRET on the runtime host.
   BRIVEN_RUNTIME_URL: z.string().url().default('http://localhost:3003'),
