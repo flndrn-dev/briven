@@ -1,0 +1,60 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# env
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# test
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+
+# os
+.DS_Store
+Thumbs.db
+
+# misc
+*.tsbuildinfo
+.cache/
+
+# runtime bundles (populated per-env, never checked in)
+apps/*/data/
+apps/**/data/
+
+# claude code local overrides (shared settings.json is fine to commit)
+.claude/settings.local.json
+
+# internal reference docs — never pushed to remote
+# covers /docs/ at repo root and every file + subfolder inside it
+/docs
+/docs/
+/docs/**
+/docs/**/*

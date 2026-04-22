@@ -1,0 +1,3 @@
+/* Re-export the single source of truth for brand tokens.
+   Apps that already import @briven/config/tailwind/theme.css do not need this. */
+@import "@briven/config/tailwind/theme.css";

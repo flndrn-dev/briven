@@ -1,0 +1,13 @@
+{
+  "name": "@briven/studio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "embedded data browser — mounted inside the dashboard",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'studio: phase 2 month 1 per BUILD_PLAN.md' && exit 0",
+    "build": "echo 'studio: skeleton — nothing to build yet'",
+    "lint": "echo 'studio: no source yet'",
+    "typecheck": "echo 'studio: no source yet'"
+  }
+}

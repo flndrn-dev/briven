@@ -1,0 +1,32 @@
+{
+  "name": "@briven/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "briven.cloud — marketing + dashboard",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "echo 'lint wired in phase 1'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@briven/config": "workspace:*",
+    "@briven/shared": "workspace:*",
+    "@briven/ui": "workspace:*",
+    "geist": "^1.7.0",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3"
+  }
+}

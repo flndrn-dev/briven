@@ -1,0 +1,42 @@
+{
+  "name": "@briven/svelte",
+  "version": "0.0.1",
+  "description": "Svelte stores and helpers for briven",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo 'lint wired in phase 1'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@briven/client": "workspace:*",
+    "@briven/config": "workspace:*",
+    "@briven/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flndrn-dev/briven.git",
+    "directory": "packages/client-svelte"
+  },
+  "homepage": "https://docs.briven.cloud"
+}

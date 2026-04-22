@@ -1,0 +1,13 @@
+{
+  "name": "@briven/realtime",
+  "version": "0.0.0",
+  "private": true,
+  "description": "WebSocket service for reactive queries — LISTEN/NOTIFY fan-out",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'realtime: phase 2 month 1 per BUILD_PLAN.md' && exit 0",
+    "build": "echo 'realtime: skeleton — nothing to build yet'",
+    "lint": "echo 'realtime: no source yet'",
+    "typecheck": "echo 'realtime: no source yet'"
+  }
+}

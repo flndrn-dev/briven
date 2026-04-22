@@ -1,0 +1,124 @@
+/*
+ * briven — design token source of truth.
+ *
+ * Import once per app:
+ *   @import "@briven/config/tailwind/theme.css";
+ *
+ * Never hard-code hex values in components. Never override these tokens locally.
+ * See BRAND.md §3.2 for rationale and contrast targets.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* ── Surfaces ───────────────────────────────────────────────── */
+  --color-bg: #0a0b0d;
+  --color-surface: #13151a;
+  --color-surface-raised: #1b1e25;
+  --color-surface-overlay: #232731;
+  --color-surface-inverse: #f5f7fa;
+
+  /* ── Borders ────────────────────────────────────────────────── */
+  --color-border: #2a2e36;
+  --color-border-subtle: #1e2128;
+  --color-border-strong: #3a3f4a;
+  --color-border-primary: #00e87a4d;
+
+  /* ── Text ───────────────────────────────────────────────────── */
+  --color-text: #f5f7fa;
+  --color-text-muted: #9ba3af;
+  --color-text-subtle: #6b7280;
+  --color-text-inverse: #0a0b0d;
+  --color-text-link: #00e87a;
+
+  /* ── Brand / primary ────────────────────────────────────────── */
+  --color-primary: #00e87a;
+  --color-primary-hover: #1af08a;
+  --color-primary-pressed: #00c968;
+  --color-primary-subtle: #00e87a1a;
+  --color-primary-ghost: #00e87a0d;
+
+  /* ── Semantic ───────────────────────────────────────────────── */
+  --color-success: #00e87a;
+  --color-warning: #ffb020;
+  --color-error: #ff4757;
+  --color-info: #5b9fff;
+
+  /* ── Code & logs ────────────────────────────────────────────── */
+  --color-code-bg: #0f1115;
+  --color-code-text: #e6edf3;
+  --color-code-comment: #6b7280;
+  --color-code-keyword: #ff7a9f;
+  --color-code-string: #9dffa8;
+  --color-code-number: #ffb86b;
+  --color-code-fn: #5b9fff;
+
+  /* ── Shadows ────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.5);
+  --shadow-glow: 0 0 0 1px #00e87a33, 0 0 24px 0 #00e87a1a;
+
+  /* ── Radius ─────────────────────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* ── Typography ─────────────────────────────────────────────── */
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --text-display-1: 4.5rem;
+  --text-display-2: 3.5rem;
+  --text-display-3: 2.75rem;
+  --text-h1: 2rem;
+  --text-h2: 1.5rem;
+  --text-h3: 1.25rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-xs: 0.75rem;
+
+  /* ── Motion ─────────────────────────────────────────────────── */
+  --ease-briven: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-page: 220ms;
+}
+
+/* Dark-theme only. No @media (prefers-color-scheme: light) override.
+   If a third-party embed needs a neutral surface, use surface-inverse deliberately. */
+html {
+  color-scheme: dark;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-text);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

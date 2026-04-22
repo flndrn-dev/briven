@@ -1,0 +1,26 @@
+{
+  "name": "@briven/config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared tsconfig, eslint, prettier, and tailwind v4 base for the briven monorepo",
+  "type": "module",
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/next.json": "./tsconfig/next.json",
+    "./tsconfig/node.json": "./tsconfig/node.json",
+    "./tsconfig/bun.json": "./tsconfig/bun.json",
+    "./tsconfig/react-library.json": "./tsconfig/react-library.json",
+    "./eslint/base": "./eslint/base.js",
+    "./eslint/next": "./eslint/next.js",
+    "./eslint/react": "./eslint/react.js",
+    "./tailwind/theme.css": "./tailwind/theme.css"
+  },
+  "files": [
+    "tsconfig",
+    "eslint",
+    "tailwind"
+  ],
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
