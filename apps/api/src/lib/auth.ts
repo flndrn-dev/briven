@@ -3,6 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { magicLink } from 'better-auth/plugins';
 
 import { getDb } from '../db/client.js';
+import { accounts, sessions, users, verifications } from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from './logger.js';
 import { sendEmailVerification, sendMagicLink } from './email.js';
@@ -23,7 +24,17 @@ export const auth = betterAuth({
   basePath: '/v1/auth',
   trustedOrigins: env.BRIVEN_TRUSTED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
 
-  database: drizzleAdapter(getDb(), { provider: 'pg' }),
+  // Map Better Auth's singular model names onto our pluralised tables
+  // (CLAUDE.md §6.1: DB tables are snake_case + plural).
+  database: drizzleAdapter(getDb(), {
+    provider: 'pg',
+    schema: {
+      user: users,
+      session: sessions,
+      account: accounts,
+      verification: verifications,
+    },
+  }),
 
   advanced: {
     cookiePrefix: 'briven',
