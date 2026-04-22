@@ -1,5 +1,6 @@
 import { printHelp } from './commands/help.js';
 import { runDeploy } from './commands/deploy.js';
+import { runEnv } from './commands/env.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
@@ -7,7 +8,7 @@ import { printNotImplemented } from './commands/not-implemented.js';
 import { printVersion } from './commands/version.js';
 import { runWhoami } from './commands/whoami.js';
 
-const STUB_COMMANDS = new Set(['link', 'dev', 'env', 'logs', 'db', 'export', 'import', 'projects']);
+const STUB_COMMANDS = new Set(['link', 'dev', 'logs', 'db', 'export', 'import', 'projects']);
 
 export async function run(argv: readonly string[]): Promise<number> {
   const [first, ...rest] = argv;
@@ -33,6 +34,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runWhoami();
     case 'deploy':
       return runDeploy(rest);
+    case 'env':
+      return runEnv(rest);
   }
 
   if (STUB_COMMANDS.has(first)) {

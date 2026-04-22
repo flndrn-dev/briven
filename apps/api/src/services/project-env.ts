@@ -123,3 +123,18 @@ export async function deleteEnvVar(projectId: string, envVarId: string): Promise
   if (!row) throw new NotFoundError('env_var', envVarId);
   await db.delete(projectEnvVars).where(eq(projectEnvVars.id, envVarId));
 }
+
+export async function deleteEnvVarByKey(
+  projectId: string,
+  key: string,
+): Promise<{ id: string; key: string }> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(projectEnvVars)
+    .where(and(eq(projectEnvVars.key, key), eq(projectEnvVars.projectId, projectId)))
+    .limit(1);
+  if (!row) throw new NotFoundError('env_var', key);
+  await db.delete(projectEnvVars).where(eq(projectEnvVars.id, row.id));
+  return { id: row.id, key: row.key };
+}
