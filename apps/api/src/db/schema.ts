@@ -21,7 +21,10 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
-const id = () => varchar('id', { length: 30 }).primaryKey();
+// Per CLAUDE.md §8.1 we use prefixed ULIDs (28 chars) for briven-managed
+// rows, but Better Auth-managed tables use its own 32-char nanoid scheme.
+// Keep the column flexible: `text` accommodates both without truncation.
+const id = () => text('id').primaryKey();
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const createdAt = () => ts('created_at').defaultNow().notNull();
 const updatedAt = () => ts('updated_at').defaultNow().notNull();
@@ -50,7 +53,7 @@ export const accounts = pgTable(
   'accounts',
   {
     id: id(),
-    userId: varchar('user_id', { length: 30 })
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     accountId: text('account_id').notNull(),
@@ -76,7 +79,7 @@ export const sessions = pgTable(
   'sessions',
   {
     id: id(),
-    userId: varchar('user_id', { length: 30 })
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     token: text('token').notNull(),
@@ -118,7 +121,7 @@ export const projects = pgTable(
     id: id(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
-    ownerId: varchar('owner_id', { length: 30 })
+    ownerId: text('owner_id')
       .notNull()
       .references(() => users.id),
     region: text('region').notNull().default('eu-west-1'),
@@ -141,10 +144,10 @@ export type MemberRole = (typeof memberRole)[number];
 export const projectMembers = pgTable(
   'project_members',
   {
-    projectId: varchar('project_id', { length: 30 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    userId: varchar('user_id', { length: 30 })
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').$type<MemberRole>().notNull().default('developer'),
@@ -161,10 +164,10 @@ export const apiKeys = pgTable(
   'api_keys',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 30 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    createdBy: varchar('created_by', { length: 30 })
+    createdBy: text('created_by')
       .notNull()
       .references(() => users.id),
     name: text('name').notNull(),
@@ -197,11 +200,11 @@ export const deployments = pgTable(
   'deployments',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 30 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    triggeredBy: varchar('triggered_by', { length: 30 }).references(() => users.id),
-    apiKeyId: varchar('api_key_id', { length: 30 }).references(() => apiKeys.id),
+    triggeredBy: text('triggered_by').references(() => users.id),
+    apiKeyId: text('api_key_id').references(() => apiKeys.id),
     status: text('status').$type<DeploymentStatus>().notNull().default('pending'),
     schemaDiffSummary: jsonb('schema_diff_summary'),
     // Full schema definition as declared by the user at deploy time. Every
@@ -227,8 +230,8 @@ export const auditLogs = pgTable(
   'audit_logs',
   {
     id: id(),
-    actorId: varchar('actor_id', { length: 30 }).references(() => users.id),
-    projectId: varchar('project_id', { length: 30 }).references(() => projects.id),
+    actorId: text('actor_id').references(() => users.id),
+    projectId: text('project_id').references(() => projects.id),
     action: text('action').notNull(),
     // SHA-256 hash of the caller IP — we never store raw IPs (CLAUDE.md §5.1).
     ipHash: varchar('ip_hash', { length: 64 }),
