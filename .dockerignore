@@ -1,0 +1,23 @@
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/build
+**/coverage
+**/.pnpm-store
+**/*.log
+.git
+.github
+.vscode
+.idea
+.DS_Store
+# internal-only docs — mirrors /.gitignore behaviour
+/docs
+# env files never baked into images
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+# local runtime data
+apps/**/data
