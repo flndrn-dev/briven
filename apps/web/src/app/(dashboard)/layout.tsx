@@ -9,8 +9,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const user = await requireUser();
 
   return (
-    <div className="min-h-dvh bg-[var(--color-bg)] text-[var(--color-text)]">
-      <header className="border-b border-[var(--color-border-subtle)]">
+    <div className="flex h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
+      <header className="shrink-0 border-b border-[var(--color-border-subtle)]">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/dashboard" className="flex items-center gap-3" aria-label="briven dashboard">
             <Image src="/icon.svg" alt="" width={24} height={24} priority />
@@ -32,9 +32,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl gap-8 px-6 py-8">
+      {/* Body area fills the remaining viewport height. Sidebar spans the
+          full body height; main scrolls independently so the sidebar's
+          bottom-anchored toggle stays put. */}
+      <div className="mx-auto flex w-full min-h-0 max-w-6xl flex-1 gap-8 px-6 py-8">
         <DashboardSidebar isAdmin={user.isAdmin} />
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );
