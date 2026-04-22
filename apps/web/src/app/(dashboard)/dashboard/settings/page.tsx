@@ -15,12 +15,25 @@ interface PendingInvitation {
 
 export const dynamic = 'force-dynamic';
 
+function formatNearBy(
+  nearBy: { city: string | null; region: string | null; country: string | null } | null,
+): string {
+  if (!nearBy) return '—';
+  const place = nearBy.city ?? nearBy.region;
+  if (place && nearBy.country) return `${place}, ${nearBy.country}`;
+  return place ?? nearBy.country ?? '—';
+}
+
 export default async function SettingsPage() {
   const user = await requireUser();
 
   const { invitations } = await apiJson<{ invitations: PendingInvitation[] }>(
     '/v1/me/invitations',
   ).catch(() => ({ invitations: [] as PendingInvitation[] }));
+
+  const { tier } = await apiJson<{ tier: 'free' | 'pro' | 'team' }>('/v1/billing/tier').catch(
+    () => ({ tier: 'free' as const }),
+  );
 
   async function save(patch: Record<string, string | null>) {
     'use server';
@@ -107,6 +120,56 @@ export default async function SettingsPage() {
       </section>
 
       <section>
+        <h2 className="font-mono text-sm text-[var(--color-text)]">billing</h2>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+          your plan and payment settings. paid plans ship with the Polar.sh integration in phase 3,
+          with mavi Pay added as a second processor later.
+        </p>
+        <dl className="mt-3 grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
+          <dt className="text-[var(--color-text-subtle)]">current plan</dt>
+          <dd>
+            <span className="rounded bg-[var(--color-primary-subtle)] px-2 py-0.5 text-xs text-[var(--color-primary)]">
+              {tier}
+            </span>
+            {tier === 'free' ? (
+              <span className="ml-2 text-xs text-[var(--color-text-subtle)]">
+                dogfood-only access
+              </span>
+            ) : null}
+          </dd>
+
+          <dt className="text-[var(--color-text-subtle)]">payment method</dt>
+          <dd className="text-[var(--color-text-muted)]">not connected</dd>
+
+          <dt className="text-[var(--color-text-subtle)]">processor</dt>
+          <dd className="text-[var(--color-text-muted)]">
+            Polar.sh · mavi Pay <span className="text-[var(--color-text-subtle)]">(arrives later)</span>
+          </dd>
+
+          <dt className="text-[var(--color-text-subtle)]">invoices</dt>
+          <dd className="text-[var(--color-text-muted)]">none yet</dd>
+        </dl>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            disabled
+            title="available when Polar.sh checkout lands"
+            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] opacity-50"
+          >
+            change plan
+          </button>
+          <button
+            type="button"
+            disabled
+            title="available when Polar.sh checkout lands"
+            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] opacity-50"
+          >
+            update payment method
+          </button>
+        </div>
+      </section>
+
+      <section>
         <h2 className="font-mono text-sm text-[var(--color-text)]">last sign-in</h2>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
           under EU GDPR you have the right to see the metadata we store about your sign-in
@@ -122,6 +185,9 @@ export default async function SettingsPage() {
 
           <dt className="text-[var(--color-text-subtle)]">ip address</dt>
           <dd>{user.lastSignIn?.ipAddress ?? '—'}</dd>
+
+          <dt className="text-[var(--color-text-subtle)]">near by</dt>
+          <dd>{formatNearBy(user.lastSignIn?.nearBy ?? null)}</dd>
 
           <dt className="text-[var(--color-text-subtle)]">user agent</dt>
           <dd className="break-words text-xs text-[var(--color-text-muted)]">

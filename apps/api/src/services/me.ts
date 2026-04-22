@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { sessions, users } from '../db/schema.js';
+import { lookupIp } from '../lib/geoip.js';
 
 export interface ProfilePatch {
   name?: string | null;
@@ -60,6 +61,8 @@ export async function getProfile(userId: string) {
     .orderBy(desc(sessions.createdAt))
     .limit(1);
 
+  const nearBy = last ? await lookupIp(last.ipAddress) : null;
+
   return {
     ...row,
     lastSignIn: last
@@ -67,6 +70,7 @@ export async function getProfile(userId: string) {
           at: last.createdAt,
           ipAddress: last.ipAddress,
           userAgent: last.userAgent,
+          nearBy,
         }
       : null,
   };

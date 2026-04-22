@@ -63,6 +63,11 @@ const envSchema = z.object({
   // BRIVEN_RUNTIME_SHARED_SECRET on the runtime host.
   BRIVEN_RUNTIME_URL: z.string().url().default('http://localhost:3003'),
   BRIVEN_RUNTIME_SHARED_SECRET: z.string().min(32).optional(),
+
+  // GeoIP — optional path to a MaxMind GeoLite2-City.mmdb file. When unset
+  // or unreadable, IP → city lookups return null and callers show a dash.
+  // Refresh the DB monthly via the free MaxMind account download portal.
+  BRIVEN_GEOIP_DB_PATH: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

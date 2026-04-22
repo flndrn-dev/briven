@@ -25,6 +25,11 @@ export interface SessionUser {
     at: string;
     ipAddress: string | null;
     userAgent: string | null;
+    nearBy: {
+      city: string | null;
+      region: string | null;
+      country: string | null;
+    } | null;
   } | null;
 }
 
