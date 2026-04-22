@@ -7,6 +7,8 @@ export interface SessionUser {
   email: string;
   name: string | null;
   emailVerified: boolean;
+  isAdmin: boolean;
+  suspendedAt: string | null;
 }
 
 /**

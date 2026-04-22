@@ -45,6 +45,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
           >
             settings
           </Link>
+          {user.isAdmin ? (
+            <Link
+              href="/dashboard/admin"
+              className="mt-auto rounded-md px-3 py-2 text-[var(--color-primary)] hover:bg-[var(--color-surface)]"
+            >
+              admin
+            </Link>
+          ) : null}
         </nav>
 
         <main>{children}</main>
