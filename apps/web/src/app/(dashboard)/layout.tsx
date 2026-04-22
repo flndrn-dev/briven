@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { DashboardSidebar } from './dashboard-sidebar';
 import { SignOutButton } from './sign-out-button';
 import { requireUser } from '../../lib/session';
 
@@ -31,31 +32,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-[180px_1fr] gap-8 px-6 py-8">
-        <nav aria-label="dashboard sections" className="flex flex-col gap-1 font-mono text-sm">
-          <Link
-            href="/dashboard/projects"
-            className="rounded-md px-3 py-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
-          >
-            projects
-          </Link>
-          <Link
-            href="/dashboard/settings"
-            className="rounded-md px-3 py-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
-          >
-            settings
-          </Link>
-          {user.isAdmin ? (
-            <Link
-              href="/dashboard/admin"
-              className="mt-auto rounded-md px-3 py-2 text-[var(--color-primary)] hover:bg-[var(--color-surface)]"
-            >
-              admin
-            </Link>
-          ) : null}
-        </nav>
-
-        <main>{children}</main>
+      <div className="mx-auto flex w-full max-w-6xl gap-8 px-6 py-8">
+        <DashboardSidebar isAdmin={user.isAdmin} />
+        <main className="flex-1 min-w-0">{children}</main>
       </div>
     </div>
   );
