@@ -11,6 +11,7 @@ import { adminRouter } from './routes/admin.js';
 import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
 import { billingRouter } from './routes/billing.js';
+import { dbRouter } from './routes/db.js';
 import { deploymentsRouter } from './routes/deployments.js';
 import { healthRouter } from './routes/health.js';
 import { internalRouter } from './routes/internal.js';
@@ -61,6 +62,7 @@ app.route('/', projectEnvRouter);
 app.route('/', invitationsRouter);
 app.route('/', adminRouter);
 app.route('/', billingRouter);
+app.route('/', dbRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);

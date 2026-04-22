@@ -43,10 +43,20 @@ export function schemaNameFor(projectId: string): string {
 }
 
 /**
+ * Postgres role that owns day-to-day CRUD on a project's schema. Granted at
+ * provision time; password is rotated on every `briven db shell` request.
+ */
+export function roleNameFor(projectId: string): string {
+  return `${schemaNameFor(projectId)}_owner`;
+}
+
+/**
  * Provision a schema for a new project. Idempotent — safe to call on retry.
+ * Also creates the project's scoped login role (see roleNameFor).
  */
 export async function provisionProjectSchema(projectId: string): Promise<string> {
   const schema = schemaNameFor(projectId);
+  const role = roleNameFor(projectId);
   const sql = client();
   // Identifier interpolation via sql() wrapper validates and quotes safely.
   await sql`CREATE SCHEMA IF NOT EXISTS ${sql(schema)}`;
@@ -67,8 +77,75 @@ export async function provisionProjectSchema(projectId: string): Promise<string>
       value jsonb NOT NULL
     )
   `);
-  log.info('project_schema_provisioned', { projectId, schema });
+  await provisionProjectRole(projectId);
+  log.info('project_schema_provisioned', { projectId, schema, role });
   return schema;
+}
+
+/**
+ * Create the project's scoped login role and grant CRUD inside its schema.
+ * Called at project creation and lazily at shell-token issue time for
+ * projects that pre-date this feature.
+ */
+export async function provisionProjectRole(projectId: string): Promise<void> {
+  const schema = schemaNameFor(projectId);
+  const role = roleNameFor(projectId);
+  const sql = client();
+  // CREATE ROLE is not idempotent via IF NOT EXISTS; use a DO block.
+  await sql.unsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN
+        EXECUTE 'CREATE ROLE "${role}" WITH LOGIN NOINHERIT PASSWORD NULL';
+      END IF;
+    END
+    $$;
+  `);
+  await sql.unsafe(`GRANT USAGE ON SCHEMA "${schema}" TO "${role}"`);
+  await sql.unsafe(`GRANT ALL ON ALL TABLES IN SCHEMA "${schema}" TO "${role}"`);
+  await sql.unsafe(`GRANT ALL ON ALL SEQUENCES IN SCHEMA "${schema}" TO "${role}"`);
+  await sql.unsafe(
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA "${schema}" GRANT ALL ON TABLES TO "${role}"`,
+  );
+  await sql.unsafe(
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA "${schema}" GRANT ALL ON SEQUENCES TO "${role}"`,
+  );
+  // Platform tables: readable by platform, never writable by the user.
+  await sql.unsafe(
+    `REVOKE ALL ON TABLE "${schema}"."_briven_migrations" FROM "${role}"`,
+  );
+  await sql.unsafe(`REVOKE ALL ON TABLE "${schema}"."_briven_meta" FROM "${role}"`);
+}
+
+/**
+ * Rotate the project role's password to a short-lived random value and
+ * return the plaintext + expiry. The caller constructs a DSN from these and
+ * never writes them to logs.
+ */
+export async function rotateProjectRolePassword(
+  projectId: string,
+  ttlSeconds: number,
+): Promise<{ role: string; password: string; expiresAt: Date }> {
+  await provisionProjectRole(projectId);
+  const role = roleNameFor(projectId);
+  const password = randomPassword(32);
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+  const sql = client();
+  // Identifier quoting via pg_ident escape: we generated `role` ourselves,
+  // so it's safe; password is bound via postgres.js parameter binding.
+  await sql.unsafe(
+    `ALTER ROLE "${role}" WITH PASSWORD $1 VALID UNTIL $2`,
+    [password, expiresAt.toISOString()],
+  );
+  return { role, password, expiresAt };
+}
+
+function randomPassword(bytes: number): string {
+  // Hex-encoded random bytes — safe in every DSN, never contains chars
+  // needing URL-encoding.
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
