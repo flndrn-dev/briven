@@ -38,7 +38,7 @@ export default function HomePage() {
             github
           </Link>
           <Link
-            href="/login"
+            href="/signin"
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           >
             sign in
