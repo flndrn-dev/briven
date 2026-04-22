@@ -57,6 +57,13 @@
       "when": 1776860035627,
       "tag": "0007_superb_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776875560574,
+      "tag": "0008_clumsy_supernaut",
+      "breakpoints": true
     }
   ]
 }

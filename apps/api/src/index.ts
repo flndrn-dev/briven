@@ -17,11 +17,13 @@ import { healthRouter } from './routes/health.js';
 import { internalRouter } from './routes/internal.js';
 import { invitationsRouter } from './routes/invitations.js';
 import { invokeRouter } from './routes/invoke.js';
+import { logsRouter } from './routes/logs.js';
 import { meRouter } from './routes/me.js';
 import { projectEnvRouter } from './routes/project-env.js';
 import { membersRouter } from './routes/project-members.js';
 import { projectsRouter } from './routes/projects.js';
 import { rootRouter } from './routes/root.js';
+import { startLogFanoutWorker, startLogRetentionCron } from './workers/log-fanout.js';
 
 type AppEnv = {
   Variables: {
@@ -63,11 +65,17 @@ app.route('/', invitationsRouter);
 app.route('/', adminRouter);
 app.route('/', billingRouter);
 app.route('/', dbRouter);
+app.route('/', logsRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);
 
 log.info('api_boot', { port: env.BRIVEN_API_PORT, origin: env.BRIVEN_API_ORIGIN });
+
+// Background workers — both degrade gracefully when redis/data-plane
+// isn't configured (log-fanout sleeps, retention prunes nothing).
+startLogFanoutWorker();
+startLogRetentionCron();
 
 export default {
   port: env.BRIVEN_API_PORT,

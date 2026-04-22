@@ -340,6 +340,45 @@ export const deployments = pgTable(
   }),
 );
 
+/* ─── function_logs ───────────────────────────────────────────────── */
+/*
+ * Durable copy of each invocation envelope that the runtime publishes to
+ * Redis. The async log-fanout worker copies entries from `logs:{projectId}`
+ * streams into this table; the dashboard queries it for the Logs page, and
+ * a daily retention cron trims rows older than the tier-configured window.
+ *
+ * Per CLAUDE.md §5.1 user content fields (`user_logs_json`, `err_message`)
+ * pass through unmodified — they are the user's own data about their own
+ * project, surfaced only to the account owner.
+ */
+export const functionLogs = pgTable(
+  'function_logs',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    deploymentId: text('deployment_id')
+      .notNull()
+      .references(() => deployments.id, { onDelete: 'cascade' }),
+    invocationId: text('invocation_id').notNull(),
+    functionName: varchar('function_name', { length: 128 }).notNull(),
+    status: varchar('status', { length: 8 }).notNull(),
+    durationMs: varchar('duration_ms', { length: 12 }).notNull(),
+    touchedTables: jsonb('touched_tables').notNull(),
+    userLogsJson: jsonb('user_logs_json').notNull(),
+    errCode: text('err_code'),
+    errMessage: text('err_message'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    projectCreatedIdx: index('function_logs_project_created_idx').on(
+      t.projectId,
+      t.createdAt,
+    ),
+  }),
+);
+
 /* ─── audit_logs ──────────────────────────────────────────────────── */
 export const auditLogs = pgTable(
   'audit_logs',
@@ -370,4 +409,6 @@ export type NewApiKey = typeof apiKeys.$inferInsert;
 export type Deployment = typeof deployments.$inferSelect;
 export type NewDeployment = typeof deployments.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type FunctionLog = typeof functionLogs.$inferSelect;
+export type NewFunctionLog = typeof functionLogs.$inferInsert;
 export type NewAuditLog = typeof auditLogs.$inferInsert;

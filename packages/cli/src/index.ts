@@ -5,11 +5,12 @@ import { runEnv } from './commands/env.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
+import { runLogs } from './commands/logs.js';
 import { printNotImplemented } from './commands/not-implemented.js';
 import { printVersion } from './commands/version.js';
 import { runWhoami } from './commands/whoami.js';
 
-const STUB_COMMANDS = new Set(['link', 'dev', 'logs', 'export', 'import', 'projects']);
+const STUB_COMMANDS = new Set(['link', 'dev', 'export', 'import', 'projects']);
 
 export async function run(argv: readonly string[]): Promise<number> {
   const [first, ...rest] = argv;
@@ -39,6 +40,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runEnv(rest);
     case 'db':
       return runDb(rest);
+    case 'logs':
+      return runLogs(rest);
   }
 
   if (STUB_COMMANDS.has(first)) {
