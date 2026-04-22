@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { RiGithubFill } from 'react-icons/ri';
 
@@ -10,10 +9,10 @@ interface Props {
 }
 
 export function SignInForm({ next, disabled }: Props) {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
   const [oauthPending, setOauthPending] = useState(false);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -32,9 +31,7 @@ export function SignInForm({ next, disabled }: Props) {
         const body = await res.text().catch(() => '');
         throw new Error(body || `request failed (${res.status})`);
       }
-      const url = new URL(window.location.href);
-      url.searchParams.set('sent', '1');
-      router.replace(`${url.pathname}${url.search}`);
+      setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'something went wrong');
     } finally {
@@ -67,6 +64,30 @@ export function SignInForm({ next, disabled }: Props) {
   }
 
   const anyPending = pending || oauthPending;
+
+  if (sent) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 font-mono text-sm">
+          <p className="text-[var(--color-text)]">check your inbox</p>
+          <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+            we sent a one-time link to <span className="text-[var(--color-text)]">{email}</span>.
+            click it to finish signing in. the link expires in 10 minutes.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setSent(false);
+            setEmail('');
+          }}
+          className="self-start font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        >
+          ← use a different email
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4" aria-busy={anyPending}>

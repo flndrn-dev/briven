@@ -7,6 +7,7 @@ import { audit, hashIp } from '../services/audit.js';
 import {
   createApiKey,
   listApiKeysForProject,
+  renameApiKey,
   revokeApiKey,
 } from '../services/api-keys.js';
 import { getProjectForUser } from '../services/projects.js';
@@ -84,6 +85,39 @@ apiKeysRouter.post('/v1/projects/:id/api-keys', async (c) => {
     },
     201,
   );
+});
+
+const renameKeySchema = z.object({
+  name: z.string().min(1).max(80),
+});
+
+apiKeysRouter.patch('/v1/projects/:id/api-keys/:keyId', async (c) => {
+  const user = c.get('user')!;
+  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const keyId = c.req.param('keyId');
+
+  const body = await c.req.json().catch(() => null);
+  const parsed = renameKeySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
+      400,
+    );
+  }
+
+  await renameApiKey(project.id, keyId, parsed.data.name);
+  await audit({
+    actorId: user.id,
+    projectId: project.id,
+    action: 'api_key.rename',
+    ipHash: hashIp(
+      c.req.raw.headers.get('x-forwarded-for'),
+      env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper',
+    ),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { keyId, name: parsed.data.name },
+  });
+  return c.json({ keyId, name: parsed.data.name });
 });
 
 apiKeysRouter.delete('/v1/projects/:id/api-keys/:keyId', async (c) => {

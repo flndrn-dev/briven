@@ -10,11 +10,10 @@ export const metadata = {
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; sent?: string }>;
+  searchParams: Promise<{ next?: string }>;
 }) {
   const params = await searchParams;
   const next = params.next ?? '/dashboard';
-  const sent = params.sent === '1';
 
   return (
     <main className="relative flex min-h-dvh items-center justify-center bg-[var(--color-bg)] px-6 text-[var(--color-text)]">
@@ -25,12 +24,9 @@ export default async function SignInPage({
         </Link>
 
         <h1 className="font-mono text-2xl tracking-tight">sign in</h1>
-        <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          {sent ? 'check your inbox for the magic link.' : 'we send a one-time link to your email.'}
-        </p>
 
         <div className="mt-8">
-          <SignInForm next={next} disabled={sent} />
+          <SignInForm next={next} />
         </div>
 
         <p className="mt-10 font-mono text-xs text-[var(--color-text-subtle)]">

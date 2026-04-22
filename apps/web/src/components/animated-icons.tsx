@@ -132,6 +132,37 @@ export function ShieldIcon({ className, animate }: IconProps) {
   );
 }
 
+/**
+ * Copy icon that morphs into a checkmark when `copied` is true.
+ * The caller owns the `copied` state (set on click, clear on timeout).
+ */
+export function CopyIcon({
+  className,
+  copied = false,
+}: IconProps & { copied?: boolean }) {
+  return (
+    <span className={className}>
+      <svg {...iconBase} className="size-full">
+        {/* the two-rectangle copy glyph, faded out when copied */}
+        <motion.g
+          animate={{ opacity: copied ? 0 : 1 }}
+          transition={{ duration: 0.15 }}
+        >
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </motion.g>
+        {/* the checkmark, strokes in on copy */}
+        <motion.path
+          d="M5 12l5 5L20 7"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={copied ? { pathLength: 1, opacity: 1 } : { pathLength: 0, opacity: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+        />
+      </svg>
+    </span>
+  );
+}
+
 /** Chevron pointing left/right — used by the sidebar collapse toggle. */
 export function ChevronIcon({
   className,

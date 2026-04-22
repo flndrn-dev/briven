@@ -97,6 +97,22 @@ export async function listApiKeysForProject(projectId: string): Promise<MaskedAp
   return rows;
 }
 
+export async function renameApiKey(
+  projectId: string,
+  keyId: string,
+  name: string,
+): Promise<void> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(apiKeys)
+    .where(and(eq(apiKeys.id, keyId), eq(apiKeys.projectId, projectId)))
+    .limit(1);
+  if (!row) throw new NotFoundError('api_key', keyId);
+  if (row.revokedAt) return; // revoked keys are immutable
+  await db.update(apiKeys).set({ name }).where(eq(apiKeys.id, keyId));
+}
+
 export async function revokeApiKey(projectId: string, keyId: string): Promise<void> {
   const db = getDb();
   const [row] = await db

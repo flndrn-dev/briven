@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from 'react';
 
+import { CopyField } from '../../../../../../components/copy-field';
+
 interface Props {
   action: (formData: FormData) => Promise<{ plaintext: string }>;
 }
@@ -57,17 +59,10 @@ export function NewKeyDialog({ action }: Props) {
                 <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
                   this is the only time the plaintext will be shown. store it in a secret manager.
                 </p>
-                <pre className="mt-4 break-all rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-3 font-mono text-xs">
-                  {plaintext}
-                </pre>
-                <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(plaintext)}
-                    className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-                  >
-                    copy
-                  </button>
+                <div className="mt-4">
+                  <CopyField value={plaintext} label="api key plaintext" />
+                </div>
+                <div className="mt-4 flex justify-end">
                   <button
                     type="button"
                     onClick={close}

@@ -1,8 +1,8 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { KeyRow } from './key-row';
 import { NewKeyDialog } from './new-key-dialog';
-import { RevokeButton } from './revoke-button';
 
 interface ApiKey {
   id: string;
@@ -47,6 +47,21 @@ export default async function KeysPage({ params }: { params: Promise<{ id: strin
     revalidatePath(`/dashboard/projects/${id}/keys`);
   }
 
+  async function rename(keyId: string, name: string) {
+    'use server';
+    const { id } = await params;
+    const res = await apiFetch(`/v1/projects/${id}/api-keys/${keyId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(body || `rename failed: ${res.status}`);
+    }
+    revalidatePath(`/dashboard/projects/${id}/keys`);
+  }
+
   const active = keys.filter((k) => !k.revokedAt);
   const revoked = keys.filter((k) => k.revokedAt);
 
@@ -70,7 +85,7 @@ export default async function KeysPage({ params }: { params: Promise<{ id: strin
       ) : (
         <ul className="flex flex-col gap-2">
           {active.map((k) => (
-            <KeyRow key={k.id} k={k} onRevoke={revoke} />
+            <KeyRow key={k.id} apiKey={k} onRevoke={revoke} onRename={rename} />
           ))}
         </ul>
       )}
@@ -92,26 +107,3 @@ export default async function KeysPage({ params }: { params: Promise<{ id: strin
   );
 }
 
-function KeyRow({
-  k,
-  onRevoke,
-}: {
-  k: ApiKey;
-  onRevoke: (keyId: string) => Promise<void>;
-}) {
-  return (
-    <li className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
-      <div>
-        <p className="font-mono text-sm">{k.name}</p>
-        <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-          brk_•••{k.suffix} · created {new Date(k.createdAt).toISOString().slice(0, 10)}
-          {k.lastUsedAt
-            ? ` · last used ${new Date(k.lastUsedAt).toISOString().slice(0, 10)}`
-            : ' · never used'}
-          {k.expiresAt ? ` · expires ${new Date(k.expiresAt).toISOString().slice(0, 10)}` : null}
-        </p>
-      </div>
-      <RevokeButton keyId={k.id} onRevoke={onRevoke} />
-    </li>
-  );
-}
