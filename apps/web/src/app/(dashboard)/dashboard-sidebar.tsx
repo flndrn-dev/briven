@@ -94,7 +94,7 @@ export function DashboardSidebar({ isAdmin }: { isAdmin: boolean }) {
     <aside
       aria-label="dashboard sections"
       data-collapsed={isCollapsed ? 'true' : 'false'}
-      className={`relative flex h-full shrink-0 flex-col transition-[width] duration-200 ease-out ${
+      className={`relative flex h-full shrink-0 flex-col transition-[width] duration-200 ease-out border-1 border-white ${
         isCollapsed ? 'w-[72px]' : 'w-[180px]'
       }`}
     >

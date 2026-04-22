@@ -1,7 +1,9 @@
+import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 
-import { apiJson } from '../../../../lib/api';
+import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
+import { ProfileForm } from './profile-form';
 
 interface PendingInvitation {
   id: string;
@@ -20,22 +22,44 @@ export default async function SettingsPage() {
     '/v1/me/invitations',
   ).catch(() => ({ invitations: [] as PendingInvitation[] }));
 
+  async function save(patch: Record<string, string | null>) {
+    'use server';
+    const res = await apiFetch('/v1/me', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(body || `update failed: ${res.status}`);
+    }
+    revalidatePath('/dashboard/settings');
+  }
+
   return (
-    <div className="flex max-w-2xl flex-col gap-8">
+    <div className="flex max-w-3xl flex-col gap-8 pb-12">
       <section>
         <h2 className="font-mono text-sm text-[var(--color-text)]">account</h2>
-        <dl className="mt-3 grid grid-cols-[140px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
+        <dl className="mt-3 grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
           <dt className="text-[var(--color-text-subtle)]">email</dt>
-          <dd>{user.email}</dd>
-
-          <dt className="text-[var(--color-text-subtle)]">name</dt>
-          <dd>{user.name ?? '—'}</dd>
+          <dd>
+            {user.email}
+            {user.emailVerified ? (
+              <span className="ml-2 rounded bg-[var(--color-primary-subtle)] px-1.5 py-0.5 text-xs text-[var(--color-primary)]">
+                verified
+              </span>
+            ) : (
+              <span className="ml-2 rounded bg-red-400/15 px-1.5 py-0.5 text-xs text-red-400">
+                unverified
+              </span>
+            )}
+          </dd>
 
           <dt className="text-[var(--color-text-subtle)]">user id</dt>
-          <dd className="text-xs">{user.id}</dd>
+          <dd className="truncate text-xs">{user.id}</dd>
 
-          <dt className="text-[var(--color-text-subtle)]">email verified</dt>
-          <dd>{user.emailVerified ? 'yes' : 'no'}</dd>
+          <dt className="text-[var(--color-text-subtle)]">joined</dt>
+          <dd>{new Date(user.createdAt).toISOString().slice(0, 10)}</dd>
 
           {user.isAdmin ? (
             <>
@@ -53,6 +77,56 @@ export default async function SettingsPage() {
               </dd>
             </>
           ) : null}
+        </dl>
+      </section>
+
+      <section>
+        <h2 className="font-mono text-sm text-[var(--color-text)]">profile + billing (EU KYC)</h2>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+          required before a paid plan checkout. used for VAT determination, invoice issuance, and
+          EU KYC compliance. stored only on the control plane, never shared with a customer
+          project.
+        </p>
+        <div className="mt-3">
+          <ProfileForm
+            initial={{
+              name: user.name ?? '',
+              legalName: user.legalName ?? '',
+              companyName: user.companyName ?? '',
+              vatId: user.vatId ?? '',
+              addressLine1: user.addressLine1 ?? '',
+              addressLine2: user.addressLine2 ?? '',
+              addressCity: user.addressCity ?? '',
+              addressPostalCode: user.addressPostalCode ?? '',
+              addressRegion: user.addressRegion ?? '',
+              addressCountry: user.addressCountry ?? '',
+            }}
+            save={save}
+          />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="font-mono text-sm text-[var(--color-text)]">last sign-in</h2>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+          under EU GDPR you have the right to see the metadata we store about your sign-in
+          activity. visible only to you.
+        </p>
+        <dl className="mt-3 grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
+          <dt className="text-[var(--color-text-subtle)]">at</dt>
+          <dd>
+            {user.lastSignIn
+              ? new Date(user.lastSignIn.at).toISOString().replace('T', ' ').slice(0, 19)
+              : 'never'}
+          </dd>
+
+          <dt className="text-[var(--color-text-subtle)]">ip address</dt>
+          <dd>{user.lastSignIn?.ipAddress ?? '—'}</dd>
+
+          <dt className="text-[var(--color-text-subtle)]">user agent</dt>
+          <dd className="break-words text-xs text-[var(--color-text-muted)]">
+            {user.lastSignIn?.userAgent ?? '—'}
+          </dd>
         </dl>
       </section>
 
@@ -87,7 +161,9 @@ export default async function SettingsPage() {
       <section>
         <h2 className="font-mono text-sm text-red-400">danger zone</h2>
         <div className="mt-3 rounded-md border border-red-400/30 bg-red-400/5 p-5 font-mono text-sm">
-          <p>account deletion arrives in phase 3. use <code>briven cli export</code> first.</p>
+          <p>
+            account deletion arrives in phase 3. use <code>briven cli export</code> first.
+          </p>
         </div>
       </section>
     </div>

@@ -7,8 +7,25 @@ export interface SessionUser {
   email: string;
   name: string | null;
   emailVerified: boolean;
+  image: string | null;
   isAdmin: boolean;
   suspendedAt: string | null;
+  // EU KYC / billing profile (all optional until paid checkout).
+  legalName: string | null;
+  companyName: string | null;
+  vatId: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  addressCity: string | null;
+  addressPostalCode: string | null;
+  addressRegion: string | null;
+  addressCountry: string | null;
+  createdAt: string;
+  lastSignIn: {
+    at: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+  } | null;
 }
 
 /**

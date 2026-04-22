@@ -47,6 +47,22 @@ export const users = pgTable(
     // Set by an admin to freeze all sign-in attempts + deploys. Sessions
     // are invalidated on next request.
     suspendedAt: ts('suspended_at'),
+    /*
+     * EU GDPR / AML billing profile. All fields optional at create time;
+     * required before a paid subscription checkout (enforced at checkout).
+     * Stored in the control plane, never in a customer schema. Address
+     * block is the natural person or legal entity the invoice issues to.
+     */
+    legalName: text('legal_name'),
+    companyName: text('company_name'),
+    vatId: text('vat_id'),
+    addressLine1: text('address_line_1'),
+    addressLine2: text('address_line_2'),
+    addressCity: text('address_city'),
+    addressPostalCode: text('address_postal_code'),
+    addressRegion: text('address_region'),
+    // ISO 3166-1 alpha-2 (e.g. 'BE', 'NL'). Determines VAT treatment.
+    addressCountry: text('address_country'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
