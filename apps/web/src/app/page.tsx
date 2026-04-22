@@ -62,7 +62,7 @@ export default function HomePage() {
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Link
-              href="/signup"
+              href="/signin"
               className="inline-flex h-12 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary)] px-6 font-sans font-medium text-[var(--color-text-inverse)] shadow-[var(--shadow-sm)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease-briven)] hover:bg-[var(--color-primary-hover)] active:bg-[var(--color-primary-pressed)]"
             >
               get started
@@ -98,10 +98,12 @@ export default function HomePage() {
         />
       </section>
 
-      <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-6 border-t border-[var(--color-border-subtle)] px-6 py-8 font-mono text-[var(--text-xs)] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
-        <div className="flex items-center gap-3">
-          <Image src="/icon.svg" alt="" width={18} height={18} className="opacity-70" />
-          <span>briven · worldwide · agpl-3.0 core · mit cli</span>
+      <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 border-t border-[var(--color-border-subtle)] px-6 py-6 font-mono text-[10px] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2">
+          <Image src="/icon.svg" alt="" width={14} height={14} className="opacity-70" />
+          <span>
+            © {new Date().getFullYear()} briven by flndrn · worldwide · agpl-3.0 core · mit cli
+          </span>
         </div>
         <div className="flex items-center gap-4">
           <Link href="/trust" className="hover:text-[var(--color-text-muted)]">
@@ -114,7 +116,7 @@ export default function HomePage() {
             terms
           </Link>
           <Link href="https://docs.briven.cloud" className="hover:text-[var(--color-text-muted)]">
-            docs.briven.cloud
+            docs
           </Link>
         </div>
       </footer>
