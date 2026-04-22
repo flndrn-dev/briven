@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { UserMenuButton } from '../../components/user-menu-button';
 import { ChevronRightIcon, type ChevronRightIconHandle } from '../../components/ui/chevron-right';
 import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
@@ -49,7 +50,14 @@ const NAV: NavItem[] = [
 
 type IconHandle = FoldersIconHandle | CogIconHandle | ShieldCheckIconHandle;
 
-export function DashboardSidebar({ isAdmin }: { isAdmin: boolean }) {
+interface SidebarUser {
+  name: string | null;
+  email: string;
+  image: string | null;
+  legalName: string | null;
+}
+
+export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: SidebarUser }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -78,8 +86,8 @@ export function DashboardSidebar({ isAdmin }: { isAdmin: boolean }) {
 
   const items = NAV.filter((i) => !i.adminOnly || isAdmin);
   const isCollapsed = hydrated && collapsed;
-  // open = size-7 (28px), collapsed = size-8 (32px) per the design direction.
-  const iconPixels = isCollapsed ? 32 : 28;
+  // Collapsed rail is the denser state — icons shrink instead of growing.
+  const iconPixels = isCollapsed ? 22 : 28;
 
   const toggleRef = useRef<ChevronRightIconHandle>(null);
   const [toggleHover, setToggleHover] = useState(false);
@@ -111,31 +119,37 @@ export function DashboardSidebar({ isAdmin }: { isAdmin: boolean }) {
       </ul>
 
       {/*
-        Absolutely pinned to the sidebar's bottom — with the layout now
-        filling the viewport and the sidebar set to h-full, this lands
-        bottom-5 from the viewport edge exactly. Centered under the
-        sidebar column via left-1/2 + translate.
+        Bottom row: user menu + collapse toggle on one line. Collapsed mode
+        shrinks the user menu to an avatar-only square so both buttons fit
+        inside the 72px rail.
       */}
-      <button
-        type="button"
-        onClick={toggle}
-        onMouseEnter={() => setToggleHover(true)}
-        onMouseLeave={() => setToggleHover(false)}
-        onFocus={() => setToggleHover(true)}
-        onBlur={() => setToggleHover(false)}
-        aria-label={isCollapsed ? 'expand sidebar' : 'collapse sidebar'}
-        className="absolute bottom-5 left-1/2 flex size-8 -translate-x-1/2 items-center justify-center rounded-md border border-[var(--color-border-subtle)] text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border)] hover:text-[var(--color-primary)]"
+      <div
+        className={`absolute bottom-5 left-0 right-0 flex items-center ${
+          isCollapsed ? 'justify-center gap-1.5' : 'gap-2 px-3'
+        }`}
       >
-        <span
-          className="pointer-events-none inline-block"
-          style={{
-            transform: `rotate(${isCollapsed ? 0 : 180}deg)`,
-            transition: 'transform 200ms',
-          }}
+        <UserMenuButton user={user} collapsed={isCollapsed} />
+        <button
+          type="button"
+          onClick={toggle}
+          onMouseEnter={() => setToggleHover(true)}
+          onMouseLeave={() => setToggleHover(false)}
+          onFocus={() => setToggleHover(true)}
+          onBlur={() => setToggleHover(false)}
+          aria-label={isCollapsed ? 'expand sidebar' : 'collapse sidebar'}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-[var(--color-border-subtle)] text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border)] hover:text-[var(--color-primary)]"
         >
-          <ChevronRightIcon ref={toggleRef} size={18} />
-        </span>
-      </button>
+          <span
+            className="pointer-events-none inline-block"
+            style={{
+              transform: `rotate(${isCollapsed ? 0 : 180}deg)`,
+              transition: 'transform 200ms',
+            }}
+          >
+            <ChevronRightIcon ref={toggleRef} size={18} />
+          </span>
+        </button>
+      </div>
     </aside>
   );
 }

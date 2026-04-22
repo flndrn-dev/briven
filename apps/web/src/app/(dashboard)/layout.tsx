@@ -36,7 +36,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
           full body height; main scrolls independently so the sidebar's
           bottom-anchored toggle stays put. */}
       <div className="mx-auto flex w-full min-h-0 max-w-6xl flex-1 gap-8 px-6 py-8">
-        <DashboardSidebar isAdmin={user.isAdmin} />
+        <DashboardSidebar
+          isAdmin={user.isAdmin}
+          user={{
+            name: user.name,
+            email: user.email,
+            image: user.image,
+            legalName: user.legalName,
+          }}
+        />
         <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
