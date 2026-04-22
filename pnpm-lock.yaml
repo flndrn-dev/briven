@@ -246,6 +246,9 @@ importers:
       '@briven/shared':
         specifier: workspace:*
         version: link:../shared
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1

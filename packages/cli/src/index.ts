@@ -1,6 +1,7 @@
 import { printHelp } from './commands/help.js';
 import { runDb } from './commands/db.js';
 import { runDeploy } from './commands/deploy.js';
+import { runDev } from './commands/dev.js';
 import { runEnv } from './commands/env.js';
 import { runInit } from './commands/init.js';
 import { runLogin } from './commands/login.js';
@@ -10,7 +11,7 @@ import { printNotImplemented } from './commands/not-implemented.js';
 import { printVersion } from './commands/version.js';
 import { runWhoami } from './commands/whoami.js';
 
-const STUB_COMMANDS = new Set(['link', 'dev', 'export', 'import', 'projects']);
+const STUB_COMMANDS = new Set(['link', 'export', 'import', 'projects']);
 
 export async function run(argv: readonly string[]): Promise<number> {
   const [first, ...rest] = argv;
@@ -42,6 +43,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runDb(rest);
     case 'logs':
       return runLogs(rest);
+    case 'dev':
+      return runDev(rest);
   }
 
   if (STUB_COMMANDS.has(first)) {

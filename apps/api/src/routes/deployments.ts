@@ -7,6 +7,7 @@ import type { Session, User } from '../middleware/session.js';
 import {
   cancelPendingDeployment,
   createDeployment,
+  getCurrentDeployment,
   getCurrentSchema,
   getDeployment,
   listDeploymentsForProject,
@@ -62,6 +63,7 @@ export const deploymentsRouter = new Hono<AppEnv>();
 
 deploymentsRouter.use('/v1/projects/:id/deployments', requireProjectAuth());
 deploymentsRouter.use('/v1/projects/:id/deployments/*', requireProjectAuth());
+deploymentsRouter.use('/v1/projects/:id/deployments/latest', requireProjectAuth());
 deploymentsRouter.use('/v1/projects/:id/info', requireProjectAuth());
 deploymentsRouter.use('/v1/projects/:id/schema/current', requireProjectAuth());
 
@@ -183,6 +185,165 @@ deploymentsRouter.get('/v1/projects/:id/deployments/:deploymentId', async (c) =>
   const deployment = await getDeployment(c.req.param('id'), c.req.param('deploymentId'));
   return c.json({ deployment });
 });
+
+const patchSchema = z.object({
+  changedFunctions: z
+    .record(z.string().max(256), z.string().max(MAX_FUNCTION_SOURCE_BYTES))
+    .optional(),
+  removedFunctions: z.array(z.string().max(256)).optional(),
+  schemaSnapshot: z.record(z.string(), z.unknown()).optional(),
+  schemaDiffSummary: z.record(z.string(), z.unknown()).optional(),
+  confirmDestructive: z.boolean().optional(),
+});
+
+deploymentsRouter.patch('/v1/projects/:id/deployments/latest', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
+      400,
+    );
+  }
+
+  const current = await getCurrentDeployment(projectId);
+  const latestBundle = (current?.bundle as Record<string, string> | null) ?? {};
+
+  const mergedBundle: Record<string, string> = { ...latestBundle };
+  if (parsed.data.changedFunctions) {
+    for (const [k, v] of Object.entries(parsed.data.changedFunctions)) mergedBundle[k] = v;
+  }
+  if (parsed.data.removedFunctions) {
+    for (const k of parsed.data.removedFunctions) delete mergedBundle[k];
+  }
+  if (Object.keys(mergedBundle).length > MAX_FUNCTION_FILES) {
+    return c.json(
+      { code: 'bundle_too_large', message: `bundle exceeds ${MAX_FUNCTION_FILES} files` },
+      400,
+    );
+  }
+
+  // Schema snapshot: if the client didn't send one, inherit the previous;
+  // destructive diffs are enforced when a new snapshot is supplied.
+  const inheritedSnapshot =
+    parsed.data.schemaSnapshot ?? ((current?.schemaSnapshot as Record<string, unknown> | null) ?? undefined);
+
+  if (parsed.data.schemaSnapshot && !parsed.data.confirmDestructive) {
+    const prevSnap = (current?.schemaSnapshot as Record<string, unknown> | null) ?? null;
+    if (isDestructiveDiff(prevSnap, parsed.data.schemaSnapshot)) {
+      return c.json(
+        {
+          code: 'destructive_requires_confirmation',
+          message:
+            'schema diff drops tables or columns; re-send with confirmDestructive:true or run `briven deploy --confirm-destructive`',
+        },
+        400,
+      );
+    }
+  }
+
+  const user = c.get('user');
+  const apiKeyId = c.get('apiKeyId');
+  const functionNames = Object.keys(mergedBundle).sort();
+
+  if (functionNames.length > 0) {
+    assertFunctionCountAllowed(functionNames.length, 'free');
+  }
+
+  const deployment = await createDeployment({
+    projectId,
+    triggeredBy: user?.id ?? null,
+    apiKeyId,
+    schemaDiffSummary: parsed.data.schemaDiffSummary,
+    schemaSnapshot: inheritedSnapshot,
+    functionCount: functionNames.length,
+    functionNames,
+    bundle: mergedBundle,
+  });
+
+  await audit({
+    actorId: user?.id ?? null,
+    projectId,
+    action: 'deployment.patch',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: {
+      deploymentId: deployment.id,
+      via: apiKeyId ? 'api_key' : 'session',
+      changedCount: Object.keys(parsed.data.changedFunctions ?? {}).length,
+      removedCount: parsed.data.removedFunctions?.length ?? 0,
+    },
+  });
+
+  // Apply schema in-band (same path as POST /deployments). Harmless no-op
+  // when the client didn't send a new snapshot.
+  if (parsed.data.schemaSnapshot) {
+    try {
+      await transitionDeployment({
+        projectId,
+        deploymentId: deployment.id,
+        status: 'running',
+      });
+      const prev = await getCurrentSchema(projectId);
+      await applySchema(
+        projectId,
+        deployment.id,
+        parsed.data.schemaSnapshot as unknown as SchemaDef,
+        (prev.snapshot as unknown as SchemaDef | null) ?? null,
+      );
+      await transitionDeployment({
+        projectId,
+        deploymentId: deployment.id,
+        status: 'succeeded',
+      });
+    } catch (err) {
+      log.error('schema_apply_failed', {
+        projectId,
+        deploymentId: deployment.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      await transitionDeployment({
+        projectId,
+        deploymentId: deployment.id,
+        status: 'failed',
+        errorCode: 'schema_apply_failed',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } else {
+    // Function-only patches: no schema work, deployment is immediately
+    // serve-able. Mark succeeded so getCurrentDeployment picks it up.
+    await transitionDeployment({
+      projectId,
+      deploymentId: deployment.id,
+      status: 'succeeded',
+    });
+  }
+
+  const updated = await getDeployment(projectId, deployment.id);
+  return c.json({ deployment: updated }, 201);
+});
+
+function isDestructiveDiff(
+  prev: Record<string, unknown> | null,
+  next: Record<string, unknown>,
+): boolean {
+  if (!prev) return false;
+  const prevTables = (prev.tables as Record<string, Record<string, unknown>> | undefined) ?? {};
+  const nextTables = (next.tables as Record<string, Record<string, unknown>> | undefined) ?? {};
+  for (const tName of Object.keys(prevTables)) {
+    if (!(tName in nextTables)) return true; // dropped table
+    const prevCols =
+      (prevTables[tName]!.columns as Record<string, unknown> | undefined) ?? {};
+    const nextCols =
+      (nextTables[tName]!.columns as Record<string, unknown> | undefined) ?? {};
+    for (const cName of Object.keys(prevCols)) {
+      if (!(cName in nextCols)) return true; // dropped column
+    }
+  }
+  return false;
+}
 
 deploymentsRouter.post('/v1/projects/:id/deployments/:deploymentId/cancel', async (c) => {
   const projectId = c.req.param('id');
