@@ -99,8 +99,8 @@ export default function HomePage() {
       </section>
 
       <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 border-t border-[var(--color-border-subtle)] px-6 py-6 font-mono text-[10px] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
-        <div className="flex items-center gap-2">
-          <Image src="/icon.svg" alt="" width={14} height={14} className="opacity-70" />
+        <div className="flex items-center gap-1">
+          <Image src="/icon.svg" alt="" width={22} height={22} className="opacity-70" />
           <span>
             © {new Date().getFullYear()} briven by flndrn · worldwide · agpl-3.0 core · mit cli
           </span>
