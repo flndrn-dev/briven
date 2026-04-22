@@ -185,6 +185,3 @@ function BackgroundGrid() {
       }}
     />
   );
-}
-
-
