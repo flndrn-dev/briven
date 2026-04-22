@@ -164,6 +164,29 @@ export const projectMembers = pgTable(
   }),
 );
 
+/* ─── project_env_vars ────────────────────────────────────────────── */
+export const projectEnvVars = pgTable(
+  'project_env_vars',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    // AES-256-GCM ciphertext of the value, base64. Never read directly —
+    // always through services/project-env.ts which wraps decrypt.
+    encryptedValue: text('encrypted_value').notNull(),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    projectKeyIdx: uniqueIndex('project_env_vars_project_key_idx').on(t.projectId, t.key),
+  }),
+);
+
+export type ProjectEnvVar = typeof projectEnvVars.$inferSelect;
+
 /* ─── api_keys / deploy keys ──────────────────────────────────────── */
 export const apiKeys = pgTable(
   'api_keys',

@@ -16,6 +16,7 @@
   "dependencies": {
     "@briven/config": "workspace:*",
     "@briven/shared": "workspace:*",
+    "postgres": "^3.4.9",
     "zod": "^4.3.6"
   },
   "devDependencies": {

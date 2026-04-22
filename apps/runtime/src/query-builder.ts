@@ -232,8 +232,19 @@ class DeleteImpl implements DeleteQuery {
   }
 }
 
-export function buildDbClient(tx: postgres.TransactionSql): DbClient {
+/**
+ * Build a `DbClient` and a Set the caller can read after the function
+ * resolves — every `ctx.db('<table>')` call records the table name. The
+ * realtime service uses this to decide which postgres LISTEN channels to
+ * subscribe to for change-driven re-invocation.
+ */
+export function buildDbClient(tx: postgres.TransactionSql): {
+  db: DbClient;
+  touched: Set<string>;
+} {
+  const touched = new Set<string>();
   const dbFn = ((table: string): TableQuery => {
+    touched.add(table);
     return {
       select: (cols) => new SelectImpl(tx, table, cols),
       insert: (values) => new InsertImpl(tx, table, values),
@@ -246,15 +257,20 @@ export function buildDbClient(tx: postgres.TransactionSql): DbClient {
     return tx.unsafe(sql, [...params] as never[]) as Promise<unknown[]>;
   };
 
-  return dbFn;
+  return { db: dbFn, touched };
 }
 
 export function makeCtx(
   tx: postgres.TransactionSql,
-  request: { requestId: string; auth: Ctx['auth'] },
-): Ctx {
-  return {
-    db: buildDbClient(tx),
+  request: {
+    requestId: string;
+    auth: Ctx['auth'];
+    env?: Readonly<Record<string, string>>;
+  },
+): { ctx: Ctx; touched: Set<string> } {
+  const { db, touched } = buildDbClient(tx);
+  const ctx: Ctx = {
+    db,
     requestId: request.requestId,
     log: {
       debug: () => undefined,
@@ -262,7 +278,8 @@ export function makeCtx(
       warn: () => undefined,
       error: () => undefined,
     },
-    env: Object.freeze({}),
+    env: Object.freeze({ ...(request.env ?? {}) }),
     auth: request.auth,
   };
+  return { ctx, touched };
 }

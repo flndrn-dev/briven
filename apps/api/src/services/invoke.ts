@@ -3,6 +3,7 @@ import { brivenError, NotFoundError } from '@briven/shared';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import { getCurrentDeployment } from './deployments.js';
+import { getPlainEnvForProject } from './project-env.js';
 
 export interface InvokeInput {
   projectId: string;
@@ -16,13 +17,20 @@ export interface InvokeInput {
 }
 
 export type InvokeResult =
-  | { ok: true; value: unknown; durationMs: number; deploymentId: string }
+  | {
+      ok: true;
+      value: unknown;
+      durationMs: number;
+      deploymentId: string;
+      touchedTables: readonly string[];
+    }
   | {
       ok: false;
       code: string;
       message: string;
       durationMs: number;
       deploymentId: string;
+      touchedTables?: readonly string[];
     };
 
 /**
@@ -47,6 +55,11 @@ export async function invoke(input: InvokeInput): Promise<InvokeResult> {
     headers['authorization'] = `Bearer ${env.BRIVEN_RUNTIME_SHARED_SECRET}`;
   }
 
+  // Pull per-project env vars. Encrypted at rest, decrypted only here and
+  // shipped to the runtime over the swarm overlay. The runtime never caches
+  // them and `ctx.env` is the only surface exposed to user code.
+  const projectEnv = await getPlainEnvForProject(input.projectId).catch(() => ({}));
+
   let res: Response;
   try {
     res = await fetch(`${env.BRIVEN_RUNTIME_URL}/invoke`, {
@@ -59,6 +72,7 @@ export async function invoke(input: InvokeInput): Promise<InvokeResult> {
         requestId: input.requestId,
         args: input.args,
         auth: input.auth,
+        env: projectEnv,
       }),
     });
   } catch (err) {
@@ -89,11 +103,19 @@ export async function invoke(input: InvokeInput): Promise<InvokeResult> {
     code?: string;
     message?: string;
     durationMs?: number;
+    touchedTables?: string[];
   };
 
   const durationMs = typeof payload.durationMs === 'number' ? payload.durationMs : 0;
+  const touchedTables = payload.touchedTables ?? [];
   if (payload.ok) {
-    return { ok: true, value: payload.value, durationMs, deploymentId: deployment.id };
+    return {
+      ok: true,
+      value: payload.value,
+      durationMs,
+      deploymentId: deployment.id,
+      touchedTables,
+    };
   }
   return {
     ok: false,
@@ -101,5 +123,6 @@ export async function invoke(input: InvokeInput): Promise<InvokeResult> {
     message: payload.message ?? 'unknown error',
     durationMs,
     deploymentId: deployment.id,
+    touchedTables,
   };
 }

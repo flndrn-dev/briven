@@ -29,6 +29,13 @@
       "when": 1776837051940,
       "tag": "0003_supreme_nocturne",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776848756881,
+      "tag": "0004_stale_weapon_omega",
+      "breakpoints": true
     }
   ]
 }

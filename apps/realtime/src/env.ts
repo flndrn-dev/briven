@@ -14,6 +14,11 @@ const envSchema = z.object({
   // Shared with apps/api so realtime can call internal endpoints; also used
   // to validate the bearer token on the WebSocket upgrade.
   BRIVEN_RUNTIME_SHARED_SECRET: z.string().min(32).optional(),
+
+  // Data-plane URL: realtime opens a single dedicated connection here and
+  // issues `LISTEN briven_<schema>_<table>` per active subscription. When a
+  // NOTIFY arrives it re-invokes any subscriptions touching that table.
+  BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

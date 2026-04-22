@@ -7,8 +7,10 @@ const TABS = [
   { href: '', label: 'overview' },
   { href: '/functions', label: 'functions' },
   { href: '/deployments', label: 'deployments' },
+  { href: '/env', label: 'env' },
   { href: '/keys', label: 'api keys' },
   { href: '/members', label: 'members' },
+  { href: '/activity', label: 'activity' },
   { href: '/settings', label: 'settings' },
 ] as const;
 

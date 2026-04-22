@@ -10,6 +10,7 @@ export interface InvokeRequest {
   readonly deploymentId: string;
   readonly requestId: string;
   readonly auth: InvokeAuth | null;
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 export interface InvokeAuth {
@@ -18,12 +19,21 @@ export interface InvokeAuth {
 }
 
 export type InvokeResult =
-  | { ok: true; value: unknown; durationMs: number }
+  | {
+      ok: true;
+      value: unknown;
+      durationMs: number;
+      // Tables the executor observed `ctx.db('<table>')` on. The realtime
+      // service uses these to decide which LISTEN channels to subscribe
+      // to for re-invocation push.
+      touchedTables: readonly string[];
+    }
   | {
       ok: false;
       code: string;
       message: string;
       durationMs: number;
+      touchedTables?: readonly string[];
     };
 
 /**

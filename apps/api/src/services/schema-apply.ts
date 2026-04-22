@@ -54,9 +54,12 @@ export async function applySchema(
 function renderChange(change: Change): string[] {
   switch (change.kind) {
     case 'create_table':
-      return [renderCreateTable(change.table, change.def)];
+      return [renderCreateTable(change.table, change.def), ...renderNotifyTrigger(change.table)];
     case 'drop_table':
-      return [`DROP TABLE IF EXISTS "${change.table}" CASCADE`];
+      return [
+        `DROP TRIGGER IF EXISTS ${triggerName(change.table)} ON "${change.table}"`,
+        `DROP TABLE IF EXISTS "${change.table}" CASCADE`,
+      ];
     case 'add_column':
       return [
         `ALTER TABLE "${change.table}" ADD COLUMN IF NOT EXISTS "${change.column}" ${renderColumnType(change.def)}`,
@@ -64,6 +67,47 @@ function renderChange(change: Change): string[] {
     case 'drop_column':
       return [`ALTER TABLE "${change.table}" DROP COLUMN IF EXISTS "${change.column}"`];
   }
+}
+
+/**
+ * Per-table NOTIFY trigger. Channel name is `briven_<schemaname>_<table>` — the
+ * schema name is the project's data-plane schema (`proj_<projectId>`), so the
+ * channel is unique across the whole shared cluster. Realtime LISTENs on
+ * those channels to know when to re-invoke a subscribed query.
+ *
+ * Payload is small JSON: `{op, id?}` — we send the op kind and primary key
+ * if present. Anything more would risk leaking row data into a side channel.
+ */
+function renderNotifyTrigger(table: string): string[] {
+  const fn = triggerFnName(table);
+  const trg = triggerName(table);
+  // current_schema() resolves to the project's schema (search_path is set
+  // by runInProjectSchema), so the channel is project-scoped.
+  return [
+    `
+    CREATE OR REPLACE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
+    DECLARE channel text;
+    BEGIN
+      channel := 'briven_' || current_schema() || '_${table}';
+      PERFORM pg_notify(channel, json_build_object('op', TG_OP)::text);
+      IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END $$
+    `.trim(),
+    `DROP TRIGGER IF EXISTS ${trg} ON "${table}"`,
+    `
+    CREATE TRIGGER ${trg}
+      AFTER INSERT OR UPDATE OR DELETE ON "${table}"
+      FOR EACH ROW EXECUTE FUNCTION ${fn}()
+    `.trim(),
+  ];
+}
+
+function triggerName(table: string): string {
+  return `_briven_notify_${table}`;
+}
+
+function triggerFnName(table: string): string {
+  return `_briven_notify_${table}_fn`;
 }
 
 function renderColumnType(def: ColumnDef): string {

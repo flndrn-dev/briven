@@ -42,15 +42,21 @@ export async function invokeInline(
       };
     }
 
-    const value = await withProjectTx(request.projectId, async (tx) => {
-      const ctx = makeCtx(tx, { requestId: request.requestId, auth: request.auth });
-      return fn(ctx, request.args);
+    const { value, touched } = await withProjectTx(request.projectId, async (tx) => {
+      const { ctx, touched } = makeCtx(tx, {
+        requestId: request.requestId,
+        auth: request.auth,
+        env: request.env,
+      });
+      const v = await fn(ctx, request.args);
+      return { value: v, touched };
     });
 
     return {
       ok: true,
       value,
       durationMs: Math.round(performance.now() - started),
+      touchedTables: [...touched],
     };
   } catch (err) {
     return {

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { pingDb } from '../db/client.js';
+import { pingDataPlane } from '../db/data-plane.js';
 import { env } from '../env.js';
 
 const BOOT_TIME = new Date().toISOString();
@@ -21,20 +22,43 @@ healthRouter.get('/health', (c) =>
 );
 
 /**
- * /ready — dependency readiness. Fails if any required dep is unreachable.
- * Postgres probe is live; Redis probe lands when sessions/queues are wired.
+ * /ready — dependency readiness. Returns 200 only when every required
+ * upstream is reachable (control-plane postgres, data-plane postgres,
+ * runtime reachable from the swarm network).
  */
 healthRouter.get('/ready', async (c) => {
-  const dbConfigured = Boolean(env.BRIVEN_DATABASE_URL);
-  const redisConfigured = Boolean(env.BRIVEN_REDIS_URL);
-
-  const dbOk = dbConfigured ? await pingDb() : false;
+  const [controlOk, dataOk, runtimeOk] = await Promise.all([
+    env.BRIVEN_DATABASE_URL ? pingDb() : Promise.resolve(false),
+    env.BRIVEN_DATA_PLANE_URL ? pingDataPlane() : Promise.resolve(false),
+    probeRuntime(),
+  ]);
 
   const checks = {
-    postgres: !dbConfigured ? 'not_configured' : dbOk ? 'ok' : 'unreachable',
-    redis: redisConfigured ? 'pending_probe' : 'not_configured',
+    control_postgres: env.BRIVEN_DATABASE_URL
+      ? controlOk
+        ? 'ok'
+        : 'unreachable'
+      : 'not_configured',
+    data_plane_postgres: env.BRIVEN_DATA_PLANE_URL
+      ? dataOk
+        ? 'ok'
+        : 'unreachable'
+      : 'not_configured',
+    runtime: runtimeOk ? 'ok' : 'unreachable',
   } as const;
 
-  const ready = dbOk && redisConfigured;
+  const ready = controlOk && dataOk && runtimeOk;
   return c.json({ status: ready ? 'ready' : 'not_ready', checks }, ready ? 200 : 503);
 });
+
+async function probeRuntime(): Promise<boolean> {
+  if (!env.BRIVEN_RUNTIME_URL) return false;
+  try {
+    const res = await fetch(`${env.BRIVEN_RUNTIME_URL}/health`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

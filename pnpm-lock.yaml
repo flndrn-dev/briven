@@ -127,6 +127,9 @@ importers:
       '@briven/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       zod:
         specifier: ^4.3.6
         version: 4.3.6

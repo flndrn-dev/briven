@@ -7,7 +7,7 @@ export default function HomePage() {
       <BackgroundGrid />
 
       <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <Link href="/" className="flex items-center gap-3" aria-label="briven home">
+        <Link href="/" className="flex items-center gap-2" aria-label="briven home">
           <Image
             src="/icon.svg"
             alt=""

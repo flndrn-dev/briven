@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
-import { audit, hashIp } from '../services/audit.js';
+import { audit, hashIp, listAuditForProject } from '../services/audit.js';
 import {
   createProject,
   getProjectForUser,
@@ -115,4 +115,11 @@ projectsRouter.delete('/v1/projects/:id', async (c) => {
     userAgent: c.req.header('user-agent') ?? null,
   });
   return c.json({ project });
+});
+
+projectsRouter.get('/v1/projects/:id/activity', async (c) => {
+  const user = c.get('user')!;
+  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const rows = await listAuditForProject(project.id, 100);
+  return c.json({ activity: rows });
 });

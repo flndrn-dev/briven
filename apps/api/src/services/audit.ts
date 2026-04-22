@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { newId } from '@briven/shared';
+import { desc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { auditLogs, type NewAuditLog } from '../db/schema.js';
@@ -26,6 +27,44 @@ export interface AuditEntry {
   ipHash: string | null;
   userAgent: string | null;
   metadata?: Record<string, unknown>;
+}
+
+export interface AuditRow {
+  id: string;
+  action: string;
+  actorId: string | null;
+  ipHash: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+}
+
+/**
+ * Recent audit entries for a project, newest first. Used by the dashboard
+ * "activity" tab. The IP hash stays opaque; CLAUDE.md §5.1 forbids surfacing
+ * raw IPs to the dashboard.
+ */
+export async function listAuditForProject(
+  projectId: string,
+  limit = 100,
+): Promise<AuditRow[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      actorId: auditLogs.actorId,
+      ipHash: auditLogs.ipHash,
+      metadata: auditLogs.metadata,
+      createdAt: auditLogs.createdAt,
+    })
+    .from(auditLogs)
+    .where(eq(auditLogs.projectId, projectId))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({
+    ...r,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+  }));
 }
 
 /**
