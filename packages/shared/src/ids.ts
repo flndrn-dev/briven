@@ -17,7 +17,8 @@ export type IdPrefix =
   | 'm' // member
   | 'au' // audit log
   | 'fn' // function record
-  | 'ev'; // event
+  | 'ev' // event
+  | 'inv'; // invocation — per-call id attached to function logs
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

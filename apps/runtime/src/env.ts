@@ -27,6 +27,16 @@ const envSchema = z.object({
   // schemas against. The runtime opens a pooled connection here and scopes
   // `search_path` per invoke so user functions only see their own tables.
   BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
+
+  // Redis URL — used to publish function invocation log envelopes as a
+  // stream. Optional: when unset the publisher is a no-op and invocations
+  // still succeed, they're just not tailable via `briven logs`.
+  BRIVEN_REDIS_URL: z.string().url().optional(),
+
+  // Cap on retained stream entries per project before Redis trims the head.
+  // `MAXLEN ~` uses approximate trimming so the cap isn't exact, which is
+  // what we want — fast writes, bounded memory.
+  BRIVEN_LOGS_STREAM_MAX: z.coerce.number().int().positive().default(10_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

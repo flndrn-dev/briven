@@ -266,13 +266,14 @@ export function makeCtx(
     requestId: string;
     auth: Ctx['auth'];
     env?: Readonly<Record<string, string>>;
+    log?: Ctx['log'];
   },
 ): { ctx: Ctx; touched: Set<string> } {
   const { db, touched } = buildDbClient(tx);
   const ctx: Ctx = {
     db,
     requestId: request.requestId,
-    log: {
+    log: request.log ?? {
       debug: () => undefined,
       info: () => undefined,
       warn: () => undefined,
