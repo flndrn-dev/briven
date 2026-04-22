@@ -11,8 +11,8 @@ export default function HomePage() {
           <Image
             src="/icon.svg"
             alt=""
-            width={28}
-            height={28}
+            width={40}
+            height={40}
             priority
             className="opacity-95"
           />

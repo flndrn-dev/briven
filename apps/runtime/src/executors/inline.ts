@@ -1,16 +1,18 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { Ctx } from '@briven/schema';
-
+import { withProjectTx } from '../db.js';
+import { makeCtx } from '../query-builder.js';
 import type { Bundle, InvokeRequest, InvokeResult } from '../types.js';
 
 /**
- * Phase 1 executor — runs user code inline in the runtime host process.
+ * Phase 1 executor — runs user code inline in the runtime host process,
+ * inside a per-invoke transaction scoped to the project's data-plane
+ * schema.
  *
- * **NOT isolated.** This is a dogfood-only shortcut per BUILD_PLAN Phase 1
- * week 5-6. Flip BRIVEN_RUNTIME_EXECUTOR=deno once that executor lands. Do
- * NOT use `inline` in any environment that accepts external traffic.
+ * **NOT isolated.** Dogfood-only shortcut per BUILD_PLAN Phase 1 week 5-6.
+ * Flip BRIVEN_RUNTIME_EXECUTOR=deno once that executor lands. Do NOT use
+ * `inline` in any environment that accepts external traffic.
  */
 export async function invokeInline(
   bundle: Bundle,
@@ -29,10 +31,7 @@ export async function invokeInline(
   const started = performance.now();
 
   try {
-    const mod = (await import(pathToFileURL(modPath).href)) as Record<
-      string,
-      (ctx: Ctx, args: unknown) => Promise<unknown>
-    >;
+    const mod = await import(pathToFileURL(modPath).href);
     const fn = mod[request.functionName] ?? mod.default;
     if (typeof fn !== 'function') {
       return {
@@ -43,8 +42,11 @@ export async function invokeInline(
       };
     }
 
-    const ctx: Ctx = makeStubCtx(request);
-    const value = await fn(ctx, request.args);
+    const value = await withProjectTx(request.projectId, async (tx) => {
+      const ctx = makeCtx(tx, { requestId: request.requestId, auth: request.auth });
+      return fn(ctx, request.args);
+    });
+
     return {
       ok: true,
       value,
@@ -59,28 +61,4 @@ export async function invokeInline(
       durationMs: Math.round(performance.now() - started),
     };
   }
-}
-
-/**
- * Phase 1 stub for the runtime `Ctx`. The real implementation wires the
- * per-project DbClient, logger, and env injection. For now, db() throws so
- * any query code surfaces as a clean error instead of silently succeeding.
- */
-function makeStubCtx(request: InvokeRequest): Ctx {
-  const fail = () => {
-    throw new Error('ctx.db is not implemented in the phase 1 inline executor');
-  };
-  const logger: Ctx['log'] = {
-    debug: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  };
-  return {
-    db: fail as unknown as Ctx['db'],
-    requestId: request.requestId,
-    log: logger,
-    env: Object.freeze({}),
-    auth: request.auth,
-  };
 }

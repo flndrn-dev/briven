@@ -10,8 +10,11 @@ import {
   getCurrentSchema,
   getDeployment,
   listDeploymentsForProject,
+  transitionDeployment,
 } from '../services/deployments.js';
 import { audit, hashIp } from '../services/audit.js';
+import { applySchema, type SchemaDef } from '../services/schema-apply.js';
+import { log } from '../lib/logger.js';
 
 type AppEnv = {
   Variables: {
@@ -127,7 +130,46 @@ deploymentsRouter.post('/v1/projects/:id/deployments', async (c) => {
     metadata: { deploymentId: deployment.id, via: apiKeyId ? 'api_key' : 'session' },
   });
 
-  return c.json({ deployment }, 201);
+  // Apply the schema in-band. Phase 1 has one shared cluster + a single
+  // worker — the api process is the worker. Phase 2 moves this onto a
+  // queue so deploys don't block the request.
+  if (parsed.data.schemaSnapshot) {
+    try {
+      await transitionDeployment({
+        projectId,
+        deploymentId: deployment.id,
+        status: 'running',
+      });
+      const prev = await getCurrentSchema(projectId);
+      await applySchema(
+        projectId,
+        deployment.id,
+        parsed.data.schemaSnapshot as unknown as SchemaDef,
+        (prev.snapshot as unknown as SchemaDef | null) ?? null,
+      );
+      await transitionDeployment({
+        projectId,
+        deploymentId: deployment.id,
+        status: 'succeeded',
+      });
+    } catch (err) {
+      log.error('schema_apply_failed', {
+        projectId,
+        deploymentId: deployment.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      await transitionDeployment({
+        projectId,
+        deploymentId: deployment.id,
+        status: 'failed',
+        errorCode: 'schema_apply_failed',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const updated = await getDeployment(projectId, deployment.id);
+  return c.json({ deployment: updated }, 201);
 });
 
 deploymentsRouter.get('/v1/projects/:id/deployments/:deploymentId', async (c) => {

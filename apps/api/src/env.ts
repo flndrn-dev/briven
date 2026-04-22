@@ -17,6 +17,11 @@ const envSchema = z.object({
   // Control-plane meta-DB — required once Phase 1 week 1 services are wired.
   BRIVEN_DATABASE_URL: z.string().url().optional(),
 
+  // Data-plane: shared postgres cluster where each project gets its own
+  // schema. CLAUDE.md §3.4 — schema-per-tenant up to Team tier, then
+  // dedicated cluster per tenant. Phase 1 has one cluster.
+  BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
+
   // Redis — sessions, queues. Optional until auth lands.
   BRIVEN_REDIS_URL: z.string().url().optional(),
 

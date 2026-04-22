@@ -128,6 +128,10 @@ export const projects = pgTable(
     region: text('region').notNull().default('eu-west-1'),
     tier: text('tier').$type<ProjectTier>().notNull().default('free'),
     shardId: text('shard_id'),
+    // The Postgres schema name where this project's tables live. Per
+    // CLAUDE.md §3.4 we use schema-per-tenant within a shared cluster
+    // (briven-data-plane). Format: `proj_<base32(projectId)>`.
+    dataSchemaName: text('data_schema_name'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

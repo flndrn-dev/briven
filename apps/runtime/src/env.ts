@@ -22,6 +22,11 @@ const envSchema = z.object({
   // Internal apps/api URL, reachable on the swarm overlay network. Used
   // only for bundle fetches; never the public api.briven.cloud hostname.
   BRIVEN_API_INTERNAL_URL: z.string().url().default('http://localhost:3001'),
+
+  // Data-plane postgres URL — same cluster the api provisions per-project
+  // schemas against. The runtime opens a pooled connection here and scopes
+  // `search_path` per invoke so user functions only see their own tables.
+  BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

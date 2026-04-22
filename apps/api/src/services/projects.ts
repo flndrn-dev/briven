@@ -4,7 +4,9 @@ import { newId, NotFoundError, ForbiddenError, ValidationError } from '@briven/s
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
+import { provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
 import { projects, projectMembers, type Project, type NewProject } from '../db/schema.js';
+import { log } from '../lib/logger.js';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -39,13 +41,15 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     });
   }
 
+  const projectId = newId('p');
   const row: NewProject = {
-    id: newId('p'),
+    id: projectId,
     slug,
     name: input.name,
     ownerId: input.ownerId,
     region: input.region ?? 'eu-west-1',
     tier: 'free',
+    dataSchemaName: schemaNameFor(projectId),
   };
 
   const db = getDb();
@@ -59,6 +63,18 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     userId: input.ownerId,
     role: 'owner',
   });
+
+  // Provision the data-plane schema. If this fails we log and let the row
+  // stand — the deploy worker will retry the schema creation before applying
+  // any DDL, so a transient outage here doesn't strand the project.
+  try {
+    await provisionProjectSchema(created.id);
+  } catch (err) {
+    log.error('project_schema_provision_failed', {
+      projectId: created.id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   return created;
 }

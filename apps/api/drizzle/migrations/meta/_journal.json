@@ -22,6 +22,13 @@
       "when": 1776835881574,
       "tag": "0002_clammy_deadpool",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776837051940,
+      "tag": "0003_supreme_nocturne",
+      "breakpoints": true
     }
   ]
 }

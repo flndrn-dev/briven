@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@briven/config": "workspace:*",
+    "@briven/schema": "workspace:^",
     "@briven/shared": "workspace:*",
     "better-auth": "^1.6.6",
     "drizzle-orm": "^0.45.2",
