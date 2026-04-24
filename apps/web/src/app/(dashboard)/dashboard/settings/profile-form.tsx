@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 
+import { COUNTRIES_EU, COUNTRIES_REST } from '../../../../lib/countries';
+
 type VatState =
   | { status: 'idle' }
   | { status: 'checking' }
@@ -31,42 +33,6 @@ interface Props {
   save: (patch: Record<string, string | null>) => Promise<void>;
 }
 
-// Minimal EU + surrounding country list. Extend as we onboard beyond the EU/EEA.
-const COUNTRIES: Array<{ code: string; name: string }> = [
-  { code: 'AT', name: 'Austria' },
-  { code: 'BE', name: 'Belgium' },
-  { code: 'BG', name: 'Bulgaria' },
-  { code: 'CH', name: 'Switzerland' },
-  { code: 'CY', name: 'Cyprus' },
-  { code: 'CZ', name: 'Czech Republic' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'DK', name: 'Denmark' },
-  { code: 'EE', name: 'Estonia' },
-  { code: 'ES', name: 'Spain' },
-  { code: 'FI', name: 'Finland' },
-  { code: 'FR', name: 'France' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'GR', name: 'Greece' },
-  { code: 'HR', name: 'Croatia' },
-  { code: 'HU', name: 'Hungary' },
-  { code: 'IE', name: 'Ireland' },
-  { code: 'IS', name: 'Iceland' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'LI', name: 'Liechtenstein' },
-  { code: 'LT', name: 'Lithuania' },
-  { code: 'LU', name: 'Luxembourg' },
-  { code: 'LV', name: 'Latvia' },
-  { code: 'MT', name: 'Malta' },
-  { code: 'NL', name: 'Netherlands' },
-  { code: 'NO', name: 'Norway' },
-  { code: 'PL', name: 'Poland' },
-  { code: 'PT', name: 'Portugal' },
-  { code: 'RO', name: 'Romania' },
-  { code: 'SE', name: 'Sweden' },
-  { code: 'SI', name: 'Slovenia' },
-  { code: 'SK', name: 'Slovakia' },
-  { code: 'US', name: 'United States' },
-];
 
 type FieldKey = keyof ProfileInitial;
 
@@ -229,11 +195,20 @@ export function ProfileForm({ initial, vatLocked, save }: Props) {
               className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
             >
               <option value="">— select —</option>
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name} ({c.code})
-                </option>
-              ))}
+              <optgroup label="EU / EEA / UK / CH">
+                {COUNTRIES_EU.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="rest of world">
+                {COUNTRIES_REST.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </label>
         </div>
