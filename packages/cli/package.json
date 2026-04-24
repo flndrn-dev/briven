@@ -23,7 +23,7 @@
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "echo 'lint wired in phase 1'",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/**/*.test.ts"
+    "test": "tsx --test src/cli.test.ts"
   },
   "dependencies": {
     "chokidar": "^5.0.0",

@@ -1,4 +1,4 @@
-@import "@briven/config/tailwind/theme.css";
+@import '@briven/config/tailwind/theme.css';
 
 /*
  * Global affordance: every non-disabled interactive element shows a pointer
@@ -8,11 +8,11 @@
 @layer base {
   button:not(:disabled),
   a,
-  [role="button"]:not([aria-disabled="true"]) {
+  [role='button']:not([aria-disabled='true']) {
     cursor: pointer;
   }
   button:disabled,
-  [role="button"][aria-disabled="true"] {
+  [role='button'][aria-disabled='true'] {
     cursor: not-allowed;
   }
 }

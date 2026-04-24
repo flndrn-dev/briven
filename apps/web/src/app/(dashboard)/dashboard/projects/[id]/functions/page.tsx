@@ -10,11 +10,7 @@ interface Deployment {
 
 export const dynamic = 'force-dynamic';
 
-export default async function FunctionsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function FunctionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { deployments } = await apiJson<{ deployments: Deployment[] }>(
     `/v1/projects/${id}/deployments?limit=1`,
@@ -38,8 +34,7 @@ export default async function FunctionsPage({
       <header>
         <h2 className="font-mono text-sm text-[var(--color-text)]">functions</h2>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          served from deployment{' '}
-          <code className="text-[var(--color-text)]">{current.id}</code> ·{' '}
+          served from deployment <code className="text-[var(--color-text)]">{current.id}</code> ·{' '}
           {names.length} function{names.length === 1 ? '' : 's'} · status{' '}
           <span className="text-[var(--color-text)]">{current.status}</span>
         </p>

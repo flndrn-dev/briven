@@ -52,7 +52,8 @@ export default function NewProjectPage() {
 
         <label className="flex flex-col gap-2">
           <span className="font-mono text-xs text-[var(--color-text-muted)]">
-            slug <span className="text-[var(--color-text-subtle)]">(optional — generated if blank)</span>
+            slug{' '}
+            <span className="text-[var(--color-text-subtle)]">(optional — generated if blank)</span>
           </span>
           <input
             name="slug"

@@ -119,8 +119,6 @@ export async function adminStats(): Promise<{
     .from(projects)
     .where(and(isNull(projects.deletedAt)));
   // deployments table doesn't have a soft-delete; sum all
-  const [d] = await db.execute<{ c: number }>(
-    sql`SELECT count(*)::int AS c FROM deployments`,
-  );
+  const [d] = await db.execute<{ c: number }>(sql`SELECT count(*)::int AS c FROM deployments`);
   return { users: u?.c ?? 0, projects: p?.c ?? 0, deployments: d?.c ?? 0 };
 }

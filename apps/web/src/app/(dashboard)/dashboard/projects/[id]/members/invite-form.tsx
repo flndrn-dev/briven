@@ -56,9 +56,7 @@ export function InviteForm({ action }: Props) {
           {pending ? 'sending...' : 'send invite'}
         </button>
       </div>
-      {sent ? (
-        <p className="font-mono text-xs text-[var(--color-primary)]">invite sent ✓</p>
-      ) : null}
+      {sent ? <p className="font-mono text-xs text-[var(--color-primary)]">invite sent ✓</p> : null}
       {error ? (
         <p role="alert" className="font-mono text-xs text-red-400">
           {error}

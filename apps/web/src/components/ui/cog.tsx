@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { motion, useAnimation } from "motion/react";
-import type { HTMLAttributes } from "react";
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { motion, useAnimation } from 'motion/react';
+import type { HTMLAttributes } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export interface CogIconHandle {
   startAnimation: () => void;
@@ -24,8 +24,8 @@ const CogIcon = forwardRef<CogIconHandle, CogIconProps>(
       isControlledRef.current = true;
 
       return {
-        startAnimation: () => controls.start("animate"),
-        stopAnimation: () => controls.start("normal"),
+        startAnimation: () => controls.start('animate'),
+        stopAnimation: () => controls.start('normal'),
       };
     });
 
@@ -34,10 +34,10 @@ const CogIcon = forwardRef<CogIconHandle, CogIconProps>(
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
-          controls.start("animate");
+          controls.start('animate');
         }
       },
-      [controls, onMouseEnter]
+      [controls, onMouseEnter],
     );
 
     const handleMouseLeave = useCallback(
@@ -45,10 +45,10 @@ const CogIcon = forwardRef<CogIconHandle, CogIconProps>(
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
-          controls.start("normal");
+          controls.start('normal');
         }
       },
-      [controls, onMouseLeave]
+      [controls, onMouseLeave],
     );
     return (
       <div
@@ -65,7 +65,7 @@ const CogIcon = forwardRef<CogIconHandle, CogIconProps>(
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth="2"
-          transition={{ type: "spring", stiffness: 50, damping: 10 }}
+          transition={{ type: 'spring', stiffness: 50, damping: 10 }}
           variants={{
             normal: {
               rotate: 0,
@@ -95,9 +95,9 @@ const CogIcon = forwardRef<CogIconHandle, CogIconProps>(
         </motion.svg>
       </div>
     );
-  }
+  },
 );
 
-CogIcon.displayName = "CogIcon";
+CogIcon.displayName = 'CogIcon';
 
 export { CogIcon };

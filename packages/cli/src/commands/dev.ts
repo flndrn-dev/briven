@@ -7,13 +7,7 @@ import { apiCall, ApiCallError } from '../api-client.js';
 import { discoverFunctions, loadProjectSchema } from '../bundler.js';
 import { readCredentials, type ProjectCredential } from '../config.js';
 import { readProjectConfig } from '../project-config.js';
-import {
-  banner,
-  blankLine,
-  error as printError,
-  step,
-  success,
-} from '../output.js';
+import { banner, blankLine, error as printError, step, success } from '../output.js';
 
 interface DevArgs {
   quiet: boolean;
@@ -47,7 +41,11 @@ export async function runDev(argv: readonly string[]): Promise<number> {
 
   banner(`dev ${local.projectId}`);
   step(`origin    ${cred.apiOrigin}`);
-  step(args.confirmDestructive ? pc.red('destructive schema diffs allowed') : 'safe mode — destructive schema diffs refused');
+  step(
+    args.confirmDestructive
+      ? pc.red('destructive schema diffs allowed')
+      : 'safe mode — destructive schema diffs refused',
+  );
   blankLine();
 
   const cwd = process.cwd();
@@ -124,7 +122,11 @@ async function push(
   const schemaChanged = !sameSchema(snapshot.schema, nextSchema);
   const { changedFunctions, removedFunctions } = bundleDelta(snapshot.bundle, nextBundle);
 
-  if (!schemaChanged && Object.keys(changedFunctions).length === 0 && removedFunctions.length === 0) {
+  if (
+    !schemaChanged &&
+    Object.keys(changedFunctions).length === 0 &&
+    removedFunctions.length === 0
+  ) {
     return; // nothing to push
   }
 

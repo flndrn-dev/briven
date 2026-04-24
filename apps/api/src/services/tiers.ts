@@ -45,10 +45,12 @@ export async function assertProjectCreateAllowed(
   const count = row?.count ?? 0;
   const limit = TIERS[orgTier].projectsPerOrg;
   if (count >= limit) {
-    throw new TierLimitExceeded(
-      `project limit reached for tier '${orgTier}' (${count}/${limit})`,
-      { orgId, tier: orgTier, count, limit },
-    );
+    throw new TierLimitExceeded(`project limit reached for tier '${orgTier}' (${count}/${limit})`, {
+      orgId,
+      tier: orgTier,
+      count,
+      limit,
+    });
   }
 }
 

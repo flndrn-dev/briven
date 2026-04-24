@@ -85,9 +85,7 @@ export function UpgradeButtons({ plans, currentTier }: Props) {
           );
         })}
       </div>
-      {errMsg ? (
-        <p className="font-mono text-xs text-[var(--color-error)]">{errMsg}</p>
-      ) : null}
+      {errMsg ? <p className="font-mono text-xs text-[var(--color-error)]">{errMsg}</p> : null}
     </div>
   );
 }

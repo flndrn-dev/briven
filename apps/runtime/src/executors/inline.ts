@@ -4,11 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { newId } from '@briven/shared';
 
 import { withProjectTx } from '../db.js';
-import {
-  createLogCollector,
-  installConsolePatch,
-  runWithCollector,
-} from '../log-collector.js';
+import { createLogCollector, installConsolePatch, runWithCollector } from '../log-collector.js';
 import { publishInvocation } from '../log-publisher.js';
 import { makeCtx } from '../query-builder.js';
 import type { Bundle, InvokeRequest, InvokeResult } from '../types.js';
@@ -30,10 +26,7 @@ installConsolePatch();
  * through it, then publish a single structured envelope to Redis for
  * `briven logs --tail` and the log-fanout worker.
  */
-export async function invokeInline(
-  bundle: Bundle,
-  request: InvokeRequest,
-): Promise<InvokeResult> {
+export async function invokeInline(bundle: Bundle, request: InvokeRequest): Promise<InvokeResult> {
   if (!bundle.functionNames.includes(request.functionName)) {
     return {
       ok: false,

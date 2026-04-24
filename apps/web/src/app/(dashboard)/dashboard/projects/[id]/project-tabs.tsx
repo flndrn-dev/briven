@@ -19,7 +19,10 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
   const base = `/dashboard/projects/${projectId}`;
 
   return (
-    <nav aria-label="project sections" className="flex gap-1 border-b border-[var(--color-border-subtle)]">
+    <nav
+      aria-label="project sections"
+      className="flex gap-1 border-b border-[var(--color-border-subtle)]"
+    >
       {TABS.map((tab) => {
         const href = `${base}${tab.href}`;
         const active = tab.href === '' ? pathname === base : pathname.startsWith(href);

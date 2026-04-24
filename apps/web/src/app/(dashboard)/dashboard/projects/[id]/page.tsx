@@ -14,11 +14,7 @@ interface Deployment {
 
 export const dynamic = 'force-dynamic';
 
-export default async function ProjectOverviewPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ProjectOverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { project } = await apiJson<{ project: Project }>(`/v1/projects/${id}`);
   const { deployments } = await apiJson<{ deployments: Deployment[] }>(
@@ -41,14 +37,13 @@ export default async function ProjectOverviewPage({
               : 'never'
           }
         />
-        <Card
-          label="functions (last deploy)"
-          value={latest?.functionCount ?? '—'}
-        />
+        <Card label="functions (last deploy)" value={latest?.functionCount ?? '—'} />
       </div>
 
       <div>
-        <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">recent deployments</h2>
+        <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">
+          recent deployments
+        </h2>
         {deployments.length === 0 ? (
           <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center font-mono text-sm text-[var(--color-text-muted)]">
             no deployments yet. run <code className="text-[var(--color-text)]">briven deploy</code>.

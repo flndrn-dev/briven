@@ -1,15 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-  diff,
-  generateSql,
-  schema,
-  table,
-  text,
-  timestamp,
-  type SchemaDef,
-} from './index.js';
+import { diff, generateSql, schema, table, text, timestamp, type SchemaDef } from './index.js';
 
 test('schema rejects reserved _briven_ prefix', () => {
   assert.throws(() =>
@@ -94,8 +86,5 @@ test('table foreign key reference renders in SQL', () => {
     }),
   });
   const sql = generateSql(s);
-  assert.match(
-    sql,
-    /FOREIGN KEY \("userId"\) REFERENCES "users" \("id"\) ON DELETE CASCADE/,
-  );
+  assert.match(sql, /FOREIGN KEY \("userId"\) REFERENCES "users" \("id"\) ON DELETE CASCADE/);
 });

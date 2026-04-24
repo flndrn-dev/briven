@@ -5,13 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { apiCall, ApiCallError } from '../api-client.js';
 import { readCredentials } from '../config.js';
 import { readProjectConfig } from '../project-config.js';
-import {
-  banner,
-  blankLine,
-  error as printError,
-  step,
-  success,
-} from '../output.js';
+import { banner, blankLine, error as printError, step, success } from '../output.js';
 
 interface MaskedEnvVar {
   id: string;
@@ -91,10 +85,10 @@ async function runList(_argv: readonly string[]): Promise<number> {
 
   banner('env list');
   try {
-    const res = await apiCall<{ env: MaskedEnvVar[] }>(
-      `/v1/projects/${ctx.projectId}/env`,
-      { apiOrigin: ctx.apiOrigin, apiKey: ctx.apiKey },
-    );
+    const res = await apiCall<{ env: MaskedEnvVar[] }>(`/v1/projects/${ctx.projectId}/env`, {
+      apiOrigin: ctx.apiOrigin,
+      apiKey: ctx.apiKey,
+    });
     blankLine();
     if (res.env.length === 0) {
       step('no env vars set');
@@ -102,9 +96,7 @@ async function runList(_argv: readonly string[]): Promise<number> {
     }
     const maxKeyLen = res.env.reduce((m, v) => Math.max(m, v.key.length), 0);
     for (const v of res.env) {
-      step(
-        `${v.key.padEnd(maxKeyLen)}  ····${v.lastFour}  ${relativeTime(v.updatedAt)}`,
-      );
+      step(`${v.key.padEnd(maxKeyLen)}  ····${v.lastFour}  ${relativeTime(v.updatedAt)}`);
     }
     return 0;
   } catch (err) {
@@ -122,10 +114,10 @@ async function runGet(argv: readonly string[]): Promise<number> {
   }
 
   try {
-    const res = await apiCall<{ env: MaskedEnvVar[] }>(
-      `/v1/projects/${ctx.projectId}/env`,
-      { apiOrigin: ctx.apiOrigin, apiKey: ctx.apiKey },
-    );
+    const res = await apiCall<{ env: MaskedEnvVar[] }>(`/v1/projects/${ctx.projectId}/env`, {
+      apiOrigin: ctx.apiOrigin,
+      apiKey: ctx.apiKey,
+    });
     const match = res.env.find((v) => v.key === key);
     if (!match) {
       printError(`no env var named '${key}'`);
@@ -165,7 +157,9 @@ async function runSet(argv: readonly string[]): Promise<number> {
   }
 
   if (!/^[A-Z_][A-Z0-9_]{0,63}$/.test(key)) {
-    printError('key must be uppercase letters, digits, underscores; start with letter or underscore');
+    printError(
+      'key must be uppercase letters, digits, underscores; start with letter or underscore',
+    );
     return 1;
   }
 
@@ -294,7 +288,9 @@ async function checkGitignore(
   let gitRoot: string | null = null;
   for (let i = 0; i < 40; i += 1) {
     const maybe = resolve(dir, '.git');
-    const hit = await access(maybe).then(() => true).catch(() => false);
+    const hit = await access(maybe)
+      .then(() => true)
+      .catch(() => false);
     if (hit) {
       gitRoot = dir;
       break;
@@ -310,7 +306,10 @@ async function checkGitignore(
   }
   const gitignorePath = resolve(gitRoot, '.gitignore');
   const contents = await readFile(gitignorePath, 'utf8').catch(() => '');
-  const lines = contents.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  const lines = contents
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
   // why: we do a best-effort match on three common patterns — exact name,
   // glob-prefix (`.env*`), and glob-suffix (`*.local`). A proper gitignore
   // matcher would handle nesting, negation, and anchoring; that's overkill
@@ -326,7 +325,12 @@ async function checkGitignore(
   return { insideGitRepo: true, ignored, suggestedLine };
 }
 
-function parseFlags(argv: readonly string[]): { _: string[]; yes: boolean; force: boolean; out?: string } {
+function parseFlags(argv: readonly string[]): {
+  _: string[];
+  yes: boolean;
+  force: boolean;
+  out?: string;
+} {
   const out: { _: string[]; yes: boolean; force: boolean; out?: string } = {
     _: [],
     yes: false,

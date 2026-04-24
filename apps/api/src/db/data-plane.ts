@@ -111,9 +111,7 @@ export async function provisionProjectRole(projectId: string): Promise<void> {
     `ALTER DEFAULT PRIVILEGES IN SCHEMA "${schema}" GRANT ALL ON SEQUENCES TO "${role}"`,
   );
   // Platform tables: readable by platform, never writable by the user.
-  await sql.unsafe(
-    `REVOKE ALL ON TABLE "${schema}"."_briven_migrations" FROM "${role}"`,
-  );
+  await sql.unsafe(`REVOKE ALL ON TABLE "${schema}"."_briven_migrations" FROM "${role}"`);
   await sql.unsafe(`REVOKE ALL ON TABLE "${schema}"."_briven_meta" FROM "${role}"`);
 }
 
@@ -133,10 +131,10 @@ export async function rotateProjectRolePassword(
   const sql = client();
   // Identifier quoting via pg_ident escape: we generated `role` ourselves,
   // so it's safe; password is bound via postgres.js parameter binding.
-  await sql.unsafe(
-    `ALTER ROLE "${role}" WITH PASSWORD $1 VALID UNTIL $2`,
-    [password, expiresAt.toISOString()],
-  );
+  await sql.unsafe(`ALTER ROLE "${role}" WITH PASSWORD $1 VALID UNTIL $2`, [
+    password,
+    expiresAt.toISOString(),
+  ]);
   return { role, password, expiresAt };
 }
 

@@ -13,18 +13,11 @@ export default async function HomePage() {
 
       <header className="relative z-50 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
         <Link href="/" className="flex items-center gap-2" aria-label="briven home">
-          <Image
-            src="/icon.svg"
-            alt=""
-            width={40}
-            height={40}
-            priority
-            className="opacity-95"
-          />
-          <span className="font-mono text-[var(--text-small)] tracking-tight text-[var(--color-text)]">
+          <Image src="/icon.svg" alt="" width={40} height={40} priority className="opacity-95" />
+          <span className="font-mono tracking-tight text-[var(--color-text)] text-[var(--text-small)]">
             briven
           </span>
-          <span className="hidden font-mono text-[var(--text-xs)] text-[var(--color-text-subtle)] sm:inline">
+          <span className="hidden font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)] sm:inline">
             · cloud
           </span>
         </Link>
@@ -71,12 +64,12 @@ export default async function HomePage() {
       <section className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-16 pt-20 sm:pt-28">
         <div className="flex max-w-3xl flex-col gap-6">
           <LiveBadge />
-          <h1 className="font-sans text-[var(--text-display-3)] font-medium leading-[1.05] tracking-[-0.03em] text-[var(--color-text)] sm:text-[var(--text-display-2)]">
+          <h1 className="font-sans font-medium leading-[1.05] tracking-[-0.03em] text-[var(--color-text)] text-[var(--text-display-3)] sm:text-[var(--text-display-2)]">
             the postgres backend
             <br />
             you actually own.
           </h1>
-          <p className="max-w-2xl text-[var(--text-body)] leading-[1.6] text-[var(--color-text-muted)]">
+          <p className="max-w-2xl leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
             reactive queries, typed schema, one-command deploys — on vanilla postgres. worldwide
             multi-region hosting. self-hostable. export your whole project with one command, any
             day.
@@ -150,7 +143,7 @@ export default async function HomePage() {
 
 function LiveBadge() {
   return (
-    <div className="inline-flex w-fit items-center gap-2 rounded-[var(--radius-full)] border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-3 py-1 font-mono text-[var(--text-xs)] text-[var(--color-text)]">
+    <div className="inline-flex w-fit items-center gap-2 rounded-[var(--radius-full)] border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-3 py-1 font-mono text-[var(--color-text)] text-[var(--text-xs)]">
       <span className="relative flex h-1.5 w-1.5">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-primary)] opacity-60" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-primary)]" />
@@ -163,18 +156,20 @@ function LiveBadge() {
 function InstallBlock() {
   return (
     <div className="mt-8 w-full max-w-xl overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-code-bg)]">
-      <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-2 font-mono text-[var(--text-xs)] text-[var(--color-text-subtle)]">
+      <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-2 font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]">
         <span>terminal</span>
         <span>zsh</span>
       </div>
-      <pre className="overflow-x-auto p-4 font-mono text-[var(--text-small)] leading-[1.7] text-[var(--color-code-text)]">
+      <pre className="overflow-x-auto p-4 font-mono leading-[1.7] text-[var(--color-code-text)] text-[var(--text-small)]">
         <span className="text-[var(--color-text-subtle)]">{'# scaffold a new project'}</span>
         {'\n'}
-        <span className="text-[var(--color-primary)]">npx</span>{' briven init'}
+        <span className="text-[var(--color-primary)]">npx</span>
+        {' briven init'}
         {'\n\n'}
         <span className="text-[var(--color-text-subtle)]">{'# deploy to briven.cloud'}</span>
         {'\n'}
-        <span className="text-[var(--color-primary)]">npx</span>{' briven deploy'}
+        <span className="text-[var(--color-primary)]">npx</span>
+        {' briven deploy'}
       </pre>
     </div>
   );
@@ -183,10 +178,10 @@ function InstallBlock() {
 function Pillar({ title, body }: { title: string; body: string }) {
   return (
     <article className="flex flex-col gap-2 bg-[var(--color-bg)] p-6">
-      <h3 className="font-mono text-[var(--text-xs)] uppercase tracking-[0.12em] text-[var(--color-primary)]">
+      <h3 className="font-mono uppercase tracking-[0.12em] text-[var(--color-primary)] text-[var(--text-xs)]">
         {title}
       </h3>
-      <p className="text-[var(--text-small)] leading-[1.6] text-[var(--color-text-muted)]">
+      <p className="leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
         {body}
       </p>
     </article>
@@ -202,10 +197,8 @@ function BackgroundGrid() {
         backgroundImage:
           'linear-gradient(to right, var(--color-border-subtle) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-subtle) 1px, transparent 1px)',
         backgroundSize: '48px 48px',
-        maskImage:
-          'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%)',
-        WebkitMaskImage:
-          'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%)',
+        maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%)',
       }}
     />
   );

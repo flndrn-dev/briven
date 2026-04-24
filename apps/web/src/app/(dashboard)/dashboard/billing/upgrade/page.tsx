@@ -30,7 +30,11 @@ export default async function UpgradePage({
       <main className="mx-auto max-w-lg px-6 py-16 font-mono text-sm">
         <h1 className="text-xl">unknown plan</h1>
         <p className="mt-2 text-[var(--color-text-muted)]">
-          pick a plan from the <a href="/#pricing" className="text-[var(--color-text-link)]">pricing section</a>.
+          pick a plan from the{' '}
+          <a href="/#pricing" className="text-[var(--color-text-link)]">
+            pricing section
+          </a>
+          .
         </p>
       </main>
     );

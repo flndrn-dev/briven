@@ -108,9 +108,8 @@ export default async function SettingsPage() {
       <section>
         <h2 className="font-mono text-sm text-[var(--color-text)]">profile + billing (EU KYC)</h2>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          required before a paid plan checkout. used for VAT determination, invoice issuance, and
-          EU KYC compliance. stored only on the control plane, never shared with a customer
-          project.
+          required before a paid plan checkout. used for VAT determination, invoice issuance, and EU
+          KYC compliance. stored only on the control plane, never shared with a customer project.
         </p>
         <div className="mt-3 flex flex-col gap-4">
           <AvatarUploader
@@ -139,8 +138,8 @@ export default async function SettingsPage() {
       <section>
         <h2 className="font-mono text-sm text-[var(--color-text)]">last sign-in</h2>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          under EU GDPR you have the right to see the metadata we store about your sign-in
-          activity. visible only to you.
+          under EU GDPR you have the right to see the metadata we store about your sign-in activity.
+          visible only to you.
         </p>
         <dl className="mt-3 grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
           <dt className="text-[var(--color-text-subtle)]">at</dt>

@@ -285,10 +285,7 @@ export const projectInvitations = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    projectEmailIdx: uniqueIndex('project_invitations_project_email_idx').on(
-      t.projectId,
-      t.email,
-    ),
+    projectEmailIdx: uniqueIndex('project_invitations_project_email_idx').on(t.projectId, t.email),
     tokenIdx: uniqueIndex('project_invitations_token_idx').on(t.tokenHash),
   }),
 );
@@ -346,13 +343,7 @@ export const apiKeys = pgTable(
 );
 
 /* ─── deployments ─────────────────────────────────────────────────── */
-export const deploymentStatus = [
-  'pending',
-  'running',
-  'succeeded',
-  'failed',
-  'cancelled',
-] as const;
+export const deploymentStatus = ['pending', 'running', 'succeeded', 'failed', 'cancelled'] as const;
 export type DeploymentStatus = (typeof deploymentStatus)[number];
 
 export const deployments = pgTable(
@@ -421,10 +412,7 @@ export const functionLogs = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    projectCreatedIdx: index('function_logs_project_created_idx').on(
-      t.projectId,
-      t.createdAt,
-    ),
+    projectCreatedIdx: index('function_logs_project_created_idx').on(t.projectId, t.createdAt),
   }),
 );
 

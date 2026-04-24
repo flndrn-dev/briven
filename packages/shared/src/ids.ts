@@ -27,6 +27,8 @@ export function newId(prefix: IdPrefix): string {
 
 export function isId(value: unknown, prefix: IdPrefix): value is `${IdPrefix}_${string}` {
   return (
-    typeof value === 'string' && value.startsWith(`${prefix}_`) && value.length === prefix.length + 27
+    typeof value === 'string' &&
+    value.startsWith(`${prefix}_`) &&
+    value.length === prefix.length + 27
   );
 }

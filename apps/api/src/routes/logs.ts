@@ -135,9 +135,7 @@ interface ParsedMessage {
 
 async function readLastN(redis: Redis, key: string, n: number): Promise<ParsedMessage[]> {
   const rev = await redis.xrevrange(key, '+', '-', 'COUNT', n);
-  return rev
-    .map(([id, fields]) => ({ id, fields: parseFields(fields) }))
-    .reverse();
+  return rev.map(([id, fields]) => ({ id, fields: parseFields(fields) })).reverse();
 }
 
 function parseFields(flat: string[]): Record<string, string> {

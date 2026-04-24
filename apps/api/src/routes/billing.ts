@@ -116,7 +116,10 @@ billingRouter.post('/v1/billing/portal', async (c) => {
     );
   }
   try {
-    const result = await createCustomerPortalSession(summary.polarCustomerId, parsed.data.returnURL);
+    const result = await createCustomerPortalSession(
+      summary.polarCustomerId,
+      parsed.data.returnURL,
+    );
     return c.json(result);
   } catch (err) {
     if (err && typeof err === 'object' && 'code' in err) {
@@ -241,8 +244,7 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
   // Prefer orgId (the current schema). Legacy events from before migration
   // 0010 only carry ownerId — resolve them to the user's personal org so
   // redelivery of pre-migration events still lands correctly.
-  let orgId: string | null =
-    typeof meta.orgId === 'string' ? meta.orgId : null;
+  let orgId: string | null = typeof meta.orgId === 'string' ? meta.orgId : null;
   if (!orgId) {
     const legacyOwnerId = typeof meta.ownerId === 'string' ? meta.ownerId : null;
     if (legacyOwnerId) {

@@ -80,10 +80,10 @@ export async function runDeploy(argv: readonly string[]): Promise<number> {
   step('fetching current deployed schema');
   let current: CurrentSchemaResponse;
   try {
-    current = await apiCall<CurrentSchemaResponse>(
-      `/v1/projects/${targetId}/schema/current`,
-      { apiOrigin: cred.apiOrigin, apiKey: cred.apiKey },
-    );
+    current = await apiCall<CurrentSchemaResponse>(`/v1/projects/${targetId}/schema/current`, {
+      apiOrigin: cred.apiOrigin,
+      apiKey: cred.apiKey,
+    });
   } catch (err) {
     if (err instanceof ApiCallError) {
       printError(`server rejected: ${err.code} (${err.status})`);
@@ -123,21 +123,18 @@ export async function runDeploy(argv: readonly string[]): Promise<number> {
 
   step('creating deployment...');
   try {
-    const res = await apiCall<DeploymentResponse>(
-      `/v1/projects/${targetId}/deployments`,
-      {
-        method: 'POST',
-        apiOrigin: cred.apiOrigin,
-        apiKey: cred.apiKey,
-        body: {
-          schemaDiffSummary: summary,
-          schemaSnapshot: nextSchema,
-          functionCount: functions.count,
-          functionNames: functions.names,
-          bundle: functions.bundle,
-        },
+    const res = await apiCall<DeploymentResponse>(`/v1/projects/${targetId}/deployments`, {
+      method: 'POST',
+      apiOrigin: cred.apiOrigin,
+      apiKey: cred.apiKey,
+      body: {
+        schemaDiffSummary: summary,
+        schemaSnapshot: nextSchema,
+        functionCount: functions.count,
+        functionNames: functions.names,
+        bundle: functions.bundle,
       },
-    );
+    });
     blankLine();
     success(`deployment ${res.deployment.id} · ${res.deployment.status}`);
     return 0;

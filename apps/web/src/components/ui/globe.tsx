@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { motion, useAnimation } from "motion/react";
-import type { HTMLAttributes } from "react";
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { motion, useAnimation } from 'motion/react';
+import type { HTMLAttributes } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export interface GlobeIconHandle {
   startAnimation: () => void;
@@ -23,8 +23,8 @@ const GlobeIcon = forwardRef<GlobeIconHandle, GlobeIconProps>(
     useImperativeHandle(ref, () => {
       isControlledRef.current = true;
       return {
-        startAnimation: () => controls.start("animate"),
-        stopAnimation: () => controls.start("normal"),
+        startAnimation: () => controls.start('animate'),
+        stopAnimation: () => controls.start('normal'),
       };
     });
 
@@ -33,7 +33,7 @@ const GlobeIcon = forwardRef<GlobeIconHandle, GlobeIconProps>(
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
-          controls.start("animate");
+          controls.start('animate');
         }
       },
       [controls, onMouseEnter],
@@ -44,7 +44,7 @@ const GlobeIcon = forwardRef<GlobeIconHandle, GlobeIconProps>(
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
-          controls.start("normal");
+          controls.start('normal');
         }
       },
       [controls, onMouseLeave],
@@ -72,7 +72,7 @@ const GlobeIcon = forwardRef<GlobeIconHandle, GlobeIconProps>(
             normal: { rotate: 0 },
             animate: { rotate: 360 },
           }}
-          transition={{ type: "spring", stiffness: 80, damping: 15 }}
+          transition={{ type: 'spring', stiffness: 80, damping: 15 }}
         >
           <circle cx="12" cy="12" r="10" />
           <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
@@ -83,6 +83,6 @@ const GlobeIcon = forwardRef<GlobeIconHandle, GlobeIconProps>(
   },
 );
 
-GlobeIcon.displayName = "GlobeIcon";
+GlobeIcon.displayName = 'GlobeIcon';
 
 export { GlobeIcon };

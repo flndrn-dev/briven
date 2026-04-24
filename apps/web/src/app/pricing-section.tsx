@@ -113,18 +113,15 @@ const TIERS: readonly Tier[] = [
 
 export function PricingSection() {
   return (
-    <section
-      id="pricing"
-      className="relative z-10 mx-auto w-full max-w-6xl px-6 py-20 sm:py-24"
-    >
+    <section id="pricing" className="relative z-10 mx-auto w-full max-w-6xl px-6 py-20 sm:py-24">
       <div className="flex flex-col gap-3 pb-10">
-        <h2 className="font-sans text-[var(--text-h1)] font-medium tracking-[-0.02em] text-[var(--color-text)]">
+        <h2 className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-h1)]">
           pricing
         </h2>
-        <p className="max-w-2xl font-sans text-[var(--text-body)] leading-[1.6] text-[var(--color-text-muted)]">
+        <p className="max-w-2xl font-sans leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
           every tier includes a monthly bucket of invocations, storage, bandwidth, and realtime
-          connections. go past the bucket and the meter runs — no surprise-upgrade walls. cancel
-          any time. pg_dump is always your escape hatch.
+          connections. go past the bucket and the meter runs — no surprise-upgrade walls. cancel any
+          time. pg_dump is always your escape hatch.
         </p>
       </div>
 
@@ -134,10 +131,10 @@ export function PricingSection() {
         ))}
       </div>
 
-      <div className="flex flex-col gap-1 pt-6 font-mono text-[var(--text-xs)] text-[var(--color-text-subtle)]">
+      <div className="flex flex-col gap-1 pt-6 font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]">
         <p>
-          prices in EUR · vat added at checkout for EU customers (reverse-charge for valid vat id) · card
-          required on every tier including free
+          prices in EUR · vat added at checkout for EU customers (reverse-charge for valid vat id) ·
+          card required on every tier including free
         </p>
         <p>
           self-hosting is free forever under agpl-3.0 · overage metering launches with public beta;
@@ -156,7 +153,7 @@ function TierCard({ tier }: { tier: Tier }) {
       }`}
     >
       <header className="flex items-baseline justify-between">
-        <h3 className="font-mono text-[var(--text-xs)] uppercase tracking-[0.12em] text-[var(--color-primary)]">
+        <h3 className="font-mono uppercase tracking-[0.12em] text-[var(--color-primary)] text-[var(--text-xs)]">
           {tier.name}
         </h3>
         {tier.highlight ? (
@@ -167,15 +164,15 @@ function TierCard({ tier }: { tier: Tier }) {
       </header>
 
       <div className="flex items-baseline gap-1">
-        <span className="font-sans text-[var(--text-display-3)] font-medium tracking-[-0.02em] text-[var(--color-text)]">
+        <span className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-display-3)]">
           {tier.price}
         </span>
-        <span className="font-mono text-[var(--text-small)] text-[var(--color-text-subtle)]">
+        <span className="font-mono text-[var(--color-text-subtle)] text-[var(--text-small)]">
           {tier.cadence}
         </span>
       </div>
 
-      <p className="font-sans text-[var(--text-small)] leading-[1.6] text-[var(--color-text-muted)]">
+      <p className="font-sans leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
         {tier.pitch}
       </p>
 
@@ -187,9 +184,7 @@ function TierCard({ tier }: { tier: Tier }) {
           {tier.included.map((row) => (
             <div key={row.label} className="flex justify-between gap-3">
               <dt className="text-[var(--color-text-muted)]">{row.label}</dt>
-              <dd className="whitespace-nowrap text-right text-[var(--color-text)]">
-                {row.value}
-              </dd>
+              <dd className="whitespace-nowrap text-right text-[var(--color-text)]">{row.value}</dd>
             </div>
           ))}
         </dl>
@@ -216,7 +211,7 @@ function TierCard({ tier }: { tier: Tier }) {
           {tier.features.map((feature) => (
             <li
               key={feature}
-              className="flex items-start gap-2 font-mono text-[var(--text-xs)] text-[var(--color-text-muted)]"
+              className="flex items-start gap-2 font-mono text-[var(--color-text-muted)] text-[var(--text-xs)]"
             >
               <span
                 aria-hidden

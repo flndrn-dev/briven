@@ -52,7 +52,13 @@ function tierForProductId(productId: string): ProjectTier {
 }
 
 export type VatCheck =
-  | { state: 'valid'; countryCode: string; vatNumber: string; name: string | null; address: string | null }
+  | {
+      state: 'valid';
+      countryCode: string;
+      vatNumber: string;
+      name: string | null;
+      address: string | null;
+    }
   | { state: 'invalid'; reason: string }
   | { state: 'unverifiable'; reason: string };
 
@@ -198,8 +204,7 @@ export async function getSubscriptionForOrg(orgId: string): Promise<Subscription
     };
   }
   return {
-    tier:
-      row.status === 'canceled' || row.status === 'past_due' ? 'free' : row.tier,
+    tier: row.status === 'canceled' || row.status === 'past_due' ? 'free' : row.tier,
     status: row.status,
     currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
     canceledAt: row.canceledAt?.toISOString() ?? null,

@@ -93,9 +93,7 @@ export function InvokePanel({ projectId, functionName }: Props) {
             ) : null}
           </span>
           <pre className="h-full min-h-[12rem] overflow-auto rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-3 font-mono text-xs text-[var(--color-text)]">
-            {result
-              ? JSON.stringify(result.ok ? result.value : result.message, null, 2)
-              : '—'}
+            {result ? JSON.stringify(result.ok ? result.value : result.message, null, 2) : '—'}
           </pre>
         </div>
       </div>

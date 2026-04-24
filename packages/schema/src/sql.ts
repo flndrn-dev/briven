@@ -30,9 +30,7 @@ export function renderCreateTable(name: string, table: TableDef): string {
   for (const [colName, colDef] of Object.entries(table.columns)) {
     if (!colDef.references) continue;
     const ref = colDef.references;
-    const onDelete = ref.onDelete
-      ? ` ON DELETE ${ref.onDelete.toUpperCase()}`
-      : '';
+    const onDelete = ref.onDelete ? ` ON DELETE ${ref.onDelete.toUpperCase()}` : '';
     fkLines.push(
       `  FOREIGN KEY ("${colName}") REFERENCES "${ref.table}" ("${ref.column}")${onDelete}`,
     );
@@ -58,9 +56,7 @@ function renderIndexes(tableName: string, table: TableDef): string[] {
     const colList = idx.columns.map((c) => `"${c}"`).join(', ');
     const nameSuffix = idx.columns.join('_');
     const indexName = `${tableName}_${nameSuffix}_idx`;
-    out.push(
-      `CREATE ${unique}INDEX IF NOT EXISTS "${indexName}" ON "${tableName}" (${colList});`,
-    );
+    out.push(`CREATE ${unique}INDEX IF NOT EXISTS "${indexName}" ON "${tableName}" (${colList});`);
   }
   return out;
 }

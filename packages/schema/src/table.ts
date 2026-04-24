@@ -28,9 +28,7 @@ export interface TableInput {
  * `TableDef` suitable for serialisation.
  */
 export function table(input: TableInput | Record<string, ColumnBuilder>): TableDef {
-  const normalised: TableInput = isTableInput(input)
-    ? input
-    : { columns: input };
+  const normalised: TableInput = isTableInput(input) ? input : { columns: input };
 
   const columns: Record<string, ColumnDef> = {};
   for (const [name, builder] of Object.entries(normalised.columns)) {

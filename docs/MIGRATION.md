@@ -41,34 +41,34 @@ Every briven migration follows the same five principles. If you violate these, y
 
 ## 1.5 briven cloud — what's live today vs still coming
 
-Before you plan a migration, read this matrix. This doc describes the *intended* migration flow, but not every piece is implemented yet. Rows flagged `⏳` require a manual fallback (documented inline where the command appears).
+Before you plan a migration, read this matrix. This doc describes the _intended_ migration flow, but not every piece is implemented yet. Rows flagged `⏳` require a manual fallback (documented inline where the command appears).
 
-| Feature | State | Notes |
-|---|---|---|
-| Control-plane API (`api.briven.cloud`) | ✅ live | Hono on Bun, KVM4 |
-| Control-plane Postgres (meta-DB) | ✅ live | Dokploy-hosted, `briven_control` |
-| Data-plane Postgres (customer schemas) | ✅ live | Same KVM today; splits to dedicated in Phase 2 M3 |
-| Dashboard (`dev.briven.cloud`) | ✅ live | Projects, billing, settings, admin pages all work |
-| Multi-tenant orgs (`organizations`, `org_members`) | ✅ live | Every user has an auto-created `personal=true` org. See §2.5 |
-| Better Auth via magic link (Resend) | ✅ live | `briven.session_token` cookie (prod: `__Secure-` prefix) |
-| GitHub OAuth | ⚙️ env wired | Flow not verified end-to-end yet |
-| Email + password auth | ⚙️ partial | Better Auth supports it; not exercised |
-| Polar billing (Free/Pro/Team), webhook sync | ✅ live | One subscription per org |
-| VIES live VAT validation on settings | ✅ live | `/v1/billing/vat/check` (debounced) |
-| Schema DSL (`packages/schema`) | ✅ exists | Diff engine present; customer-project deploy path never exercised end-to-end |
+| Feature                                                                                                     | State               | Notes                                                                                          |
+| ----------------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
+| Control-plane API (`api.briven.cloud`)                                                                      | ✅ live             | Hono on Bun, KVM4                                                                              |
+| Control-plane Postgres (meta-DB)                                                                            | ✅ live             | Dokploy-hosted, `briven_control`                                                               |
+| Data-plane Postgres (customer schemas)                                                                      | ✅ live             | Same KVM today; splits to dedicated in Phase 2 M3                                              |
+| Dashboard (`dev.briven.cloud`)                                                                              | ✅ live             | Projects, billing, settings, admin pages all work                                              |
+| Multi-tenant orgs (`organizations`, `org_members`)                                                          | ✅ live             | Every user has an auto-created `personal=true` org. See §2.5                                   |
+| Better Auth via magic link (Resend)                                                                         | ✅ live             | `briven.session_token` cookie (prod: `__Secure-` prefix)                                       |
+| GitHub OAuth                                                                                                | ⚙️ env wired        | Flow not verified end-to-end yet                                                               |
+| Email + password auth                                                                                       | ⚙️ partial          | Better Auth supports it; not exercised                                                         |
+| Polar billing (Free/Pro/Team), webhook sync                                                                 | ✅ live             | One subscription per org                                                                       |
+| VIES live VAT validation on settings                                                                        | ✅ live             | `/v1/billing/vat/check` (debounced)                                                            |
+| Schema DSL (`packages/schema`)                                                                              | ✅ exists           | Diff engine present; customer-project deploy path never exercised end-to-end                   |
 | `briven` CLI commands: `init`, `login`, `logout`, `deploy`, `dev`, `db`, `env`, `logs`, `whoami`, `version` | ⚙️ present as files | Behaviour against a real customer project is untested — **zero completed deployments to date** |
-| `briven link --create` | ⏳ not yet | Use the dashboard's Projects → New UI for now |
-| `briven import --from-convex <zip>` | ⏳ not yet | Use the manual script in §4 |
-| `briven auth import --from-supabase <csv>` | ⏳ not yet | Use the manual SQL in §5 |
-| `briven export` | ⏳ not yet | Use direct `pg_dump` against the project's Postgres |
-| Realtime / reactive `useQuery` | ⏳ skeleton | `apps/realtime` is two files today. Phase 2 M1 |
-| Auto-generated `LISTEN/NOTIFY` triggers on schema diff | ⏳ not yet | Phase 2 M1 |
-| Per-project file storage | ⏳ not yet | Phase 3 — planning to use Cloudflare R2 |
-| Usage metering (invocations, DB size, bandwidth) | ⏳ not yet | Phase 3 M1 / Phase 4 GA |
-| Rate limits per tier at gateway | ⏳ not yet | Phase 3 M1 |
-| Outbound network filter on runtime | ⏳ not yet | Phase 3 M1 |
-| Daily `pg_dump` → off-site backups | ⏳ not set up | Phase 0 exit criterion still open |
-| Observability (Grafana / Loki / Prometheus) | ⏳ not set up | Phase 0 exit criterion still open |
+| `briven link --create`                                                                                      | ⏳ not yet          | Use the dashboard's Projects → New UI for now                                                  |
+| `briven import --from-convex <zip>`                                                                         | ⏳ not yet          | Use the manual script in §4                                                                    |
+| `briven auth import --from-supabase <csv>`                                                                  | ⏳ not yet          | Use the manual SQL in §5                                                                       |
+| `briven export`                                                                                             | ⏳ not yet          | Use direct `pg_dump` against the project's Postgres                                            |
+| Realtime / reactive `useQuery`                                                                              | ⏳ skeleton         | `apps/realtime` is two files today. Phase 2 M1                                                 |
+| Auto-generated `LISTEN/NOTIFY` triggers on schema diff                                                      | ⏳ not yet          | Phase 2 M1                                                                                     |
+| Per-project file storage                                                                                    | ⏳ not yet          | Phase 3 — planning to use Cloudflare R2                                                        |
+| Usage metering (invocations, DB size, bandwidth)                                                            | ⏳ not yet          | Phase 3 M1 / Phase 4 GA                                                                        |
+| Rate limits per tier at gateway                                                                             | ⏳ not yet          | Phase 3 M1                                                                                     |
+| Outbound network filter on runtime                                                                          | ⏳ not yet          | Phase 3 M1                                                                                     |
+| Daily `pg_dump` → off-site backups                                                                          | ⏳ not set up       | Phase 0 exit criterion still open                                                              |
+| Observability (Grafana / Loki / Prometheus)                                                                 | ⏳ not set up       | Phase 0 exit criterion still open                                                              |
 
 **Rule of thumb for agents:** if a `briven <subcommand>` in this doc isn't in the row-list above as ✅, assume it doesn't work yet. Look for the manual fallback inline.
 
@@ -97,7 +97,7 @@ Write this down in a `migration-inventory.md` next to this file. If you skip thi
 **Prerequisites on your briven account before you start:**
 
 - [ ] You have a briven account created via magic-link sign-in (GitHub OAuth is wired but flow-verification is pending — prefer magic link today).
-- [ ] You have filled in your profile under Settings → Profile: **legal name**, **billing address**, and **VAT ID** if you are an EU business. These are *required* before any Pro or Team checkout (the Polar checkout refuses without them). They are not required for Free-tier migrations.
+- [ ] You have filled in your profile under Settings → Profile: **legal name**, **billing address**, and **VAT ID** if you are an EU business. These are _required_ before any Pro or Team checkout (the Polar checkout refuses without them). They are not required for Free-tier migrations.
 - [ ] Your personal org has been created (this happens automatically at signup — nothing for you to do, but confirm `/v1/me` returns a `defaultOrgId` before proceeding).
 
 **Project creation:**
@@ -288,7 +288,7 @@ briven cloud is multi-tenant at the **organisation** level, not the user level. 
 Why a migrating agent needs to know this:
 
 - **Your new briven project lives inside your personal org.** Today's dashboard doesn't expose an org switcher (the switcher is Phase 3), so the UX is single-org-implicit — but the data model underneath is already multi-org.
-- **`projects.org_id`, not `projects.owner_id`.** If the source project talks about "project owner," map that to the creator's personal org, not to a user FK. The `org_members` table carries per-user roles (`owner` / `admin` / `developer` / `viewer`); roles are *stored* today but *not yet enforced* (Phase 3).
+- **`projects.org_id`, not `projects.owner_id`.** If the source project talks about "project owner," map that to the creator's personal org, not to a user FK. The `org_members` table carries per-user roles (`owner` / `admin` / `developer` / `viewer`); roles are _stored_ today but _not yet enforced_ (Phase 3).
 - **`subscriptions.org_id` is UNIQUE.** One paid subscription per org, ever. If the source product had multiple billing relationships per user, collapse them to one-per-org; that's the shape briven uses.
 - **Polar webhook metadata.** Checkouts carry `metadata.orgId`; legacy events redelivered from before the schema change also accept `metadata.ownerId` + fall back to that user's personal org.
 
@@ -298,7 +298,7 @@ Why a migrating agent needs to know this:
 - Pro: 3 owned orgs, 1 seat
 - Team: unlimited owned orgs, 5 seats included + €15/extra (seat overage billing is Phase 3)
 
-Being *invited to* another org is allowed on every tier — the cap is only on orgs the user creates.
+Being _invited to_ another org is allowed on every tier — the cap is only on orgs the user creates.
 
 ---
 
@@ -332,36 +332,36 @@ Convex's document model translates to Postgres tables. Each Convex table becomes
 
 **Type mapping** (Convex → briven):
 
-| Convex | briven (in `schema.ts`) |
-|--------|-------------------------|
-| `v.id("tableName")` | `text().refs("tableName.id")` |
-| `v.string()` | `text()` |
-| `v.number()` | `bigint()` (for ints) or `doublePrecision()` |
-| `v.boolean()` | `boolean()` |
-| `v.int64()` | `bigint()` |
-| `v.array(...)` | `jsonb()` |
-| `v.object({...})` | `jsonb()` |
-| `v.optional(...)` | `.null()` on the column |
+| Convex              | briven (in `schema.ts`)                      |
+| ------------------- | -------------------------------------------- |
+| `v.id("tableName")` | `text().refs("tableName.id")`                |
+| `v.string()`        | `text()`                                     |
+| `v.number()`        | `bigint()` (for ints) or `doublePrecision()` |
+| `v.boolean()`       | `boolean()`                                  |
+| `v.int64()`         | `bigint()`                                   |
+| `v.array(...)`      | `jsonb()`                                    |
+| `v.object({...})`   | `jsonb()`                                    |
+| `v.optional(...)`   | `.null()` on the column                      |
 
 ### Functions
 
-| Convex | briven |
-|--------|--------|
-| `query(async (ctx, args) => {...})` | `query("name", async (ctx, args) => {...})` |
-| `mutation(async (ctx, args) => {...})` | `mutation("name", async (ctx, args) => {...})` |
-| `action(async (ctx, args) => {...})` | `action("name", async (ctx, args) => {...})` |
-| `ctx.db.query("posts").collect()` | `ctx.db.select().from(posts)` |
-| `ctx.db.insert("posts", {...})` | `ctx.db.insert(posts).values({...})` |
-| `ctx.db.patch(id, {...})` | `ctx.db.update(posts).set({...}).where(eq(posts.id, id))` |
-| `ctx.db.delete(id)` | `ctx.db.delete(posts).where(eq(posts.id, id))` |
+| Convex                                 | briven                                                    |
+| -------------------------------------- | --------------------------------------------------------- |
+| `query(async (ctx, args) => {...})`    | `query("name", async (ctx, args) => {...})`               |
+| `mutation(async (ctx, args) => {...})` | `mutation("name", async (ctx, args) => {...})`            |
+| `action(async (ctx, args) => {...})`   | `action("name", async (ctx, args) => {...})`              |
+| `ctx.db.query("posts").collect()`      | `ctx.db.select().from(posts)`                             |
+| `ctx.db.insert("posts", {...})`        | `ctx.db.insert(posts).values({...})`                      |
+| `ctx.db.patch(id, {...})`              | `ctx.db.update(posts).set({...}).where(eq(posts.id, id))` |
+| `ctx.db.delete(id)`                    | `ctx.db.delete(posts).where(eq(posts.id, id))`            |
 
 ### Client-side
 
-| Convex | briven |
-|--------|--------|
-| `useQuery(api.posts.list)` | `useQuery("posts.list")` ⏳ non-reactive today; realtime is Phase 2 M1 |
-| `useMutation(api.posts.create)` | `useMutation("posts.create")` |
-| `ConvexProvider` | `BrivenProvider` — verify the export exists in `@briven/client-react` before relying on the name |
+| Convex                          | briven                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `useQuery(api.posts.list)`      | `useQuery("posts.list")` ⏳ non-reactive today; realtime is Phase 2 M1                           |
+| `useMutation(api.posts.create)` | `useMutation("posts.create")`                                                                    |
+| `ConvexProvider`                | `BrivenProvider` — verify the export exists in `@briven/client-react` before relying on the name |
 
 **Reality check:** Convex's big differentiator is reactive queries. briven aims for the same, but `apps/realtime` is a skeleton today (two files). Until Phase 2 M1 ships, `useQuery` on briven is a one-shot fetch — no auto-updates. If your Convex app leans hard on reactivity, either (a) wait until the realtime service is done, or (b) plan to wrap briven calls with your own polling / TanStack Query until reactivity lands.
 
@@ -387,7 +387,7 @@ Supabase IS Postgres, so this is the simplest migration on the schema side. The 
 - [ ] Translate each table to `briven/schema.ts` using `schema.sql` as the reference
 - [ ] Explicitly port RLS policies to briven access rules in the schema DSL
 - [ ] Translate every `CREATE FUNCTION` to a file in `briven/functions/`
-- [ ] Translate every `CREATE TRIGGER` — briven *plans* to generate CRUD triggers automatically from schema diff output (Phase 2 M1, ties into reactive-query pipeline), but that's not live today. For now, port every trigger yourself, including CRUD ones, as normal SQL inside an `action` function or via raw migration.
+- [ ] Translate every `CREATE TRIGGER` — briven _plans_ to generate CRUD triggers automatically from schema diff output (Phase 2 M1, ties into reactive-query pipeline), but that's not live today. For now, port every trigger yourself, including CRUD ones, as normal SQL inside an `action` function or via raw migration.
 
 ### Functions
 
@@ -399,13 +399,13 @@ Supabase has multiple places where logic lives:
 
 ### Client-side
 
-| Supabase | briven |
-|----------|--------|
-| `supabase.from("posts").select("*")` | `useQuery("posts.list")` (define server-side) |
-| `supabase.from("posts").insert({...})` | `useMutation("posts.create")` |
-| `supabase.rpc("fn_name", {...})` | `useMutation("fn_name")` |
-| `supabase.channel(...)` | handled automatically by `useQuery` reactivity |
-| `createClient()` | `createBrivenClient()` |
+| Supabase                               | briven                                         |
+| -------------------------------------- | ---------------------------------------------- |
+| `supabase.from("posts").select("*")`   | `useQuery("posts.list")` (define server-side)  |
+| `supabase.from("posts").insert({...})` | `useMutation("posts.create")`                  |
+| `supabase.rpc("fn_name", {...})`       | `useMutation("fn_name")`                       |
+| `supabase.channel(...)`                | handled automatically by `useQuery` reactivity |
+| `createClient()`                       | `createBrivenClient()`                         |
 
 ### Data
 
@@ -488,26 +488,26 @@ Budget 3-5× the time of a Postgres migration. If you can, consider a staged app
 
 ## 9. Postgres type mapping (source column → `briven/schema.ts`)
 
-| Postgres | briven DSL |
-|----------|-----------|
-| `text`, `varchar` | `text()` |
-| `integer`, `int4` | `integer()` |
-| `bigint`, `int8` | `bigint()` |
-| `smallint` | `smallint()` |
-| `boolean` | `boolean()` |
-| `real`, `float4` | `real()` |
-| `double precision`, `float8` | `doublePrecision()` |
-| `numeric(p,s)` | `numeric({ precision, scale })` |
-| `timestamp`, `timestamptz` | `timestamp()` / `timestamp({ withTimezone: true })` |
-| `date` | `date()` |
-| `time`, `timetz` | `time()` |
-| `uuid` | `uuid()` |
-| `jsonb` | `jsonb<T>()` |
-| `json` | `json<T>()` |
-| `bytea` | `bytes()` |
-| `text[]` | `array(text())` |
-| enum types | `enum("name", [...])` |
-| `vector(N)` (pgvector) | `vector({ dimensions: N })` |
+| Postgres                     | briven DSL                                          |
+| ---------------------------- | --------------------------------------------------- |
+| `text`, `varchar`            | `text()`                                            |
+| `integer`, `int4`            | `integer()`                                         |
+| `bigint`, `int8`             | `bigint()`                                          |
+| `smallint`                   | `smallint()`                                        |
+| `boolean`                    | `boolean()`                                         |
+| `real`, `float4`             | `real()`                                            |
+| `double precision`, `float8` | `doublePrecision()`                                 |
+| `numeric(p,s)`               | `numeric({ precision, scale })`                     |
+| `timestamp`, `timestamptz`   | `timestamp()` / `timestamp({ withTimezone: true })` |
+| `date`                       | `date()`                                            |
+| `time`, `timetz`             | `time()`                                            |
+| `uuid`                       | `uuid()`                                            |
+| `jsonb`                      | `jsonb<T>()`                                        |
+| `json`                       | `json<T>()`                                         |
+| `bytea`                      | `bytes()`                                           |
+| `text[]`                     | `array(text())`                                     |
+| enum types                   | `enum("name", [...])`                               |
+| `vector(N)` (pgvector)       | `vector({ dimensions: N })`                         |
 
 ---
 
@@ -522,7 +522,7 @@ Don't start the migration until ALL of these are true:
 - [ ] You have rollback access to the source (admin credentials, not just the app's connection string)
 - [ ] You have told anyone depending on the product that a migration window is coming
 - [ ] Your briven cloud project is created and the admin key is stored
-- [ ] Your briven profile has legal name + billing address filled in; VAT ID if EU (only *required* for Pro/Team — Free works without)
+- [ ] Your briven profile has legal name + billing address filled in; VAT ID if EU (only _required_ for Pro/Team — Free works without)
 - [ ] Your local dev environment can reach briven (`briven whoami` works)
 
 ---
@@ -590,13 +590,13 @@ Every migration needs to answer "how do users sign in after the cutover." Here's
 
 ### Identity translation table
 
-| Source | briven equivalent |
-|---|---|
-| Convex Auth identity object | briven session resolved via `c.get('user')` in Hono; `requireUser()` in Next.js RSC |
+| Source                          | briven equivalent                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Convex Auth identity object     | briven session resolved via `c.get('user')` in Hono; `requireUser()` in Next.js RSC                                                    |
 | Supabase `auth.users.id` (uuid) | briven `users.id` (ULID with `u_` prefix via `newId('u')`); store the source uuid on the `accounts.account_id` column for traceability |
-| Supabase JWT claim | briven session cookie; there is no JWT in the browser — session lookup happens server-side |
-| Firebase Auth `uid` | same as Supabase (store as `accounts.account_id`, issue a new briven `users.id`) |
-| Clerk / Auth0 `sub` | same pattern |
+| Supabase JWT claim              | briven session cookie; there is no JWT in the browser — session lookup happens server-side                                             |
+| Firebase Auth `uid`             | same as Supabase (store as `accounts.account_id`, issue a new briven `users.id`)                                                       |
+| Clerk / Auth0 `sub`             | same pattern                                                                                                                           |
 
 ### What you don't get to transfer
 
@@ -611,6 +611,7 @@ Signing in authenticates you as a `users` row. On first call to `/v1/me`, briven
 ### Post-cutover UX
 
 On first sign-in after migration:
+
 1. Magic-link email → `/v1/auth/magic-link/verify` → session cookie.
 2. `/v1/me` → auto-creates the user's personal org if they were imported without one.
 3. Profile is empty of VAT / billing address — user fills that in Settings → Profile before any Pro/Team checkout (Free works without it).
@@ -641,4 +642,4 @@ Every meaningful migration should teach this doc something. Append here.
 
 ---
 
-*End of MIGRATION.md*
+_End of MIGRATION.md_

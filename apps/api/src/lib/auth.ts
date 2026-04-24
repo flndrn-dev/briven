@@ -22,7 +22,9 @@ export const auth = betterAuth({
   secret: env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-insecure-fallback-change-in-prod',
   baseURL: env.BRIVEN_API_ORIGIN,
   basePath: '/v1/auth',
-  trustedOrigins: env.BRIVEN_TRUSTED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
+  trustedOrigins: env.BRIVEN_TRUSTED_ORIGINS.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
 
   // Map Better Auth's singular model names onto our pluralised tables
   // (CLAUDE.md §6.1: DB tables are snake_case + plural).
@@ -73,14 +75,15 @@ export const auth = betterAuth({
     },
   },
 
-  socialProviders: env.BRIVEN_GITHUB_CLIENT_ID && env.BRIVEN_GITHUB_CLIENT_SECRET
-    ? {
-        github: {
-          clientId: env.BRIVEN_GITHUB_CLIENT_ID,
-          clientSecret: env.BRIVEN_GITHUB_CLIENT_SECRET,
-        },
-      }
-    : {},
+  socialProviders:
+    env.BRIVEN_GITHUB_CLIENT_ID && env.BRIVEN_GITHUB_CLIENT_SECRET
+      ? {
+          github: {
+            clientId: env.BRIVEN_GITHUB_CLIENT_ID,
+            clientSecret: env.BRIVEN_GITHUB_CLIENT_SECRET,
+          },
+        }
+      : {},
 
   plugins: [
     magicLink({

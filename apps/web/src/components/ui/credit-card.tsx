@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import type { Transition } from "motion/react";
-import { motion, useAnimation } from "motion/react";
-import type { HTMLAttributes } from "react";
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import type { Transition } from 'motion/react';
+import { motion, useAnimation } from 'motion/react';
+import type { HTMLAttributes } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export interface CreditCardIconHandle {
   startAnimation: () => void;
@@ -18,7 +18,7 @@ interface CreditCardIconProps extends HTMLAttributes<HTMLDivElement> {
 
 const DEFAULT_TRANSITION: Transition = {
   duration: 0.45,
-  ease: "easeOut",
+  ease: 'easeOut',
 };
 
 const CreditCardIcon = forwardRef<CreditCardIconHandle, CreditCardIconProps>(
@@ -29,8 +29,8 @@ const CreditCardIcon = forwardRef<CreditCardIconHandle, CreditCardIconProps>(
     useImperativeHandle(ref, () => {
       isControlledRef.current = true;
       return {
-        startAnimation: () => controls.start("animate"),
-        stopAnimation: () => controls.start("normal"),
+        startAnimation: () => controls.start('animate'),
+        stopAnimation: () => controls.start('normal'),
       };
     });
 
@@ -39,10 +39,10 @@ const CreditCardIcon = forwardRef<CreditCardIconHandle, CreditCardIconProps>(
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
-          controls.start("animate");
+          controls.start('animate');
         }
       },
-      [controls, onMouseEnter]
+      [controls, onMouseEnter],
     );
 
     const handleMouseLeave = useCallback(
@@ -50,10 +50,10 @@ const CreditCardIcon = forwardRef<CreditCardIconHandle, CreditCardIconProps>(
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
-          controls.start("normal");
+          controls.start('normal');
         }
       },
-      [controls, onMouseLeave]
+      [controls, onMouseLeave],
     );
 
     return (
@@ -86,7 +86,7 @@ const CreditCardIcon = forwardRef<CreditCardIconHandle, CreditCardIconProps>(
               normal: { rotate: 0 },
               animate: { rotate: [0, -3, 3, 0] },
             }}
-            style={{ transformOrigin: "12px 12px" }}
+            style={{ transformOrigin: '12px 12px' }}
           />
           <motion.line
             x1="2"
@@ -103,9 +103,9 @@ const CreditCardIcon = forwardRef<CreditCardIconHandle, CreditCardIconProps>(
         </svg>
       </div>
     );
-  }
+  },
 );
 
-CreditCardIcon.displayName = "CreditCardIcon";
+CreditCardIcon.displayName = 'CreditCardIcon';
 
 export { CreditCardIcon };

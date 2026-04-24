@@ -109,10 +109,7 @@ export async function listDeploymentsForProject(
     .limit(limit);
 }
 
-export async function getDeployment(
-  projectId: string,
-  deploymentId: string,
-): Promise<Deployment> {
+export async function getDeployment(projectId: string, deploymentId: string): Promise<Deployment> {
   const db = getDb();
   const [row] = await db
     .select()
@@ -131,9 +128,7 @@ export interface TransitionDeploymentInput {
   errorMessage?: string | null;
 }
 
-export async function transitionDeployment(
-  input: TransitionDeploymentInput,
-): Promise<Deployment> {
+export async function transitionDeployment(input: TransitionDeploymentInput): Promise<Deployment> {
   const existing = await getDeployment(input.projectId, input.deploymentId);
   const now = new Date();
   const patch: Partial<Deployment> = { status: input.status };

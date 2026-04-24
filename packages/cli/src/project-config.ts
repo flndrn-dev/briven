@@ -15,7 +15,9 @@ export interface ProjectConfig {
   region?: string;
 }
 
-export async function readProjectConfig(cwd: string = process.cwd()): Promise<ProjectConfig | null> {
+export async function readProjectConfig(
+  cwd: string = process.cwd(),
+): Promise<ProjectConfig | null> {
   try {
     const raw = await readFile(resolve(cwd, PROJECT_CONFIG_FILENAME), 'utf8');
     const parsed = JSON.parse(raw) as ProjectConfig;

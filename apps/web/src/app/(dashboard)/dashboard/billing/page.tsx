@@ -19,7 +19,10 @@ interface Plan {
   productId: string;
 }
 
-const TIER_INCLUDED: Record<SubscriptionSummary['tier'], Array<{ label: string; value: string }>> = {
+const TIER_INCLUDED: Record<
+  SubscriptionSummary['tier'],
+  Array<{ label: string; value: string }>
+> = {
   free: [
     { label: 'function invocations', value: '1M / mo' },
     { label: 'database', value: '1 gb' },
@@ -73,15 +76,13 @@ export default async function BillingPage({
   await requireUser();
   const { checkout } = await searchParams;
 
-  const subscription = await apiJson<SubscriptionSummary>('/v1/billing/subscription').catch(
-    () => ({
-      tier: 'free' as const,
-      status: 'free' as const,
-      currentPeriodEnd: null,
-      canceledAt: null,
-      polarCustomerId: null,
-    }),
-  );
+  const subscription = await apiJson<SubscriptionSummary>('/v1/billing/subscription').catch(() => ({
+    tier: 'free' as const,
+    status: 'free' as const,
+    currentPeriodEnd: null,
+    canceledAt: null,
+    polarCustomerId: null,
+  }));
 
   const { plans } = await apiJson<{ plans: Plan[] }>('/v1/billing/plans').catch(() => ({
     plans: [] as Plan[],
@@ -94,16 +95,16 @@ export default async function BillingPage({
     <div className="flex max-w-4xl flex-col gap-10 pb-12">
       {isCheckoutSuccess ? (
         <div className="rounded-md border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-4 py-3 font-mono text-sm text-[var(--color-primary)]">
-          payment received · your new plan is active · it can take a few seconds for the tier
-          pill to update below
+          payment received · your new plan is active · it can take a few seconds for the tier pill
+          to update below
         </div>
       ) : null}
 
       <header>
         <h1 className="font-mono text-lg text-[var(--color-text)]">billing</h1>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          plan, usage allowance, payments, invoices. cards, refunds, and cancellation are
-          handled through the polar.sh customer portal.
+          plan, usage allowance, payments, invoices. cards, refunds, and cancellation are handled
+          through the polar.sh customer portal.
         </p>
       </header>
 
@@ -137,7 +138,9 @@ export default async function BillingPage({
             <dt className="text-[var(--color-text-subtle)]">
               {subscription.canceledAt ? 'access until' : 'renews'}
             </dt>
-            <dd className="text-[var(--color-text)]">{renewalDate(subscription.currentPeriodEnd)}</dd>
+            <dd className="text-[var(--color-text)]">
+              {renewalDate(subscription.currentPeriodEnd)}
+            </dd>
 
             <dt className="text-[var(--color-text-subtle)]">processor</dt>
             <dd className="text-[var(--color-text-muted)]">
@@ -175,8 +178,8 @@ export default async function BillingPage({
           ))}
         </dl>
         <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-          phase 2/3 enforces hard caps at these limits. the meter + overage billing turn on
-          for public beta (phase 4).
+          phase 2/3 enforces hard caps at these limits. the meter + overage billing turn on for
+          public beta (phase 4).
         </p>
       </section>
 

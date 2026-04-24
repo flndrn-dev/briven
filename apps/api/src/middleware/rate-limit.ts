@@ -36,10 +36,7 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
     const prevKey = `rl:${options.scope}:${subject}:${bucket - 1}`;
 
     try {
-      const [currentRaw, prevRaw] = await Promise.all([
-        redis.incr(currentKey),
-        redis.get(prevKey),
-      ]);
+      const [currentRaw, prevRaw] = await Promise.all([redis.incr(currentKey), redis.get(prevKey)]);
       if (currentRaw === 1) {
         // Expire after 2 windows so the prev lookup still works.
         await redis.pexpire(currentKey, options.windowMs * 2);

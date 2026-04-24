@@ -19,7 +19,9 @@ export interface ProfilePatch {
   addressCountry?: string | null;
 }
 
-export async function getCurrentVat(userId: string): Promise<{ vatId: string | null; vatVerifiedAt: Date | null }> {
+export async function getCurrentVat(
+  userId: string,
+): Promise<{ vatId: string | null; vatVerifiedAt: Date | null }> {
   const db = getDb();
   const [row] = await db
     .select({ vatId: users.vatId, vatVerifiedAt: users.vatVerifiedAt })
@@ -109,8 +111,5 @@ export async function updateProfile(userId: string, patch: ProfilePatch): Promis
 
 export async function setAvatar(userId: string, dataUri: string | null): Promise<void> {
   const db = getDb();
-  await db
-    .update(users)
-    .set({ image: dataUri, updatedAt: new Date() })
-    .where(eq(users.id, userId));
+  await db.update(users).set({ image: dataUri, updatedAt: new Date() }).where(eq(users.id, userId));
 }

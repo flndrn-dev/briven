@@ -39,8 +39,8 @@ export default async function ProjectsPage() {
       {projects.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
           <p className="font-mono text-sm text-[var(--color-text-muted)]">
-            projects are the unit of isolation on briven — one postgres schema,
-            one function runtime, one set of deploy keys.
+            projects are the unit of isolation on briven — one postgres schema, one function
+            runtime, one set of deploy keys.
           </p>
         </div>
       ) : (

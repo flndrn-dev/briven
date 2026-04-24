@@ -13,10 +13,7 @@ async function main() {
       // Dev-from-source fallback: route the import through tsx's loader so
       // `.ts` files with `.js`-suffixed imports resolve correctly.
       const { tsImport } = await import('tsx/esm/api');
-      mod = await tsImport(
-        pathToFileURL(resolve(here, '../src/index.ts')).href,
-        import.meta.url,
-      );
+      mod = await tsImport(pathToFileURL(resolve(here, '../src/index.ts')).href, import.meta.url);
     } else {
       throw err;
     }
