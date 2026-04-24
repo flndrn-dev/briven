@@ -150,19 +150,15 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
 
   const rawBody = await c.req.text();
 
-  // Polar follows Standard Webhooks with one important wrinkle documented
-  // at polar.sh/docs/integrate/webhooks/delivery: Polar signs with the
-  // *raw ASCII bytes* of the secret string (minus the `polar_whs_` prefix),
-  // whereas the Standard Webhooks library treats its input as base64 and
-  // decodes it. Bridge the gap by base64-encoding the raw secret before
-  // handing it in — the library then decodes it back to those ASCII bytes
-  // and HMAC'ing matches Polar's signature.
-  const rawSecret = secret.startsWith('polar_whs_')
-    ? secret.slice('polar_whs_'.length)
-    : secret.startsWith('whsec_')
-    ? secret.slice('whsec_'.length)
-    : secret;
-  const encodedSecret = Buffer.from(rawSecret, 'utf8').toString('base64');
+  // Polar deviates from the Standard Webhooks spec on secret handling.
+  // Per polar-python's validate_event (src/polar_sdk/_webhooks/__init__.py),
+  // the reference implementation is:
+  //   base64_secret = base64.b64encode(secret.encode()).decode()
+  //   webhook = Webhook(base64_secret)
+  // i.e. base64-encode the FULL secret string (including the `polar_whs_`
+  // prefix) and hand THAT to the library, which base64-decodes it and
+  // HMAC's with those raw ASCII bytes. Do NOT strip the prefix.
+  const encodedSecret = Buffer.from(secret, 'utf8').toString('base64');
 
   const wh = new Webhook(encodedSecret);
   try {
