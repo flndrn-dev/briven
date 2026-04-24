@@ -38,14 +38,17 @@ const webhookSchema = z.object({
   data: z
     .object({
       id: z.string(),
-      customer_id: z.string().optional(),
-      customer: z.object({ id: z.string() }).passthrough().optional(),
-      product_id: z.string().optional(),
-      product: z.object({ id: z.string() }).passthrough().optional(),
-      status: z.string().optional(),
-      current_period_end: z.string().nullable().optional(),
-      canceled_at: z.string().nullable().optional(),
-      metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+      // nullish: Polar sends null (not undefined) for fields that don't
+      // apply to a given event type — e.g. product.* events have no
+      // customer_id. Accept both null and undefined.
+      customer_id: z.string().nullish(),
+      customer: z.object({ id: z.string() }).passthrough().nullish(),
+      product_id: z.string().nullish(),
+      product: z.object({ id: z.string() }).passthrough().nullish(),
+      status: z.string().nullish(),
+      current_period_end: z.string().nullish(),
+      canceled_at: z.string().nullish(),
+      metadata: z.record(z.string(), z.unknown()).nullish(),
     })
     .passthrough(),
 });
