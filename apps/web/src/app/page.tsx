@@ -1,6 +1,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { PricingSection } from './pricing-section';
+
 export default function HomePage() {
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
@@ -25,6 +27,12 @@ export default function HomePage() {
         </Link>
 
         <nav className="flex items-center gap-6 font-mono text-[var(--text-small)]">
+          <Link
+            href="#pricing"
+            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          >
+            pricing
+          </Link>
           <Link
             href="https://docs.briven.cloud"
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
@@ -97,6 +105,8 @@ export default function HomePage() {
           body="daily backups, point-in-time recovery, monthly restore drills — from day one."
         />
       </section>
+
+      <PricingSection />
 
       <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 border-t border-[var(--color-border-subtle)] px-6 py-6 font-mono text-[10px] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
         <div className="flex items-center gap-1">

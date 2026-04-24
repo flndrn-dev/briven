@@ -7,6 +7,8 @@ import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import {
   configuredPlans,
+  createCustomerPortalSession,
+  getSubscriptionForOwner,
   getTierForOwner,
   upsertSubscriptionFromPolar,
 } from '../services/billing.js';
@@ -23,6 +25,10 @@ type AppEnv = {
 const checkoutSchema = z.object({
   tier: z.enum(['pro', 'team']),
   successURL: z.string().url(),
+});
+
+const portalSchema = z.object({
+  returnURL: z.string().url(),
 });
 
 const webhookSchema = z.object({
@@ -43,11 +49,48 @@ export const billingRouter = new Hono<AppEnv>();
 billingRouter.use('/v1/billing/tier', requireAuth());
 billingRouter.use('/v1/billing/checkout', requireAuth());
 billingRouter.use('/v1/billing/plans', requireAuth());
+billingRouter.use('/v1/billing/subscription', requireAuth());
+billingRouter.use('/v1/billing/portal', requireAuth());
 
 billingRouter.get('/v1/billing/tier', async (c) => {
   const user = c.get('user')!;
   const tier = await getTierForOwner(user.id);
   return c.json({ tier });
+});
+
+billingRouter.get('/v1/billing/subscription', async (c) => {
+  const user = c.get('user')!;
+  const summary = await getSubscriptionForOwner(user.id);
+  return c.json(summary);
+});
+
+billingRouter.post('/v1/billing/portal', async (c) => {
+  const user = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = portalSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const summary = await getSubscriptionForOwner(user.id);
+  if (!summary.polarCustomerId) {
+    return c.json(
+      {
+        code: 'no_customer',
+        message: 'no paid subscription yet — start one via checkout first',
+      },
+      404,
+    );
+  }
+  try {
+    const result = await createCustomerPortalSession(summary.polarCustomerId, parsed.data.returnURL);
+    return c.json(result);
+  } catch (err) {
+    if (err && typeof err === 'object' && 'code' in err) {
+      const e = err as { code: string; message: string; status?: number };
+      return c.json({ code: e.code, message: e.message }, (e.status ?? 500) as never);
+    }
+    throw err;
+  }
 });
 
 /**

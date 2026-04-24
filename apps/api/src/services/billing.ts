@@ -104,6 +104,79 @@ export async function getTierForOwner(ownerId: string): Promise<ProjectTier> {
   return row.tier;
 }
 
+export interface SubscriptionSummary {
+  tier: ProjectTier;
+  status: SubscriptionStatus | 'free';
+  currentPeriodEnd: string | null;
+  canceledAt: string | null;
+  polarCustomerId: string | null;
+}
+
+/**
+ * Full billing snapshot for the signed-in owner. Returns a 'free' sentinel
+ * when the user has never had a paid subscription. Consumers use this for
+ * the settings page — `getTierForOwner` remains the cheap lookup for tier
+ * enforcement.
+ */
+export async function getSubscriptionForOwner(ownerId: string): Promise<SubscriptionSummary> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.ownerId, ownerId))
+    .limit(1);
+  if (!row) {
+    return {
+      tier: 'free',
+      status: 'free',
+      currentPeriodEnd: null,
+      canceledAt: null,
+      polarCustomerId: null,
+    };
+  }
+  return {
+    tier:
+      row.status === 'canceled' || row.status === 'past_due' ? 'free' : row.tier,
+    status: row.status,
+    currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
+    canceledAt: row.canceledAt?.toISOString() ?? null,
+    polarCustomerId: row.polarCustomerId,
+  };
+}
+
+/**
+ * Open a Polar customer portal session the user can use to manage cards,
+ * invoices, and cancellation on Polar's hosted UI. Throws PolarNotConfigured
+ * when the access token is missing, or NotFoundError if the user has no
+ * `polar_customer_id` yet (i.e. they've never checked out).
+ */
+export async function createCustomerPortalSession(
+  polarCustomerId: string,
+  returnURL: string,
+): Promise<{ url: string }> {
+  if (!env.BRIVEN_POLAR_ACCESS_TOKEN) throw new PolarNotConfigured();
+  const res = await fetch(`${env.BRIVEN_POLAR_API_BASE}/v1/customer-sessions/`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${env.BRIVEN_POLAR_ACCESS_TOKEN}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      customer_id: polarCustomerId,
+      return_url: returnURL,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new brivenError('polar_error', `polar portal failed: ${body}`, { status: 502 });
+  }
+  const parsed = (await res.json()) as { customer_portal_url?: string };
+  if (!parsed.customer_portal_url) {
+    throw new brivenError('polar_error', 'polar did not return a portal url', { status: 502 });
+  }
+  return { url: parsed.customer_portal_url };
+}
+
 export class PolarNotConfigured extends brivenError {
   constructor() {
     super('polar_not_configured', 'billing is not configured', { status: 503 });
