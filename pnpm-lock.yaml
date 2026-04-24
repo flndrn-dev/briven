@@ -252,15 +252,6 @@ importers:
 
   packages/cli:
     dependencies:
-      '@briven/config':
-        specifier: workspace:*
-        version: link:../config
-      '@briven/schema':
-        specifier: workspace:^
-        version: link:../schema
-      '@briven/shared':
-        specifier: workspace:*
-        version: link:../shared
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
@@ -271,6 +262,15 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
     devDependencies:
+      '@briven/config':
+        specifier: workspace:*
+        version: link:../config
+      '@briven/schema':
+        specifier: workspace:^
+        version: link:../schema
+      '@briven/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
