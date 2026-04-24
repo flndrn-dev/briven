@@ -130,13 +130,12 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
       </ul>
 
       {/*
-        Bottom row: user menu + collapse toggle on one line. Collapsed mode
-        shrinks the user menu to an avatar-only square so both buttons fit
-        inside the 72px rail.
+        Bottom stack: user menu on top, collapse toggle beneath it. Both
+        are centred in collapsed mode so they line up inside the 72px rail.
       */}
       <div
-        className={`absolute bottom-5 left-0 right-0 flex items-center ${
-          isCollapsed ? 'justify-center gap-1.5' : 'gap-2 px-3'
+        className={`absolute bottom-3 left-0 right-0 flex flex-col gap-2 ${
+          isCollapsed ? 'items-center' : 'items-stretch px-3'
         }`}
       >
         <UserMenuButton user={user} collapsed={isCollapsed} />
@@ -148,7 +147,9 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
           onFocus={() => setToggleHover(true)}
           onBlur={() => setToggleHover(false)}
           aria-label={isCollapsed ? 'expand sidebar' : 'collapse sidebar'}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-[var(--color-border-subtle)] text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border)] hover:text-[var(--color-primary)]"
+          className={`flex size-8 shrink-0 items-center justify-center rounded-md border border-[var(--color-border-subtle)] text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border)] hover:text-[var(--color-primary)] ${
+            isCollapsed ? '' : 'self-end'
+          }`}
         >
           <span
             className="pointer-events-none inline-block"
