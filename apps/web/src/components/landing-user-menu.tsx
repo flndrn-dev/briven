@@ -150,11 +150,11 @@ function useRowHover() {
 }
 
 function rowClasses(destructive?: boolean) {
-  return `flex w-full items-center gap-3 rounded px-3 py-2 font-mono text-sm transition-colors ${
+  return `flex w-full cursor-pointer items-center gap-3 rounded px-3 py-2 font-mono text-sm transition-colors ${
     destructive
       ? 'text-[var(--color-error)] hover:bg-[var(--color-surface-overlay)]'
       : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]'
-  } disabled:opacity-50`;
+  } disabled:cursor-not-allowed disabled:opacity-50`;
 }
 
 function iconNode(Icon: IconComponent, ref: React.Ref<IconHandle>) {
