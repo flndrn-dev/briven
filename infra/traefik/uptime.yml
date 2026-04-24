@@ -1,0 +1,28 @@
+# Uptime Kuma dashboard router. Uptime Kuma itself lives as a Docker
+# swarm service (briven-uptime-kuma) on dokploy-network, exposed
+# externally via this Traefik dynamic config.
+#
+# Deploy path:
+#   scp infra/traefik/uptime.yml \
+#       root@187.124.64.116:/etc/dokploy/traefik/dynamic/uptime.yml
+#
+# HTTPS note: same story as the wildcard subdomain file — depends on
+# the briven.cloud zone's TLS story. For now it's HTTP only;
+# promote to HTTPS once J picks a resolver strategy (see
+# docs/runbooks/wildcard-subdomains.md).
+
+http:
+  routers:
+    briven-uptime-kuma-http:
+      rule: "Host(`dev-uptime.briven.cloud`)"
+      entryPoints:
+        - web
+      service: briven-uptime-kuma-api
+      middlewares: []
+
+  services:
+    briven-uptime-kuma-api:
+      loadBalancer:
+        servers:
+          - url: "http://briven-uptime-kuma:3001"
+        passHostHeader: true
