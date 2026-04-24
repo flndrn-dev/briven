@@ -3,6 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
+import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
+import { LayoutGridIcon, type LayoutGridIconHandle } from './ui/layout-grid';
+import { LogOutIcon, type LogOutIconHandle } from './ui/log-out';
+
 interface UserInfo {
   name: string | null;
   email: string;
@@ -15,6 +19,10 @@ interface UserInfo {
  * visitor already has a session. Mirrors the sidebar UserMenuButton's
  * dropdown contents but opens downward (the button lives at the top of
  * the page, not the bottom of a sidebar).
+ *
+ * Each row drives its own icon animation from hover on the whole row so
+ * the motion kicks in the moment the cursor crosses the button's padding,
+ * not only the icon's 16px surface.
  */
 export function LandingUserMenu({ user }: { user: UserInfo }) {
   const [open, setOpen] = useState(false);
@@ -83,45 +91,161 @@ export function LandingUserMenu({ user }: { user: UserInfo }) {
           </div>
           <ul className="p-1">
             <li>
-              <Link
+              <AnimatedMenuLink
                 href="/dashboard"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]"
-              >
-                <GridIcon />
-                dashboard
-              </Link>
+                icon={LayoutGridIcon}
+                label="dashboard"
+                onSelect={() => setOpen(false)}
+              />
             </li>
             <li>
-              <a
+              <AnimatedMenuAnchor
                 href="https://docs.briven.cloud"
+                icon={BookOpenIcon}
+                label="docs"
                 target="_blank"
                 rel="noreferrer"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]"
-              >
-                <BookIcon />
-                docs
-              </a>
+                onSelect={() => setOpen(false)}
+              />
             </li>
             <li>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={signOut}
+              <AnimatedMenuButton
+                icon={LogOutIcon}
+                label={signingOut ? 'signing out…' : 'log out'}
                 disabled={signingOut}
-                className="flex w-full items-center gap-3 rounded px-3 py-2 font-mono text-sm text-[var(--color-error)] transition-colors hover:bg-[var(--color-surface-overlay)] disabled:opacity-50"
-              >
-                <LogOutIcon />
-                {signingOut ? 'signing out…' : 'log out'}
-              </button>
+                destructive
+                onSelect={signOut}
+              />
             </li>
           </ul>
         </div>
       )}
     </div>
+  );
+}
+
+type IconHandle = LayoutGridIconHandle | BookOpenIconHandle | LogOutIconHandle;
+type IconComponent = typeof LayoutGridIcon | typeof BookOpenIcon | typeof LogOutIcon;
+
+function useRowHover() {
+  const ref = useRef<IconHandle>(null);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    if (!ref.current) return;
+    if (hover) ref.current.startAnimation();
+    else ref.current.stopAnimation();
+  }, [hover]);
+  return {
+    ref,
+    handlers: {
+      onMouseEnter: () => setHover(true),
+      onMouseLeave: () => setHover(false),
+      onFocus: () => setHover(true),
+      onBlur: () => setHover(false),
+    },
+  };
+}
+
+function rowClasses(destructive?: boolean) {
+  return `flex w-full items-center gap-3 rounded px-3 py-2 font-mono text-sm transition-colors ${
+    destructive
+      ? 'text-[var(--color-error)] hover:bg-[var(--color-surface-overlay)]'
+      : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]'
+  } disabled:opacity-50`;
+}
+
+function iconNode(Icon: IconComponent, ref: React.Ref<IconHandle>) {
+  return (
+    <span className="pointer-events-none">
+      <Icon ref={ref as never} size={16} />
+    </span>
+  );
+}
+
+function AnimatedMenuLink({
+  href,
+  icon: Icon,
+  label,
+  onSelect,
+}: {
+  href: string;
+  icon: IconComponent;
+  label: string;
+  onSelect?: () => void;
+}) {
+  const { ref, handlers } = useRowHover();
+  return (
+    <Link
+      href={href}
+      role="menuitem"
+      onClick={onSelect}
+      className={rowClasses()}
+      {...handlers}
+    >
+      {iconNode(Icon, ref)}
+      {label}
+    </Link>
+  );
+}
+
+function AnimatedMenuAnchor({
+  href,
+  icon: Icon,
+  label,
+  onSelect,
+  target,
+  rel,
+}: {
+  href: string;
+  icon: IconComponent;
+  label: string;
+  onSelect?: () => void;
+  target?: string;
+  rel?: string;
+}) {
+  const { ref, handlers } = useRowHover();
+  return (
+    <a
+      href={href}
+      target={target}
+      rel={rel}
+      role="menuitem"
+      onClick={onSelect}
+      className={rowClasses()}
+      {...handlers}
+    >
+      {iconNode(Icon, ref)}
+      {label}
+    </a>
+  );
+}
+
+function AnimatedMenuButton({
+  icon: Icon,
+  label,
+  onSelect,
+  disabled,
+  destructive,
+}: {
+  icon: IconComponent;
+  label: string;
+  onSelect?: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  const { ref, handlers } = useRowHover();
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onSelect}
+      disabled={disabled}
+      className={rowClasses(destructive)}
+      {...handlers}
+    >
+      {iconNode(Icon, ref)}
+      {label}
+    </button>
   );
 }
 
@@ -161,63 +285,4 @@ function getInitials(source: string): string {
     .filter(Boolean)
     .join('');
   return (letters || cleaned[0] || '·').toUpperCase();
-}
-
-function GridIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
-    </svg>
-  );
-}
-
-function BookIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-    </svg>
-  );
-}
-
-function LogOutIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  );
 }

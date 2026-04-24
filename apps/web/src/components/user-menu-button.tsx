@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
 import {
   ChevronsUpDownIcon,
   type ChevronsUpDownIconHandle,
 } from './ui/chevrons-up-down';
+import { GlobeIcon, type GlobeIconHandle } from './ui/globe';
+import { LogOutIcon, type LogOutIconHandle } from './ui/log-out';
 
 interface UserInfo {
   name: string | null;
@@ -22,11 +25,15 @@ interface Props {
 /**
  * Sidebar-anchored user menu. Collapses to a bare avatar when the sidebar
  * is collapsed; expands to avatar + name + email + chevron when open.
- * Dropdown opens upward with a docs link and sign-out.
+ * Dropdown opens upward with a website/docs link and sign-out.
  *
  * why: the user's own email appears only to themselves within their own
  * authenticated sidebar — the same trust boundary as CLAUDE.md §5.1's
  * carve-out for the Settings/Account page.
+ *
+ * Icon animations are driven from each menu row's hover state via the
+ * component handle — hovering anywhere in the row (icon, label, padding)
+ * triggers the animation, not just the icon's own 16px surface.
  */
 export function UserMenuButton({ user, collapsed }: Props) {
   const [open, setOpen] = useState(false);
@@ -126,45 +133,125 @@ export function UserMenuButton({ user, collapsed }: Props) {
           </div>
           <ul className="p-1">
             <li>
-              <a
+              <MenuRow
+                as="a"
                 href="/"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]"
-              >
-                <GlobeIcon />
-                website
-              </a>
+                onSelect={() => setOpen(false)}
+                icon={GlobeIcon}
+                label="website"
+              />
             </li>
             <li>
-              <a
+              <MenuRow
+                as="a"
                 href="https://docs.briven.cloud"
                 target="_blank"
                 rel="noreferrer"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]"
-              >
-                <BookIcon />
-                docs
-              </a>
+                onSelect={() => setOpen(false)}
+                icon={BookOpenIcon}
+                label="docs"
+              />
             </li>
             <li>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={signOut}
+              <MenuRow
+                as="button"
+                onSelect={signOut}
                 disabled={signingOut}
-                className="flex w-full items-center gap-3 rounded px-3 py-2 font-mono text-sm text-[var(--color-error)] transition-colors hover:bg-[var(--color-surface-overlay)] disabled:opacity-50"
-              >
-                <LogOutIcon />
-                {signingOut ? 'signing out…' : 'log out'}
-              </button>
+                icon={LogOutIcon}
+                label={signingOut ? 'signing out…' : 'log out'}
+                destructive
+              />
             </li>
           </ul>
         </div>
       )}
     </div>
+  );
+}
+
+type IconHandle = GlobeIconHandle | BookOpenIconHandle | LogOutIconHandle;
+type IconComponent = typeof GlobeIcon | typeof BookOpenIcon | typeof LogOutIcon;
+
+interface MenuRowBaseProps {
+  onSelect?: () => void;
+  icon: IconComponent;
+  label: string;
+  destructive?: boolean;
+  disabled?: boolean;
+}
+type MenuRowProps =
+  | (MenuRowBaseProps & {
+      as: 'a';
+      href: string;
+      target?: string;
+      rel?: string;
+    })
+  | (MenuRowBaseProps & {
+      as: 'button';
+    });
+
+/**
+ * Single dropdown row. Owns the hover state so the icon's animation starts
+ * the moment the cursor enters the row (not just the icon's 16px box).
+ */
+function MenuRow(props: MenuRowProps) {
+  const { icon: Icon, label, destructive, onSelect, disabled } = props;
+  const ref = useRef<IconHandle>(null);
+  const [hover, setHover] = useState(false);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    if (hover && !disabled) ref.current.startAnimation();
+    else ref.current.stopAnimation();
+  }, [hover, disabled]);
+
+  const base = `flex w-full items-center gap-3 rounded px-3 py-2 font-mono text-sm transition-colors ${
+    destructive
+      ? 'text-[var(--color-error)] hover:bg-[var(--color-surface-overlay)]'
+      : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]'
+  } disabled:opacity-50`;
+
+  const sharedHandlers = {
+    onMouseEnter: () => setHover(true),
+    onMouseLeave: () => setHover(false),
+    onFocus: () => setHover(true),
+    onBlur: () => setHover(false),
+  };
+
+  const iconNode = (
+    <span className="pointer-events-none">
+      <Icon ref={ref as never} size={16} />
+    </span>
+  );
+
+  if (props.as === 'a') {
+    return (
+      <a
+        href={props.href}
+        target={props.target}
+        rel={props.rel}
+        role="menuitem"
+        onClick={onSelect}
+        className={base}
+        {...sharedHandlers}
+      >
+        {iconNode}
+        {label}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onSelect}
+      disabled={disabled}
+      className={base}
+      {...sharedHandlers}
+    >
+      {iconNode}
+      {label}
+    </button>
   );
 }
 
@@ -204,62 +291,4 @@ function getInitials(source: string): string {
     .filter(Boolean)
     .join('');
   return (letters || cleaned[0] || '·').toUpperCase();
-}
-
-function GlobeIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M2 12h20" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  );
-}
-
-function BookIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-    </svg>
-  );
-}
-
-function LogOutIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  );
 }

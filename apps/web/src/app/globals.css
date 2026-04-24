@@ -1,1 +1,18 @@
 @import "@briven/config/tailwind/theme.css";
+
+/*
+ * Global affordance: every non-disabled interactive element shows a pointer
+ * on hover. Disabled buttons fall back to not-allowed so the UI reads
+ * correctly without per-component classes.
+ */
+@layer base {
+  button:not(:disabled),
+  a,
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
