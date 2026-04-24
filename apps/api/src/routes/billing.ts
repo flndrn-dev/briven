@@ -150,43 +150,30 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
 
   const rawBody = await c.req.text();
 
-  // Polar follows the Standard Webhooks spec. The library base64-decodes
-  // the secret itself and natively strips `whsec_`, but Polar wraps with
-  // `polar_whs_` — strip that ourselves before handing the rest in.
-  const normalizedSecret = secret.startsWith('polar_whs_')
+  // Polar follows Standard Webhooks with one important wrinkle documented
+  // at polar.sh/docs/integrate/webhooks/delivery: Polar signs with the
+  // *raw ASCII bytes* of the secret string (minus the `polar_whs_` prefix),
+  // whereas the Standard Webhooks library treats its input as base64 and
+  // decodes it. Bridge the gap by base64-encoding the raw secret before
+  // handing it in — the library then decodes it back to those ASCII bytes
+  // and HMAC'ing matches Polar's signature.
+  const rawSecret = secret.startsWith('polar_whs_')
     ? secret.slice('polar_whs_'.length)
+    : secret.startsWith('whsec_')
+    ? secret.slice('whsec_'.length)
     : secret;
+  const encodedSecret = Buffer.from(rawSecret, 'utf8').toString('base64');
 
-  const whId = c.req.header('webhook-id') ?? '';
-  const whTs = c.req.header('webhook-timestamp') ?? '';
-  const whSig = c.req.header('webhook-signature') ?? '';
-
-  const wh = new Webhook(normalizedSecret);
+  const wh = new Webhook(encodedSecret);
   try {
     wh.verify(rawBody, {
-      'webhook-id': whId,
-      'webhook-timestamp': whTs,
-      'webhook-signature': whSig,
+      'webhook-id': c.req.header('webhook-id') ?? '',
+      'webhook-timestamp': c.req.header('webhook-timestamp') ?? '',
+      'webhook-signature': c.req.header('webhook-signature') ?? '',
     });
   } catch (err) {
     if (err instanceof WebhookVerificationError) {
-      // Emit enough to diagnose secret vs body-mutation without logging
-      // the whole payload (PII) or the secret itself.
-      let computed = '';
-      try {
-        computed = wh.sign(whId, new Date(Number(whTs) * 1000), rawBody);
-      } catch {}
-      log.warn('polar_webhook_bad_signature', {
-        message: err.message,
-        webhookId: whId,
-        timestamp: whTs,
-        bodyLen: rawBody.length,
-        bodyHead: rawBody.slice(0, 64),
-        bodyTail: rawBody.slice(-64),
-        receivedSig: whSig,
-        computedSig: computed,
-        secretHint: normalizedSecret.slice(0, 4) + '…' + normalizedSecret.slice(-4),
-      });
+      log.warn('polar_webhook_bad_signature', { message: err.message });
       return c.json({ code: 'bad_signature' }, 401);
     }
     throw err;
