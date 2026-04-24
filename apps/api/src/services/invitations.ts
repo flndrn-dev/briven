@@ -65,10 +65,7 @@ export async function createInvitation(input: InviteInput): Promise<ProjectInvit
 
 export async function listInvitations(projectId: string): Promise<ProjectInvitation[]> {
   const db = getDb();
-  return db
-    .select()
-    .from(projectInvitations)
-    .where(eq(projectInvitations.projectId, projectId));
+  return db.select().from(projectInvitations).where(eq(projectInvitations.projectId, projectId));
 }
 
 export async function revokeInvitation(projectId: string, invitationId: string): Promise<void> {

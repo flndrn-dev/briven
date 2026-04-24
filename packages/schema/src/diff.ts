@@ -48,9 +48,7 @@ export function diff(prev: SchemaDef | null, next: SchemaDef): DiffResult {
     }
   }
 
-  const destructive = changes.some(
-    (c) => c.kind === 'drop_table' || c.kind === 'drop_column',
-  );
+  const destructive = changes.some((c) => c.kind === 'drop_table' || c.kind === 'drop_column');
   return { changes, destructive };
 }
 

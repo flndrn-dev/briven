@@ -227,7 +227,9 @@ deploymentsRouter.patch('/v1/projects/:id/deployments/latest', async (c) => {
   // Schema snapshot: if the client didn't send one, inherit the previous;
   // destructive diffs are enforced when a new snapshot is supplied.
   const inheritedSnapshot =
-    parsed.data.schemaSnapshot ?? ((current?.schemaSnapshot as Record<string, unknown> | null) ?? undefined);
+    parsed.data.schemaSnapshot ??
+    (current?.schemaSnapshot as Record<string, unknown> | null) ??
+    undefined;
 
   if (parsed.data.schemaSnapshot && !parsed.data.confirmDestructive) {
     const prevSnap = (current?.schemaSnapshot as Record<string, unknown> | null) ?? null;
@@ -334,10 +336,8 @@ function isDestructiveDiff(
   const nextTables = (next.tables as Record<string, Record<string, unknown>> | undefined) ?? {};
   for (const tName of Object.keys(prevTables)) {
     if (!(tName in nextTables)) return true; // dropped table
-    const prevCols =
-      (prevTables[tName]!.columns as Record<string, unknown> | undefined) ?? {};
-    const nextCols =
-      (nextTables[tName]!.columns as Record<string, unknown> | undefined) ?? {};
+    const prevCols = (prevTables[tName]!.columns as Record<string, unknown> | undefined) ?? {};
+    const nextCols = (nextTables[tName]!.columns as Record<string, unknown> | undefined) ?? {};
     for (const cName of Object.keys(prevCols)) {
       if (!(cName in nextCols)) return true; // dropped column
     }

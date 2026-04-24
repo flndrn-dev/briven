@@ -20,11 +20,7 @@ export default function DocsIndex() {
           title="quickstart"
           body="from nothing to deployed in five minutes."
         />
-        <DocCard
-          href="/cli"
-          title="cli"
-          body="every command, flag, and env var."
-        />
+        <DocCard href="/cli" title="cli" body="every command, flag, and env var." />
         <DocCard
           href="/schema"
           title="schema dsl"

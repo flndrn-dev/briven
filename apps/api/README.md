@@ -14,11 +14,11 @@ requires **bun 1.1+**. the dev script uses `bun --hot` for live reload.
 
 ## endpoints (phase 0)
 
-| path | description |
-|------|-------------|
-| `GET /` | liveness + service identity |
-| `GET /health` | process alive |
-| `GET /ready` | dependencies reachable (stubs until phase 1) |
+| path          | description                                  |
+| ------------- | -------------------------------------------- |
+| `GET /`       | liveness + service identity                  |
+| `GET /health` | process alive                                |
+| `GET /ready`  | dependencies reachable (stubs until phase 1) |
 
 phase 1 adds auth, projects, deployments, api-keys — see `docs/BUILD_PLAN.md` §Phase 1.
 

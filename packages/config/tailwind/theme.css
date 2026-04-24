@@ -8,7 +8,7 @@
  * See BRAND.md §3.2 for rationale and contrast targets.
  */
 
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   /* ── Surfaces ───────────────────────────────────────────────── */
@@ -67,8 +67,8 @@
   --radius-full: 9999px;
 
   /* ── Typography ─────────────────────────────────────────────── */
-  --font-sans: "Geist", system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
 
   --text-display-1: 4.5rem;
   --text-display-2: 3.5rem;
@@ -96,7 +96,7 @@ html {
 
 body {
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
+  font-feature-settings: 'ss01', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -119,20 +119,20 @@ body {
  */
 button:not(:disabled),
 a[href],
-[role="button"]:not([aria-disabled="true"]),
+[role='button']:not([aria-disabled='true']),
 summary,
 label[for],
 select:not(:disabled),
-input[type="submit"]:not(:disabled),
-input[type="button"]:not(:disabled),
-input[type="reset"]:not(:disabled),
-input[type="checkbox"]:not(:disabled),
-input[type="radio"]:not(:disabled) {
+input[type='submit']:not(:disabled),
+input[type='button']:not(:disabled),
+input[type='reset']:not(:disabled),
+input[type='checkbox']:not(:disabled),
+input[type='radio']:not(:disabled) {
   cursor: pointer;
 }
 
 button:disabled,
-[role="button"][aria-disabled="true"] {
+[role='button'][aria-disabled='true'] {
   cursor: not-allowed;
 }
 

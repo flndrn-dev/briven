@@ -19,8 +19,7 @@ const SESSION_COOKIE_DEV = 'briven.session_token';
  */
 export default function proxy(req: NextRequest): NextResponse {
   const { nextUrl } = req;
-  const hasSession =
-    req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);
+  const hasSession = req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);
 
   if (!hasSession) {
     const url = nextUrl.clone();

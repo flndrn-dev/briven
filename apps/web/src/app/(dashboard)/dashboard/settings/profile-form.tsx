@@ -35,7 +35,6 @@ interface Props {
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
-
 type FieldKey = keyof ProfileInitial;
 
 export function ProfileForm({ initial, vatLocked, save }: Props) {
@@ -66,10 +65,9 @@ export function ProfileForm({ initial, vatLocked, save }: Props) {
     vatDebounce.current = setTimeout(async () => {
       setVat({ status: 'checking' });
       try {
-        const res = await fetch(
-          `/api/v1/billing/vat/check?id=${encodeURIComponent(trimmed)}`,
-          { credentials: 'include' },
-        );
+        const res = await fetch(`/api/v1/billing/vat/check?id=${encodeURIComponent(trimmed)}`, {
+          credentials: 'include',
+        });
         if (!res.ok) {
           setVat({ status: 'unverifiable', reason: `http_${res.status}` });
           return;
@@ -183,7 +181,11 @@ export function ProfileForm({ initial, vatLocked, save }: Props) {
             onChange={(v) => set('addressLine2', v)}
           />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px]">
-            <Field label="city" value={values.addressCity} onChange={(v) => set('addressCity', v)} />
+            <Field
+              label="city"
+              value={values.addressCity}
+              onChange={(v) => set('addressCity', v)}
+            />
             <Field
               label="postal code"
               value={values.addressPostalCode}
@@ -247,9 +249,7 @@ export function ProfileForm({ initial, vatLocked, save }: Props) {
 function VatStatusLine({ state }: { state: VatState }) {
   if (state.status === 'idle') return null;
   if (state.status === 'checking') {
-    return (
-      <p className="font-mono text-xs text-[var(--color-text-subtle)]">checking with VIES…</p>
-    );
+    return <p className="font-mono text-xs text-[var(--color-text-subtle)]">checking with VIES…</p>;
   }
   if (state.status === 'valid') {
     return (
@@ -292,9 +292,7 @@ function Field({
     <label className="flex flex-col gap-2">
       <span className="font-mono text-xs text-[var(--color-text-muted)]">
         {label}
-        {hint ? (
-          <span className="ml-2 text-[var(--color-text-subtle)]">({hint})</span>
-        ) : null}
+        {hint ? <span className="ml-2 text-[var(--color-text-subtle)]">({hint})</span> : null}
       </span>
       <input
         type="text"

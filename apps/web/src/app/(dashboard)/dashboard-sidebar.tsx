@@ -55,11 +55,7 @@ const NAV: NavItem[] = [
   },
 ];
 
-type IconHandle =
-  | FoldersIconHandle
-  | CogIconHandle
-  | ShieldCheckIconHandle
-  | CreditCardIconHandle;
+type IconHandle = FoldersIconHandle | CogIconHandle | ShieldCheckIconHandle | CreditCardIconHandle;
 
 interface SidebarUser {
   name: string | null;

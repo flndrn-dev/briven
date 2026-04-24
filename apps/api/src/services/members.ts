@@ -2,13 +2,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '@briven/shared';
 import { and, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import {
-  memberRole,
-  projectMembers,
-  projects,
-  users,
-  type MemberRole,
-} from '../db/schema.js';
+import { memberRole, projectMembers, projects, users, type MemberRole } from '../db/schema.js';
 
 export interface MemberRow {
   userId: string;
@@ -34,10 +28,7 @@ export async function listMembers(projectId: string): Promise<MemberRow[]> {
   return rows;
 }
 
-export async function getMember(
-  projectId: string,
-  userId: string,
-): Promise<MemberRow | null> {
+export async function getMember(projectId: string, userId: string): Promise<MemberRow | null> {
   const db = getDb();
   const [row] = await db
     .select({
@@ -116,9 +107,7 @@ export async function updateMemberRole(
   await db
     .update(projectMembers)
     .set({ role, updatedAt: new Date() })
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    );
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
 
   const updated = await getMember(projectId, userId);
   if (!updated) throw new Error('member update returned no row');
@@ -134,9 +123,7 @@ export async function removeMember(projectId: string, userId: string): Promise<v
   const db = getDb();
   await db
     .delete(projectMembers)
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    );
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
 }
 
 /**

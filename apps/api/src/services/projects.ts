@@ -5,7 +5,13 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
-import { projects, projectMembers, orgMembers, type Project, type NewProject } from '../db/schema.js';
+import {
+  projects,
+  projectMembers,
+  orgMembers,
+  type Project,
+  type NewProject,
+} from '../db/schema.js';
 import { log } from '../lib/logger.js';
 import { getTierForOrg } from './billing.js';
 import { assertProjectCreateAllowed } from './tiers.js';
@@ -102,7 +108,9 @@ export async function getProjectForUser(projectId: string, userId: string): Prom
     .select()
     .from(projects)
     .innerJoin(orgMembers, eq(orgMembers.orgId, projects.orgId))
-    .where(and(eq(projects.id, projectId), eq(orgMembers.userId, userId), isNull(projects.deletedAt)))
+    .where(
+      and(eq(projects.id, projectId), eq(orgMembers.userId, userId), isNull(projects.deletedAt)),
+    )
     .limit(1);
   if (!row) throw new NotFoundError('project', projectId);
   return row.projects;

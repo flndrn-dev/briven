@@ -65,7 +65,10 @@ apiKeysRouter.post('/v1/projects/:id/api-keys', async (c) => {
     actorId: user.id,
     projectId: project.id,
     action: 'api_key.create',
-    ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for'), env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper'),
+    ipHash: hashIp(
+      c.req.raw.headers.get('x-forwarded-for'),
+      env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper',
+    ),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { keyId: record.id, name: record.name },
   });
@@ -129,7 +132,10 @@ apiKeysRouter.delete('/v1/projects/:id/api-keys/:keyId', async (c) => {
     actorId: user.id,
     projectId: project.id,
     action: 'api_key.revoke',
-    ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for'), env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper'),
+    ipHash: hashIp(
+      c.req.raw.headers.get('x-forwarded-for'),
+      env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper',
+    ),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { keyId },
   });

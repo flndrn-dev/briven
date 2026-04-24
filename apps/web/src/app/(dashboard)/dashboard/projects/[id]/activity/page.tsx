@@ -11,15 +11,9 @@ interface Activity {
 
 export const dynamic = 'force-dynamic';
 
-export default async function ActivityPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ActivityPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { activity } = await apiJson<{ activity: Activity[] }>(
-    `/v1/projects/${id}/activity`,
-  );
+  const { activity } = await apiJson<{ activity: Activity[] }>(`/v1/projects/${id}/activity`);
 
   if (activity.length === 0) {
     return (

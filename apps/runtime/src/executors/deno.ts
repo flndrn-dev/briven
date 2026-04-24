@@ -12,10 +12,7 @@ import type { Bundle, InvokeRequest, InvokeResult } from '../types.js';
  *  - stdin/stdout JSON-RPC: `{ id, method: 'invoke', params }` → `{ id, result | error }`
  *  - isolate killed + replaced after 10 min idle OR 1,000 invocations OR any crash
  */
-export async function invokeDeno(
-  _bundle: Bundle,
-  _request: InvokeRequest,
-): Promise<InvokeResult> {
+export async function invokeDeno(_bundle: Bundle, _request: InvokeRequest): Promise<InvokeResult> {
   return {
     ok: false,
     code: 'executor_not_implemented',

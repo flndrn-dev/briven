@@ -5,7 +5,7 @@ All backups are `pg_dump --format=custom` files uploaded nightly by
 Each timestamped directory contains:
 
 - `control.dump` — briven control-plane meta-DB (`briven_control`)
-- `data.dump`    — shared data-plane cluster (`briven_data`, all project schemas)
+- `data.dump` — shared data-plane cluster (`briven_data`, all project schemas)
 - `sha256sums.txt` — content hashes for integrity verification
 
 ## restore
@@ -45,9 +45,9 @@ Drill date (first Monday, ~30 minutes):
 Set a B2 bucket lifecycle rule, not code-side deletion, so the
 dev does not accidentally remove old snapshots. Recommended phases:
 
-- 0–30 days:   keep every nightly
+- 0–30 days: keep every nightly
 - 30–365 days: weekly only (B2 lifecycle: "keep one per 7 days")
-- >1 year:     delete
+- > 1 year: delete
 
 ## what's NOT backed up yet
 

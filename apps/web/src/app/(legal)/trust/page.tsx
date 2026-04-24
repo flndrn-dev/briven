@@ -10,10 +10,10 @@ export default function TrustPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">where data lives</h2>
       <p>
-        briven runs on a dedicated Hostinger KVM in Frankfurt (eu-west-1). Customer databases
-        live in a shared Postgres 17 cluster (pgvector enabled) with one schema per project —
-        every query is scoped to the project's schema at the application layer plus search_path
-        at the connection layer. Team-tier projects graduate to a dedicated cluster.
+        briven runs on a dedicated Hostinger KVM in Frankfurt (eu-west-1). Customer databases live
+        in a shared Postgres 17 cluster (pgvector enabled) with one schema per project — every query
+        is scoped to the project's schema at the application layer plus search_path at the
+        connection layer. Team-tier projects graduate to a dedicated cluster.
       </p>
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">encryption</h2>
@@ -34,15 +34,15 @@ export default function TrustPage() {
       <p>
         SSH to the control-plane host is key-only; root password auth is disabled. Every
         platform-level mutation (deploy, member change, env edit, key revoke) is written to an
-        append-only audit log tied to the authenticated actor. IPs are hashed before storage
-        per our privacy policy.
+        append-only audit log tied to the authenticated actor. IPs are hashed before storage per our
+        privacy policy.
       </p>
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">incident disclosure</h2>
       <p>
         We will disclose incidents that affect customer data within 72 hours of detection to
-        affected accounts and will publish a post-mortem here within 30 days. No incidents to
-        report yet.
+        affected accounts and will publish a post-mortem here within 30 days. No incidents to report
+        yet.
       </p>
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">open source</h2>

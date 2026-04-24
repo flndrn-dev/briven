@@ -31,11 +31,17 @@ export default async function SignInPage({
 
         <p className="mt-10 font-mono text-xs text-[var(--color-text-subtle)]">
           by signing in you agree to the{' '}
-          <Link href="/legal/terms" className="underline underline-offset-2 hover:text-[var(--color-text)]">
+          <Link
+            href="/legal/terms"
+            className="underline underline-offset-2 hover:text-[var(--color-text)]"
+          >
             terms
           </Link>{' '}
           and{' '}
-          <Link href="/legal/privacy" className="underline underline-offset-2 hover:text-[var(--color-text)]">
+          <Link
+            href="/legal/privacy"
+            className="underline underline-offset-2 hover:text-[var(--color-text)]"
+          >
             privacy
           </Link>{' '}
           policy.

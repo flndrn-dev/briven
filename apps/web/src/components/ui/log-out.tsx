@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { motion, useAnimation } from "motion/react";
-import type { HTMLAttributes } from "react";
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { motion, useAnimation } from 'motion/react';
+import type { HTMLAttributes } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export interface LogOutIconHandle {
   startAnimation: () => void;
@@ -23,8 +23,8 @@ const LogOutIcon = forwardRef<LogOutIconHandle, LogOutIconProps>(
     useImperativeHandle(ref, () => {
       isControlledRef.current = true;
       return {
-        startAnimation: () => controls.start("animate"),
-        stopAnimation: () => controls.start("normal"),
+        startAnimation: () => controls.start('animate'),
+        stopAnimation: () => controls.start('normal'),
       };
     });
 
@@ -33,7 +33,7 @@ const LogOutIcon = forwardRef<LogOutIconHandle, LogOutIconProps>(
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
-          controls.start("animate");
+          controls.start('animate');
         }
       },
       [controls, onMouseEnter],
@@ -44,7 +44,7 @@ const LogOutIcon = forwardRef<LogOutIconHandle, LogOutIconProps>(
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
-          controls.start("normal");
+          controls.start('normal');
         }
       },
       [controls, onMouseLeave],
@@ -71,7 +71,7 @@ const LogOutIcon = forwardRef<LogOutIconHandle, LogOutIconProps>(
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
           <motion.g
             animate={controls}
-            transition={{ type: "spring", stiffness: 250, damping: 18 }}
+            transition={{ type: 'spring', stiffness: 250, damping: 18 }}
             variants={{
               normal: { translateX: 0 },
               animate: { translateX: 3 },
@@ -86,6 +86,6 @@ const LogOutIcon = forwardRef<LogOutIconHandle, LogOutIconProps>(
   },
 );
 
-LogOutIcon.displayName = "LogOutIcon";
+LogOutIcon.displayName = 'LogOutIcon';
 
 export { LogOutIcon };

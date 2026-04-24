@@ -4,10 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
-import {
-  ChevronsUpDownIcon,
-  type ChevronsUpDownIconHandle,
-} from './ui/chevrons-up-down';
+import { ChevronsUpDownIcon, type ChevronsUpDownIconHandle } from './ui/chevrons-up-down';
 import { GlobeIcon, type GlobeIconHandle } from './ui/globe';
 import { LogOutIcon, type LogOutIconHandle } from './ui/log-out';
 
@@ -81,7 +78,7 @@ export function UserMenuButton({ user, collapsed }: Props) {
   }
 
   return (
-    <div ref={containerRef} className={collapsed ? 'relative' : 'relative flex-1 min-w-0'}>
+    <div ref={containerRef} className={collapsed ? 'relative' : 'relative min-w-0 flex-1'}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

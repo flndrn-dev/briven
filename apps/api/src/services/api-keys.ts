@@ -97,11 +97,7 @@ export async function listApiKeysForProject(projectId: string): Promise<MaskedAp
   return rows;
 }
 
-export async function renameApiKey(
-  projectId: string,
-  keyId: string,
-  name: string,
-): Promise<void> {
+export async function renameApiKey(projectId: string, keyId: string, name: string): Promise<void> {
   const db = getDb();
   const [row] = await db
     .select()

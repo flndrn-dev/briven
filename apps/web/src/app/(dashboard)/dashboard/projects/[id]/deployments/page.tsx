@@ -14,11 +14,7 @@ interface Deployment {
 
 export const dynamic = 'force-dynamic';
 
-export default async function DeploymentsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function DeploymentsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { deployments } = await apiJson<{ deployments: Deployment[] }>(
     `/v1/projects/${id}/deployments?limit=100`,
@@ -27,8 +23,8 @@ export default async function DeploymentsPage({
   if (deployments.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center font-mono text-sm text-[var(--color-text-muted)]">
-        no deployments yet. run <code className="text-[var(--color-text)]">briven deploy</code>{' '}
-        from your project directory.
+        no deployments yet. run <code className="text-[var(--color-text)]">briven deploy</code> from
+        your project directory.
       </p>
     );
   }

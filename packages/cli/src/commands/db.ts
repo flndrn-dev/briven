@@ -51,10 +51,11 @@ async function runShell(): Promise<number> {
 
   let token: ShellTokenResponse;
   try {
-    token = await apiCall<ShellTokenResponse>(
-      `/v1/projects/${local.projectId}/db/shell-token`,
-      { method: 'POST', apiOrigin: cred.apiOrigin, apiKey: cred.apiKey },
-    );
+    token = await apiCall<ShellTokenResponse>(`/v1/projects/${local.projectId}/db/shell-token`, {
+      method: 'POST',
+      apiOrigin: cred.apiOrigin,
+      apiKey: cred.apiKey,
+    });
   } catch (err) {
     if (err instanceof ApiCallError) {
       printError(`server rejected: ${err.code} (${err.status})`);

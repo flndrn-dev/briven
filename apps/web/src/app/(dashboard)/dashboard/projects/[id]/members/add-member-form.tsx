@@ -26,7 +26,10 @@ export function AddMemberForm({ action }: Props) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+    <form
+      onSubmit={onSubmit}
+      className="flex flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4"
+    >
       <div className="flex gap-2">
         <input
           name="email"

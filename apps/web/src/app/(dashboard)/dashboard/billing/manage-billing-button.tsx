@@ -12,7 +12,10 @@ interface Props {
  * rendered when the user already has a polar_customer_id (i.e. they've
  * completed a checkout at least once).
  */
-export function ManageBillingButton({ label = 'manage billing on polar', variant = 'secondary' }: Props) {
+export function ManageBillingButton({
+  label = 'manage billing on polar',
+  variant = 'secondary',
+}: Props) {
   const [pending, setPending] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
@@ -62,9 +65,7 @@ export function ManageBillingButton({ label = 'manage billing on polar', variant
       >
         {pending ? 'opening portal…' : label}
       </button>
-      {errMsg ? (
-        <p className="font-mono text-xs text-[var(--color-error)]">{errMsg}</p>
-      ) : null}
+      {errMsg ? <p className="font-mono text-xs text-[var(--color-error)]">{errMsg}</p> : null}
     </div>
   );
 }

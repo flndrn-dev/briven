@@ -43,10 +43,7 @@ export interface AuditRow {
  * "activity" tab. The IP hash stays opaque; CLAUDE.md §5.1 forbids surfacing
  * raw IPs to the dashboard.
  */
-export async function listAuditForProject(
-  projectId: string,
-  limit = 100,
-): Promise<AuditRow[]> {
+export async function listAuditForProject(projectId: string, limit = 100): Promise<AuditRow[]> {
   const db = getDb();
   const rows = await db
     .select({

@@ -14,13 +14,40 @@ export interface Country {
 }
 
 const EU_CODES = new Set([
-  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR',
-  'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO',
-  'SE', 'SI', 'SK',
+  'AT',
+  'BE',
+  'BG',
+  'CY',
+  'CZ',
+  'DE',
+  'DK',
+  'EE',
+  'ES',
+  'FI',
+  'FR',
+  'GR',
+  'HR',
+  'HU',
+  'IE',
+  'IT',
+  'LT',
+  'LU',
+  'LV',
+  'MT',
+  'NL',
+  'PL',
+  'PT',
+  'RO',
+  'SE',
+  'SI',
+  'SK',
   // EEA non-EU
-  'IS', 'LI', 'NO',
+  'IS',
+  'LI',
+  'NO',
   // neighbouring
-  'CH', 'GB',
+  'CH',
+  'GB',
 ]);
 
 const ALL: ReadonlyArray<Country> = [
@@ -281,12 +308,12 @@ const byName = (a: Country, b: Country) => a.name.localeCompare(b.name);
  * VAT), then every other country alphabetically. A single `<optgroup>` in
  * the form separates the two blocks visually.
  */
-export const COUNTRIES_EU: ReadonlyArray<Country> = ALL
-  .filter((c) => EU_CODES.has(c.code))
-  .sort(byName);
+export const COUNTRIES_EU: ReadonlyArray<Country> = ALL.filter((c) => EU_CODES.has(c.code)).sort(
+  byName,
+);
 
-export const COUNTRIES_REST: ReadonlyArray<Country> = ALL
-  .filter((c) => !EU_CODES.has(c.code))
-  .sort(byName);
+export const COUNTRIES_REST: ReadonlyArray<Country> = ALL.filter((c) => !EU_CODES.has(c.code)).sort(
+  byName,
+);
 
 export const COUNTRIES: ReadonlyArray<Country> = [...COUNTRIES_EU, ...COUNTRIES_REST];

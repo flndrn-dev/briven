@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { motion, useAnimation } from "motion/react";
-import type { HTMLAttributes } from "react";
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { motion, useAnimation } from 'motion/react';
+import type { HTMLAttributes } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export interface LayoutGridIconHandle {
   startAnimation: () => void;
@@ -23,8 +23,8 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
     useImperativeHandle(ref, () => {
       isControlledRef.current = true;
       return {
-        startAnimation: () => controls.start("animate"),
-        stopAnimation: () => controls.start("normal"),
+        startAnimation: () => controls.start('animate'),
+        stopAnimation: () => controls.start('normal'),
       };
     });
 
@@ -33,7 +33,7 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
-          controls.start("animate");
+          controls.start('animate');
         }
       },
       [controls, onMouseEnter],
@@ -44,13 +44,13 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
-          controls.start("normal");
+          controls.start('normal');
         }
       },
       [controls, onMouseLeave],
     );
 
-    const tileTransition = { type: "spring" as const, stiffness: 300, damping: 20 };
+    const tileTransition = { type: 'spring' as const, stiffness: 300, damping: 20 };
 
     return (
       <div
@@ -78,7 +78,10 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
             rx="1"
             animate={controls}
             transition={tileTransition}
-            variants={{ normal: { translateX: 0, translateY: 0 }, animate: { translateX: -1, translateY: -1 } }}
+            variants={{
+              normal: { translateX: 0, translateY: 0 },
+              animate: { translateX: -1, translateY: -1 },
+            }}
           />
           <motion.rect
             x="14"
@@ -88,7 +91,10 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
             rx="1"
             animate={controls}
             transition={{ ...tileTransition, delay: 0.04 }}
-            variants={{ normal: { translateX: 0, translateY: 0 }, animate: { translateX: 1, translateY: -1 } }}
+            variants={{
+              normal: { translateX: 0, translateY: 0 },
+              animate: { translateX: 1, translateY: -1 },
+            }}
           />
           <motion.rect
             x="14"
@@ -98,7 +104,10 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
             rx="1"
             animate={controls}
             transition={{ ...tileTransition, delay: 0.08 }}
-            variants={{ normal: { translateX: 0, translateY: 0 }, animate: { translateX: 1, translateY: 1 } }}
+            variants={{
+              normal: { translateX: 0, translateY: 0 },
+              animate: { translateX: 1, translateY: 1 },
+            }}
           />
           <motion.rect
             x="3"
@@ -108,7 +117,10 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
             rx="1"
             animate={controls}
             transition={{ ...tileTransition, delay: 0.12 }}
-            variants={{ normal: { translateX: 0, translateY: 0 }, animate: { translateX: -1, translateY: 1 } }}
+            variants={{
+              normal: { translateX: 0, translateY: 0 },
+              animate: { translateX: -1, translateY: 1 },
+            }}
           />
         </svg>
       </div>
@@ -116,6 +128,6 @@ const LayoutGridIcon = forwardRef<LayoutGridIconHandle, LayoutGridIconProps>(
   },
 );
 
-LayoutGridIcon.displayName = "LayoutGridIcon";
+LayoutGridIcon.displayName = 'LayoutGridIcon';
 
 export { LayoutGridIcon };

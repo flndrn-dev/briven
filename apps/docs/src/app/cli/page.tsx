@@ -14,7 +14,9 @@ export default function CliPage() {
       </p>
 
       <Section title="init">
-        <p>Scaffold <code>briven.json</code>, <code>briven/schema.ts</code>, and an example function.</p>
+        <p>
+          Scaffold <code>briven.json</code>, <code>briven/schema.ts</code>, and an example function.
+        </p>
         <Code>{`$ briven init`}</Code>
         <p>
           Creates the project layout in the current directory. Pass <code>--name</code> to override
@@ -40,9 +42,8 @@ export default function CliPage() {
       <Section title="deploy">
         <p>
           Loads <code>briven/schema.ts</code>, compares it to the currently deployed schema, and
-          creates a new deployment. Destructive changes (drop table, drop column) are refused
-          unless <code>--confirm-destructive</code> is passed, per{' '}
-          <code>CLAUDE.md §8.3</code>.
+          creates a new deployment. Destructive changes (drop table, drop column) are refused unless{' '}
+          <code>--confirm-destructive</code> is passed, per <code>CLAUDE.md §8.3</code>.
         </p>
         <Code>{`$ briven deploy
 $ briven deploy --dry-run

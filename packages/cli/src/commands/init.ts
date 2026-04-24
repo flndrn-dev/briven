@@ -86,7 +86,14 @@ async function updateGitignore(cwd: string): Promise<void> {
   try {
     current = await readFile(path, 'utf8');
   } catch (err) {
-    if (!(err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'ENOENT')) {
+    if (
+      !(
+        err &&
+        typeof err === 'object' &&
+        'code' in err &&
+        (err as { code: string }).code === 'ENOENT'
+      )
+    ) {
       throw err;
     }
   }

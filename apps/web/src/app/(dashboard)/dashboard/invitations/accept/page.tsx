@@ -36,9 +36,7 @@ export default async function AcceptInvitationPage({
   });
 
   if (res.status === 401) {
-    redirect(
-      `/signin?next=${encodeURIComponent(`/dashboard/invitations/accept?token=${token}`)}`,
-    );
+    redirect(`/signin?next=${encodeURIComponent(`/dashboard/invitations/accept?token=${token}`)}`);
   }
 
   if (!res.ok) {
@@ -46,7 +44,9 @@ export default async function AcceptInvitationPage({
     return (
       <main className="mx-auto max-w-lg px-6 py-16 font-mono text-sm">
         <h1 className="text-xl">couldn't accept this invitation</h1>
-        <p className="mt-2 text-[var(--color-text-muted)]">{body.message ?? `http ${res.status}`}</p>
+        <p className="mt-2 text-[var(--color-text-muted)]">
+          {body.message ?? `http ${res.status}`}
+        </p>
         <p className="mt-6">
           <a href="/dashboard" className="text-[var(--color-text-link)]">
             back to dashboard

@@ -18,9 +18,7 @@ export function MemberActions({ userId, role, onUpdateRole, onRemove }: Props) {
   const [confirming, setConfirming] = useState(false);
 
   if (role === 'owner') {
-    return (
-      <span className="font-mono text-xs text-[var(--color-text-muted)]">owner</span>
-    );
+    return <span className="font-mono text-xs text-[var(--color-text-muted)]">owner</span>;
   }
 
   return (
@@ -28,9 +26,7 @@ export function MemberActions({ userId, role, onUpdateRole, onRemove }: Props) {
       <select
         value={role}
         disabled={pending}
-        onChange={(e) =>
-          startTransition(() => onUpdateRole(userId, e.currentTarget.value as Role))
-        }
+        onChange={(e) => startTransition(() => onUpdateRole(userId, e.currentTarget.value as Role))}
         className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2 py-1 font-mono text-xs"
       >
         {ASSIGNABLE.map((r) => (

@@ -136,7 +136,9 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
       </section>
 
       <section>
-        <h3 className="font-mono text-xs text-[var(--color-text-muted)]">add existing user directly</h3>
+        <h3 className="font-mono text-xs text-[var(--color-text-muted)]">
+          add existing user directly
+        </h3>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-subtle)]">
           skips the invite email — the user must already exist in briven.
         </p>
