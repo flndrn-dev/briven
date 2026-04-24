@@ -1,0 +1,13 @@
+[Unit]
+Description=briven cloud — fire daily pg_dump backup
+Documentation=https://github.com/flndrn-dev/briven/tree/main/infra/backups
+
+[Timer]
+# Daily at 02:17 UTC — off-peak; 17min past the hour to avoid the
+# "every system fires exactly on the hour" thundering-herd pattern.
+OnCalendar=*-*-* 02:17:00
+Persistent=true
+Unit=briven-backup.service
+
+[Install]
+WantedBy=timers.target
