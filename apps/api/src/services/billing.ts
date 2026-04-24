@@ -83,23 +83,30 @@ export async function checkVatWithVies(raw: string): Promise<VatCheck> {
       },
     );
     if (!res.ok) return { state: 'unverifiable', reason: `vies_http_${res.status}` };
+    // VIES response fields (live):
+    //   valid: true | false
+    //   userError: string present when VIES itself errored (e.g. registry down)
+    //   name / address: "---" when not disclosed; real string when valid
     const data = (await res.json()) as {
-      isValid?: boolean;
+      valid?: boolean;
       userError?: string;
       name?: string | null;
       address?: string | null;
     };
-    if (data.isValid === true) {
+    if (data.userError && data.userError !== 'VALID') {
+      return { state: 'unverifiable', reason: data.userError };
+    }
+    if (data.valid === true) {
       return {
         state: 'valid',
         countryCode,
         vatNumber,
-        name: data.name ?? null,
-        address: data.address ?? null,
+        name: data.name && data.name !== '---' ? data.name : null,
+        address: data.address && data.address !== '---' ? data.address : null,
       };
     }
-    if (data.isValid === false) {
-      return { state: 'invalid', reason: data.userError ?? 'not_registered' };
+    if (data.valid === false) {
+      return { state: 'invalid', reason: 'not_registered' };
     }
     return { state: 'unverifiable', reason: 'vies_ambiguous' };
   } catch (err) {

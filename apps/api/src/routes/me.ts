@@ -75,7 +75,7 @@ meRouter.patch('/v1/me', requireAuth(), async (c) => {
         {
           code: 'vat_locked',
           message:
-            'your VAT is already verified — contact support to change it (compliance: we rely on a verified VAT for tax treatment)',
+            'VAT is verified and locked — changes require a support request (phase 3 will surface a contact flow)',
         },
         403,
       );

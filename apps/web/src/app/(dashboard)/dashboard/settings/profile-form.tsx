@@ -188,13 +188,7 @@ export function ProfileForm({ initial, vatLocked, save }: Props) {
         />
         {vatLocked ? (
           <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-            VAT verified ✓ · changes now go through{' '}
-            <a
-              href="mailto:support@briven.cloud?subject=VAT%20change%20request"
-              className="text-[var(--color-text-link)] underline hover:text-[var(--color-text)]"
-            >
-              support@briven.cloud
-            </a>
+            VAT verified ✓ · locked — changes require support (contact flow coming with phase 3)
           </p>
         ) : (
           <VatStatusLine state={vat} />
