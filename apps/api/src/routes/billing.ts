@@ -157,16 +157,36 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
     ? secret.slice('polar_whs_'.length)
     : secret;
 
+  const whId = c.req.header('webhook-id') ?? '';
+  const whTs = c.req.header('webhook-timestamp') ?? '';
+  const whSig = c.req.header('webhook-signature') ?? '';
+
   const wh = new Webhook(normalizedSecret);
   try {
     wh.verify(rawBody, {
-      'webhook-id': c.req.header('webhook-id') ?? '',
-      'webhook-timestamp': c.req.header('webhook-timestamp') ?? '',
-      'webhook-signature': c.req.header('webhook-signature') ?? '',
+      'webhook-id': whId,
+      'webhook-timestamp': whTs,
+      'webhook-signature': whSig,
     });
   } catch (err) {
     if (err instanceof WebhookVerificationError) {
-      log.warn('polar_webhook_bad_signature', { message: err.message });
+      // Emit enough to diagnose secret vs body-mutation without logging
+      // the whole payload (PII) or the secret itself.
+      let computed = '';
+      try {
+        computed = wh.sign(whId, new Date(Number(whTs) * 1000), rawBody);
+      } catch {}
+      log.warn('polar_webhook_bad_signature', {
+        message: err.message,
+        webhookId: whId,
+        timestamp: whTs,
+        bodyLen: rawBody.length,
+        bodyHead: rawBody.slice(0, 64),
+        bodyTail: rawBody.slice(-64),
+        receivedSig: whSig,
+        computedSig: computed,
+        secretHint: normalizedSecret.slice(0, 4) + '…' + normalizedSecret.slice(-4),
+      });
       return c.json({ code: 'bad_signature' }, 401);
     }
     throw err;
