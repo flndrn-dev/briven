@@ -62,6 +62,12 @@ export async function upsertSubscriptionFromPolar(input: {
 }): Promise<void> {
   const tier = tierForProductId(input.polarProductId);
   const db = getDb();
+  // The unique index on `subscriptions` is on `owner_id` (one row per user —
+  // we collapse the user's subscription history to their latest state).
+  // `polar_subscription_id` is only non-unique indexed, so using it as the
+  // conflict target raises `no unique or exclusion constraint matching`.
+  // Upsert on owner_id and overwrite the polar identifiers each time — a new
+  // subscription after cancellation cleanly replaces the stale row.
   await db
     .insert(subscriptions)
     .values({
@@ -75,8 +81,10 @@ export async function upsertSubscriptionFromPolar(input: {
       canceledAt: input.canceledAt,
     })
     .onConflictDoUpdate({
-      target: subscriptions.polarSubscriptionId,
+      target: subscriptions.ownerId,
       set: {
+        polarSubscriptionId: input.polarSubscriptionId,
+        polarCustomerId: input.polarCustomerId,
         tier,
         status: input.status,
         currentPeriodEnd: input.currentPeriodEnd,
