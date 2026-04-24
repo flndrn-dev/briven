@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
@@ -36,6 +37,7 @@ interface Props {
  * triggers the animation, not just the icon's own 16px surface.
  */
 export function UserMenuButton({ user, collapsed }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -134,9 +136,11 @@ export function UserMenuButton({ user, collapsed }: Props) {
           <ul className="p-1">
             <li>
               <MenuRow
-                as="a"
-                href="/"
-                onSelect={() => setOpen(false)}
+                as="button"
+                onSelect={() => {
+                  setOpen(false);
+                  router.push('/');
+                }}
                 icon={GlobeIcon}
                 label="website"
               />

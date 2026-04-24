@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
@@ -25,6 +25,7 @@ interface UserInfo {
  * not only the icon's 16px surface.
  */
 export function LandingUserMenu({ user }: { user: UserInfo }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,11 +92,13 @@ export function LandingUserMenu({ user }: { user: UserInfo }) {
           </div>
           <ul className="p-1">
             <li>
-              <AnimatedMenuLink
-                href="/dashboard"
+              <AnimatedMenuButton
                 icon={LayoutGridIcon}
                 label="dashboard"
-                onSelect={() => setOpen(false)}
+                onSelect={() => {
+                  setOpen(false);
+                  router.push('/dashboard');
+                }}
               />
             </li>
             <li>
@@ -159,32 +162,6 @@ function iconNode(Icon: IconComponent, ref: React.Ref<IconHandle>) {
     <span className="pointer-events-none">
       <Icon ref={ref as never} size={16} />
     </span>
-  );
-}
-
-function AnimatedMenuLink({
-  href,
-  icon: Icon,
-  label,
-  onSelect,
-}: {
-  href: string;
-  icon: IconComponent;
-  label: string;
-  onSelect?: () => void;
-}) {
-  const { ref, handlers } = useRowHover();
-  return (
-    <Link
-      href={href}
-      role="menuitem"
-      onClick={onSelect}
-      className={rowClasses()}
-      {...handlers}
-    >
-      {iconNode(Icon, ref)}
-      {label}
-    </Link>
   );
 }
 
