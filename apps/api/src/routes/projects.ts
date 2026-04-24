@@ -2,12 +2,14 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import { env } from '../env.js';
+import { requireProjectAuth } from '../middleware/project-auth.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
 import { getDefaultOrgForUser } from '../services/orgs.js';
 import {
   createProject,
   getProjectForUser,
+  getProjectInfo,
   listProjectsForUser,
   softDeleteProjectForUser,
   updateProjectForUser,
@@ -40,6 +42,22 @@ function getIpHash(c: Context<AppEnv>): string | null {
 }
 
 export const projectsRouter = new Hono<AppEnv>();
+
+// The `/info` route below accepts either a session OR a project-scoped
+// API key, via requireProjectAuth. It MUST be registered before the
+// broader `/v1/projects/*` requireAuth middleware so the stricter
+// session-only middleware doesn't short-circuit Bearer-authed requests
+// to /info. Hono runs middleware in registration order.
+projectsRouter.use('/v1/projects/:id/info', requireProjectAuth());
+projectsRouter.get('/v1/projects/:id/info', async (c) => {
+  // Lightweight "is this credential real?" endpoint — used by
+  // `briven login` to verify the user's key before storing it.
+  // Auth middleware has already validated the credential; we only
+  // return a minimal info blob to confirm the project exists.
+  const projectId = c.req.param('id');
+  const info = await getProjectInfo(projectId);
+  return c.json({ project: info });
+});
 
 projectsRouter.use('/v1/projects', requireAuth());
 projectsRouter.use('/v1/projects/*', requireAuth());

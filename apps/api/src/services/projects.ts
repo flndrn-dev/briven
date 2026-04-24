@@ -108,6 +108,23 @@ export async function getProjectForUser(projectId: string, userId: string): Prom
   return row.projects;
 }
 
+/**
+ * Fetch a project row without a per-user membership check — callers
+ * that reach here have already been auth-gated by requireProjectAuth
+ * (which resolves either a session owner OR a project-scoped API key).
+ * Used by the `/v1/projects/:id/info` verify-credentials endpoint.
+ */
+export async function getProjectInfo(projectId: string): Promise<Project> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
+    .limit(1);
+  if (!row) throw new NotFoundError('project', projectId);
+  return row;
+}
+
 export interface UpdateProjectInput {
   name?: string;
   slug?: string;
