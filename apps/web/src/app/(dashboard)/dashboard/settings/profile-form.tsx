@@ -1,6 +1,13 @@
 'use client';
 
-import { useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+
+type VatState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'valid'; name: string | null; address: string | null }
+  | { status: 'invalid'; reason: string }
+  | { status: 'unverifiable'; reason: string };
 
 interface ProfileInitial {
   name: string;
@@ -64,10 +71,59 @@ export function ProfileForm({ initial, save }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [vat, setVat] = useState<VatState>({ status: 'idle' });
+  const vatDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function set(key: FieldKey, value: string) {
     setValues((v) => ({ ...v, [key]: value }));
+    if (key === 'vatId') {
+      setVat({ status: 'idle' });
+    }
   }
+
+  // why: VIES is slow and rate-sensitive — debounce so users typing the
+  // number don't trigger a call per keystroke. Empty string clears the
+  // state instead of hitting the endpoint.
+  useEffect(() => {
+    if (vatDebounce.current) clearTimeout(vatDebounce.current);
+    const trimmed = values.vatId.trim();
+    if (trimmed.length === 0) {
+      setVat({ status: 'idle' });
+      return;
+    }
+    vatDebounce.current = setTimeout(async () => {
+      setVat({ status: 'checking' });
+      try {
+        const res = await fetch(
+          `/api/v1/billing/vat/check?id=${encodeURIComponent(trimmed)}`,
+          { credentials: 'include' },
+        );
+        if (!res.ok) {
+          setVat({ status: 'unverifiable', reason: `http_${res.status}` });
+          return;
+        }
+        const data = (await res.json()) as
+          | { state: 'valid'; name: string | null; address: string | null }
+          | { state: 'invalid'; reason: string }
+          | { state: 'unverifiable'; reason: string };
+        if (data.state === 'valid') {
+          setVat({ status: 'valid', name: data.name, address: data.address });
+        } else if (data.state === 'invalid') {
+          setVat({ status: 'invalid', reason: data.reason });
+        } else {
+          setVat({ status: 'unverifiable', reason: data.reason });
+        }
+      } catch (err) {
+        setVat({
+          status: 'unverifiable',
+          reason: err instanceof Error ? err.message : 'vat_check_failed',
+        });
+      }
+    }, 600);
+    return () => {
+      if (vatDebounce.current) clearTimeout(vatDebounce.current);
+    };
+  }, [values.vatId]);
 
   function dirty(): boolean {
     return (Object.keys(values) as FieldKey[]).some((k) => values[k] !== initial[k]);
@@ -118,12 +174,15 @@ export function ProfileForm({ initial, save }: Props) {
         />
       </div>
 
-      <Field
-        label="vat id / tax id"
-        hint="EU VAT (e.g. BE0123456789) for reverse-charge B2B invoicing"
-        value={values.vatId}
-        onChange={(v) => set('vatId', v)}
-      />
+      <div className="flex flex-col gap-1.5">
+        <Field
+          label="vat id / tax id"
+          hint="EU VAT (e.g. BE0123456789) for reverse-charge B2B invoicing"
+          value={values.vatId}
+          onChange={(v) => set('vatId', v)}
+        />
+        <VatStatusLine state={vat} />
+      </div>
 
       <div>
         <span className="font-mono text-xs text-[var(--color-text-muted)]">billing address</span>
@@ -188,6 +247,37 @@ export function ProfileForm({ initial, save }: Props) {
         </button>
       </div>
     </form>
+  );
+}
+
+function VatStatusLine({ state }: { state: VatState }) {
+  if (state.status === 'idle') return null;
+  if (state.status === 'checking') {
+    return (
+      <p className="font-mono text-xs text-[var(--color-text-subtle)]">checking with VIES…</p>
+    );
+  }
+  if (state.status === 'valid') {
+    return (
+      <p className="font-mono text-xs text-[var(--color-primary)]">
+        valid ✓ {state.name ? `· ${state.name}` : null}
+        {state.address ? (
+          <span className="block text-[var(--color-text-subtle)]">{state.address}</span>
+        ) : null}
+      </p>
+    );
+  }
+  if (state.status === 'invalid') {
+    return (
+      <p role="alert" className="font-mono text-xs text-red-400">
+        not registered with VIES ({state.reason})
+      </p>
+    );
+  }
+  return (
+    <p className="font-mono text-xs text-amber-400">
+      couldn't reach VIES ({state.reason}) — we'll re-check on save
+    </p>
   );
 }
 

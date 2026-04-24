@@ -60,6 +60,7 @@ billingRouter.use('/v1/billing/checkout', requireAuth());
 billingRouter.use('/v1/billing/plans', requireAuth());
 billingRouter.use('/v1/billing/subscription', requireAuth());
 billingRouter.use('/v1/billing/portal', requireAuth());
+billingRouter.use('/v1/billing/vat/check', requireAuth());
 
 billingRouter.get('/v1/billing/tier', async (c) => {
   const user = c.get('user')!;
@@ -71,6 +72,68 @@ billingRouter.get('/v1/billing/subscription', async (c) => {
   const user = c.get('user')!;
   const summary = await getSubscriptionForOwner(user.id);
   return c.json(summary);
+});
+
+/**
+ * Live VAT check against the EU VIES REST API. Returns one of:
+ *   valid          – VIES confirms it is a registered VAT number
+ *   invalid        – VIES confirms it does not exist (or format is bad)
+ *   unverifiable   – VIES was unreachable / that country's registry is
+ *                    timing out. Caller should let the user proceed but
+ *                    flag the number as unverified.
+ *
+ * VIES is known to be per-country flaky, so we never block on a transient
+ * outage — the customer can still check out and we re-check on the next
+ * profile update.
+ */
+billingRouter.get('/v1/billing/vat/check', async (c) => {
+  const raw = c.req.query('id') ?? '';
+  const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (cleaned.length < 4) {
+    return c.json({ state: 'invalid', reason: 'too_short' });
+  }
+  const countryCode = cleaned.slice(0, 2);
+  const vatNumber = cleaned.slice(2);
+  if (!/^[A-Z]{2}$/.test(countryCode)) {
+    return c.json({ state: 'invalid', reason: 'bad_country' });
+  }
+
+  try {
+    const res = await fetch(
+      'https://ec.europa.eu/taxation_customs/vies/rest-api/check-vat-number',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ countryCode, vatNumber }),
+        signal: AbortSignal.timeout(6000),
+      },
+    );
+    if (!res.ok) {
+      return c.json({ state: 'unverifiable', reason: `vies_http_${res.status}` });
+    }
+    const data = (await res.json()) as {
+      isValid?: boolean;
+      userError?: string;
+      name?: string | null;
+      address?: string | null;
+    };
+    if (data.isValid === true) {
+      return c.json({
+        state: 'valid',
+        countryCode,
+        vatNumber,
+        name: data.name ?? null,
+        address: data.address ?? null,
+      });
+    }
+    if (data.isValid === false) {
+      return c.json({ state: 'invalid', reason: data.userError ?? 'not_registered' });
+    }
+    return c.json({ state: 'unverifiable', reason: 'vies_ambiguous' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.name : 'vies_error';
+    return c.json({ state: 'unverifiable', reason: msg });
+  }
 });
 
 billingRouter.post('/v1/billing/portal', async (c) => {

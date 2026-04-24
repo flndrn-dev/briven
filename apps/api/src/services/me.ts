@@ -86,3 +86,11 @@ export async function updateProfile(userId: string, patch: ProfilePatch): Promis
     })
     .where(eq(users.id, userId));
 }
+
+export async function setAvatar(userId: string, dataUri: string | null): Promise<void> {
+  const db = getDb();
+  await db
+    .update(users)
+    .set({ image: dataUri, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}

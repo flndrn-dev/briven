@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 
+import { AvatarUploader } from '../../../../components/avatar-uploader';
 import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
 import { ProfileForm } from './profile-form';
@@ -96,7 +97,11 @@ export default async function SettingsPage() {
           EU KYC compliance. stored only on the control plane, never shared with a customer
           project.
         </p>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col gap-4">
+          <AvatarUploader
+            currentImage={user.image}
+            displayName={user.legalName ?? user.name ?? user.email}
+          />
           <ProfileForm
             initial={{
               name: user.name ?? '',
