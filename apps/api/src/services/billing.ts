@@ -8,12 +8,13 @@ import { log } from '../lib/logger.js';
 import type { ProjectTier } from '../db/schema.js';
 
 /**
- * Polar.sh integration skeleton.
+ * Polar.sh integration.
  *
- * Status: the data model (subscriptions table) and webhook dispatcher are
- * ready, but no Polar product/price is created yet — the user flips from
- * 'free' to 'pro' by editing the subscriptions row manually. Wiring up
- * the Polar API happens when BRIVEN_POLAR_ACCESS_TOKEN is set.
+ * Tier mapping is env-driven: BRIVEN_POLAR_PRO_PRODUCT_ID and
+ * BRIVEN_POLAR_TEAM_PRODUCT_ID are the UUIDs of the Polar products that
+ * correspond to each tier. Webhooks look up the tier by matching the
+ * product_id from Polar's payload against these env values. Checkout calls
+ * pass the same UUIDs to Polar in the `products: [...]` body.
  *
  * Webhook expected payloads (subset we care about):
  *   - subscription.created
@@ -21,10 +22,34 @@ import type { ProjectTier } from '../db/schema.js';
  *   - subscription.canceled
  */
 
-const TIER_BY_POLAR_PRODUCT: Record<string, ProjectTier> = {
-  // Fill once the Polar product ids exist. Keys = Polar product ids.
-  // e.g. 'prod_briven_pro': 'pro'
-};
+type CheckoutableTier = 'pro' | 'team';
+
+export interface PlanConfig {
+  tier: CheckoutableTier;
+  productId: string;
+}
+
+/**
+ * Plans currently configured for checkout. Returns an empty array when no
+ * product UUIDs are set — the settings page reads this to decide whether
+ * the upgrade buttons are live.
+ */
+export function configuredPlans(): PlanConfig[] {
+  const out: PlanConfig[] = [];
+  if (env.BRIVEN_POLAR_PRO_PRODUCT_ID) {
+    out.push({ tier: 'pro', productId: env.BRIVEN_POLAR_PRO_PRODUCT_ID });
+  }
+  if (env.BRIVEN_POLAR_TEAM_PRODUCT_ID) {
+    out.push({ tier: 'team', productId: env.BRIVEN_POLAR_TEAM_PRODUCT_ID });
+  }
+  return out;
+}
+
+function tierForProductId(productId: string): ProjectTier {
+  if (productId === env.BRIVEN_POLAR_PRO_PRODUCT_ID) return 'pro';
+  if (productId === env.BRIVEN_POLAR_TEAM_PRODUCT_ID) return 'team';
+  return 'free';
+}
 
 export async function upsertSubscriptionFromPolar(input: {
   polarSubscriptionId: string;
@@ -35,7 +60,7 @@ export async function upsertSubscriptionFromPolar(input: {
   currentPeriodEnd: Date | null;
   canceledAt: Date | null;
 }): Promise<void> {
-  const tier = TIER_BY_POLAR_PRODUCT[input.polarProductId] ?? 'free';
+  const tier = tierForProductId(input.polarProductId);
   const db = getDb();
   await db
     .insert(subscriptions)
@@ -86,25 +111,40 @@ export class PolarNotConfigured extends brivenError {
   }
 }
 
-/** Hit Polar.sh to create a checkout session. Throws if creds missing. */
+export class UnknownTier extends brivenError {
+  constructor(tier: string) {
+    super('unknown_tier', `tier '${tier}' has no configured polar product`, { status: 400 });
+    this.name = 'UnknownTier';
+  }
+}
+
+/**
+ * Create a Polar checkout session for the requested tier. Returns the hosted
+ * checkout URL the caller can redirect to. Uses Polar's current API shape
+ * (`products: [productId]`) — the deprecated `product_price_id` field is
+ * not used.
+ */
 export async function createCheckout(input: {
   ownerId: string;
   email: string;
-  priceId: string;
+  tier: CheckoutableTier;
   successURL: string;
 }): Promise<{ url: string }> {
   if (!env.BRIVEN_POLAR_ACCESS_TOKEN) throw new PolarNotConfigured();
-  const res = await fetch('https://api.polar.sh/v1/checkouts/', {
+  const plan = configuredPlans().find((p) => p.tier === input.tier);
+  if (!plan) throw new UnknownTier(input.tier);
+
+  const res = await fetch(`${env.BRIVEN_POLAR_API_BASE}/v1/checkouts/`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${env.BRIVEN_POLAR_ACCESS_TOKEN}`,
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      product_price_id: input.priceId,
+      products: [plan.productId],
       customer_email: input.email,
       success_url: input.successURL,
-      metadata: { ownerId: input.ownerId },
+      metadata: { ownerId: input.ownerId, tier: input.tier },
     }),
   });
   if (!res.ok) {

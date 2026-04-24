@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
 import { ProfileForm } from './profile-form';
+import { UpgradeButtons } from './upgrade-buttons';
 
 interface PendingInvitation {
   id: string;
@@ -34,6 +35,10 @@ export default async function SettingsPage() {
   const { tier } = await apiJson<{ tier: 'free' | 'pro' | 'team' }>('/v1/billing/tier').catch(
     () => ({ tier: 'free' as const }),
   );
+
+  const { plans } = await apiJson<{ plans: Array<{ tier: 'pro' | 'team'; productId: string }> }>(
+    '/v1/billing/plans',
+  ).catch(() => ({ plans: [] as Array<{ tier: 'pro' | 'team'; productId: string }> }));
 
   async function save(patch: Record<string, string | null>) {
     'use server';
@@ -149,24 +154,13 @@ export default async function SettingsPage() {
           <dt className="text-[var(--color-text-subtle)]">invoices</dt>
           <dd className="text-[var(--color-text-muted)]">none yet</dd>
         </dl>
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            disabled
-            title="available when Polar.sh checkout lands"
-            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] opacity-50"
-          >
-            change plan
-          </button>
-          <button
-            type="button"
-            disabled
-            title="available when Polar.sh checkout lands"
-            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] opacity-50"
-          >
-            update payment method
-          </button>
-        </div>
+        {plans.length > 0 ? (
+          <UpgradeButtons plans={plans} currentTier={tier} />
+        ) : (
+          <p className="mt-3 font-mono text-xs text-[var(--color-text-subtle)]">
+            checkout not configured — set BRIVEN_POLAR_* env vars on the api to enable upgrades.
+          </p>
+        )}
       </section>
 
       <section>

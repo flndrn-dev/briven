@@ -5,7 +5,11 @@ import { z } from 'zod';
 
 import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
-import { getTierForOwner, upsertSubscriptionFromPolar } from '../services/billing.js';
+import {
+  configuredPlans,
+  getTierForOwner,
+  upsertSubscriptionFromPolar,
+} from '../services/billing.js';
 import { log } from '../lib/logger.js';
 
 type AppEnv = {
@@ -17,7 +21,7 @@ type AppEnv = {
 };
 
 const checkoutSchema = z.object({
-  priceId: z.string().min(1),
+  tier: z.enum(['pro', 'team']),
   successURL: z.string().url(),
 });
 
@@ -38,11 +42,26 @@ export const billingRouter = new Hono<AppEnv>();
 
 billingRouter.use('/v1/billing/tier', requireAuth());
 billingRouter.use('/v1/billing/checkout', requireAuth());
+billingRouter.use('/v1/billing/plans', requireAuth());
 
 billingRouter.get('/v1/billing/tier', async (c) => {
   const user = c.get('user')!;
   const tier = await getTierForOwner(user.id);
   return c.json({ tier });
+});
+
+/**
+ * Plans the user can check out into. Empty array when Polar product UUIDs
+ * aren't configured — the UI uses this to gate the upgrade buttons.
+ */
+billingRouter.get('/v1/billing/plans', async (c) => {
+  const plans = configuredPlans().map((p) => ({
+    tier: p.tier,
+    // The product id is the only identifier the client needs to reason about
+    // a plan; nothing else about the Polar product leaks through here.
+    productId: p.productId,
+  }));
+  return c.json({ plans });
 });
 
 billingRouter.post('/v1/billing/checkout', async (c) => {
@@ -57,7 +76,7 @@ billingRouter.post('/v1/billing/checkout', async (c) => {
     const result = await createCheckout({
       ownerId: user.id,
       email: user.email,
-      priceId: parsed.data.priceId,
+      tier: parsed.data.tier,
       successURL: parsed.data.successURL,
     });
     return c.json(result);

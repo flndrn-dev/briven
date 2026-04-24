@@ -33,8 +33,18 @@ const envSchema = z.object({
   BRIVEN_ENCRYPTION_KEY: z.string().min(32).optional(),
 
   // Polar.sh billing — Phase 3.
+  // Sandbox vs production: set BRIVEN_POLAR_API_BASE to
+  //   https://sandbox-api.polar.sh   during dev
+  //   https://api.polar.sh           once the production product exists
+  // Matching access tokens + webhook secrets come from the matching env.
+  BRIVEN_POLAR_API_BASE: z.string().url().default('https://api.polar.sh'),
   BRIVEN_POLAR_ACCESS_TOKEN: z.string().optional(),
   BRIVEN_POLAR_WEBHOOK_SECRET: z.string().optional(),
+  // Polar product UUIDs per tier. Checkout + webhook → tier mapping both
+  // read these. Until they're set, `/v1/billing/plans` reports no plans
+  // and the settings page keeps the upgrade UI disabled.
+  BRIVEN_POLAR_PRO_PRODUCT_ID: z.string().optional(),
+  BRIVEN_POLAR_TEAM_PRODUCT_ID: z.string().optional(),
 
   // Resend transactional email.
   BRIVEN_RESEND_API_KEY: z.string().optional(),
