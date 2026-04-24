@@ -44,6 +44,9 @@ importers:
       hono:
         specifier: ^4.12.14
         version: 4.12.14
+      ioredis:
+        specifier: ^5.10.1
+        version: 5.10.1
       maxmind:
         specifier: ^5.0.6
         version: 5.0.6
