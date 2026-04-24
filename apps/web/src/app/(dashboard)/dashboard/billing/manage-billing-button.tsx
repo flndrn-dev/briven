@@ -36,7 +36,11 @@ export function ManageBillingButton({ label = 'manage billing on polar', variant
         throw new Error(body.message ?? body.code ?? `http ${res.status}`);
       }
       const { url } = (await res.json()) as { url: string };
-      window.location.href = url;
+      // Open the portal in a new tab so the user stays on briven.cloud and
+      // can return to the dashboard without a back-navigation round-trip.
+      // noopener/noreferrer hardens against tabnabbing from a third-party.
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setPending(false);
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : 'portal failed to open');
       setPending(false);
