@@ -118,24 +118,21 @@ export async function upsertSubscriptionFromPolar(input: {
   polarSubscriptionId: string;
   polarCustomerId: string;
   polarProductId: string;
-  ownerId: string;
+  orgId: string;
   status: SubscriptionStatus;
   currentPeriodEnd: Date | null;
   canceledAt: Date | null;
 }): Promise<void> {
   const tier = tierForProductId(input.polarProductId);
   const db = getDb();
-  // The unique index on `subscriptions` is on `owner_id` (one row per user —
-  // we collapse the user's subscription history to their latest state).
-  // `polar_subscription_id` is only non-unique indexed, so using it as the
-  // conflict target raises `no unique or exclusion constraint matching`.
-  // Upsert on owner_id and overwrite the polar identifiers each time — a new
-  // subscription after cancellation cleanly replaces the stale row.
+  // Unique index on subscriptions.org_id (one sub per org). New subs for
+  // the same org replace the stale row — a fresh checkout after cancel
+  // cleanly overwrites the prior polar_subscription_id.
   await db
     .insert(subscriptions)
     .values({
       id: `sub_${input.polarSubscriptionId}`,
-      ownerId: input.ownerId,
+      orgId: input.orgId,
       polarSubscriptionId: input.polarSubscriptionId,
       polarCustomerId: input.polarCustomerId,
       tier,
@@ -144,7 +141,7 @@ export async function upsertSubscriptionFromPolar(input: {
       canceledAt: input.canceledAt,
     })
     .onConflictDoUpdate({
-      target: subscriptions.ownerId,
+      target: subscriptions.orgId,
       set: {
         polarSubscriptionId: input.polarSubscriptionId,
         polarCustomerId: input.polarCustomerId,
@@ -158,17 +155,18 @@ export async function upsertSubscriptionFromPolar(input: {
 
   log.info('subscription_synced', {
     polarSubscriptionId: input.polarSubscriptionId,
+    orgId: input.orgId,
     tier,
     status: input.status,
   });
 }
 
-export async function getTierForOwner(ownerId: string): Promise<ProjectTier> {
+export async function getTierForOrg(orgId: string): Promise<ProjectTier> {
   const db = getDb();
   const [row] = await db
     .select({ tier: subscriptions.tier, status: subscriptions.status })
     .from(subscriptions)
-    .where(eq(subscriptions.ownerId, ownerId))
+    .where(eq(subscriptions.orgId, orgId))
     .limit(1);
   if (!row) return 'free';
   if (row.status === 'canceled' || row.status === 'past_due') return 'free';
@@ -183,18 +181,12 @@ export interface SubscriptionSummary {
   polarCustomerId: string | null;
 }
 
-/**
- * Full billing snapshot for the signed-in owner. Returns a 'free' sentinel
- * when the user has never had a paid subscription. Consumers use this for
- * the settings page — `getTierForOwner` remains the cheap lookup for tier
- * enforcement.
- */
-export async function getSubscriptionForOwner(ownerId: string): Promise<SubscriptionSummary> {
+export async function getSubscriptionForOrg(orgId: string): Promise<SubscriptionSummary> {
   const db = getDb();
   const [row] = await db
     .select()
     .from(subscriptions)
-    .where(eq(subscriptions.ownerId, ownerId))
+    .where(eq(subscriptions.orgId, orgId))
     .limit(1);
   if (!row) {
     return {
@@ -262,14 +254,9 @@ export class UnknownTier extends brivenError {
   }
 }
 
-/**
- * Create a Polar checkout session for the requested tier. Returns the hosted
- * checkout URL the caller can redirect to. Uses Polar's current API shape
- * (`products: [productId]`) — the deprecated `product_price_id` field is
- * not used.
- */
 export async function createCheckout(input: {
-  ownerId: string;
+  orgId: string;
+  createdByUserId: string;
   email: string;
   tier: CheckoutableTier;
   successURL: string;
@@ -288,7 +275,13 @@ export async function createCheckout(input: {
       products: [plan.productId],
       customer_email: input.email,
       success_url: input.successURL,
-      metadata: { ownerId: input.ownerId, tier: input.tier },
+      // orgId = billing-owning entity; createdByUserId = audit trail of
+      // which user clicked the button inside that org.
+      metadata: {
+        orgId: input.orgId,
+        createdByUserId: input.createdByUserId,
+        tier: input.tier,
+      },
     }),
   });
   if (!res.ok) {
