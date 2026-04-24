@@ -51,6 +51,62 @@ function tierForProductId(productId: string): ProjectTier {
   return 'free';
 }
 
+export type VatCheck =
+  | { state: 'valid'; countryCode: string; vatNumber: string; name: string | null; address: string | null }
+  | { state: 'invalid'; reason: string }
+  | { state: 'unverifiable'; reason: string };
+
+/**
+ * Validate an EU VAT number against the VIES REST API. Used by both the
+ * interactive settings form (debounced per-keystroke) and the authoritative
+ * check that happens on PATCH /v1/me before we lock the field.
+ *
+ * VIES is known to be flaky per-country — an outage from (say) Germany's
+ * registry returns 'unverifiable'. Callers decide whether to block or not;
+ * the settings save path lets unverifiable saves through without setting
+ * vat_verified_at so the user can retry later.
+ */
+export async function checkVatWithVies(raw: string): Promise<VatCheck> {
+  const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (cleaned.length < 4) return { state: 'invalid', reason: 'too_short' };
+  const countryCode = cleaned.slice(0, 2);
+  const vatNumber = cleaned.slice(2);
+  if (!/^[A-Z]{2}$/.test(countryCode)) return { state: 'invalid', reason: 'bad_country' };
+  try {
+    const res = await fetch(
+      'https://ec.europa.eu/taxation_customs/vies/rest-api/check-vat-number',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ countryCode, vatNumber }),
+        signal: AbortSignal.timeout(6000),
+      },
+    );
+    if (!res.ok) return { state: 'unverifiable', reason: `vies_http_${res.status}` };
+    const data = (await res.json()) as {
+      isValid?: boolean;
+      userError?: string;
+      name?: string | null;
+      address?: string | null;
+    };
+    if (data.isValid === true) {
+      return {
+        state: 'valid',
+        countryCode,
+        vatNumber,
+        name: data.name ?? null,
+        address: data.address ?? null,
+      };
+    }
+    if (data.isValid === false) {
+      return { state: 'invalid', reason: data.userError ?? 'not_registered' };
+    }
+    return { state: 'unverifiable', reason: 'vies_ambiguous' };
+  } catch (err) {
+    return { state: 'unverifiable', reason: err instanceof Error ? err.name : 'vies_error' };
+  }
+}
+
 export async function upsertSubscriptionFromPolar(input: {
   polarSubscriptionId: string;
   polarCustomerId: string;

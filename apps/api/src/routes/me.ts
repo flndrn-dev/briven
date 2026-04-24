@@ -4,7 +4,14 @@ import { z } from 'zod';
 import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import { audit, hashIp } from '../services/audit.js';
-import { getProfile, setAvatar, updateProfile } from '../services/me.js';
+import { checkVatWithVies } from '../services/billing.js';
+import {
+  getCurrentVat,
+  getProfile,
+  setAvatar,
+  updateProfile,
+  type ProfilePatch,
+} from '../services/me.js';
 
 type AppEnv = {
   Variables: {
@@ -53,7 +60,41 @@ meRouter.patch('/v1/me', requireAuth(), async (c) => {
     );
   }
 
-  await updateProfile(user.id, parsed.data);
+  // VAT is special. If the caller is changing vatId, we need to:
+  //  1. reject the edit if their existing VAT is already verified — at that
+  //     point support has to handle the change (tax treatment is tied to a
+  //     point-in-time attestation we relied on)
+  //  2. re-verify the new value against VIES before accepting it, and stamp
+  //     vat_verified_at on success; invalid → 400; unverifiable → accept
+  //     without a timestamp so transient VIES outages don't block saves
+  const patch: ProfilePatch = { ...parsed.data };
+  if ('vatId' in patch) {
+    const current = await getCurrentVat(user.id);
+    if (current.vatVerifiedAt && patch.vatId !== current.vatId) {
+      return c.json(
+        {
+          code: 'vat_locked',
+          message:
+            'your VAT is already verified — contact support to change it (compliance: we rely on a verified VAT for tax treatment)',
+        },
+        403,
+      );
+    }
+    if (patch.vatId) {
+      const check = await checkVatWithVies(patch.vatId);
+      if (check.state === 'invalid') {
+        return c.json(
+          { code: 'vat_invalid', message: `VIES did not recognise that VAT (${check.reason})` },
+          400,
+        );
+      }
+      patch.vatVerifiedAt = check.state === 'valid' ? new Date() : null;
+    } else {
+      patch.vatVerifiedAt = null;
+    }
+  }
+
+  await updateProfile(user.id, patch);
 
   // Audit which fields changed; never log the values themselves.
   await audit({

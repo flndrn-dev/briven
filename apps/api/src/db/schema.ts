@@ -56,6 +56,11 @@ export const users = pgTable(
     legalName: text('legal_name'),
     companyName: text('company_name'),
     vatId: text('vat_id'),
+    // Set when a vat_id is confirmed valid against VIES. Locks the field
+    // against further self-service edits — changes after this must go
+    // through support (legal/compliance: treat a verified VAT as a
+    // point-in-time attestation we relied on for tax treatment).
+    vatVerifiedAt: ts('vat_verified_at'),
     addressLine1: text('address_line_1'),
     addressLine2: text('address_line_2'),
     addressCity: text('address_city'),

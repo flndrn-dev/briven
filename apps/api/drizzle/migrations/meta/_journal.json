@@ -64,6 +64,13 @@
       "when": 1776875560574,
       "tag": "0008_clumsy_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777029868145,
+      "tag": "0009_add_vat_verified_at",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import {
+  checkVatWithVies,
   configuredPlans,
   createCustomerPortalSession,
   getSubscriptionForOwner,
@@ -88,52 +89,8 @@ billingRouter.get('/v1/billing/subscription', async (c) => {
  */
 billingRouter.get('/v1/billing/vat/check', async (c) => {
   const raw = c.req.query('id') ?? '';
-  const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  if (cleaned.length < 4) {
-    return c.json({ state: 'invalid', reason: 'too_short' });
-  }
-  const countryCode = cleaned.slice(0, 2);
-  const vatNumber = cleaned.slice(2);
-  if (!/^[A-Z]{2}$/.test(countryCode)) {
-    return c.json({ state: 'invalid', reason: 'bad_country' });
-  }
-
-  try {
-    const res = await fetch(
-      'https://ec.europa.eu/taxation_customs/vies/rest-api/check-vat-number',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ countryCode, vatNumber }),
-        signal: AbortSignal.timeout(6000),
-      },
-    );
-    if (!res.ok) {
-      return c.json({ state: 'unverifiable', reason: `vies_http_${res.status}` });
-    }
-    const data = (await res.json()) as {
-      isValid?: boolean;
-      userError?: string;
-      name?: string | null;
-      address?: string | null;
-    };
-    if (data.isValid === true) {
-      return c.json({
-        state: 'valid',
-        countryCode,
-        vatNumber,
-        name: data.name ?? null,
-        address: data.address ?? null,
-      });
-    }
-    if (data.isValid === false) {
-      return c.json({ state: 'invalid', reason: data.userError ?? 'not_registered' });
-    }
-    return c.json({ state: 'unverifiable', reason: 'vies_ambiguous' });
-  } catch (err) {
-    const msg = err instanceof Error ? err.name : 'vies_error';
-    return c.json({ state: 'unverifiable', reason: msg });
-  }
+  const result = await checkVatWithVies(raw);
+  return c.json(result);
 });
 
 billingRouter.post('/v1/billing/portal', async (c) => {

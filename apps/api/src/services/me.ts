@@ -9,12 +9,23 @@ export interface ProfilePatch {
   legalName?: string | null;
   companyName?: string | null;
   vatId?: string | null;
+  vatVerifiedAt?: Date | null;
   addressLine1?: string | null;
   addressLine2?: string | null;
   addressCity?: string | null;
   addressPostalCode?: string | null;
   addressRegion?: string | null;
   addressCountry?: string | null;
+}
+
+export async function getCurrentVat(userId: string): Promise<{ vatId: string | null; vatVerifiedAt: Date | null }> {
+  const db = getDb();
+  const [row] = await db
+    .select({ vatId: users.vatId, vatVerifiedAt: users.vatVerifiedAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row ?? { vatId: null, vatVerifiedAt: null };
 }
 
 /**
@@ -37,6 +48,7 @@ export async function getProfile(userId: string) {
       legalName: users.legalName,
       companyName: users.companyName,
       vatId: users.vatId,
+      vatVerifiedAt: users.vatVerifiedAt,
       addressLine1: users.addressLine1,
       addressLine2: users.addressLine2,
       addressCity: users.addressCity,

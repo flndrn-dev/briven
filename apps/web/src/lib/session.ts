@@ -14,6 +14,7 @@ export interface SessionUser {
   legalName: string | null;
   companyName: string | null;
   vatId: string | null;
+  vatVerifiedAt: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
   addressCity: string | null;

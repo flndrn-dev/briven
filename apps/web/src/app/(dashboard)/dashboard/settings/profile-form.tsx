@@ -24,6 +24,10 @@ interface ProfileInitial {
 
 interface Props {
   initial: ProfileInitial;
+  // True when the user already has a VIES-verified VAT on file. The field
+  // then renders read-only — tax treatment relied on that attestation, so
+  // a change has to go through support.
+  vatLocked: boolean;
   save: (patch: Record<string, string | null>) => Promise<void>;
 }
 
@@ -66,7 +70,7 @@ const COUNTRIES: Array<{ code: string; name: string }> = [
 
 type FieldKey = keyof ProfileInitial;
 
-export function ProfileForm({ initial, save }: Props) {
+export function ProfileForm({ initial, vatLocked, save }: Props) {
   const [values, setValues] = useState<ProfileInitial>(initial);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -180,8 +184,21 @@ export function ProfileForm({ initial, save }: Props) {
           hint="EU VAT (e.g. BE0123456789) for reverse-charge B2B invoicing"
           value={values.vatId}
           onChange={(v) => set('vatId', v)}
+          readOnly={vatLocked}
         />
-        <VatStatusLine state={vat} />
+        {vatLocked ? (
+          <p className="font-mono text-xs text-[var(--color-text-subtle)]">
+            VAT verified ✓ · changes now go through{' '}
+            <a
+              href="mailto:support@briven.cloud?subject=VAT%20change%20request"
+              className="text-[var(--color-text-link)] underline hover:text-[var(--color-text)]"
+            >
+              support@briven.cloud
+            </a>
+          </p>
+        ) : (
+          <VatStatusLine state={vat} />
+        )}
       </div>
 
       <div>
@@ -286,11 +303,13 @@ function Field({
   hint,
   value,
   onChange,
+  readOnly,
 }: {
   label: string;
   hint?: string;
   value: string;
   onChange: (v: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <label className="flex flex-col gap-2">
@@ -303,8 +322,14 @@ function Field({
       <input
         type="text"
         value={value}
+        readOnly={readOnly}
         onChange={(e) => onChange(e.currentTarget.value)}
-        className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+        aria-readonly={readOnly ? 'true' : undefined}
+        className={`rounded-md border px-3 py-2 font-mono text-sm outline-none ${
+          readOnly
+            ? 'cursor-not-allowed border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)]'
+            : 'border-[var(--color-border)] bg-[var(--color-surface-raised)] focus:border-[var(--color-primary)]'
+        }`}
       />
     </label>
   );

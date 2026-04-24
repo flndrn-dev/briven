@@ -41,7 +41,14 @@ export default async function SettingsPage() {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(body || `update failed: ${res.status}`);
+      let message = body;
+      try {
+        const parsed = JSON.parse(body) as { message?: string };
+        if (parsed.message) message = parsed.message;
+      } catch {
+        // body wasn't JSON — fall back to the raw text
+      }
+      throw new Error(message || `update failed: ${res.status}`);
     }
     revalidatePath('/dashboard/settings');
   }
@@ -115,6 +122,7 @@ export default async function SettingsPage() {
               addressRegion: user.addressRegion ?? '',
               addressCountry: user.addressCountry ?? '',
             }}
+            vatLocked={Boolean(user.vatVerifiedAt && user.vatId)}
             save={save}
           />
         </div>
