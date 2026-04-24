@@ -3,9 +3,7 @@ import Link from 'next/link';
 
 import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
-import { ManageBillingButton } from './manage-billing-button';
 import { ProfileForm } from './profile-form';
-import { UpgradeButtons } from './upgrade-buttons';
 
 interface PendingInvitation {
   id: string;
@@ -26,47 +24,12 @@ function formatNearBy(
   return place ?? nearBy.country ?? '—';
 }
 
-function formatRenewal(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  free: '—',
-  trialing: 'trialing',
-  active: 'active',
-  past_due: 'payment past due',
-  canceled: 'canceled',
-};
-
 export default async function SettingsPage() {
   const user = await requireUser();
 
   const { invitations } = await apiJson<{ invitations: PendingInvitation[] }>(
     '/v1/me/invitations',
   ).catch(() => ({ invitations: [] as PendingInvitation[] }));
-
-  interface SubscriptionSummary {
-    tier: 'free' | 'pro' | 'team';
-    status: 'free' | 'trialing' | 'active' | 'past_due' | 'canceled';
-    currentPeriodEnd: string | null;
-    canceledAt: string | null;
-    polarCustomerId: string | null;
-  }
-  const subscription = await apiJson<SubscriptionSummary>('/v1/billing/subscription').catch(
-    () => ({
-      tier: 'free' as const,
-      status: 'free' as const,
-      currentPeriodEnd: null,
-      canceledAt: null,
-      polarCustomerId: null,
-    }),
-  );
-  const tier = subscription.tier;
-
-  const { plans } = await apiJson<{ plans: Array<{ tier: 'pro' | 'team'; productId: string }> }>(
-    '/v1/billing/plans',
-  ).catch(() => ({ plans: [] as Array<{ tier: 'pro' | 'team'; productId: string }> }));
 
   async function save(patch: Record<string, string | null>) {
     'use server';
@@ -149,60 +112,6 @@ export default async function SettingsPage() {
             }}
             save={save}
           />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="font-mono text-sm text-[var(--color-text)]">billing</h2>
-        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          your plan and payment settings. cards, invoices, and cancellation live on the hosted Polar
-          customer portal.
-        </p>
-        <dl className="mt-3 grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
-          <dt className="text-[var(--color-text-subtle)]">current plan</dt>
-          <dd>
-            <span className="rounded bg-[var(--color-primary-subtle)] px-2 py-0.5 text-xs text-[var(--color-primary)]">
-              {tier}
-            </span>
-            {tier === 'free' ? (
-              <span className="ml-2 text-xs text-[var(--color-text-subtle)]">
-                dogfood-only access
-              </span>
-            ) : null}
-          </dd>
-
-          <dt className="text-[var(--color-text-subtle)]">status</dt>
-          <dd className="text-[var(--color-text-muted)]">
-            {STATUS_LABEL[subscription.status] ?? subscription.status}
-            {subscription.canceledAt ? (
-              <span className="ml-2 text-xs text-[var(--color-text-subtle)]">
-                cancels {formatRenewal(subscription.currentPeriodEnd)}
-              </span>
-            ) : null}
-          </dd>
-
-          <dt className="text-[var(--color-text-subtle)]">
-            {subscription.canceledAt ? 'access until' : 'renews'}
-          </dt>
-          <dd className="text-[var(--color-text-muted)]">
-            {formatRenewal(subscription.currentPeriodEnd)}
-          </dd>
-
-          <dt className="text-[var(--color-text-subtle)]">processor</dt>
-          <dd className="text-[var(--color-text-muted)]">
-            Polar.sh <span className="text-[var(--color-text-subtle)]">· mavi Pay arrives later</span>
-          </dd>
-        </dl>
-
-        <div className="mt-3 flex flex-col gap-3">
-          {plans.length > 0 ? (
-            <UpgradeButtons plans={plans} currentTier={tier} />
-          ) : (
-            <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-              checkout not configured — set BRIVEN_POLAR_* env vars on the api to enable upgrades.
-            </p>
-          )}
-          {subscription.polarCustomerId ? <ManageBillingButton /> : null}
         </div>
       </section>
 

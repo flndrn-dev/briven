@@ -13,15 +13,14 @@ interface Props {
 }
 
 const TIER_LABEL: Record<Plan['tier'], string> = {
-  pro: 'upgrade to pro',
-  team: 'upgrade to team',
+  pro: 'switch to pro',
+  team: 'switch to team',
 };
 
 /**
- * Plan-picker buttons rendered beneath the billing card when Polar is wired.
- * `plans` is whatever GET /v1/billing/plans returned — empty means the
- * `BRIVEN_POLAR_*_PRODUCT_ID` env vars aren't set and the parent shows a
- * "not configured" note instead.
+ * Plan-switch buttons for the /dashboard/billing page. Opens a Polar
+ * checkout for the requested tier and redirects the user to the hosted
+ * URL. Hides the tier the user is already on.
  */
 export function UpgradeButtons({ plans, currentTier }: Props) {
   const [pending, setPending] = useState<Plan['tier'] | null>(null);
@@ -37,7 +36,7 @@ export function UpgradeButtons({ plans, currentTier }: Props) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           tier,
-          successURL: `${window.location.origin}/dashboard/settings?checkout=success`,
+          successURL: `${window.location.origin}/dashboard/billing?checkout=success`,
         }),
       });
       if (!res.ok) {
@@ -56,7 +55,7 @@ export function UpgradeButtons({ plans, currentTier }: Props) {
   if (pickable.length === 0) return null;
 
   return (
-    <div className="mt-3 flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
         {pickable.map((p) => (
           <button

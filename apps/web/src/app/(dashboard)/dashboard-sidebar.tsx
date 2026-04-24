@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { UserMenuButton } from '../../components/user-menu-button';
 import { ChevronRightIcon, type ChevronRightIconHandle } from '../../components/ui/chevron-right';
 import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
+import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/credit-card';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
 
@@ -34,6 +35,12 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/dashboard/projects'),
   },
   {
+    href: '/dashboard/billing',
+    label: 'billing',
+    Icon: CreditCardIcon as never,
+    match: (p) => p.startsWith('/dashboard/billing'),
+  },
+  {
     href: '/dashboard/settings',
     label: 'settings',
     Icon: CogIcon as never,
@@ -48,7 +55,11 @@ const NAV: NavItem[] = [
   },
 ];
 
-type IconHandle = FoldersIconHandle | CogIconHandle | ShieldCheckIconHandle;
+type IconHandle =
+  | FoldersIconHandle
+  | CogIconHandle
+  | ShieldCheckIconHandle
+  | CreditCardIconHandle;
 
 interface SidebarUser {
   name: string | null;

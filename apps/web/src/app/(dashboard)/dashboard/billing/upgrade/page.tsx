@@ -43,7 +43,7 @@ export default async function UpgradePage({
 
   const body: CheckoutBody = {
     tier,
-    successURL: `${origin}/dashboard/settings?checkout=success`,
+    successURL: `${origin}/dashboard/billing?checkout=success`,
   };
 
   const res = await apiFetch('/v1/billing/checkout', {
