@@ -32,7 +32,9 @@ export default async function SettingsPage() {
     '/v1/me/invitations',
   ).catch(() => ({ invitations: [] as PendingInvitation[] }));
 
-  async function save(patch: Record<string, string | null>) {
+  async function save(
+    patch: Record<string, string | null>,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
     'use server';
     const res = await apiFetch('/v1/me', {
       method: 'PATCH',
@@ -40,6 +42,11 @@ export default async function SettingsPage() {
       body: JSON.stringify(patch),
     });
     if (!res.ok) {
+      // Never throw from a server action on an expected user-visible error
+      // (VAT-locked, VAT-invalid, validation). Throwing crosses the RSC
+      // boundary and Next.js renders its generic error boundary instead
+      // of the form's inline error. Return a result object so the client
+      // can render the message cleanly.
       const body = await res.text().catch(() => '');
       let message = body;
       try {
@@ -48,9 +55,10 @@ export default async function SettingsPage() {
       } catch {
         // body wasn't JSON — fall back to the raw text
       }
-      throw new Error(message || `update failed: ${res.status}`);
+      return { ok: false, error: message || `update failed: ${res.status}` };
     }
     revalidatePath('/dashboard/settings');
+    return { ok: true };
   }
 
   return (

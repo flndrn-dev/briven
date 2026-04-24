@@ -61,12 +61,15 @@ meRouter.patch('/v1/me', requireAuth(), async (c) => {
   }
 
   // VAT is special. If the caller is changing vatId, we need to:
-  //  1. reject the edit if their existing VAT is already verified — at that
-  //     point support has to handle the change (tax treatment is tied to a
-  //     point-in-time attestation we relied on)
-  //  2. re-verify the new value against VIES before accepting it, and stamp
-  //     vat_verified_at on success; invalid → 400; unverifiable → accept
-  //     without a timestamp so transient VIES outages don't block saves
+  //  1. reject the edit if their existing VAT is already verified — support
+  //     has to handle that change (tax treatment is tied to a point-in-time
+  //     attestation we relied on).
+  //  2. otherwise, call VIES and stamp vat_verified_at ONLY on 'valid'.
+  //     'invalid' or 'unverifiable' both save without the timestamp — a
+  //     VIES registry outage or a user typing their own number that VIES
+  //     temporarily doesn't recognise must not block the rest of the form.
+  //     The live debounced check (GET /v1/billing/vat/check) already warns
+  //     the user about the state; the save is intentionally permissive.
   const patch: ProfilePatch = { ...parsed.data };
   if ('vatId' in patch) {
     const current = await getCurrentVat(user.id);
@@ -82,12 +85,6 @@ meRouter.patch('/v1/me', requireAuth(), async (c) => {
     }
     if (patch.vatId) {
       const check = await checkVatWithVies(patch.vatId);
-      if (check.state === 'invalid') {
-        return c.json(
-          { code: 'vat_invalid', message: `VIES did not recognise that VAT (${check.reason})` },
-          400,
-        );
-      }
       patch.vatVerifiedAt = check.state === 'valid' ? new Date() : null;
     } else {
       patch.vatVerifiedAt = null;

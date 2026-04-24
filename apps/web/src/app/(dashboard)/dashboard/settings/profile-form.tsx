@@ -30,7 +30,9 @@ interface Props {
   // then renders read-only — tax treatment relied on that attestation, so
   // a change has to go through support.
   vatLocked: boolean;
-  save: (patch: Record<string, string | null>) => Promise<void>;
+  save: (
+    patch: Record<string, string | null>,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 
@@ -113,10 +115,16 @@ export function ProfileForm({ initial, vatLocked, save }: Props) {
     });
     startTransition(async () => {
       try {
-        await save(patch);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
+        const result = await save(patch);
+        if (result.ok) {
+          setSaved(true);
+          setTimeout(() => setSaved(false), 3000);
+        } else {
+          setError(result.error);
+        }
       } catch (err) {
+        // Fallback: any *unexpected* throw (network failure, RSC transport)
+        // still surfaces inline instead of Next's error boundary.
         setError(err instanceof Error ? err.message : 'save failed');
       }
     });
