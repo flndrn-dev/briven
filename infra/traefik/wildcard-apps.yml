@@ -1,0 +1,44 @@
+# Wildcard routing for *.apps.briven.cloud — every project subdomain
+# resolves to the control-plane API, which extracts the subdomain
+# (project slug or id) and dispatches to the runtime. This is the
+# public "call your function" URL shape: p_xxx.apps.briven.cloud/<fn>.
+#
+# Deploy path (the controller drops this file via scp; Dokploy's
+# Traefik file-provider watches /etc/dokploy/traefik/dynamic/*.yml):
+#
+#   scp infra/traefik/wildcard-apps.yml \
+#       root@187.124.64.116:/etc/dokploy/traefik/dynamic/wildcard-apps.yml
+#
+# Traefik picks it up within seconds — no restart needed.
+#
+# HTTPS: DEFERRED. The file-provider can serve HTTPS via two paths:
+#   A. Cloudflare proxy (orange cloud on the DNS record) — origin
+#      accepts HTTP, Cloudflare serves the wildcard cert. Requires
+#      Cloudflare Advanced Certificate Manager on their plan for
+#      two-level wildcards, OR manual cert upload to Cloudflare.
+#   B. DNS-01 ACME via Cloudflare API token — Traefik itself gets
+#      the wildcard cert from Let's Encrypt.
+# Today this file exposes HTTP only, so we can smoke-test once DNS
+# lands. Flip to HTTPS after J picks A or B.
+
+http:
+  routers:
+    wildcard-apps-http:
+      # HostRegexp requires Go regex syntax in Traefik v3. This matches
+      # any subdomain (slug or id) under apps.briven.cloud.
+      rule: "HostRegexp(`^[a-z0-9-]+\\.apps\\.briven\\.cloud$`)"
+      entryPoints:
+        - web
+      service: wildcard-apps-api
+      # No redirect-to-https middleware until the TLS cert story is sorted.
+      middlewares: []
+
+  services:
+    wildcard-apps-api:
+      loadBalancer:
+        # Route to the same swarm service the regular API uses.
+        # passHostHeader=true so the Hono middleware can read the
+        # original subdomain and derive the project id.
+        servers:
+          - url: "http://app-hack-mobile-sensor-xw9qop:3001"
+        passHostHeader: true
