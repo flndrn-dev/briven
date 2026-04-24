@@ -11,6 +11,7 @@ import { ulid } from 'ulid';
 export type IdPrefix =
   | 'u' // user
   | 'a' // account
+  | 'org' // organisation
   | 'p' // project
   | 'd' // deployment
   | 'k' // api key

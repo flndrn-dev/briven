@@ -140,6 +140,54 @@ export const verifications = pgTable(
   }),
 );
 
+/* ─── organizations ───────────────────────────────────────────────── */
+export const orgRole = ['owner', 'admin', 'developer', 'viewer'] as const;
+export type OrgRole = (typeof orgRole)[number];
+
+export const organizations = pgTable(
+  'organizations',
+  {
+    id: id(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    // True for the auto-created first org per user. Lets the UI keep a
+    // single-org implicit UX until Phase 3 adds a switcher.
+    personal: boolean('personal').notNull().default(false),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => ({
+    slugIdx: uniqueIndex('organizations_slug_idx').on(t.slug),
+  }),
+);
+
+export type Organization = typeof organizations.$inferSelect;
+export type NewOrganization = typeof organizations.$inferInsert;
+
+export const orgMembers = pgTable(
+  'org_members',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Stored but not enforced this project — Phase 3 wires RBAC.
+    role: text('role').$type<OrgRole>().notNull().default('developer'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.orgId, t.userId] }),
+    userIdx: index('org_members_user_id_idx').on(t.userId),
+  }),
+);
+
 /* ─── projects ────────────────────────────────────────────────────── */
 export const projectTier = ['free', 'pro', 'team'] as const;
 export type ProjectTier = (typeof projectTier)[number];
@@ -150,15 +198,12 @@ export const projects = pgTable(
     id: id(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
-    ownerId: text('owner_id')
+    orgId: text('org_id')
       .notNull()
-      .references(() => users.id),
+      .references(() => organizations.id, { onDelete: 'cascade' }),
     region: text('region').notNull().default('eu-west-1'),
     tier: text('tier').$type<ProjectTier>().notNull().default('free'),
     shardId: text('shard_id'),
-    // The Postgres schema name where this project's tables live. Per
-    // CLAUDE.md §3.4 we use schema-per-tenant within a shared cluster
-    // (briven-data-plane). Format: `proj_<base32(projectId)>`.
     dataSchemaName: text('data_schema_name'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -166,7 +211,7 @@ export const projects = pgTable(
   },
   (t) => ({
     slugIdx: uniqueIndex('projects_slug_idx').on(t.slug),
-    ownerIdx: index('projects_owner_idx').on(t.ownerId),
+    orgIdx: index('projects_org_idx').on(t.orgId),
   }),
 );
 
@@ -200,10 +245,9 @@ export const subscriptions = pgTable(
   'subscriptions',
   {
     id: id(),
-    ownerId: text('owner_id')
+    orgId: text('org_id')
       .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    // External id at Polar.sh — the source of truth.
+      .references(() => organizations.id, { onDelete: 'cascade' }),
     polarSubscriptionId: text('polar_subscription_id'),
     polarCustomerId: text('polar_customer_id'),
     tier: text('tier').$type<ProjectTier>().notNull().default('free'),
@@ -214,7 +258,7 @@ export const subscriptions = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => ({
-    ownerIdx: uniqueIndex('subscriptions_owner_idx').on(t.ownerId),
+    orgIdx: uniqueIndex('subscriptions_org_idx').on(t.orgId),
     polarIdx: index('subscriptions_polar_idx').on(t.polarSubscriptionId),
   }),
 );

@@ -71,6 +71,13 @@
       "when": 1777029868145,
       "tag": "0009_add_vat_verified_at",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777029900000,
+      "tag": "0010_orgs",
+      "breakpoints": true
     }
   ]
 }

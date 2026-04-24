@@ -9,6 +9,10 @@ export interface SessionUser {
   emailVerified: boolean;
   image: string | null;
   isAdmin: boolean;
+  // Personal org id auto-created by migration 0010. Web uses this as the
+  // implicit org context for every billing + project route; Phase 3 adds
+  // an org switcher that overrides it.
+  defaultOrgId: string;
   suspendedAt: string | null;
   // EU KYC / billing profile (all optional until paid checkout).
   legalName: string | null;

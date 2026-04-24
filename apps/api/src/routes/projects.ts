@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
+import { getDefaultOrgForUser } from '../services/orgs.js';
 import {
   createProject,
   getProjectForUser,
@@ -64,7 +65,14 @@ projectsRouter.post('/v1/projects', async (c) => {
     );
   }
 
-  const project = await createProject({ ...parsed.data, ownerId: user.id });
+  const org = await getDefaultOrgForUser(user.id);
+  const project = await createProject({
+    name: parsed.data.name,
+    orgId: org.id,
+    createdByUserId: user.id,
+    slug: parsed.data.slug,
+    region: parsed.data.region,
+  });
   await audit({
     actorId: user.id,
     projectId: project.id,

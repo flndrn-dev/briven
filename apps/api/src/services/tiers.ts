@@ -10,16 +10,16 @@ import { projects, type ProjectTier } from '../db/schema.js';
  * per-request floor separately (Phase 3 free tier: 60 invokes / 10s).
  */
 export interface TierLimits {
-  readonly projectsPerOwner: number;
+  readonly projectsPerOrg: number;
   readonly functionsPerProject: number;
   /** Soft cap — surfaced in dashboard; no hard enforcement per month yet. */
   readonly invokesPerMonth: number;
 }
 
 export const TIERS: Record<ProjectTier, TierLimits> = {
-  free: { projectsPerOwner: 3, functionsPerProject: 20, invokesPerMonth: 100_000 },
-  pro: { projectsPerOwner: 20, functionsPerProject: 200, invokesPerMonth: 1_000_000 },
-  team: { projectsPerOwner: 100, functionsPerProject: 2_000, invokesPerMonth: 10_000_000 },
+  free: { projectsPerOrg: 3, functionsPerProject: 20, invokesPerMonth: 100_000 },
+  pro: { projectsPerOrg: 20, functionsPerProject: 200, invokesPerMonth: 1_000_000 },
+  team: { projectsPerOrg: 100, functionsPerProject: 2_000, invokesPerMonth: 10_000_000 },
 };
 
 export class TierLimitExceeded extends brivenError {
@@ -34,20 +34,20 @@ export class TierLimitExceeded extends brivenError {
  * before inserting a new row.
  */
 export async function assertProjectCreateAllowed(
-  ownerId: string,
-  ownerTier: ProjectTier = 'free',
+  orgId: string,
+  orgTier: ProjectTier = 'free',
 ): Promise<void> {
   const db = getDb();
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(projects)
-    .where(and(eq(projects.ownerId, ownerId), isNull(projects.deletedAt)));
+    .where(and(eq(projects.orgId, orgId), isNull(projects.deletedAt)));
   const count = row?.count ?? 0;
-  const limit = TIERS[ownerTier].projectsPerOwner;
+  const limit = TIERS[orgTier].projectsPerOrg;
   if (count >= limit) {
     throw new TierLimitExceeded(
-      `project limit reached for tier '${ownerTier}' (${count}/${limit})`,
-      { ownerId, tier: ownerTier, count, limit },
+      `project limit reached for tier '${orgTier}' (${count}/${limit})`,
+      { orgId, tier: orgTier, count, limit },
     );
   }
 }

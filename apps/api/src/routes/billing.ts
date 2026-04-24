@@ -7,12 +7,14 @@ import { requireAuth, type Session, type User } from '../middleware/session.js';
 import {
   checkVatWithVies,
   configuredPlans,
+  createCheckout,
   createCustomerPortalSession,
-  getSubscriptionForOwner,
-  getTierForOwner,
+  getSubscriptionForOrg,
+  getTierForOrg,
   upsertSubscriptionFromPolar,
 } from '../services/billing.js';
 import { log } from '../lib/logger.js';
+import { getDefaultOrgForUser } from '../services/orgs.js';
 
 type AppEnv = {
   Variables: {
@@ -65,13 +67,15 @@ billingRouter.use('/v1/billing/vat/check', requireAuth());
 
 billingRouter.get('/v1/billing/tier', async (c) => {
   const user = c.get('user')!;
-  const tier = await getTierForOwner(user.id);
+  const org = await getDefaultOrgForUser(user.id);
+  const tier = await getTierForOrg(org.id);
   return c.json({ tier });
 });
 
 billingRouter.get('/v1/billing/subscription', async (c) => {
   const user = c.get('user')!;
-  const summary = await getSubscriptionForOwner(user.id);
+  const org = await getDefaultOrgForUser(user.id);
+  const summary = await getSubscriptionForOrg(org.id);
   return c.json(summary);
 });
 
@@ -100,7 +104,8 @@ billingRouter.post('/v1/billing/portal', async (c) => {
   if (!parsed.success) {
     return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
   }
-  const summary = await getSubscriptionForOwner(user.id);
+  const org = await getDefaultOrgForUser(user.id);
+  const summary = await getSubscriptionForOrg(org.id);
   if (!summary.polarCustomerId) {
     return c.json(
       {
@@ -144,9 +149,10 @@ billingRouter.post('/v1/billing/checkout', async (c) => {
     return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
   }
   try {
-    const { createCheckout } = await import('../services/billing.js');
+    const org = await getDefaultOrgForUser(user.id);
     const result = await createCheckout({
-      ownerId: user.id,
+      orgId: org.id,
+      createdByUserId: user.id,
       email: user.email,
       tier: parsed.data.tier,
       successURL: parsed.data.successURL,
@@ -232,13 +238,25 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
   }
 
   const meta = (data.metadata as Record<string, unknown> | null) ?? {};
-  const ownerId = typeof meta.ownerId === 'string' ? meta.ownerId : null;
-  if (!ownerId) {
-    // why: Polar carries our metadata on checkout, but for events fired
-    // before the first successful checkout (abandoned flows, etc.) the
-    // owner is unknown. Ack so Polar stops retrying — no state to write.
-    log.warn('polar_webhook_no_owner', { type: payload.type, subscriptionId: data.id });
-    return c.json({ ok: true, ignored: 'no_owner' });
+  // Prefer orgId (the current schema). Legacy events from before migration
+  // 0010 only carry ownerId — resolve them to the user's personal org so
+  // redelivery of pre-migration events still lands correctly.
+  let orgId: string | null =
+    typeof meta.orgId === 'string' ? meta.orgId : null;
+  if (!orgId) {
+    const legacyOwnerId = typeof meta.ownerId === 'string' ? meta.ownerId : null;
+    if (legacyOwnerId) {
+      try {
+        const personalOrg = await getDefaultOrgForUser(legacyOwnerId);
+        orgId = personalOrg.id;
+      } catch {
+        // fall through to no_org branch
+      }
+    }
+  }
+  if (!orgId) {
+    log.warn('polar_webhook_no_org', { type: payload.type, subscriptionId: data.id });
+    return c.json({ ok: true, ignored: 'no_org' });
   }
 
   const status = data.status ?? (payload.type === 'subscription.canceled' ? 'canceled' : 'active');
@@ -247,7 +265,7 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
     polarSubscriptionId: data.id,
     polarCustomerId: customerId,
     polarProductId: productId,
-    ownerId,
+    orgId,
     status: statusFromPolar(status),
     currentPeriodEnd: data.current_period_end ? new Date(data.current_period_end) : null,
     canceledAt: data.canceled_at ? new Date(data.canceled_at) : null,
