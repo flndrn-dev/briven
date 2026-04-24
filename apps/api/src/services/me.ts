@@ -3,6 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { sessions, users } from '../db/schema.js';
 import { lookupIp } from '../lib/geoip.js';
+import { getDefaultOrgForUser } from './orgs.js';
 
 export interface ProfilePatch {
   name?: string | null;
@@ -75,8 +76,15 @@ export async function getProfile(userId: string) {
 
   const nearBy = last ? await lookupIp(last.ipAddress) : null;
 
+  // Default org is resolved once per /v1/me call. It's always the user's
+  // personal org (auto-created by migration 0010). Web uses this as the
+  // implicit org-context for every billing + project route — URLs stay
+  // org-less until Phase 3 adds a switcher.
+  const defaultOrg = await getDefaultOrgForUser(userId);
+
   return {
     ...row,
+    defaultOrgId: defaultOrg.id,
     lastSignIn: last
       ? {
           at: last.createdAt,
