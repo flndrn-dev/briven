@@ -28,6 +28,7 @@
     "maxmind": "^5.0.6",
     "postgres": "^3.4.9",
     "resend": "^6.12.2",
+    "standardwebhooks": "^1.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

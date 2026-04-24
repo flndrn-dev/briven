@@ -1,6 +1,5 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
-
 import { Hono } from 'hono';
+import { Webhook, WebhookVerificationError } from 'standardwebhooks';
 import { z } from 'zod';
 
 import { env } from '../env.js';
@@ -31,17 +30,24 @@ const portalSchema = z.object({
   returnURL: z.string().url(),
 });
 
+// Polar's webhook payload has evolved — some events carry flat ids
+// (`customer_id`, `product_id`) while newer subscription/order events nest
+// the full object. Accept both shapes and resolve at read time.
 const webhookSchema = z.object({
-  type: z.enum(['subscription.created', 'subscription.updated', 'subscription.canceled']),
-  data: z.object({
-    id: z.string(),
-    customer_id: z.string(),
-    product_id: z.string(),
-    status: z.string(),
-    current_period_end: z.string().nullable().optional(),
-    canceled_at: z.string().nullable().optional(),
-    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
-  }),
+  type: z.string(),
+  data: z
+    .object({
+      id: z.string(),
+      customer_id: z.string().optional(),
+      customer: z.object({ id: z.string() }).passthrough().optional(),
+      product_id: z.string().optional(),
+      product: z.object({ id: z.string() }).passthrough().optional(),
+      status: z.string().optional(),
+      current_period_end: z.string().nullable().optional(),
+      canceled_at: z.string().nullable().optional(),
+      metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+    })
+    .passthrough(),
 });
 
 export const billingRouter = new Hono<AppEnv>();
@@ -141,44 +147,99 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
   if (!secret) {
     return c.json({ code: 'not_configured' }, 503);
   }
-  const rawBody = await c.req.text();
-  const signature = c.req.header('webhook-signature') ?? '';
 
-  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
-  const provided = signature.replace(/^sha256=/, '');
-  const a = Buffer.from(expected);
-  const b = Buffer.from(provided);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    log.warn('polar_webhook_bad_signature');
-    return c.json({ code: 'bad_signature' }, 401);
+  const rawBody = await c.req.text();
+
+  // Polar follows the Standard Webhooks spec: three headers
+  // (webhook-id / webhook-timestamp / webhook-signature). The signature
+  // is HMAC-SHA256 over `${id}.${timestamp}.${body}` in base64, framed
+  // as `v1,<sig> v1,<sig2>` in the header.
+  //
+  // Polar wraps the secret with a `polar_whs_` prefix (Standard Webhooks
+  // canonical is `whsec_`). Either way we strip the prefix before the
+  // base64 decode, then hand the raw bytes to the verifier.
+  const rawSecret = secret.startsWith('polar_whs_')
+    ? secret.slice('polar_whs_'.length)
+    : secret.startsWith('whsec_')
+    ? secret.slice('whsec_'.length)
+    : secret;
+
+  let secretBytes: Uint8Array;
+  try {
+    secretBytes = new Uint8Array(Buffer.from(rawSecret, 'base64'));
+  } catch {
+    log.error('polar_webhook_secret_malformed');
+    return c.json({ code: 'not_configured' }, 503);
+  }
+
+  const wh = new Webhook(secretBytes);
+  try {
+    wh.verify(rawBody, {
+      'webhook-id': c.req.header('webhook-id') ?? '',
+      'webhook-timestamp': c.req.header('webhook-timestamp') ?? '',
+      'webhook-signature': c.req.header('webhook-signature') ?? '',
+    });
+  } catch (err) {
+    if (err instanceof WebhookVerificationError) {
+      log.warn('polar_webhook_bad_signature', { message: err.message });
+      return c.json({ code: 'bad_signature' }, 401);
+    }
+    throw err;
   }
 
   let payload: z.infer<typeof webhookSchema>;
   try {
     payload = webhookSchema.parse(JSON.parse(rawBody));
-  } catch {
+  } catch (err) {
+    log.warn('polar_webhook_bad_payload', {
+      message: err instanceof Error ? err.message : String(err),
+    });
     return c.json({ code: 'bad_payload' }, 400);
   }
 
-  const meta = (payload.data.metadata as Record<string, unknown> | null) ?? {};
-  const ownerId = typeof meta.ownerId === 'string' ? meta.ownerId : null;
-  if (!ownerId) {
-    // A webhook without our metadata isn't addressable — log and accept
-    // so Polar doesn't retry forever.
-    log.warn('polar_webhook_no_owner', { subscriptionId: payload.data.id });
-    return c.json({ ok: true });
+  // Polar fires many event types; we only care about subscription
+  // lifecycle ones. Everything else gets a 200 so Polar doesn't retry.
+  const SUBSCRIPTION_EVENTS = new Set([
+    'subscription.created',
+    'subscription.active',
+    'subscription.updated',
+    'subscription.canceled',
+  ]);
+  if (!SUBSCRIPTION_EVENTS.has(payload.type)) {
+    return c.json({ ok: true, ignored: payload.type });
   }
 
+  const data = payload.data;
+  const customerId = data.customer_id ?? data.customer?.id ?? null;
+  const productId = data.product_id ?? data.product?.id ?? null;
+  if (!customerId || !productId) {
+    log.warn('polar_webhook_missing_ids', {
+      type: payload.type,
+      subscriptionId: data.id,
+    });
+    return c.json({ ok: true, ignored: 'missing_ids' });
+  }
+
+  const meta = (data.metadata as Record<string, unknown> | null) ?? {};
+  const ownerId = typeof meta.ownerId === 'string' ? meta.ownerId : null;
+  if (!ownerId) {
+    // why: Polar carries our metadata on checkout, but for events fired
+    // before the first successful checkout (abandoned flows, etc.) the
+    // owner is unknown. Ack so Polar stops retrying — no state to write.
+    log.warn('polar_webhook_no_owner', { type: payload.type, subscriptionId: data.id });
+    return c.json({ ok: true, ignored: 'no_owner' });
+  }
+
+  const status = data.status ?? (payload.type === 'subscription.canceled' ? 'canceled' : 'active');
+
   await upsertSubscriptionFromPolar({
-    polarSubscriptionId: payload.data.id,
-    polarCustomerId: payload.data.customer_id,
-    polarProductId: payload.data.product_id,
+    polarSubscriptionId: data.id,
+    polarCustomerId: customerId,
+    polarProductId: productId,
     ownerId,
-    status: statusFromPolar(payload.data.status),
-    currentPeriodEnd: payload.data.current_period_end
-      ? new Date(payload.data.current_period_end)
-      : null,
-    canceledAt: payload.data.canceled_at ? new Date(payload.data.canceled_at) : null,
+    status: statusFromPolar(status),
+    currentPeriodEnd: data.current_period_end ? new Date(data.current_period_end) : null,
+    canceledAt: data.canceled_at ? new Date(data.canceled_at) : null,
   });
   return c.json({ ok: true });
 });
