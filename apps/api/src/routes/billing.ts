@@ -150,29 +150,14 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
 
   const rawBody = await c.req.text();
 
-  // Polar follows the Standard Webhooks spec: three headers
-  // (webhook-id / webhook-timestamp / webhook-signature). The signature
-  // is HMAC-SHA256 over `${id}.${timestamp}.${body}` in base64, framed
-  // as `v1,<sig> v1,<sig2>` in the header.
-  //
-  // Polar wraps the secret with a `polar_whs_` prefix (Standard Webhooks
-  // canonical is `whsec_`). Either way we strip the prefix before the
-  // base64 decode, then hand the raw bytes to the verifier.
-  const rawSecret = secret.startsWith('polar_whs_')
+  // Polar follows the Standard Webhooks spec. The library base64-decodes
+  // the secret itself and natively strips `whsec_`, but Polar wraps with
+  // `polar_whs_` — strip that ourselves before handing the rest in.
+  const normalizedSecret = secret.startsWith('polar_whs_')
     ? secret.slice('polar_whs_'.length)
-    : secret.startsWith('whsec_')
-    ? secret.slice('whsec_'.length)
     : secret;
 
-  let secretBytes: Uint8Array;
-  try {
-    secretBytes = new Uint8Array(Buffer.from(rawSecret, 'base64'));
-  } catch {
-    log.error('polar_webhook_secret_malformed');
-    return c.json({ code: 'not_configured' }, 503);
-  }
-
-  const wh = new Webhook(secretBytes);
+  const wh = new Webhook(normalizedSecret);
   try {
     wh.verify(rawBody, {
       'webhook-id': c.req.header('webhook-id') ?? '',
