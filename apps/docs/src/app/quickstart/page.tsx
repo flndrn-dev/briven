@@ -1,8 +1,18 @@
+import { PmTabs } from '../../components/pm-tabs';
 import { DocsShell } from '../../components/shell';
+import { pmExec, pmInstall, pmJoin, pmPlain } from '../../lib/pm';
 
 export const metadata = {
   title: 'quickstart',
 };
+
+const SCAFFOLD = pmJoin(
+  pmPlain('$ mkdir my-app && cd my-app'),
+  pmInstall('@briven/cli @briven/schema'),
+  pmExec('briven init', 'briven login --project p_xxx --key brk_xxx'),
+);
+
+const DEPLOY = pmExec('briven deploy');
 
 export default function QuickstartPage() {
   return (
@@ -22,17 +32,14 @@ export default function QuickstartPage() {
           store it in a secret manager immediately.
         </Step>
         <Step n={3} title="scaffold locally">
-          <Code>{`$ mkdir my-app && cd my-app
-$ pnpm add @briven/cli @briven/schema
-$ npx briven init
-$ npx briven login --project p_xxx --key brk_xxx`}</Code>
+          <PmTabs commands={SCAFFOLD} />
         </Step>
         <Step n={4} title="edit the schema + function">
           Open <code>briven/schema.ts</code>. Add a table. Open{' '}
           <code>briven/functions/notes.ts</code>. Make it return what you want.
         </Step>
         <Step n={5} title="deploy">
-          <Code>{`$ npx briven deploy`}</Code>
+          <PmTabs commands={DEPLOY} />
           The CLI prints a diff, then creates the deployment. The dashboard shows the new row in
           <em> deployments</em>.
         </Step>
@@ -52,13 +59,5 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
         <div className="mt-1 space-y-2">{children}</div>
       </div>
     </li>
-  );
-}
-
-function Code({ children }: { children: string }) {
-  return (
-    <pre className="mt-2 overflow-x-auto rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-xs text-[var(--color-text)]">
-      {children}
-    </pre>
   );
 }
