@@ -1,23 +1,43 @@
+import { PmTabs } from '../../components/pm-tabs';
 import { DocsShell } from '../../components/shell';
+import { pmDlx, pmExec, pmInstall } from '../../lib/pm';
 
 export const metadata = {
   title: 'cli',
 };
+
+const INSTALL = pmInstall('@briven/cli', { dev: true });
+const ONE_SHOT = pmDlx('briven');
+const INIT = pmExec('briven init');
+const LOGIN = pmExec('briven login --project p_xxx --key brk_xxx');
+const WHOAMI = pmExec('briven whoami');
+const DEPLOY = pmExec(
+  'briven deploy',
+  'briven deploy --dry-run',
+  'briven deploy --confirm-destructive',
+);
+const LOGOUT = pmExec('briven logout', 'briven logout --project p_xxx');
 
 export default function CliPage() {
   return (
     <DocsShell>
       <h1 className="font-mono text-2xl tracking-tight">cli</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        <code>@briven/cli</code> — install with <code>pnpm add -D @briven/cli</code> or use via{' '}
-        <code>npx briven</code>.
+        <code>@briven/cli</code> — install as a dev dependency, or run one-off via each PM&apos;s
+        remote-exec shim.
       </p>
+
+      <Section title="install">
+        <PmTabs commands={INSTALL} />
+        <p>…or skip the install and invoke directly:</p>
+        <PmTabs commands={ONE_SHOT} />
+      </Section>
 
       <Section title="init">
         <p>
           Scaffold <code>briven.json</code>, <code>briven/schema.ts</code>, and an example function.
         </p>
-        <Code>{`$ briven init`}</Code>
+        <PmTabs commands={INIT} />
         <p>
           Creates the project layout in the current directory. Pass <code>--name</code> to override
           the default (the directory name). Pass <code>--force</code> to overwrite an existing{' '}
@@ -27,7 +47,7 @@ export default function CliPage() {
 
       <Section title="login">
         <p>Store an API key so subsequent commands can authenticate against a specific project.</p>
-        <Code>{`$ briven login --project p_xxx --key brk_xxx`}</Code>
+        <PmTabs commands={LOGIN} />
         <p>
           Credentials land at <code>~/.config/briven/credentials.json</code> with mode 0600. Get a
           key from the dashboard under <em>api keys</em>.
@@ -36,7 +56,7 @@ export default function CliPage() {
 
       <Section title="whoami">
         <p>Verify the stored key is still valid and which project it belongs to.</p>
-        <Code>{`$ briven whoami`}</Code>
+        <PmTabs commands={WHOAMI} />
       </Section>
 
       <Section title="deploy">
@@ -45,14 +65,11 @@ export default function CliPage() {
           creates a new deployment. Destructive changes (drop table, drop column) are refused unless{' '}
           <code>--confirm-destructive</code> is passed, per <code>CLAUDE.md §8.3</code>.
         </p>
-        <Code>{`$ briven deploy
-$ briven deploy --dry-run
-$ briven deploy --confirm-destructive`}</Code>
+        <PmTabs commands={DEPLOY} />
       </Section>
 
       <Section title="logout">
-        <Code>{`$ briven logout
-$ briven logout --project p_xxx`}</Code>
+        <PmTabs commands={LOGOUT} />
       </Section>
 
       <Section title="environment">
@@ -78,13 +95,5 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {children}
       </div>
     </section>
-  );
-}
-
-function Code({ children }: { children: string }) {
-  return (
-    <pre className="overflow-x-auto rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text)]">
-      {children}
-    </pre>
   );
 }
