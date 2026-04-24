@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto';
 
-import { newId, NotFoundError, ForbiddenError, ValidationError } from '@briven/shared';
+import { newId, NotFoundError, ValidationError } from '@briven/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
-import { projects, projectMembers, type Project, type NewProject } from '../db/schema.js';
+import { projects, projectMembers, orgMembers, type Project, type NewProject } from '../db/schema.js';
 import { log } from '../lib/logger.js';
-import { getTierForOwner } from './billing.js';
+import { getTierForOrg } from './billing.js';
 import { assertProjectCreateAllowed } from './tiers.js';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -30,7 +30,8 @@ export function isValidSlug(slug: string): boolean {
 
 export interface CreateProjectInput {
   name: string;
-  ownerId: string;
+  orgId: string;
+  createdByUserId: string;
   slug?: string;
   region?: string;
 }
@@ -43,15 +44,15 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     });
   }
 
-  const tier = await getTierForOwner(input.ownerId);
-  await assertProjectCreateAllowed(input.ownerId, tier);
+  const tier = await getTierForOrg(input.orgId);
+  await assertProjectCreateAllowed(input.orgId, tier);
 
   const projectId = newId('p');
   const row: NewProject = {
     id: projectId,
     slug,
     name: input.name,
-    ownerId: input.ownerId,
+    orgId: input.orgId,
     region: input.region ?? 'eu-west-1',
     tier: 'free',
     dataSchemaName: schemaNameFor(projectId),
@@ -65,7 +66,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   // out the other roles; the row exists from day one for consistency.
   await db.insert(projectMembers).values({
     projectId: created.id,
-    userId: input.ownerId,
+    userId: input.createdByUserId,
     role: 'owner',
   });
 
@@ -86,11 +87,13 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 
 export async function listProjectsForUser(userId: string): Promise<Project[]> {
   const db = getDb();
-  return db
+  const rows = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.ownerId, userId), isNull(projects.deletedAt)))
+    .innerJoin(orgMembers, eq(orgMembers.orgId, projects.orgId))
+    .where(and(eq(orgMembers.userId, userId), isNull(projects.deletedAt)))
     .orderBy(desc(projects.createdAt));
+  return rows.map((r) => r.projects);
 }
 
 export async function getProjectForUser(projectId: string, userId: string): Promise<Project> {
@@ -98,11 +101,11 @@ export async function getProjectForUser(projectId: string, userId: string): Prom
   const [row] = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
+    .innerJoin(orgMembers, eq(orgMembers.orgId, projects.orgId))
+    .where(and(eq(projects.id, projectId), eq(orgMembers.userId, userId), isNull(projects.deletedAt)))
     .limit(1);
   if (!row) throw new NotFoundError('project', projectId);
-  if (row.ownerId !== userId) throw new ForbiddenError('you do not own this project');
-  return row;
+  return row.projects;
 }
 
 export interface UpdateProjectInput {
