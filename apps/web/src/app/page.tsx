@@ -11,7 +11,7 @@ export default async function HomePage() {
     <main className="relative min-h-dvh overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       <BackgroundGrid />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
+      <header className="relative z-50 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
         <Link href="/" className="flex items-center gap-2" aria-label="briven home">
           <Image
             src="/icon.svg"
