@@ -30,7 +30,8 @@ export async function listUsers(limit = 200): Promise<AdminUserRow[]> {
       createdAt: users.createdAt,
       projectCount: sql<number>`(
         SELECT count(*)::int FROM projects p
-        WHERE p.owner_id = users.id AND p.deleted_at IS NULL
+        INNER JOIN org_members m ON m.org_id = p.org_id
+        WHERE m.user_id = users.id AND p.deleted_at IS NULL
       )`,
     })
     .from(users)
@@ -44,7 +45,7 @@ export interface AdminProjectRow {
   id: string;
   slug: string;
   name: string;
-  ownerId: string;
+  orgId: string;
   tier: string;
   createdAt: Date;
 }
@@ -56,7 +57,7 @@ export async function listProjects(limit = 500): Promise<AdminProjectRow[]> {
       id: projects.id,
       slug: projects.slug,
       name: projects.name,
-      ownerId: projects.ownerId,
+      orgId: projects.orgId,
       tier: projects.tier,
       createdAt: projects.createdAt,
     })
