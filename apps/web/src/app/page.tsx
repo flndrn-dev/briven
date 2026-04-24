@@ -1,9 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { LandingUserMenu } from '../components/landing-user-menu';
+import { getSessionUser } from '../lib/session';
 import { PricingSection } from './pricing-section';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const user = await getSessionUser().catch(() => null);
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       <BackgroundGrid />
@@ -45,12 +48,23 @@ export default function HomePage() {
           >
             github
           </Link>
-          <Link
-            href="/signin"
-            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
-            sign in
-          </Link>
+          {user ? (
+            <LandingUserMenu
+              user={{
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                legalName: user.legalName,
+              }}
+            />
+          ) : (
+            <Link
+              href="/signin"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              sign in
+            </Link>
+          )}
         </nav>
       </header>
 

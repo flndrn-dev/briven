@@ -1,11 +1,7 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-
-import {
-  ChevronsUpDownIcon,
-  type ChevronsUpDownIconHandle,
-} from './ui/chevrons-up-down';
 
 interface UserInfo {
   name: string | null;
@@ -14,34 +10,18 @@ interface UserInfo {
   legalName: string | null;
 }
 
-interface Props {
-  user: UserInfo;
-  collapsed: boolean;
-}
-
 /**
- * Sidebar-anchored user menu. Collapses to a bare avatar when the sidebar
- * is collapsed; expands to avatar + name + email + chevron when open.
- * Dropdown opens upward with a docs link and sign-out.
- *
- * why: the user's own email appears only to themselves within their own
- * authenticated sidebar — the same trust boundary as CLAUDE.md §5.1's
- * carve-out for the Settings/Account page.
+ * Landing-page avatar menu, shown in place of the "sign in" link when the
+ * visitor already has a session. Mirrors the sidebar UserMenuButton's
+ * dropdown contents but opens downward (the button lives at the top of
+ * the page, not the bottom of a sidebar).
  */
-export function UserMenuButton({ user, collapsed }: Props) {
+export function LandingUserMenu({ user }: { user: UserInfo }) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const iconRef = useRef<ChevronsUpDownIconHandle>(null);
-  const [hover, setHover] = useState(false);
 
   const displayName = user.legalName ?? user.name ?? user.email.split('@')[0]!;
-
-  useEffect(() => {
-    if (!iconRef.current) return;
-    if (hover) iconRef.current.startAnimation();
-    else iconRef.current.stopAnimation();
-  }, [hover]);
 
   useEffect(() => {
     if (!open) return;
@@ -67,51 +47,28 @@ export function UserMenuButton({ user, collapsed }: Props) {
         credentials: 'include',
       });
     } finally {
-      window.location.href = '/signin';
+      window.location.href = '/';
     }
   }
 
   return (
-    <div ref={containerRef} className={collapsed ? 'relative' : 'relative flex-1 min-w-0'}>
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        onFocus={() => setHover(true)}
-        onBlur={() => setHover(false)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={collapsed ? `account menu for ${displayName}` : undefined}
-        title={collapsed ? displayName : undefined}
-        className={
-          collapsed
-            ? 'flex size-8 items-center justify-center rounded-md border border-[var(--color-border-subtle)] transition-colors hover:border-[var(--color-border)]'
-            : 'flex h-12 w-full items-center gap-2 rounded-md border border-[var(--color-border-subtle)] px-2 text-left transition-colors hover:border-[var(--color-border)]'
-        }
+        aria-label={`account menu for ${displayName}`}
+        title={displayName}
+        className="flex size-9 items-center justify-center rounded-full border border-[var(--color-border-subtle)] transition-colors hover:border-[var(--color-border)]"
       >
-        <Avatar user={user} size={collapsed ? 20 : 28} />
-        {!collapsed && (
-          <>
-            <span className="flex min-w-0 flex-1 flex-col leading-tight">
-              <span className="truncate text-xs font-medium text-[var(--color-text)]">
-                {displayName}
-              </span>
-              <span className="truncate font-mono text-[10px] text-[var(--color-text-subtle)]">
-                {user.email}
-              </span>
-            </span>
-            <span className="pointer-events-none text-[var(--color-text-muted)]">
-              <ChevronsUpDownIcon ref={iconRef} size={14} />
-            </span>
-          </>
-        )}
+        <Avatar user={user} size={28} />
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-50 mb-2 w-60 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]"
+          className="absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]"
         >
           <div className="flex items-center gap-3 border-b border-[var(--color-border-subtle)] px-3 py-3">
             <Avatar user={user} size={32} />
@@ -126,15 +83,15 @@ export function UserMenuButton({ user, collapsed }: Props) {
           </div>
           <ul className="p-1">
             <li>
-              <a
-                href="/"
+              <Link
+                href="/dashboard"
                 role="menuitem"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-3 rounded px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-overlay)] hover:text-[var(--color-text)]"
               >
-                <GlobeIcon />
-                website
-              </a>
+                <GridIcon />
+                dashboard
+              </Link>
             </li>
             <li>
               <a
@@ -206,7 +163,7 @@ function getInitials(source: string): string {
   return (letters || cleaned[0] || '·').toUpperCase();
 }
 
-function GlobeIcon() {
+function GridIcon() {
   return (
     <svg
       width="16"
@@ -219,9 +176,10 @@ function GlobeIcon() {
       strokeLinejoin="round"
       aria-hidden
     >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M2 12h20" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
     </svg>
   );
 }
