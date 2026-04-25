@@ -17,4 +17,16 @@ describe('@briven/cli entry', () => {
     const code = await run(['definitely-not-a-command']);
     assert.equal(code, 1);
   });
+
+  it('returns 0 for "link --help"', async () => {
+    const code = await run(['link', '--help']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 1 for "link" with no briven.json in cwd', async () => {
+    // The CLI workspace root has no briven.json (it's a package, not a briven
+    // project), so this exercises the "no briven.json" guard end-to-end.
+    const code = await run(['link']);
+    assert.equal(code, 1);
+  });
 });

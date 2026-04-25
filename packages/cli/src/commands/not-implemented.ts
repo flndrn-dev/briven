@@ -1,17 +1,8 @@
 import { banner, blankLine, error, link } from '../output.js';
 
 const PHASE_NOTE: Record<string, string> = {
-  init: 'Phase 1 week 3-4',
-  login: 'Phase 1 week 3-4',
-  link: 'Phase 1 week 3-4',
-  deploy: 'Phase 1 week 3-4',
-  dev: 'Phase 2 month 2',
-  env: 'Phase 2 month 2',
-  logs: 'Phase 2 month 2',
-  db: 'Phase 2 month 2',
   export: 'Phase 1 week 7-8',
   import: 'Phase 1 week 7-8',
-  whoami: 'Phase 1 week 3-4',
   projects: 'Phase 1 week 3-4',
 };
 
