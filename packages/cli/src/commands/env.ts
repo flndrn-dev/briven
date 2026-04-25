@@ -66,7 +66,7 @@ async function auth(): Promise<AuthCtx | number> {
   }
   if (!local.projectId) {
     printError('briven.json has no projectId — link this directory first.');
-    step('run: briven login --project <id> --key <brk_...>');
+    step('run: briven link');
     return 1;
   }
   const creds = await readCredentials();

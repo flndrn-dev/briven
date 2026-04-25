@@ -4,6 +4,7 @@ import { runDeploy } from './commands/deploy.js';
 import { runDev } from './commands/dev.js';
 import { runEnv } from './commands/env.js';
 import { runInit } from './commands/init.js';
+import { runLink } from './commands/link.js';
 import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
 import { runLogs } from './commands/logs.js';
@@ -11,7 +12,7 @@ import { printNotImplemented } from './commands/not-implemented.js';
 import { printVersion } from './commands/version.js';
 import { runWhoami } from './commands/whoami.js';
 
-const STUB_COMMANDS = new Set(['link', 'export', 'import', 'projects']);
+const STUB_COMMANDS = new Set(['export', 'import', 'projects']);
 
 export async function run(argv: readonly string[]): Promise<number> {
   const [first, ...rest] = argv;
@@ -29,6 +30,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   switch (first) {
     case 'init':
       return runInit(rest);
+    case 'link':
+      return runLink(rest);
     case 'login':
       return runLogin(rest);
     case 'logout':
