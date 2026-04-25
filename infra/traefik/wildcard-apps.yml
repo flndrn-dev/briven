@@ -11,27 +11,38 @@
 #
 # Traefik picks it up within seconds — no restart needed.
 #
-# HTTPS: DEFERRED. The file-provider can serve HTTPS via two paths:
-#   A. Cloudflare proxy (orange cloud on the DNS record) — origin
-#      accepts HTTP, Cloudflare serves the wildcard cert. Requires
-#      Cloudflare Advanced Certificate Manager on their plan for
-#      two-level wildcards, OR manual cert upload to Cloudflare.
-#   B. DNS-01 ACME via Cloudflare API token — Traefik itself gets
-#      the wildcard cert from Let's Encrypt.
-# Today this file exposes HTTP only, so we can smoke-test once DNS
-# lands. Flip to HTTPS after J picks A or B.
+# TLS: wildcard cert via Let's Encrypt DNS-01 against Cloudflare.
+# The `cloudflare` cert resolver is defined in the Traefik static
+# config and reads CF_DNS_API_TOKEN from the container env (loaded
+# via --env-file /root/.briven-secrets/cloudflare.env). The token
+# is scoped to Zone:DNS:Edit + Zone:Read on briven.cloud only.
+#
+# HostRegexp routers can't infer the cert domain on their own, so
+# the websecure router declares it explicitly in tls.domains.
 
 http:
   routers:
-    wildcard-apps-http:
-      # HostRegexp requires Go regex syntax in Traefik v3. This matches
-      # any subdomain (slug or id) under apps.briven.cloud.
+    wildcard-apps-web:
+      # Plain HTTP -> redirect to HTTPS.
       rule: "HostRegexp(`^[a-z0-9-]+\\.apps\\.briven\\.cloud$`)"
       entryPoints:
         - web
       service: wildcard-apps-api
-      # No redirect-to-https middleware until the TLS cert story is sorted.
+      middlewares:
+        - redirect-to-https
+
+    wildcard-apps-websecure:
+      rule: "HostRegexp(`^[a-z0-9-]+\\.apps\\.briven\\.cloud$`)"
+      entryPoints:
+        - websecure
+      service: wildcard-apps-api
       middlewares: []
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "*.apps.briven.cloud"
+            sans:
+              - "apps.briven.cloud"
 
   services:
     wildcard-apps-api:
