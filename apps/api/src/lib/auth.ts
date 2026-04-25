@@ -5,6 +5,7 @@ import { magicLink } from 'better-auth/plugins';
 import { getDb } from '../db/client.js';
 import { accounts, sessions, users, verifications } from '../db/schema.js';
 import { env } from '../env.js';
+import { ensurePersonalOrg } from '../services/orgs.js';
 import { log } from './logger.js';
 import { sendEmailVerification, sendMagicLink } from './email.js';
 
@@ -93,6 +94,33 @@ export const auth = betterAuth({
       },
     }),
   ],
+
+  // Auto-create the personal org for every new user (email/password,
+  // magic link, GitHub OAuth — all paths funnel through this hook).
+  // Migration 0010 backfilled existing users; this closes the gap for
+  // signups that happen after that migration ran. Failures are logged
+  // but never re-thrown — `getDefaultOrgForUser` self-heals on first
+  // /v1/me, so a transient hook failure is recoverable.
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          try {
+            await ensurePersonalOrg({
+              userId: user.id,
+              email: user.email,
+              name: user.name ?? null,
+            });
+          } catch (err) {
+            log.error('personal_org_create_after_signup_failed', {
+              userId: user.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        },
+      },
+    },
+  },
 
   logger: {
     disabled: false,
