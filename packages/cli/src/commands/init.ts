@@ -25,7 +25,7 @@ const SCHEMA_TEMPLATE = `/**
  * currently deployed schema and generates the migration when you run
  * \`briven deploy\`.
  */
-import { schema, table, text, timestamp } from '@briven/schema';
+import { schema, table, text, timestamp } from '@briven/cli/schema';
 
 export default schema({
   notes: table({
@@ -40,11 +40,11 @@ const FUNCTION_TEMPLATE = `/**
  * Example query. Inside a briven project every file under \`briven/functions/\`
  * becomes a named, typed endpoint; this one resolves as \`listNotes\`.
  */
-import type { Ctx } from '@briven/schema';
+import { query, type Ctx } from '@briven/cli/server';
 
-export async function listNotes(ctx: Ctx): Promise<Array<{ id: string; body: string }>> {
+export default query(async (ctx: Ctx): Promise<Array<{ id: string; body: string }>> => {
   return ctx.db('notes').select(['id', 'body']).orderBy('createdAt', 'desc').limit(50);
-}
+});
 `;
 
 const GITIGNORE_ENTRIES = ['.briven/', 'node_modules/', 'dist/'];

@@ -43,32 +43,32 @@ Every briven migration follows the same five principles. If you violate these, y
 
 Before you plan a migration, read this matrix. This doc describes the _intended_ migration flow, but not every piece is implemented yet. Rows flagged `⏳` require a manual fallback (documented inline where the command appears).
 
-| Feature                                                                                                     | State               | Notes                                                                                          |
-| ----------------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
-| Control-plane API (`api.briven.cloud`)                                                                      | ✅ live             | Hono on Bun, KVM4                                                                              |
-| Control-plane Postgres (meta-DB)                                                                            | ✅ live             | Dokploy-hosted, `briven_control`                                                               |
-| Data-plane Postgres (customer schemas)                                                                      | ✅ live             | Same KVM today; splits to dedicated in Phase 2 M3                                              |
-| Dashboard (`dev.briven.cloud`)                                                                              | ✅ live             | Projects, billing, settings, admin pages all work                                              |
-| Multi-tenant orgs (`organizations`, `org_members`)                                                          | ✅ live             | Every user has an auto-created `personal=true` org. See §2.5                                   |
-| Better Auth via magic link (Resend)                                                                         | ✅ live             | `briven.session_token` cookie (prod: `__Secure-` prefix)                                       |
-| GitHub OAuth                                                                                                | ⚙️ env wired        | Flow not verified end-to-end yet                                                               |
-| Email + password auth                                                                                       | ⚙️ partial          | Better Auth supports it; not exercised                                                         |
-| Polar billing (Free/Pro/Team), webhook sync                                                                 | ✅ live             | One subscription per org                                                                       |
-| VIES live VAT validation on settings                                                                        | ✅ live             | `/v1/billing/vat/check` (debounced)                                                            |
-| Schema DSL (`packages/schema`)                                                                              | ✅ exists           | Diff engine present; customer-project deploy path never exercised end-to-end                   |
-| `briven` CLI commands: `init`, `login`, `logout`, `deploy`, `dev`, `db`, `env`, `logs`, `whoami`, `version` | ⚙️ present as files | Behaviour against a real customer project is untested — **zero completed deployments to date** |
-| `briven link --create`                                                                                      | ⏳ not yet          | Use the dashboard's Projects → New UI for now                                                  |
-| `briven import --from-convex <zip>`                                                                         | ⏳ not yet          | Use the manual script in §4                                                                    |
-| `briven auth import --from-supabase <csv>`                                                                  | ⏳ not yet          | Use the manual SQL in §5                                                                       |
-| `briven export`                                                                                             | ⏳ not yet          | Use direct `pg_dump` against the project's Postgres                                            |
-| Realtime / reactive `useQuery`                                                                              | ⏳ skeleton         | `apps/realtime` is two files today. Phase 2 M1                                                 |
-| Auto-generated `LISTEN/NOTIFY` triggers on schema diff                                                      | ⏳ not yet          | Phase 2 M1                                                                                     |
-| Per-project file storage                                                                                    | ⏳ not yet          | Phase 3 — planning to use Cloudflare R2                                                        |
-| Usage metering (invocations, DB size, bandwidth)                                                            | ⏳ not yet          | Phase 3 M1 / Phase 4 GA                                                                        |
-| Rate limits per tier at gateway                                                                             | ⏳ not yet          | Phase 3 M1                                                                                     |
-| Outbound network filter on runtime                                                                          | ⏳ not yet          | Phase 3 M1                                                                                     |
-| Daily `pg_dump` → off-site backups                                                                          | ⏳ not set up       | Phase 0 exit criterion still open                                                              |
-| Observability (Grafana / Loki / Prometheus)                                                                 | ⏳ not set up       | Phase 0 exit criterion still open                                                              |
+| Feature                                                                                                             | State                                                  | Notes                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Control-plane API (`api.briven.cloud`)                                                                              | ✅ live                                                | Hono on Bun, KVM4                                                                                                                                                                                                                                                                                                       |
+| Control-plane Postgres (meta-DB)                                                                                    | ✅ live                                                | Dokploy-hosted, `briven_control`                                                                                                                                                                                                                                                                                        |
+| Data-plane Postgres (customer schemas)                                                                              | ✅ live                                                | Same KVM today; splits to dedicated in Phase 2 M3                                                                                                                                                                                                                                                                       |
+| Dashboard (`dev.briven.cloud`)                                                                                      | ✅ live                                                | Projects, billing, settings, admin pages all work                                                                                                                                                                                                                                                                       |
+| Multi-tenant orgs (`organizations`, `org_members`)                                                                  | ✅ live                                                | Every user has an auto-created `personal=true` org. See §2.5                                                                                                                                                                                                                                                            |
+| Better Auth via magic link (Resend)                                                                                 | ✅ live                                                | `briven.session_token` cookie (prod: `__Secure-` prefix)                                                                                                                                                                                                                                                                |
+| GitHub OAuth                                                                                                        | ⚙️ env wired                                           | Flow not verified end-to-end yet                                                                                                                                                                                                                                                                                        |
+| Email + password auth                                                                                               | ⚙️ partial                                             | Better Auth supports it; not exercised                                                                                                                                                                                                                                                                                  |
+| Polar billing (Free/Pro/Team), webhook sync                                                                         | ✅ live                                                | One subscription per org                                                                                                                                                                                                                                                                                                |
+| VIES live VAT validation on settings                                                                                | ✅ live                                                | `/v1/billing/vat/check` (debounced)                                                                                                                                                                                                                                                                                     |
+| Schema DSL (`packages/schema`)                                                                                      | ✅ exists                                              | Diff engine present; customer-project deploy path never exercised end-to-end                                                                                                                                                                                                                                            |
+| `briven` CLI commands: `init`, `login`, `logout`, `link`, `deploy`, `dev`, `db`, `env`, `logs`, `whoami`, `version` | ✅ bundled as a self-contained tarball (`@briven/cli`) | Installable in any repo via `pnpm add -D` / `npm install --save-dev` / `yarn add -D` / `bun add -d`. Exposes `@briven/cli/schema` and `@briven/cli/server` sub-imports. Phase 3 switches the install ref from a local tarball to real npm publishing. End-to-end deploy against a real customer project still untested. |
+| `briven link --create`                                                                                              | ⏳ not yet                                             | Use the dashboard's Projects → New UI for now                                                                                                                                                                                                                                                                           |
+| `briven import --from-convex <zip>`                                                                                 | ⏳ not yet                                             | Use the manual script in §4                                                                                                                                                                                                                                                                                             |
+| `briven auth import --from-supabase <csv>`                                                                          | ⏳ not yet                                             | Use the manual SQL in §5                                                                                                                                                                                                                                                                                                |
+| `briven export`                                                                                                     | ⏳ not yet                                             | Use direct `pg_dump` against the project's Postgres                                                                                                                                                                                                                                                                     |
+| Realtime / reactive `useQuery`                                                                                      | ⏳ skeleton                                            | `apps/realtime` is two files today. Phase 2 M1                                                                                                                                                                                                                                                                          |
+| Auto-generated `LISTEN/NOTIFY` triggers on schema diff                                                              | ⏳ not yet                                             | Phase 2 M1                                                                                                                                                                                                                                                                                                              |
+| Per-project file storage                                                                                            | ⏳ not yet                                             | Phase 3 — planning to use Cloudflare R2                                                                                                                                                                                                                                                                                 |
+| Usage metering (invocations, DB size, bandwidth)                                                                    | ⏳ not yet                                             | Phase 3 M1 / Phase 4 GA                                                                                                                                                                                                                                                                                                 |
+| Rate limits per tier at gateway                                                                                     | ⏳ not yet                                             | Phase 3 M1                                                                                                                                                                                                                                                                                                              |
+| Outbound network filter on runtime                                                                                  | ⏳ not yet                                             | Phase 3 M1                                                                                                                                                                                                                                                                                                              |
+| Daily `pg_dump` → off-site backups                                                                                  | ⏳ not set up                                          | Phase 0 exit criterion still open                                                                                                                                                                                                                                                                                       |
+| Observability (Grafana / Loki / Prometheus)                                                                         | ⏳ not set up                                          | Phase 0 exit criterion still open                                                                                                                                                                                                                                                                                       |
 
 **Rule of thumb for agents:** if a `briven <subcommand>` in this doc isn't in the row-list above as ✅, assume it doesn't work yet. Look for the manual fallback inline.
 
@@ -102,6 +102,18 @@ Write this down in a `migration-inventory.md` next to this file. If you skip thi
 
 **Project creation:**
 
+- [ ] Install `@briven/cli` in your repo. Pick your package manager:
+  ```bash
+  # npm
+  npm install --save-dev @briven/cli
+  # pnpm
+  pnpm add -D @briven/cli
+  # yarn
+  yarn add -D @briven/cli
+  # bun
+  bun add -d @briven/cli
+  ```
+  (Phase 0–2, while the repo is private: replace `@briven/cli` with the local tarball path, e.g. `file:/path/to/briven-cli-0.1.0.tgz`. Phase 3 flips this to `^0.1.0` from the real npm registry.)
 - [ ] `briven login` (magic link today; GitHub OAuth ⚙️ pending verification)
 - [ ] `briven init` in the target repo — this creates the `briven/` folder
 - [ ] Create the project on briven cloud:
@@ -365,6 +377,26 @@ Convex's document model translates to Postgres tables. Each Convex table becomes
 
 **Reality check:** Convex's big differentiator is reactive queries. briven aims for the same, but `apps/realtime` is a skeleton today (two files). Until Phase 2 M1 ships, `useQuery` on briven is a one-shot fetch — no auto-updates. If your Convex app leans hard on reactivity, either (a) wait until the realtime service is done, or (b) plan to wrap briven calls with your own polling / TanStack Query until reactivity lands.
 
+### Schema + functions — import paths
+
+Consumer imports come from `@briven/cli` sub-paths (the tarball inlines the schema DSL + runtime helpers, so `@briven/schema` never appears in your `package.json` or `import` lines):
+
+```ts
+// briven/schema.ts
+import { schema, table, text, bigint, boolean } from '@briven/cli/schema';
+```
+
+```ts
+// briven/functions/listPosts.ts
+import { query, type Ctx } from '@briven/cli/server';
+
+export default query(async (ctx: Ctx) => {
+  return ctx.db('posts').select(['id', 'title']).orderBy('createdAt', 'desc').limit(50);
+});
+```
+
+`@briven/cli/schema` exposes the DSL (analogous to Convex's `schema` import from `convex/server`). `@briven/cli/server` exposes the runtime `Ctx` type plus `query` / `mutation` / `action` wrappers — identity helpers today, future enforcement hook for read-only transactions etc.
+
 ### Data
 
 Manual import via the fallback in §2 Step 7 above. The integrated `briven import --from-convex <zip>` is planned (Phase 3) but not implemented today.
@@ -406,6 +438,24 @@ Supabase has multiple places where logic lives:
 | `supabase.rpc("fn_name", {...})`       | `useMutation("fn_name")`                       |
 | `supabase.channel(...)`                | handled automatically by `useQuery` reactivity |
 | `createClient()`                       | `createBrivenClient()`                         |
+
+### Schema + functions — import paths
+
+Same as the Convex section — consumer imports come from `@briven/cli` sub-paths:
+
+```ts
+// briven/schema.ts (translated from your Supabase SQL dump)
+import { schema, table, text, bigint, timestamp } from '@briven/cli/schema';
+```
+
+```ts
+// briven/functions/signup.ts
+import { mutation, type Ctx } from '@briven/cli/server';
+
+export default mutation(async (ctx: Ctx, args: { email: string }) => {
+  // ...
+});
+```
 
 ### Data
 
@@ -636,6 +686,7 @@ Every meaningful migration should teach this doc something. Append here.
 
 - `2026-0X-XX` · initial draft, pre-handlr migration
 - `2026-04-24` · Phase 0/2 reality check: added §1.5 feature matrix, §2.5 org layer, §13 auth details. Flagged CLI commands that don't exist yet (`briven link --create`, `import`, `export`, `auth import`) with manual fallbacks. Dropped prescriptive Backblaze references in favour of generic object storage language. First pass — no real migration has happened yet, so claims below §1.5 are intention-grade, not proven.
+- `2026-04-25` · `@briven/cli` ships as a single self-contained tarball with three public entries (`@briven/cli`, `@briven/cli/schema`, `@briven/cli/server`). Consumer surface standardises on `@briven/cli/*` sub-imports — the workspace package `@briven/schema` no longer leaks into consumer `package.json` or `import` lines. §1.5 CLI row flipped to ✅ (tarball reproducible). §2 Step 2 install bullet added with all four package managers. §4 (Convex) and §5 (Supabase) examples updated to the new sub-paths. First deploy-capable CLI shape — end-to-end deploy rerun is the next dogfood test.
 - `2026-0X-XX` · updated after handlr migration (first real test)
 - `2026-0X-XX` · updated after cyclingtravel migration
 - (etc.)

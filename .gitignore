@@ -4,10 +4,12 @@ node_modules/
 
 # build output
 dist/
+dist-pack/
 build/
 .next/
 out/
 .turbo/
+.tsup/
 
 # env
 .env
@@ -51,6 +53,7 @@ apps/**/data/
 
 # claude code local overrides (shared settings.json is fine to commit)
 .claude/settings.local.json
+.claude/launch.json
 
 # internal reference docs — never pushed to remote
 # covers /docs/ at repo root and every file + subfolder inside it

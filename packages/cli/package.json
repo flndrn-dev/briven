@@ -1,6 +1,6 @@
 {
   "name": "@briven/cli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "ship typescript backends to your own postgres",
   "license": "MIT",
   "type": "module",
@@ -14,27 +14,39 @@
   ],
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/cli/index.d.ts",
+      "default": "./dist/cli/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "default": "./dist/schema/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch",
+    "build": "tsup && chmod +x bin/briven.js",
     "lint": "echo 'lint wired in phase 1'",
+    "pack:tarball": "pnpm build && pnpm pack --pack-destination ../../dist-pack",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/cli.test.ts"
+    "test": "tsx --test src/cli.test.ts",
+    "test:tarball": "node scripts/smoke-tarball.mjs"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
     "picocolors": "^1.1.1",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "ulid": "^3.0.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@briven/config": "workspace:*",
     "@briven/schema": "workspace:^",
     "@briven/shared": "workspace:*",
     "@types/node": "^25.6.0",
+    "tsup": "^8.5.1",
     "typescript": "^6.0.3"
   },
   "engines": {
