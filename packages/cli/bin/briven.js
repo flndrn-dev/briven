@@ -7,7 +7,7 @@ async function main() {
   const here = dirname(fileURLToPath(import.meta.url));
   let mod;
   try {
-    mod = await import(pathToFileURL(resolve(here, '../dist/index.js')).href);
+    mod = await import(pathToFileURL(resolve(here, '../dist/cli/index.js')).href);
   } catch (err) {
     if (err && err.code === 'ERR_MODULE_NOT_FOUND') {
       // Dev-from-source fallback: route the import through tsx's loader so

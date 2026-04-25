@@ -31,7 +31,8 @@
     "lint": "echo 'lint wired in phase 1'",
     "pack:tarball": "pnpm build && pnpm pack --pack-destination ../../dist-pack",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/cli.test.ts"
+    "test": "tsx --test src/cli.test.ts",
+    "test:tarball": "node scripts/smoke-tarball.mjs"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
