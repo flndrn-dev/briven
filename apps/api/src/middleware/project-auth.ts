@@ -58,9 +58,26 @@ export const requireProjectAuth = (): MiddlewareHandler => async (c, next) => {
 /**
  * Gate a route on a minimum `MemberRole`. Must follow `requireProjectAuth`
  * in the chain (which populates `projectRole`). API-key authenticated
- * requests carry role='admin' so they pass any gate up to admin; routes
- * that should refuse api keys outright should add an explicit check on
+ * requests carry the role they were minted at (default 'admin') — routes
+ * that need to refuse api keys outright should add an explicit check on
  * `c.get('apiKeyId')`.
+ *
+ * Owner-tier gating: no route uses `requireProjectRole('owner')` today,
+ * but the scaffolding works end-to-end. To add a future owner-only route
+ * (e.g. project hard-delete or ownership transfer):
+ *
+ *   projectsRouter.delete(
+ *     '/v1/projects/:id/permanent',
+ *     requireAuth(),
+ *     requireProjectRole('owner'),
+ *     async (c) => { ... },
+ *   );
+ *
+ * Because `routes/api-keys.ts` and `services/api-keys.ts:isAssignableKeyRole`
+ * both reject 'owner' as an assignable key role, no api key can satisfy
+ * such a gate — owner-tier routes are session-only by construction.
+ * Rank semantics are pinned by `services/access.test.ts` ("owner-tier
+ * gating" suite).
  */
 export const requireProjectRole =
   (min: MemberRole): MiddlewareHandler =>

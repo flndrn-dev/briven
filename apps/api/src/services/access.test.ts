@@ -61,3 +61,33 @@ describe('hasRoleAtLeast', () => {
     expect(hasRoleAtLeast('viewer', 'owner')).toBe(false);
   });
 });
+
+/**
+ * Owner-tier gating scaffolding — narrative tests.
+ *
+ * No route in the API today gates at `owner` (admin is the practical
+ * ceiling). When a future destructive route lands (project hard-delete,
+ * ownership transfer, etc.), it should chain `requireProjectRole('owner')`
+ * after `requireProjectAuth`. These tests pin the rank semantics so a
+ * regression in `ROLE_RANK` would fail before such a route ships.
+ */
+describe('owner-tier gating', () => {
+  test('admin cannot pass an owner gate', () => {
+    // The most-privileged non-owner role still falls below the owner gate.
+    expect(hasRoleAtLeast('admin', 'owner')).toBe(false);
+  });
+
+  test('owner passes the owner gate', () => {
+    expect(hasRoleAtLeast('owner', 'owner')).toBe(true);
+  });
+
+  test('an api key can never reach the owner gate', () => {
+    // `routes/api-keys.ts:createKeySchema` rejects 'owner' as an
+    // assignable role (only viewer/developer/admin); the existing
+    // `services/api-keys.ts:isAssignableKeyRole` enforces the same.
+    // So no resolved api-key role can satisfy `requireProjectRole('owner')`.
+    expect(hasRoleAtLeast('admin', 'owner')).toBe(false);
+    expect(hasRoleAtLeast('developer', 'owner')).toBe(false);
+    expect(hasRoleAtLeast('viewer', 'owner')).toBe(false);
+  });
+});
