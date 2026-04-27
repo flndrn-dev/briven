@@ -14,7 +14,7 @@
   "dependencies": {
     "@briven/config": "workspace:*",
     "@briven/ui": "workspace:*",
-    "fumadocs-core": "^16.8.1",
+    "fumadocs-core": "^16.8.4",
     "fumadocs-mdx": "^14.3.1",
     "fumadocs-ui": "^16.8.4",
     "geist": "^1.7.0",
