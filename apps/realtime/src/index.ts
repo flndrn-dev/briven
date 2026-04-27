@@ -178,11 +178,27 @@ async function dropSubscription(subId: string): Promise<void> {
   subscriptions.delete(subId);
 }
 
+/**
+ * Authorise an incoming WS upgrade. Refuses ALL requests when the shared
+ * secret is unset — prior behaviour returned `true` (fail-open), which
+ * combined with deployments that forgot to set the env var produced an
+ * unauthenticated WebSocket service. apps/api/src/routes/internal.ts
+ * already does the right thing (503 when secret unset); this matches.
+ */
 function authorise(req: Request): boolean {
-  if (!env.BRIVEN_RUNTIME_SHARED_SECRET) return true;
+  if (!env.BRIVEN_RUNTIME_SHARED_SECRET) return false;
   const auth = req.headers.get('authorization');
   const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
   return token === env.BRIVEN_RUNTIME_SHARED_SECRET;
+}
+
+if (!env.BRIVEN_RUNTIME_SHARED_SECRET) {
+  console.error(
+    JSON.stringify({
+      event: 'realtime_boot_warning',
+      msg: 'BRIVEN_RUNTIME_SHARED_SECRET is unset — every WS upgrade will be rejected with 401 until configured',
+    }),
+  );
 }
 
 console.log(
@@ -190,7 +206,7 @@ console.log(
     event: 'realtime_boot',
     port: env.BRIVEN_REALTIME_PORT,
     apiUrl: env.BRIVEN_API_INTERNAL_URL,
-    auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'open',
+    auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
     listen: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
   }),
 );

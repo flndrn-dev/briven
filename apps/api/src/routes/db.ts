@@ -1,6 +1,5 @@
 import { Hono, type Context } from 'hono';
 
-import { env } from '../env.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth } from '../middleware/project-auth.js';
 import type { Session, User } from '../middleware/session.js';
@@ -19,8 +18,7 @@ type AppEnv = {
 function ipHash(c: Context<AppEnv>): string | null {
   const fwd = c.req.raw.headers.get('x-forwarded-for');
   const ip = fwd ? fwd.split(',')[0]!.trim() : null;
-  const pepper = env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper';
-  return hashIp(ip, pepper);
+  return hashIp(ip);
 }
 
 export const dbRouter = new Hono<AppEnv>();

@@ -149,9 +149,6 @@ export default async function SettingsPage() {
               : 'never'}
           </dd>
 
-          <dt className="text-[var(--color-text-subtle)]">ip address</dt>
-          <dd>{user.lastSignIn?.ipAddress ?? '—'}</dd>
-
           <dt className="text-[var(--color-text-subtle)]">near by</dt>
           <dd>{formatNearBy(user.lastSignIn?.nearBy ?? null)}</dd>
 

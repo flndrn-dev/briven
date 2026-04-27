@@ -1,7 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
-import { env } from '../env.js';
 import { requireAdmin } from '../middleware/admin.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import {
@@ -29,8 +28,7 @@ const userActionSchema = z.object({ userId: z.string().min(1) });
 function ipHash(c: Context<AppEnv>): string | null {
   const fwd = c.req.raw.headers.get('x-forwarded-for');
   const ip = fwd ? fwd.split(',')[0]!.trim() : null;
-  const pepper = env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper';
-  return hashIp(ip, pepper);
+  return hashIp(ip);
 }
 
 export const adminRouter = new Hono<AppEnv>();

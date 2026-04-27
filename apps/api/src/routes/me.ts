@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import { audit, hashIp } from '../services/audit.js';
 import { checkVatWithVies } from '../services/billing.js';
@@ -98,10 +97,7 @@ meRouter.patch('/v1/me', requireAuth(), async (c) => {
     actorId: user.id,
     projectId: null,
     action: 'me.update',
-    ipHash: hashIp(
-      c.req.raw.headers.get('x-forwarded-for'),
-      env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper',
-    ),
+    ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { fields: Object.keys(parsed.data) },
   });

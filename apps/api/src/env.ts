@@ -29,6 +29,12 @@ const envSchema = z.object({
   BRIVEN_BETTER_AUTH_SECRET: z.string().min(32).optional(),
   BRIVEN_JWT_SIGNING_KEY: z.string().min(32).optional(),
 
+  // Pepper for audit-log IP hashing. Separate from BETTER_AUTH_SECRET so
+  // a leak of the audit-log column (or someone with shell on the API box)
+  // can't trivially de-anonymise IPs by knowing the auth secret. Required
+  // in non-development; in dev a per-process ephemeral value is used.
+  BRIVEN_AUDIT_IP_PEPPER: z.string().min(32).optional(),
+
   // Encryption key for customer secrets at rest (AES-256).
   BRIVEN_ENCRYPTION_KEY: z.string().min(32).optional(),
 
