@@ -19,8 +19,11 @@ type AppEnv = {
   };
 };
 
+// Per-key role scoping: human users can issue a key at the same role as the
+// caller or lower (viewer/developer/admin). 'owner' is never assignable.
 const createKeySchema = z.object({
   name: z.string().min(1).max(80),
+  role: z.enum(['viewer', 'developer', 'admin']).optional(),
   expiresInDays: z.number().int().positive().max(365).optional(),
 });
 
@@ -58,6 +61,7 @@ apiKeysRouter.post('/v1/projects/:id/api-keys', async (c) => {
     projectId: project.id,
     createdBy: user.id,
     name: parsed.data.name,
+    role: parsed.data.role,
     expiresAt,
   });
   await audit({
@@ -66,7 +70,7 @@ apiKeysRouter.post('/v1/projects/:id/api-keys', async (c) => {
     action: 'api_key.create',
     ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
     userAgent: c.req.header('user-agent') ?? null,
-    metadata: { keyId: record.id, name: record.name },
+    metadata: { keyId: record.id, name: record.name, role: record.role },
   });
 
   return c.json(
@@ -75,6 +79,7 @@ apiKeysRouter.post('/v1/projects/:id/api-keys', async (c) => {
         id: record.id,
         name: record.name,
         suffix: record.suffix,
+        role: record.role,
         createdAt: record.createdAt,
         expiresAt: record.expiresAt,
       },

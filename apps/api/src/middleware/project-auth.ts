@@ -16,10 +16,11 @@ import type { Session, User } from './session.js';
  *
  * On success this middleware populates:
  *   - `c.var.apiKeyId` — non-null when authed via API key, null for session
- *   - `c.var.projectRole` — the effective `MemberRole` for session auth, or
- *     'admin' for API-key auth (api keys are project-scoped service accounts
- *     and inherit admin-equivalent privilege within their project; finer
- *     api-key scoping is a follow-up).
+ *   - `c.var.projectRole` — the effective `MemberRole`. For session auth this
+ *     is `max(orgRole, projectRole)`. For api-key auth it is the role the key
+ *     was minted at (defaults to 'admin' for back-compat with keys created
+ *     before per-key role scoping landed; new keys may be issued at any of
+ *     viewer / developer / admin).
  *
  * Routes that need stricter gating chain `requireProjectRole(min)` after
  * this middleware.
@@ -50,7 +51,7 @@ export const requireProjectAuth = (): MiddlewareHandler => async (c, next) => {
   }
 
   c.set('apiKeyId', resolved.keyId);
-  c.set('projectRole', 'admin' satisfies MemberRole);
+  c.set('projectRole', resolved.role);
   await next();
 };
 
