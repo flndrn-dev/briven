@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { env } from '../env.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
@@ -65,10 +64,7 @@ apiKeysRouter.post('/v1/projects/:id/api-keys', async (c) => {
     actorId: user.id,
     projectId: project.id,
     action: 'api_key.create',
-    ipHash: hashIp(
-      c.req.raw.headers.get('x-forwarded-for'),
-      env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper',
-    ),
+    ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { keyId: record.id, name: record.name },
   });
@@ -113,10 +109,7 @@ apiKeysRouter.patch('/v1/projects/:id/api-keys/:keyId', async (c) => {
     actorId: user.id,
     projectId: project.id,
     action: 'api_key.rename',
-    ipHash: hashIp(
-      c.req.raw.headers.get('x-forwarded-for'),
-      env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper',
-    ),
+    ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { keyId, name: parsed.data.name },
   });
@@ -132,10 +125,7 @@ apiKeysRouter.delete('/v1/projects/:id/api-keys/:keyId', async (c) => {
     actorId: user.id,
     projectId: project.id,
     action: 'api_key.revoke',
-    ipHash: hashIp(
-      c.req.raw.headers.get('x-forwarded-for'),
-      env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-pepper',
-    ),
+    ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { keyId },
   });

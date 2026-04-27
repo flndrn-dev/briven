@@ -1,23 +1,50 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 import { newId } from '@briven/shared';
 import { desc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { auditLogs, type NewAuditLog } from '../db/schema.js';
+import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 
 /**
- * Hash the caller IP with a stable server-side pepper so we can correlate
- * abuse without ever storing raw IPs (CLAUDE.md §5.1).
+ * Resolve the audit-log IP pepper. Refuses to boot in non-development when
+ * BRIVEN_AUDIT_IP_PEPPER is unset. In dev we generate a per-process random
+ * value — sufficient to keep dev workflows running without baking a
+ * publicly-known string into the open-core source.
  *
- * The pepper comes from BRIVEN_BETTER_AUTH_SECRET — rotating the secret
- * rotates the hash space, which is fine because audit correlations are
- * only meaningful within a short window anyway.
+ * The pepper is intentionally separate from BRIVEN_BETTER_AUTH_SECRET so a
+ * leak of the audit-log column (or shell on the API host) can't be combined
+ * with knowledge of the auth secret to de-anonymise every actor IP.
  */
-export function hashIp(ip: string | null | undefined, pepper: string): string | null {
+let cachedPepper: string | null = null;
+function getAuditIpPepper(): string {
+  if (cachedPepper) return cachedPepper;
+  if (env.BRIVEN_AUDIT_IP_PEPPER) {
+    cachedPepper = env.BRIVEN_AUDIT_IP_PEPPER;
+    return cachedPepper;
+  }
+  if (env.BRIVEN_ENV === 'development') {
+    log.warn(
+      'BRIVEN_AUDIT_IP_PEPPER not set — using ephemeral per-process pepper. Audit IP hashes will not correlate across restarts.',
+    );
+    cachedPepper = randomBytes(32).toString('hex');
+    return cachedPepper;
+  }
+  throw new Error(
+    'BRIVEN_AUDIT_IP_PEPPER is required outside development. Set a value of at least 32 chars.',
+  );
+}
+
+/**
+ * Hash the caller IP with the audit-log pepper so we can correlate abuse
+ * without ever storing raw IPs (CLAUDE.md §5.1). The pepper is resolved
+ * internally from BRIVEN_AUDIT_IP_PEPPER — callers no longer pass it.
+ */
+export function hashIp(ip: string | null | undefined): string | null {
   if (!ip) return null;
-  return createHash('sha256').update(`${pepper}:${ip}`).digest('hex');
+  return createHash('sha256').update(`${getAuditIpPepper()}:${ip}`).digest('hex');
 }
 
 export interface AuditEntry {
