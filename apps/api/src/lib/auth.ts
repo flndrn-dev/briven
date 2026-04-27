@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { magicLink } from 'better-auth/plugins';
@@ -10,6 +12,29 @@ import { log } from './logger.js';
 import { sendEmailVerification, sendMagicLink } from './email.js';
 
 /**
+ * Resolve the Better Auth signing secret. Refuses to boot in non-development
+ * when BRIVEN_BETTER_AUTH_SECRET is unset — historically there was a
+ * hardcoded literal fallback in this slot, which would let anyone reading
+ * the open-core source forge sessions in a prod deploy that forgot the env
+ * var. In dev we generate an ephemeral per-process value so dev workflows
+ * keep working; sessions don't survive a restart.
+ */
+function resolveAuthSecret(): string {
+  if (env.BRIVEN_BETTER_AUTH_SECRET) {
+    return env.BRIVEN_BETTER_AUTH_SECRET;
+  }
+  if (env.BRIVEN_ENV === 'development') {
+    log.warn(
+      'BRIVEN_BETTER_AUTH_SECRET not set — using ephemeral per-process secret. Sessions will not survive restart.',
+    );
+    return randomBytes(32).toString('hex');
+  }
+  throw new Error(
+    'BRIVEN_BETTER_AUTH_SECRET is required outside development. Set a value of at least 32 chars.',
+  );
+}
+
+/**
  * Better Auth instance. Per BUILD_PLAN Phase 1 week 1-2 we wire all three
  * auth methods from day one: email + password, magic link via Resend, and
  * GitHub OAuth — so j can sign into the dashboard on day one.
@@ -20,7 +45,7 @@ import { sendEmailVerification, sendMagicLink } from './email.js';
  */
 export const auth = betterAuth({
   appName: 'briven',
-  secret: env.BRIVEN_BETTER_AUTH_SECRET ?? 'dev-insecure-fallback-change-in-prod',
+  secret: resolveAuthSecret(),
   baseURL: env.BRIVEN_API_ORIGIN,
   basePath: '/v1/auth',
   trustedOrigins: env.BRIVEN_TRUSTED_ORIGINS.split(',')
