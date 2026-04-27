@@ -39,7 +39,7 @@ function resolveAuthSecret(): string {
  * auth methods from day one: email + password, magic link via Resend, and
  * GitHub OAuth — so j can sign into the dashboard on day one.
  *
- * All cookies are HTTP-only and SameSite=lax. Session TTL is 30 days; the
+ * All cookies are HTTP-only and SameSite=strict. Session TTL is 30 days; the
  * sliding-refresh refresh window is 7 days (session is extended on any
  * authenticated request inside that window).
  */
@@ -75,7 +75,12 @@ export const auth = betterAuth({
         ? { enabled: true, domain: '.briven.cloud' }
         : { enabled: false },
     defaultCookieAttributes: {
-      sameSite: 'lax',
+      // 'strict' — kills cross-site form-POST CSRF. Dashboard at briven.cloud
+      // and API at api.briven.cloud are same-site (registrable domain
+      // briven.cloud), so the dashboard's authenticated XHR/fetch keeps
+      // working; only cross-site navigations from third-party origins lose
+      // the cookie.
+      sameSite: 'strict',
       httpOnly: true,
     },
   },

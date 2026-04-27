@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { env } from './env.js';
 import { log } from './lib/logger.js';
 import { accessLog } from './middleware/access-log.js';
+import { csrfOriginCheck } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error.js';
 import { requestId } from './middleware/request-id.js';
 import { attachSession, type Session, type User } from './middleware/session.js';
@@ -49,6 +50,7 @@ app.use(
 app.use('*', requestId());
 app.use('*', accessLog());
 app.use('*', attachSession());
+app.use('*', csrfOriginCheck());
 
 app.route('/', rootRouter);
 app.route('/', healthRouter);
