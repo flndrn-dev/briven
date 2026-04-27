@@ -33,9 +33,10 @@ export async function getCurrentVat(
 
 /**
  * Fetch the KYC / profile block for the signed-in user.
- * Returns what's persisted in `users` plus the most recent session's IP
- * (sanitised to the anonymised form — full IP is visible only to the
- * account holder per GDPR access rights, and only in their own response).
+ * Returns what's persisted in `users` plus the most recent session's
+ * `nearBy` city (resolved from the IP via GeoIP). The raw IP is NEVER
+ * surfaced — CLAUDE.md §5.1 forbids IP addresses in any public-facing
+ * response, including the account holder's own.
  */
 export async function getProfile(userId: string) {
   const db = getDb();
@@ -90,7 +91,6 @@ export async function getProfile(userId: string) {
     lastSignIn: last
       ? {
           at: last.createdAt,
-          ipAddress: last.ipAddress,
           userAgent: last.userAgent,
           nearBy,
         }
