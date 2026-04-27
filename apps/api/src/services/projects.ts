@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import { newId, NotFoundError, ValidationError } from '@briven/shared';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
@@ -13,6 +13,7 @@ import {
   type NewProject,
 } from '../db/schema.js';
 import { log } from '../lib/logger.js';
+import { resolveProjectAccess, type ProjectAccess } from './access.js';
 import { getTierForOrg } from './billing.js';
 import { assertProjectCreateAllowed } from './tiers.js';
 
@@ -91,29 +92,57 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   return created;
 }
 
+/**
+ * Every project the user can see, via either an `orgMembers` row for the
+ * project's org or a `projectMembers` row for the project itself
+ * (Model B — org-as-baseline + project overrides). De-duplicated and
+ * ordered by createdAt desc.
+ */
 export async function listProjectsForUser(userId: string): Promise<Project[]> {
   const db = getDb();
-  const rows = await db
-    .select()
-    .from(projects)
-    .innerJoin(orgMembers, eq(orgMembers.orgId, projects.orgId))
-    .where(and(eq(orgMembers.userId, userId), isNull(projects.deletedAt)))
-    .orderBy(desc(projects.createdAt));
-  return rows.map((r) => r.projects);
+  const [orgScoped, projectScoped] = await Promise.all([
+    db
+      .select()
+      .from(projects)
+      .innerJoin(orgMembers, eq(orgMembers.orgId, projects.orgId))
+      .where(and(eq(orgMembers.userId, userId), isNull(projects.deletedAt))),
+    db
+      .select()
+      .from(projects)
+      .innerJoin(projectMembers, eq(projectMembers.projectId, projects.id))
+      .where(and(eq(projectMembers.userId, userId), isNull(projects.deletedAt))),
+  ]);
+  const seen = new Set<string>();
+  const merged: Project[] = [];
+  for (const r of [...orgScoped, ...projectScoped]) {
+    if (seen.has(r.projects.id)) continue;
+    seen.add(r.projects.id);
+    merged.push(r.projects);
+  }
+  merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return merged;
 }
 
 export async function getProjectForUser(projectId: string, userId: string): Promise<Project> {
-  const db = getDb();
-  const [row] = await db
-    .select()
-    .from(projects)
-    .innerJoin(orgMembers, eq(orgMembers.orgId, projects.orgId))
-    .where(
-      and(eq(projects.id, projectId), eq(orgMembers.userId, userId), isNull(projects.deletedAt)),
-    )
-    .limit(1);
-  if (!row) throw new NotFoundError('project', projectId);
-  return row.projects;
+  const access = await resolveProjectAccess(projectId, userId);
+  if (!access) throw new NotFoundError('project', projectId);
+  return access.project;
+}
+
+/**
+ * Resolve `{ project, effectiveRole }` for a session-authenticated request.
+ * Throws `NotFoundError` if the user has no access via either org or
+ * project membership. Routes that need to gate by role read the role from
+ * this return value or from `c.get('projectRole')` after the middleware
+ * runs.
+ */
+export async function getProjectAccessForUser(
+  projectId: string,
+  userId: string,
+): Promise<ProjectAccess> {
+  const access = await resolveProjectAccess(projectId, userId);
+  if (!access) throw new NotFoundError('project', projectId);
+  return access;
 }
 
 /**

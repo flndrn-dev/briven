@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { memberRole } from '../db/schema.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   acceptInvitation,
@@ -11,7 +12,6 @@ import {
   pendingInvitationsForEmail,
   revokeInvitation,
 } from '../services/invitations.js';
-import { getProjectForUser } from '../services/projects.js';
 
 type AppEnv = {
   Variables: {
@@ -46,14 +46,14 @@ invitationsRouter.use('/v1/me/invitations/*', requireAuth());
 
 invitationsRouter.get('/v1/projects/:id/invitations', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const rows = await listInvitations(project.id);
   return c.json({ invitations: rows });
 });
 
 invitationsRouter.post('/v1/projects/:id/invitations', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const body = await c.req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
@@ -85,7 +85,7 @@ invitationsRouter.post('/v1/projects/:id/invitations', async (c) => {
 
 invitationsRouter.delete('/v1/projects/:id/invitations/:invitationId', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const invitationId = c.req.param('invitationId');
   await revokeInvitation(project.id, invitationId);
   await audit({

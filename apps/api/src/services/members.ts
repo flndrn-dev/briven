@@ -126,31 +126,6 @@ export async function removeMember(projectId: string, userId: string): Promise<v
     .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
 }
 
-/**
- * Verify a user has at least the required role on a project. The ordering is
- * owner > admin > developer > viewer. Throws ForbiddenError on mismatch,
- * NotFoundError if the user isn't a member at all.
- */
-const ROLE_RANK: Record<MemberRole, number> = {
-  owner: 3,
-  admin: 2,
-  developer: 1,
-  viewer: 0,
-};
-
-export async function requireMemberRole(
-  projectId: string,
-  userId: string,
-  minRole: MemberRole,
-): Promise<MemberRole> {
-  const member = await getMember(projectId, userId);
-  if (!member) throw new NotFoundError('project', projectId);
-  if (ROLE_RANK[member.role] < ROLE_RANK[minRole]) {
-    throw new ForbiddenError(`requires role ${minRole} or higher`);
-  }
-  return member.role;
-}
-
 export async function findProjectBySlug(slug: string) {
   const db = getDb();
   const [row] = await db.select().from(projects).where(eq(projects.slug, slug)).limit(1);

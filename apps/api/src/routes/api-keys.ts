@@ -9,7 +9,7 @@ import {
   renameApiKey,
   revokeApiKey,
 } from '../services/api-keys.js';
-import { getProjectForUser } from '../services/projects.js';
+import { assertProjectRole } from '../services/access.js';
 
 type AppEnv = {
   Variables: {
@@ -31,14 +31,14 @@ apiKeysRouter.use('/v1/projects/:id/api-keys/*', requireAuth());
 
 apiKeysRouter.get('/v1/projects/:id/api-keys', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const keys = await listApiKeysForProject(project.id);
   return c.json({ keys });
 });
 
 apiKeysRouter.post('/v1/projects/:id/api-keys', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const body = await c.req.json().catch(() => null);
   const parsed = createKeySchema.safeParse(body);
   if (!parsed.success) {
@@ -92,7 +92,7 @@ const renameKeySchema = z.object({
 
 apiKeysRouter.patch('/v1/projects/:id/api-keys/:keyId', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const keyId = c.req.param('keyId');
 
   const body = await c.req.json().catch(() => null);
@@ -118,7 +118,7 @@ apiKeysRouter.patch('/v1/projects/:id/api-keys/:keyId', async (c) => {
 
 apiKeysRouter.delete('/v1/projects/:id/api-keys/:keyId', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const keyId = c.req.param('keyId');
   await revokeApiKey(project.id, keyId);
   await audit({

@@ -2,15 +2,14 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   addMemberByEmail,
   listMembers,
   removeMember,
-  requireMemberRole,
   updateMemberRole,
 } from '../services/members.js';
-import { getProjectForUser } from '../services/projects.js';
 import { memberRole } from '../db/schema.js';
 
 type AppEnv = {
@@ -45,15 +44,14 @@ membersRouter.use('/v1/projects/:id/members/*', requireAuth());
 
 membersRouter.get('/v1/projects/:id/members', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'viewer');
   const rows = await listMembers(project.id);
   return c.json({ members: rows });
 });
 
 membersRouter.post('/v1/projects/:id/members', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
-  await requireMemberRole(project.id, user.id, 'admin');
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
 
   const body = await c.req.json().catch(() => null);
   const parsed = addMemberSchema.safeParse(body);
@@ -86,8 +84,7 @@ membersRouter.post('/v1/projects/:id/members', async (c) => {
 
 membersRouter.patch('/v1/projects/:id/members/:userId', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
-  await requireMemberRole(project.id, user.id, 'admin');
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
 
   const body = await c.req.json().catch(() => null);
   const parsed = updateMemberSchema.safeParse(body);
@@ -115,8 +112,7 @@ membersRouter.patch('/v1/projects/:id/members/:userId', async (c) => {
 
 membersRouter.delete('/v1/projects/:id/members/:userId', async (c) => {
   const user = c.get('user')!;
-  const project = await getProjectForUser(c.req.param('id'), user.id);
-  await requireMemberRole(project.id, user.id, 'admin');
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
 
   const targetId = c.req.param('userId');
   await removeMember(project.id, targetId);

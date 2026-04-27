@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireProjectAuth } from '../middleware/project-auth.js';
 import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
 import { getDefaultOrgForUser } from '../services/orgs.js';
 import {
@@ -116,6 +117,7 @@ projectsRouter.patch('/v1/projects/:id', async (c) => {
       400,
     );
   }
+  await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const project = await updateProjectForUser(c.req.param('id'), user.id, parsed.data);
   await audit({
     actorId: user.id,
@@ -130,6 +132,7 @@ projectsRouter.patch('/v1/projects/:id', async (c) => {
 
 projectsRouter.delete('/v1/projects/:id', async (c) => {
   const user = c.get('user')!;
+  await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const project = await softDeleteProjectForUser(c.req.param('id'), user.id);
   await audit({
     actorId: user.id,
