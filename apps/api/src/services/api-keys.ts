@@ -1,10 +1,21 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { newId, NotFoundError } from '@briven/shared';
+import { newId, NotFoundError, ValidationError } from '@briven/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { apiKeys, type ApiKey } from '../db/schema.js';
+import { apiKeys, type ApiKey, type MemberRole } from '../db/schema.js';
+
+const ASSIGNABLE_KEY_ROLES = [
+  'viewer',
+  'developer',
+  'admin',
+] as const satisfies readonly MemberRole[];
+type AssignableKeyRole = (typeof ASSIGNABLE_KEY_ROLES)[number];
+
+export function isAssignableKeyRole(role: string): role is AssignableKeyRole {
+  return (ASSIGNABLE_KEY_ROLES as readonly string[]).includes(role);
+}
 
 const KEY_PREFIX = 'brk'; // briven key — shown to the user, searchable in logs
 const KEY_ENTROPY_BYTES = 32; // 256 bits
@@ -23,8 +34,22 @@ export async function createApiKey(input: {
   projectId: string;
   createdBy: string;
   name: string;
+  /**
+   * Effective role this key carries when authenticating a request. Must be
+   * one of the assignable tiers (viewer / developer / admin) — `owner` is
+   * reserved for human owners and cannot be issued as a key role. Defaults
+   * to 'admin' for backward-compat with callers that don't specify.
+   */
+  role?: AssignableKeyRole;
   expiresAt?: Date;
 }): Promise<CreatedApiKey> {
+  const role = input.role ?? 'admin';
+  if (!isAssignableKeyRole(role)) {
+    throw new ValidationError(`api key role must be one of ${ASSIGNABLE_KEY_ROLES.join(' | ')}`, {
+      role,
+    });
+  }
+
   const raw = randomBytes(KEY_ENTROPY_BYTES).toString('base64url');
   const plaintext = `${KEY_PREFIX}_${raw}`;
   const hash = createHash('sha256').update(plaintext).digest('hex');
@@ -40,6 +65,7 @@ export async function createApiKey(input: {
       name: input.name,
       hash,
       suffix,
+      role,
       expiresAt: input.expiresAt ?? null,
     })
     .returning();
@@ -54,7 +80,7 @@ export async function createApiKey(input: {
  */
 export async function resolveApiKey(
   plaintext: string,
-): Promise<{ projectId: string; keyId: string } | null> {
+): Promise<{ projectId: string; keyId: string; role: MemberRole } | null> {
   const hash = createHash('sha256').update(plaintext).digest('hex');
   const db = getDb();
   const [row] = await db
@@ -66,13 +92,14 @@ export async function resolveApiKey(
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
 
   await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id));
-  return { projectId: row.projectId, keyId: row.id };
+  return { projectId: row.projectId, keyId: row.id, role: row.role };
 }
 
 export interface MaskedApiKey {
   id: string;
   name: string;
   suffix: string;
+  role: MemberRole;
   createdAt: Date;
   lastUsedAt: Date | null;
   expiresAt: Date | null;
@@ -86,6 +113,7 @@ export async function listApiKeysForProject(projectId: string): Promise<MaskedAp
       id: apiKeys.id,
       name: apiKeys.name,
       suffix: apiKeys.suffix,
+      role: apiKeys.role,
       createdAt: apiKeys.createdAt,
       lastUsedAt: apiKeys.lastUsedAt,
       expiresAt: apiKeys.expiresAt,

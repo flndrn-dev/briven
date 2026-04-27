@@ -331,6 +331,11 @@ export const apiKeys = pgTable(
     hash: text('hash').notNull(),
     // Last 4 chars of the plaintext — safe to show in the dashboard as a hint.
     suffix: varchar('suffix', { length: 4 }).notNull(),
+    // Effective role this key carries when authenticating a request. Default
+    // is 'admin' for backward compat with keys minted before per-key role
+    // scoping landed; new keys can be issued with any of the standard roles
+    // (viewer / developer / admin) — owner is never assignable to a key.
+    role: text('role').$type<MemberRole>().notNull().default('admin'),
     lastUsedAt: ts('last_used_at'),
     expiresAt: ts('expires_at'),
     createdAt: createdAt(),
