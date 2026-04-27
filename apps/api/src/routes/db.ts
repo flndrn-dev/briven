@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 
 import { rateLimit } from '../middleware/rate-limit.js';
-import { requireProjectAuth } from '../middleware/project-auth.js';
+import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import type { Session, User } from '../middleware/session.js';
 import { audit, hashIp } from '../services/audit.js';
 import { issueShellToken } from '../services/db-shell.js';
@@ -23,7 +23,8 @@ function ipHash(c: Context<AppEnv>): string | null {
 
 export const dbRouter = new Hono<AppEnv>();
 
-dbRouter.use('/v1/projects/:id/db/*', requireProjectAuth());
+// `db/shell-token` rotates a privileged DSN — admin-tier.
+dbRouter.use('/v1/projects/:id/db/*', requireProjectAuth(), requireProjectRole('admin'));
 
 // why: 5/min per project is enough for a human-driven `briven db shell`
 // loop and restrictive enough that a leaked api key can't silently
