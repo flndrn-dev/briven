@@ -56,10 +56,7 @@ export const csrfOriginCheck = (): MiddlewareHandler => async (c, next) => {
     })
   ) {
     log.warn('csrf_origin_rejected', { path, method: c.req.method, origin });
-    return c.json(
-      { code: 'csrf_origin_rejected', message: 'request origin is not trusted' },
-      403,
-    );
+    return c.json({ code: 'csrf_origin_rejected', message: 'request origin is not trusted' }, 403);
   }
 
   await next();
