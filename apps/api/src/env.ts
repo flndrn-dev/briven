@@ -89,3 +89,21 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 export const env = loadEnv(envSchema);
+
+/**
+ * Cross-field invariants that zod can't easily express via `.refine()`
+ * because they depend on the resolved BRIVEN_ENV. Run after loadEnv so the
+ * process fails loudly at boot when production config is wrong.
+ */
+if (env.BRIVEN_ENV !== 'development') {
+  if (!env.BRIVEN_API_ORIGIN.startsWith('https://')) {
+    throw new Error(
+      `BRIVEN_API_ORIGIN must be HTTPS outside development (got: ${env.BRIVEN_API_ORIGIN})`,
+    );
+  }
+  if (!env.BRIVEN_WEB_ORIGIN.startsWith('https://')) {
+    throw new Error(
+      `BRIVEN_WEB_ORIGIN must be HTTPS outside development (got: ${env.BRIVEN_WEB_ORIGIN})`,
+    );
+  }
+}
