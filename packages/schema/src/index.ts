@@ -42,6 +42,9 @@ export { generateSql, renderCreateTable } from './sql.js';
 export { diff, summariseDiff } from './diff.js';
 export type { Change, DiffResult } from './diff.js';
 
+export { schemaSnapshotSchema, validateSchemaSnapshot } from './wire.js';
+export type { SchemaSnapshotWire } from './wire.js';
+
 export type {
   AuthContext,
   Ctx,

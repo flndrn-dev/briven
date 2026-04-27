@@ -35,11 +35,15 @@ export async function applySchema(
     for (const stmt of statements) {
       await tx.unsafe(stmt);
     }
-    await tx.unsafe(`
-      INSERT INTO "_briven_migrations" (id, deployment_id, summary)
-      VALUES ('${deploymentId}', '${deploymentId}', '${JSON.stringify(summarise(result.changes)).replace(/'/g, "''")}'::jsonb)
-      ON CONFLICT (id) DO NOTHING
-    `);
+    // Bind every value — even though deploymentId is server-generated, raw
+    // string interpolation here was a foot-gun if a future caller ever
+    // routed user input through.
+    await tx.unsafe(
+      `INSERT INTO "_briven_migrations" (id, deployment_id, summary)
+       VALUES ($1, $2, $3::jsonb)
+       ON CONFLICT (id) DO NOTHING`,
+      [deploymentId, deploymentId, JSON.stringify(summarise(result.changes))],
+    );
   });
 
   log.info('schema_applied', {

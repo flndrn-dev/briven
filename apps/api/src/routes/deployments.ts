@@ -1,6 +1,8 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
+import { schemaSnapshotSchema } from '@briven/schema';
+
 import { requireProjectAuth } from '../middleware/project-auth.js';
 import type { Session, User } from '../middleware/session.js';
 import {
@@ -36,7 +38,10 @@ const MAX_FUNCTION_FILES = 100;
 
 const createSchema = z.object({
   schemaDiffSummary: z.record(z.string(), z.unknown()).optional(),
-  schemaSnapshot: z.record(z.string(), z.unknown()).optional(),
+  // Strict allowlist on every identifier, sqlType, default, and onDelete —
+  // the snapshot is interpolated into raw DDL by services/schema-apply.ts on
+  // the shared data-plane superuser connection. See fix/security-sqli-schema-apply.
+  schemaSnapshot: schemaSnapshotSchema.optional(),
   functionCount: z.number().int().nonnegative().max(10_000).optional(),
   functionNames: z.array(z.string().max(128)).max(10_000).optional(),
   bundle: z
@@ -189,7 +194,7 @@ const patchSchema = z.object({
     .record(z.string().max(256), z.string().max(MAX_FUNCTION_SOURCE_BYTES))
     .optional(),
   removedFunctions: z.array(z.string().max(256)).optional(),
-  schemaSnapshot: z.record(z.string(), z.unknown()).optional(),
+  schemaSnapshot: schemaSnapshotSchema.optional(),
   schemaDiffSummary: z.record(z.string(), z.unknown()).optional(),
   confirmDestructive: z.boolean().optional(),
 });
