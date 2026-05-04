@@ -23,7 +23,7 @@
     "@briven/shared": "workspace:*",
     "better-auth": "^1.6.9",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.14",
+    "hono": "^4.12.16",
     "ioredis": "^5.10.1",
     "maxmind": "^5.0.6",
     "postgres": "^3.4.9",
