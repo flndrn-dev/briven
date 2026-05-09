@@ -1,0 +1,67 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+dist-pack/
+build/
+.next/
+out/
+.turbo/
+.tsup/
+
+# env
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# test
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+
+# os
+.DS_Store
+Thumbs.db
+
+# misc
+*.tsbuildinfo
+.cache/
+
+# runtime bundles (populated per-env, never checked in)
+apps/*/data/
+apps/**/data/
+
+# claude code local overrides (shared settings.json is fine to commit)
+.claude/settings.local.json
+.claude/launch.json
+
+# internal reference docs — never pushed to remote
+# covers /docs/ at repo root and every file + subfolder inside it
+# EXCEPTION: MIGRATION.md is tracked — it's the user-facing playbook for
+# migrating onto briven cloud and is meant to be distributed alongside
+# briven into any project that wants to migrate.
+/docs/**
+!/docs/MIGRATION.md
+
+# Local git worktrees for parallel branch work — never commit their contents
+.worktrees/

@@ -1,0 +1,38 @@
+# Uptime Kuma dashboard router. Uptime Kuma itself lives as a Docker
+# swarm service (briven-uptime-kuma) on dokploy-network, exposed
+# externally via this Traefik dynamic config.
+#
+# Deploy path:
+#   scp infra/traefik/uptime.yml \
+#       root@187.124.64.116:/etc/dokploy/traefik/dynamic/uptime.yml
+#
+# TLS: single hostname, served via the existing letsencrypt resolver
+# (HTTP-01 challenge). DNS for dev-uptime.briven.cloud is set to
+# DNS-only (grey cloud) on Cloudflare so Let's Encrypt can reach the
+# origin on port 80 during the challenge.
+
+http:
+  routers:
+    briven-uptime-kuma-web:
+      rule: "Host(`dev-uptime.briven.cloud`)"
+      entryPoints:
+        - web
+      service: briven-uptime-kuma-api
+      middlewares:
+        - redirect-to-https
+
+    briven-uptime-kuma-websecure:
+      rule: "Host(`dev-uptime.briven.cloud`)"
+      entryPoints:
+        - websecure
+      service: briven-uptime-kuma-api
+      middlewares: []
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    briven-uptime-kuma-api:
+      loadBalancer:
+        servers:
+          - url: "http://briven-uptime-kuma:3001"
+        passHostHeader: true

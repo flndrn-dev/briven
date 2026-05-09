@@ -1,0 +1,20 @@
+ALTER TABLE "accounts" ALTER COLUMN "id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "accounts" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "api_keys" ALTER COLUMN "id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "api_keys" ALTER COLUMN "project_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "api_keys" ALTER COLUMN "created_by" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "audit_logs" ALTER COLUMN "id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "audit_logs" ALTER COLUMN "actor_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "audit_logs" ALTER COLUMN "project_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "deployments" ALTER COLUMN "id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "deployments" ALTER COLUMN "project_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "deployments" ALTER COLUMN "triggered_by" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "deployments" ALTER COLUMN "api_key_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "project_members" ALTER COLUMN "project_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "project_members" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "projects" ALTER COLUMN "id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "projects" ALTER COLUMN "owner_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "sessions" ALTER COLUMN "id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "sessions" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "users" ALTER COLUMN "id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "verifications" ALTER COLUMN "id" SET DATA TYPE text;

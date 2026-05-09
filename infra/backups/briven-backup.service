@@ -1,0 +1,16 @@
+[Unit]
+Description=briven cloud — daily pg_dump of briven_control + briven_data to MinIO
+Documentation=https://github.com/flndrn-dev/briven/tree/main/infra/backups
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/briven-backup.sh
+StandardOutput=journal
+StandardError=journal
+# Generous timeout — a full dump is seconds today but can grow.
+TimeoutStartSec=1h
+# Don't restart on failure; the timer fires again tomorrow.
+# Journal tells us if a run failed.
