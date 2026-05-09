@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "vat_verified_at" timestamp with time zone;

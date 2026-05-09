@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "data_schema_name" text;

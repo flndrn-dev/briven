@@ -1,0 +1,55 @@
+# Wildcard routing for *.apps.briven.cloud — every project subdomain
+# resolves to the control-plane API, which extracts the subdomain
+# (project slug or id) and dispatches to the runtime. This is the
+# public "call your function" URL shape: p_xxx.apps.briven.cloud/<fn>.
+#
+# Deploy path (the controller drops this file via scp; Dokploy's
+# Traefik file-provider watches /etc/dokploy/traefik/dynamic/*.yml):
+#
+#   scp infra/traefik/wildcard-apps.yml \
+#       root@187.124.64.116:/etc/dokploy/traefik/dynamic/wildcard-apps.yml
+#
+# Traefik picks it up within seconds — no restart needed.
+#
+# TLS: wildcard cert via Let's Encrypt DNS-01 against Cloudflare.
+# The `cloudflare` cert resolver is defined in the Traefik static
+# config and reads CF_DNS_API_TOKEN from the container env (loaded
+# via --env-file /root/.briven-secrets/cloudflare.env). The token
+# is scoped to Zone:DNS:Edit + Zone:Read on briven.cloud only.
+#
+# HostRegexp routers can't infer the cert domain on their own, so
+# the websecure router declares it explicitly in tls.domains.
+
+http:
+  routers:
+    wildcard-apps-web:
+      # Plain HTTP -> redirect to HTTPS.
+      rule: "HostRegexp(`^[a-z0-9-]+\\.apps\\.briven\\.cloud$`)"
+      entryPoints:
+        - web
+      service: wildcard-apps-api
+      middlewares:
+        - redirect-to-https
+
+    wildcard-apps-websecure:
+      rule: "HostRegexp(`^[a-z0-9-]+\\.apps\\.briven\\.cloud$`)"
+      entryPoints:
+        - websecure
+      service: wildcard-apps-api
+      middlewares: []
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "*.apps.briven.cloud"
+            sans:
+              - "apps.briven.cloud"
+
+  services:
+    wildcard-apps-api:
+      loadBalancer:
+        # Route to the same swarm service the regular API uses.
+        # passHostHeader=true so the Hono middleware can read the
+        # original subdomain and derive the project id.
+        servers:
+          - url: "http://app-hack-mobile-sensor-xw9qop:3001"
+        passHostHeader: true
