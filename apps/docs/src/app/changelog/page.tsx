@@ -15,6 +15,60 @@ type Tag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'chore';
 
 const ENTRIES: readonly Entry[] = [
   {
+    date: '2026-05-11',
+    tags: ['infra'],
+    title: 'observability stack live + postgres-exporter sidecar',
+    body: 'grafana / loki / prometheus / promtail running on briven.tech kvm4 as compose project briven-obs; postgres-exporter ships pg_stat_* metrics from briven-postgres. all five prometheus jobs (api / runtime / realtime / postgres / prometheus) report up; four starter dashboards (api requests, runtime invocations, realtime subs, postgres health) populated.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'mittera email suppression layer',
+    body: 'new email_suppressions table + service. mittera webhook handler dispatches permanent bounces / complaints / mittera-suppressed events into the suppression list; outbound send short-circuits on suppressed recipients before posting to mittera. admin ui at /dashboard/admin/email-suppressions with manual add / remove.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'mittera outbound + webhook live on briven.tech',
+    body: 'POST https://api.mittera.eu/api/v1/emails with Bearer auth verified end-to-end (smoke + magic-link both 200). inbound webhooks at https://api.briven.tech/mittera-webhook verify X-mittera-Signature: v1=<hex> + X-mittera-Timestamp: <ms> with a 5-minute replay window, dispatch per spec §6, audit-log every event.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'nightly backup cron on kvm4',
+    body: 'systemd timer fires /usr/local/bin/briven-backup.sh daily at 02:17 UTC. pg_dump --format=custom against briven-postgres for both briven_control + briven_data, 30-day local retention, off-site upload gated on /etc/briven/backup.env (BRIVEN_BACKUP_S3_*). off-site disabled until B2/R2 creds land.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'briven init --template={blank,todo-app,chat}',
+    body: 'cli init now scaffolds from one of three inline templates. blank = minimal notes; todo-app = 4 mutations + 1 reactive query; chat = two-table per-room reactive. templates are embedded so init works on a fresh machine with no network.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'briven doctor + GET /info build identity',
+    body: 'doctor now pings /info (new endpoint) and reports build sha + build timestamp + uptime alongside the existing health / ready / auth checks. Dockerfile passes BRIVEN_BUILD_SHA + BRIVEN_BUILD_AT through as ARGs for compose to inject.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'admin: email events + suppressions dashboards',
+    body: 'two new pages under /dashboard/admin — email-events (last 200 webhook deliveries with severity-tinted chips) and email-suppressions (recipients we won\'t send to, with manual add / remove). both gated on is_admin.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['infra'],
+    title: 'forgejo actions ci',
+    body: '.forgejo/workflows/ci.yml runs pnpm -r lint + typecheck + test on every push to main. real eslint config replaces 13 lint stubs; 15 packages green workspace-wide.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['chore'],
+    title: 'briven.cloud → briven.tech sweep (78 files)',
+    body: 'every public-facing reference to the placeholder briven.cloud domain replaced with briven.tech. scripts/swap-domain.sh ships as the rename helper for future cutovers.',
+  },
+  {
     date: '2026-05-10',
     tags: ['feat'],
     title: '@briven/svelte + @briven/vue clients',
