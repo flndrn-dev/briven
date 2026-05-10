@@ -11,7 +11,10 @@ const NAV: readonly NavItem[] = [
   { href: '/cli', label: 'cli' },
   { href: '/schema', label: 'schema dsl' },
   { href: '/functions', label: 'functions' },
+  { href: '/migration', label: 'migration' },
   { href: '/self-host', label: 'self-host' },
+  { href: '/changelog', label: 'changelog' },
+  { href: '/status', label: 'status' },
 ];
 
 export function DocsShell({ children }: { children: React.ReactNode }) {
