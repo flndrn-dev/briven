@@ -16,7 +16,7 @@ interface HealthResponse {
   bootedAt: string;
 }
 
-interface InfoResponse {
+interface BuildInfoResponse {
   service: string;
   env: string;
   buildSha: string;
@@ -26,7 +26,7 @@ interface InfoResponse {
   domain: string | null;
 }
 
-interface InfoResponse {
+interface AuthInfoResponse {
   projectId: string;
   authenticatedVia: 'api_key' | 'session';
   apiKeyId: string | null;
@@ -39,14 +39,25 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
     blankLine();
     step('briven doctor                end-to-end health check against the linked api');
     step('briven doctor --origin URL   override the api origin (skip stored creds)');
+    step('briven doctor --json         machine-readable output (for scripts and CI)');
     return 0;
   }
+
+  // Reset module-level state — runDoctor can be called multiple times
+  // from the same process during tests.
+  warnings = 0;
+  errors = 0;
+  checks = [];
+
+  jsonMode = argv.includes('--json');
 
   const flag = argv.findIndex((a) => a === '--origin');
   const cliOrigin = flag !== -1 && flag + 1 < argv.length ? argv[flag + 1] : undefined;
 
-  banner('doctor');
-  blankLine();
+  if (!jsonMode) {
+    banner('doctor');
+    blankLine();
+  }
 
   let origin: string | null = cliOrigin ?? null;
   let projectId: string | null = null;
@@ -80,6 +91,12 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
   }
 
   if (!origin) {
+    if (jsonMode) {
+      process.stdout.write(
+        JSON.stringify({ ok: false, error: 'no_api_origin', checks }, null, 2) + '\n',
+      );
+      return 1;
+    }
     blankLine();
     printError('no api origin to test — link a project or pass --origin <url>.');
     return 1;
@@ -98,7 +115,7 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
   }
 
   // Build identity — non-fatal if missing (older deploys, dev mode).
-  const info = await fetchJson<InfoResponse>(`${origin}/info`);
+  const info = await fetchJson<BuildInfoResponse>(`${origin}/info`);
   if (info.ok) {
     const sha = info.body.buildSha.slice(0, 12);
     const uptime = formatUptime(info.body.uptimeSec);
@@ -133,7 +150,7 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
   // If we have stored creds, confirm the api accepts the key. /info is the
   // dedicated whoami endpoint; it returns 401 if the key is wrong.
   if (apiKey && projectId) {
-    const auth = await fetchJson<InfoResponse>(`${origin}/v1/projects/${projectId}/info`, apiKey);
+    const auth = await fetchJson<AuthInfoResponse>(`${origin}/v1/projects/${projectId}/info`, apiKey);
     if (!auth.ok) {
       check('auth (api key)', 'fail', auth.error);
     } else if (auth.body.projectId === projectId) {
@@ -141,6 +158,28 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
     } else {
       check('auth (api key)', 'warn', 'unexpected response shape');
     }
+  }
+
+  if (jsonMode) {
+    const okFlag = errors === 0;
+    const buildSha = info.ok ? info.body.buildSha : null;
+    const buildAt = info.ok ? info.body.buildAt : null;
+    process.stdout.write(
+      JSON.stringify(
+        {
+          ok: okFlag,
+          origin,
+          buildSha,
+          buildAt,
+          warnings,
+          errors,
+          checks,
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+    return okFlag ? 0 : 1;
   }
 
   blankLine();
@@ -158,16 +197,27 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
 
 let warnings = 0;
 let errors = 0;
+let jsonMode = false;
+interface CheckRow {
+  name: string;
+  level: 'ok' | 'warn' | 'fail';
+  detail: string;
+}
+let checks: CheckRow[] = [];
 
 function check(name: string, level: 'ok' | 'warn' | 'fail', detail: string): void {
+  if (level === 'warn') warnings += 1;
+  if (level === 'fail') errors += 1;
+  checks.push({ name: name.trim(), level, detail });
+
+  if (jsonMode) return;
+
   const tag =
     level === 'ok'
       ? pc.green('ok  ')
       : level === 'warn'
         ? pc.yellow('warn')
         : pc.red('fail');
-  if (level === 'warn') warnings += 1;
-  if (level === 'fail') errors += 1;
   step(`${tag}  ${name.padEnd(22)} ${pc.dim(detail)}`);
 }
 
