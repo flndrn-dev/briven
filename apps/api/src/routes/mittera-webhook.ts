@@ -125,10 +125,12 @@ mitteraWebhookRouter.post('/mittera-webhook', async (c) => {
   // Persist to audit_logs so the admin dashboard can render history.
   // §5.1: never store recipient addresses here. messageId is opaque to
   // us; bounce/complaint/suppression context is event-meta, not PII.
+  // Action shape: `mittera.<eventType>` (eventType already carries the
+  // `email.` / `domain.` / `contact.` prefix, so we don't double it).
   await audit({
     actorId: null,
     projectId: null,
-    action: `mittera.email.${eventType}`,
+    action: `mittera.${eventType}`,
     ipHash: null,
     userAgent: 'mittera-webhook',
     metadata: {
