@@ -1,9 +1,13 @@
-# briven-core — self-hosted compose template.
+# briven-core — self-hosted compose template (build-from-source mode).
 #
-# Single-machine layout — every service on one host. Suitable for ~25
+# Dokploy clones the repo from code.konnos.org/flndrn/briven and runs
+# `docker compose build` against the local Dockerfiles. No external
+# container registry, no GHCR, no auth tokens for image pulls — the
+# only thing the host needs is git + docker.
+#
+# Single-machine layout: every service on one host. Suitable for ~25
 # concurrent customer projects. Past that, split control plane to one
-# host and data plane (postgres + minio) to another; the briven cloud
-# managed service uses the same compose, just on multiple hosts.
+# host and data plane (postgres + minio) to another.
 #
 # Tested on:
 #   - Dokploy 0.20+ (recommended)
@@ -74,7 +78,9 @@ services:
       - 'briven_logs=true'
 
   api:
-    image: ghcr.io/flndrn-dev/briven-api:${BRIVEN_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
     container_name: briven-api
     restart: unless-stopped
     depends_on: [postgres, redis]
@@ -110,7 +116,9 @@ services:
       - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
 
   runtime:
-    image: ghcr.io/flndrn-dev/briven-runtime:${BRIVEN_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/runtime/Dockerfile
     container_name: briven-runtime
     restart: unless-stopped
     environment:
@@ -127,7 +135,9 @@ services:
       - 'briven_logs=true'
 
   realtime:
-    image: ghcr.io/flndrn-dev/briven-realtime:${BRIVEN_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/realtime/Dockerfile
     container_name: briven-realtime
     restart: unless-stopped
     depends_on: [postgres]
@@ -148,7 +158,9 @@ services:
       - 'traefik.http.services.briven-realtime.loadbalancer.server.port=3004'
 
   web:
-    image: ghcr.io/flndrn-dev/briven-web:${BRIVEN_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
     container_name: briven-web
     restart: unless-stopped
     depends_on: [api]
@@ -166,7 +178,9 @@ services:
       - 'traefik.http.services.briven-web.loadbalancer.server.port=3000'
 
   docs:
-    image: ghcr.io/flndrn-dev/briven-docs:${BRIVEN_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/docs/Dockerfile
     container_name: briven-docs
     restart: unless-stopped
     networks:

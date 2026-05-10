@@ -1,6 +1,6 @@
 [Unit]
 Description=briven cloud — fire daily pg_dump backup
-Documentation=https://github.com/flndrn-dev/briven/tree/main/infra/backups
+Documentation=https://code.konnos.org/flndrn/briven/src/branch/main/infra/backups
 
 [Timer]
 # Daily at 02:17 UTC — off-peak; 17min past the hour to avoid the

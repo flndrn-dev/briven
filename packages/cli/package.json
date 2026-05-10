@@ -64,9 +64,9 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/flndrn-dev/briven.git",
+    "url": "git+https://code.konnos.org/flndrn/briven.git",
     "directory": "packages/cli"
   },
   "homepage": "https://docs.briven.cloud",
-  "bugs": "https://github.com/flndrn-dev/briven/issues"
+  "bugs": "https://code.konnos.org/flndrn/briven/issues"
 }

@@ -33,7 +33,7 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
               dashboard
             </Link>
             <Link
-              href="https://github.com/flndrn-dev/briven"
+              href="https://code.konnos.org/flndrn/briven"
               className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             >
               github
@@ -62,7 +62,7 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
         <p className="mx-auto max-w-6xl px-6 font-mono text-xs text-[var(--color-text-subtle)]">
           briven · open-core reactive postgres ·{' '}
           <Link
-            href="https://github.com/flndrn-dev/briven"
+            href="https://code.konnos.org/flndrn/briven"
             className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
           >
             source

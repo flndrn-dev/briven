@@ -35,7 +35,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/flndrn-dev/briven.git",
+    "url": "git+https://code.konnos.org/flndrn/briven.git",
     "directory": "packages/client-svelte"
   },
   "homepage": "https://docs.briven.cloud"

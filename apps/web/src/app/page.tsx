@@ -36,7 +36,7 @@ export default async function HomePage() {
             docs
           </Link>
           <Link
-            href="https://github.com/flndrn-dev/briven"
+            href="https://code.konnos.org/flndrn/briven"
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           >
             github
