@@ -13,6 +13,7 @@ const NAV: readonly NavItem[] = [
   { href: '/functions', label: 'functions' },
   { href: '/migration', label: 'migration' },
   { href: '/self-host', label: 'self-host' },
+  { href: '/operator', label: 'operator' },
   { href: '/changelog', label: 'changelog' },
   { href: '/status', label: 'status' },
 ];

@@ -4,6 +4,7 @@ import { pingDb } from '../db/client.js';
 import { pingDataPlane } from '../db/data-plane.js';
 import { env } from '../env.js';
 import { renderPrometheus } from '../lib/metrics.js';
+import { pingRedis } from '../lib/redis.js';
 
 const BOOT_TIME = new Date().toISOString();
 
@@ -28,10 +29,11 @@ healthRouter.get('/health', (c) =>
  * runtime reachable from the swarm network).
  */
 healthRouter.get('/ready', async (c) => {
-  const [controlOk, dataOk, runtimeOk] = await Promise.all([
+  const [controlOk, dataOk, runtimeOk, redisOk] = await Promise.all([
     env.BRIVEN_DATABASE_URL ? pingDb() : Promise.resolve(false),
     env.BRIVEN_DATA_PLANE_URL ? pingDataPlane() : Promise.resolve(false),
     probeRuntime(),
+    env.BRIVEN_REDIS_URL ? pingRedis() : Promise.resolve(false),
   ]);
 
   const checks = {
@@ -46,9 +48,13 @@ healthRouter.get('/ready', async (c) => {
         : 'unreachable'
       : 'not_configured',
     runtime: runtimeOk ? 'ok' : 'unreachable',
+    redis: env.BRIVEN_REDIS_URL ? (redisOk ? 'ok' : 'unreachable') : 'not_configured',
   } as const;
 
-  const ready = controlOk && dataOk && runtimeOk;
+  // Redis powers logs streaming + rate limits. Required when configured;
+  // unconfigured = dev mode where logs/limits silently no-op.
+  const redisRequired = !!env.BRIVEN_REDIS_URL;
+  const ready = controlOk && dataOk && runtimeOk && (!redisRequired || redisOk);
   return c.json({ status: ready ? 'ready' : 'not_ready', checks }, ready ? 200 : 503);
 });
 

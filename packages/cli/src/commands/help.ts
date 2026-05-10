@@ -18,6 +18,7 @@ commands:
   export            export schema + functions to a json archive
   import            create a deployment from a json archive on the linked project
   projects          list projects authenticated on this machine + set default
+  doctor            run a health check against the linked api
 
 options:
   --version, -v     print the cli version and exit
