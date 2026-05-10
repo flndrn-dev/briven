@@ -1,0 +1,5 @@
+{
+  "name": "realtime-chat",
+  "schemaPath": "briven/schema.ts",
+  "functionsPath": "briven/functions"
+}
