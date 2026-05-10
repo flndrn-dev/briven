@@ -1,0 +1,191 @@
+# briven-core — self-hosted compose template.
+#
+# Single-machine layout — every service on one host. Suitable for ~25
+# concurrent customer projects. Past that, split control plane to one
+# host and data plane (postgres + minio) to another; the briven cloud
+# managed service uses the same compose, just on multiple hosts.
+#
+# Tested on:
+#   - Dokploy 0.20+ (recommended)
+#   - Coolify 4.x
+#   - Plain `docker compose up -d` on Ubuntu 24.04
+#
+# Required env (drop a `.env` next to this file):
+#
+#   BRIVEN_DOMAIN                  e.g. briven.example.com
+#   BRIVEN_BETTER_AUTH_SECRET     32+ chars, openssl rand -hex 32
+#   BRIVEN_AUDIT_IP_PEPPER        32+ chars
+#   BRIVEN_ENCRYPTION_KEY         32+ chars
+#   BRIVEN_RUNTIME_SHARED_SECRET  32+ chars
+#   BRIVEN_POSTGRES_PASSWORD      strong; gets used by all four services
+#   BRIVEN_RESEND_API_KEY         optional — magic-link emails (otherwise console)
+#   BRIVEN_GITHUB_CLIENT_ID/      optional — github oauth signin
+#   BRIVEN_GITHUB_CLIENT_SECRET
+#   BRIVEN_POLAR_*                optional — billing (skip for self-host)
+#   BRIVEN_OPEN_SIGNUPS           true | false (default false; flip for public instance)
+#
+# After first boot:
+#   1. Create the first user via the magic-link flow on https://${BRIVEN_DOMAIN}
+#   2. SSH to the postgres container and `UPDATE users SET is_admin = true WHERE id = '...'`
+#      to give yourself platform-admin (the dashboard's /admin tab unlocks)
+#   3. Create your first project via the dashboard
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: briven-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+      POSTGRES_DB: briven_control
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: briven-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+
+  minio:
+    image: minio/minio:latest
+    container_name: briven-minio
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: briven
+      MINIO_ROOT_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+
+  api:
+    image: ghcr.io/flndrn-dev/briven-api:${BRIVEN_VERSION:-latest}
+    container_name: briven-api
+    restart: unless-stopped
+    depends_on: [postgres, redis]
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_API_PORT: '3001'
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+      BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN}
+      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@briven-postgres:5432/briven_control?sslmode=disable
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@briven-postgres:5432/briven_data?sslmode=disable
+      BRIVEN_REDIS_URL: redis://briven-redis:6379
+      BRIVEN_RUNTIME_URL: http://briven-runtime:3003
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
+      BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
+      BRIVEN_ENCRYPTION_KEY: ${BRIVEN_ENCRYPTION_KEY}
+      BRIVEN_RESEND_API_KEY: ${BRIVEN_RESEND_API_KEY:-}
+      BRIVEN_GITHUB_CLIENT_ID: ${BRIVEN_GITHUB_CLIENT_ID:-}
+      BRIVEN_GITHUB_CLIENT_SECRET: ${BRIVEN_GITHUB_CLIENT_SECRET:-}
+      BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
+      BRIVEN_MINIO_ENDPOINT: http://briven-minio:9000
+      BRIVEN_MINIO_ACCESS_KEY: briven
+      BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_POSTGRES_PASSWORD}
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.briven-api.rule=Host(`api.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-api.entrypoints=websecure'
+      - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
+
+  runtime:
+    image: ghcr.io/flndrn-dev/briven-runtime:${BRIVEN_VERSION:-latest}
+    container_name: briven-runtime
+    restart: unless-stopped
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_RUNTIME_PORT: '3003'
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_RUNTIME_EXECUTOR: deno
+      BRIVEN_RUNTIME_BUNDLE_DIR: /var/lib/briven/bundles
+    volumes:
+      - runtime_bundles:/var/lib/briven/bundles
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+
+  realtime:
+    image: ghcr.io/flndrn-dev/briven-realtime:${BRIVEN_VERSION:-latest}
+    container_name: briven-realtime
+    restart: unless-stopped
+    depends_on: [postgres]
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_REALTIME_PORT: '3004'
+      BRIVEN_API_INTERNAL_URL: http://briven-api:3001
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@briven-postgres:5432/briven_data?sslmode=disable
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.briven-realtime.rule=Host(`realtime.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-realtime.entrypoints=websecure'
+      - 'traefik.http.routers.briven-realtime.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-realtime.loadbalancer.server.port=3004'
+
+  web:
+    image: ghcr.io/flndrn-dev/briven-web:${BRIVEN_VERSION:-latest}
+    container_name: briven-web
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-web.entrypoints=websecure'
+      - 'traefik.http.routers.briven-web.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-web.loadbalancer.server.port=3000'
+
+  docs:
+    image: ghcr.io/flndrn-dev/briven-docs:${BRIVEN_VERSION:-latest}
+    container_name: briven-docs
+    restart: unless-stopped
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.briven-docs.rule=Host(`docs.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-docs.entrypoints=websecure'
+      - 'traefik.http.routers.briven-docs.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-docs.loadbalancer.server.port=3000'
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  runtime_bundles:
+
+networks:
+  briven:
+    driver: bridge
+    name: briven

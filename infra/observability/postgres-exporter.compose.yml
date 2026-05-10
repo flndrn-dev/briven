@@ -1,0 +1,48 @@
+# Sidecar for the data-plane Postgres. Drop this into the compose project
+# that already runs the data-plane container — NOT into the observability
+# compose. The exporter needs to live next to the database so it can
+# scrape pg_stat_* with low-latency local-socket access; prometheus then
+# scrapes the exporter from across the briven docker network.
+#
+# Wire it in by adding `services:` and `networks:` blocks to your existing
+# data-plane compose, or `docker compose -f data-plane.yml -f
+# postgres-exporter.compose.yml up -d` to merge the two.
+#
+# Required env on the data-plane container (or via .env.local):
+#   POSTGRES_EXPORTER_DATA_SOURCE_NAME — read-only DSN. Recommend creating
+#   a dedicated `briven_metrics` postgres role with pg_monitor membership
+#   so the exporter can read pg_stat_* without superuser:
+#     CREATE ROLE briven_metrics LOGIN PASSWORD '<rotated>';
+#     GRANT pg_monitor TO briven_metrics;
+#
+# Then DSN looks like:
+#   postgresql://briven_metrics:<password>@briven-postgres:5432/postgres?sslmode=disable
+#
+# (The exporter is on the internal docker network; sslmode=disable is
+# fine. If you migrate the data plane to a managed cluster, switch to
+# sslmode=require.)
+
+services:
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DATA_SOURCE_NAME}
+      # Default collectors are fine for the four-dashboard set (database
+      # size, transactions, deadlocks, longest query). Add explicit
+      # `--collector.<name>` flags here when adding more dashboards.
+      PG_EXPORTER_AUTO_DISCOVER_DATABASES: 'true'
+      PG_EXPORTER_EXCLUDE_DATABASES: 'template0,template1'
+    networks:
+      - briven
+    labels:
+      # Promtail picks up structured logs; the exporter mostly emits
+      # access-log lines but it's cheap to keep them in Loki for incident
+      # forensics.
+      - 'briven_logs=true'
+
+networks:
+  briven:
+    external: true
+    name: briven

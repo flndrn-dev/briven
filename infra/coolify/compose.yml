@@ -1,0 +1,116 @@
+# briven-core — coolify deployment template.
+#
+# Coolify uses the same docker compose format as dokploy, but its routing
+# layer is its own — drop the traefik labels, let coolify's UI assign
+# the public hostname per service. Everything else (env vars, volumes,
+# the postgres-init script, networks) is identical to ../dokploy/compose.yml.
+#
+# Required env (set via coolify's per-service env UI or in .env):
+#   BRIVEN_DOMAIN, BRIVEN_VERSION, BRIVEN_BETTER_AUTH_SECRET,
+#   BRIVEN_AUDIT_IP_PEPPER, BRIVEN_ENCRYPTION_KEY,
+#   BRIVEN_RUNTIME_SHARED_SECRET, BRIVEN_POSTGRES_PASSWORD,
+#   BRIVEN_RESEND_API_KEY (optional), BRIVEN_GITHUB_CLIENT_ID/SECRET (optional),
+#   BRIVEN_OPEN_SIGNUPS (default false).
+#
+# Coolify-specific routing — assign these in the coolify UI per service:
+#   web       → ${BRIVEN_DOMAIN}
+#   api       → api.${BRIVEN_DOMAIN}
+#   realtime  → realtime.${BRIVEN_DOMAIN}
+#   docs      → docs.${BRIVEN_DOMAIN}
+#   minio    → s3.${BRIVEN_DOMAIN}    (optional, only if you want public bucket access)
+#   postgres + redis + runtime stay internal — no public routing.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+      POSTGRES_DB: briven_control
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: briven
+      MINIO_ROOT_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+    volumes:
+      - minio_data:/data
+
+  api:
+    image: ghcr.io/flndrn-dev/briven-api:${BRIVEN_VERSION:-latest}
+    restart: unless-stopped
+    depends_on: [postgres, redis]
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_API_PORT: '3001'
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+      BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN}
+      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_data?sslmode=disable
+      BRIVEN_REDIS_URL: redis://redis:6379
+      BRIVEN_RUNTIME_URL: http://runtime:3003
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
+      BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
+      BRIVEN_ENCRYPTION_KEY: ${BRIVEN_ENCRYPTION_KEY}
+      BRIVEN_RESEND_API_KEY: ${BRIVEN_RESEND_API_KEY:-}
+      BRIVEN_GITHUB_CLIENT_ID: ${BRIVEN_GITHUB_CLIENT_ID:-}
+      BRIVEN_GITHUB_CLIENT_SECRET: ${BRIVEN_GITHUB_CLIENT_SECRET:-}
+      BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
+      BRIVEN_MINIO_ENDPOINT: http://minio:9000
+      BRIVEN_MINIO_ACCESS_KEY: briven
+      BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_POSTGRES_PASSWORD}
+
+  runtime:
+    image: ghcr.io/flndrn-dev/briven-runtime:${BRIVEN_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_RUNTIME_PORT: '3003'
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_RUNTIME_EXECUTOR: deno
+      BRIVEN_RUNTIME_BUNDLE_DIR: /var/lib/briven/bundles
+    volumes:
+      - runtime_bundles:/var/lib/briven/bundles
+
+  realtime:
+    image: ghcr.io/flndrn-dev/briven-realtime:${BRIVEN_VERSION:-latest}
+    restart: unless-stopped
+    depends_on: [postgres]
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_REALTIME_PORT: '3004'
+      BRIVEN_API_INTERNAL_URL: http://api:3001
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_data?sslmode=disable
+
+  web:
+    image: ghcr.io/flndrn-dev/briven-web:${BRIVEN_VERSION:-latest}
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+
+  docs:
+    image: ghcr.io/flndrn-dev/briven-docs:${BRIVEN_VERSION:-latest}
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  runtime_bundles:

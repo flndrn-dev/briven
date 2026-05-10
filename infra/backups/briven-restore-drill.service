@@ -1,0 +1,14 @@
+[Unit]
+Description=briven monthly restore drill — verifies pg_dump backups by restoring them into a throwaway database
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/briven-backup.env
+ExecStart=/opt/briven/restore-drill.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target
