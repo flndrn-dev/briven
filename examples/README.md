@@ -5,7 +5,8 @@ each subdirectory is a self-contained briven project you can copy as a starting 
 | example | what it covers |
 |---|---|
 | [todo-app](./todo-app) | the canonical hello-world: schema, four mutations + one reactive query, the react client |
-| (more on the way — chat, counter, file-uploads, oauth-protected api) | |
+| [realtime-chat](./realtime-chat) | two-table schema + per-room reactive queries — a multi-room chat in ~80 lines |
+| (more on the way — counter, file-uploads, oauth-protected api) | |
 
 ## use one of these
 
