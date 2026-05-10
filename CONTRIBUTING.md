@@ -29,7 +29,7 @@ turborepo cache). Subsequent runs are instant.
 ## What to work on
 
 - The repo's TODO list is internal — the public-facing one is
-  [`docs.briven.cloud/roadmap`](https://docs.briven.cloud/roadmap). Anything
+  [`docs.briven.tech/roadmap`](https://docs.briven.tech/roadmap). Anything
   on that page is fair game.
 - Issues tagged `good first issue` on Gitea are scoped for first-time
   contributors and have a paragraph of context attached.
@@ -67,4 +67,4 @@ publicly once a fix is shipped.
 
 `main` is always shippable. Tagged releases (`v0.x.0`) are cut by the maintainer
 when feature batches converge. Self-hosters tracking releases should pin to a
-tag in their compose file; production users on briven.cloud always get `main`.
+tag in their compose file; production users on briven.tech always get `main`.

@@ -18,7 +18,7 @@ export default async function HomePage() {
             briven
           </span>
           <span className="hidden font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)] sm:inline">
-            · cloud
+            · tech
           </span>
         </Link>
 
@@ -30,7 +30,7 @@ export default async function HomePage() {
             pricing
           </Link>
           <Link
-            href="https://docs.briven.cloud"
+            href="https://docs.briven.tech"
             className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           >
             docs
@@ -83,7 +83,7 @@ export default async function HomePage() {
               get started
             </Link>
             <Link
-              href="https://docs.briven.cloud"
+              href="https://docs.briven.tech"
               className="inline-flex h-12 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-6 font-sans font-medium text-[var(--color-text)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease-briven)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)]"
             >
               read the docs
@@ -175,7 +175,7 @@ function InstallBlock() {
         <span className="text-[var(--color-primary)]">npx</span>
         {' briven init'}
         {'\n\n'}
-        <span className="text-[var(--color-text-subtle)]">{'# deploy to briven.cloud'}</span>
+        <span className="text-[var(--color-text-subtle)]">{'# deploy to briven.tech'}</span>
         {'\n'}
         <span className="text-[var(--color-primary)]">npx</span>
         {' briven deploy'}

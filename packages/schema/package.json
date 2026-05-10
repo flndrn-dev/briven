@@ -14,7 +14,7 @@
     "src"
   ],
   "scripts": {
-    "lint": "echo 'lint wired in phase 1'",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/schema.test.ts src/wire.test.ts"
   },

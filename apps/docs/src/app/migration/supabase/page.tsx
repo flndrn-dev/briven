@@ -126,7 +126,7 @@ export default mutation(async (ctx: Ctx, raw: unknown) => {
 
       <Section title="storage port">
         <p>
-          supabase storage → MinIO (briven cloud) or any S3-compatible bucket (self-host).
+          supabase storage → MinIO (briven.tech) or any S3-compatible bucket (self-host).
           the path layout briven uses is <code>p_&lt;projectId&gt;/&lt;userPath&gt;</code> —
           your existing bucket can be cp&apos;d wholesale into the new namespace.{' '}
           <code>briven storage</code> as a CLI command lands with the public beta; until then

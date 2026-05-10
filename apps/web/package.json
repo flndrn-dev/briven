@@ -2,13 +2,13 @@
   "name": "@briven/web",
   "version": "0.0.0",
   "private": true,
-  "description": "briven.cloud — marketing + dashboard",
+  "description": "briven.tech — marketing + dashboard",
   "type": "module",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "echo 'lint wired in phase 1'",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -6,8 +6,8 @@
  *
  *   const client = createBrivenClient({
  *     projectId: 'p_...',
- *     apiOrigin: 'https://api.briven.cloud',
- *     wsOrigin:  'wss://ws.briven.cloud',
+ *     apiOrigin: 'https://api.briven.tech',
+ *     wsOrigin:  'wss://ws.briven.tech',
  *     token:     () => session.token,
  *   });
  *
@@ -113,7 +113,6 @@ export function useQuery<TResult = unknown>(
       handleRef.current = null;
     };
     // argsKey captures arg shape; functionName + client identity are stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, functionName, argsKey]);
 
   const refetch = useCallback(() => {
@@ -136,7 +135,6 @@ export function useQuery<TResult = unknown>(
         }));
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, functionName, argsKey]);
 
   return { ...state, refetch };

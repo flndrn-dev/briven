@@ -103,7 +103,7 @@ export function LandingUserMenu({ user }: { user: UserInfo }) {
             </li>
             <li>
               <AnimatedMenuAnchor
-                href="https://docs.briven.cloud"
+                href="https://docs.briven.tech"
                 icon={BookOpenIcon}
                 label="docs"
                 target="_blank"
@@ -230,7 +230,6 @@ function Avatar({ user, size }: { user: UserInfo; size: number }) {
   const initials = getInitials(user.legalName ?? user.name ?? user.email);
   if (user.image) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={user.image}
         alt=""

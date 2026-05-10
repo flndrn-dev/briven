@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
     shortcut: '/favicon.svg',
   },
-  metadataBase: new URL('https://docs.briven.cloud'),
+  metadataBase: new URL('https://docs.briven.tech'),
 };
 
 export const viewport: Viewport = {

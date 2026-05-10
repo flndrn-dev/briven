@@ -1,5 +1,5 @@
 [Unit]
-Description=briven cloud — fire daily pg_dump backup
+Description=briven.tech — fire daily pg_dump backup
 Documentation=https://code.konnos.org/flndrn/briven/src/branch/main/infra/backups
 
 [Timer]

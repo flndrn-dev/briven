@@ -24,7 +24,7 @@ options:
   --version, -v     print the cli version and exit
   --help, -h        print this help and exit
 
-docs:    https://docs.briven.cloud
+docs:    https://docs.briven.tech
 source:  https://code.konnos.org/flndrn/briven
 `;
 

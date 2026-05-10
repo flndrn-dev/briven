@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { shouldRejectAsCsrf } from './csrf.js';
 
-const trusted = ['https://briven.cloud', 'https://api.briven.cloud'];
+const trusted = ['https://briven.tech', 'https://api.briven.tech'];
 
 describe('shouldRejectAsCsrf', () => {
   test('passes safe methods without inspecting Origin', () => {
@@ -80,7 +80,7 @@ describe('shouldRejectAsCsrf', () => {
         method: 'POST',
         hasSession: true,
         path: '/v1/projects',
-        origin: 'https://briven.cloud',
+        origin: 'https://briven.tech',
         trustedOrigins: trusted,
       }),
     ).toBe(false);
@@ -89,7 +89,7 @@ describe('shouldRejectAsCsrf', () => {
         method: 'DELETE',
         hasSession: true,
         path: '/v1/projects/p_xxx',
-        origin: 'https://api.briven.cloud',
+        origin: 'https://api.briven.tech',
         trustedOrigins: trusted,
       }),
     ).toBe(false);

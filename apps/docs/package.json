@@ -2,13 +2,13 @@
   "name": "@briven/docs",
   "version": "0.0.0",
   "private": true,
-  "description": "docs.briven.cloud — developer documentation (next.js 16 + fumadocs)",
+  "description": "docs.briven.tech — developer documentation (next.js 16 + fumadocs)",
   "type": "module",
   "scripts": {
     "dev": "next dev -p 3002",
     "build": "next build",
     "start": "next start -p 3002",
-    "lint": "echo 'lint wired in phase 1'",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

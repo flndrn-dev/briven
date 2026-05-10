@@ -80,7 +80,7 @@ services:
       # Traefik-only routing; Cloudflare Access fronts the public hostname
       # and injects the cf-access-authenticated-user-email header.
       - 'traefik.enable=true'
-      - 'traefik.http.routers.grafana.rule=Host(`grafana.briven.cloud`)'
+      - 'traefik.http.routers.grafana.rule=Host(`grafana.briven.tech`)'
       - 'traefik.http.routers.grafana.entrypoints=websecure'
       - 'traefik.http.routers.grafana.tls.certresolver=cloudflare'
       - 'traefik.http.services.grafana.loadbalancer.server.port=3000'

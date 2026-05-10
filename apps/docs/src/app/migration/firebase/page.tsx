@@ -170,7 +170,7 @@ console.log('done');`}</Snippet>
 
       <Section title="storage port">
         <p>
-          firebase storage is GCS. briven cloud uses MinIO; self-host is whatever
+          firebase storage is GCS. briven.tech uses MinIO; self-host is whatever
           S3-compatible bucket you point it at. <code>gsutil rsync</code> from your firestore
           bucket into a fresh briven bucket; the path layout is a free choice — keep your
           existing prefix structure and update your function code to read from{' '}

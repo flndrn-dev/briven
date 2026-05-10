@@ -140,7 +140,7 @@ export default function CliPage() {
         <ul className="list-disc pl-5">
           <li>
             <code>BRIVEN_API_ORIGIN</code> — override the control-plane origin for a self-hosted
-            deployment. Default: <code>https://api.briven.cloud</code>.
+            deployment. Default: <code>https://api.briven.tech</code>.
           </li>
           <li>
             <code>XDG_CONFIG_HOME</code> — where credentials are stored, following the XDG spec.

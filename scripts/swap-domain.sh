@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # swap-domain.sh — replace one briven public domain with another across the
-# entire repo. designed for the briven.cloud → briven.tech cutover, but
+# entire repo. designed for the briven.tech → briven.tech cutover, but
 # parameterised so it works for any rename.
 #
 # usage:
-#   ./scripts/swap-domain.sh                              # dry-run, briven.cloud → briven.tech
+#   ./scripts/swap-domain.sh                              # dry-run, briven.tech → briven.tech
 #   ./scripts/swap-domain.sh --apply                      # actually edit
 #   ./scripts/swap-domain.sh --from foo.dev --to bar.dev  # different swap
 #
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-FROM="briven.cloud"
+FROM="briven.tech"
 TO="briven.tech"
 APPLY=0
 
@@ -84,8 +84,8 @@ fi
 for f in "${files[@]}"; do
   tmp="$f.swap.$$"
   # Plain literal substitution — `.` in domain names matches any char in
-  # sed regex, but the only "briven cloud"-shaped strings in the repo are
-  # actual `briven.cloud` URIs, so the false-positive surface is empty.
+  # sed regex, but the only "briven.tech"-shaped strings in the repo are
+  # actual `briven.tech` URIs, so the false-positive surface is empty.
   sed "s|$FROM|$TO|g" "$f" > "$tmp"
   mv "$tmp" "$f"
 done

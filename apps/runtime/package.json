@@ -9,7 +9,7 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "build": "echo 'runtime: no build step — bun runs TS directly'",
-    "lint": "echo 'lint wired in phase 1'",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

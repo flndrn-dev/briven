@@ -1,6 +1,6 @@
-# MIGRATION.md — migrating to briven cloud
+# MIGRATION.md — migrating to briven.tech
 
-This file is the authoritative migration guide. Drop it into any project you want to migrate onto briven cloud (alongside `CLAUDE.md`). It covers every starting point j's products are currently on, plus the common external-user cases for when this goes public in Phase 3.
+This file is the authoritative migration guide. Drop it into any project you want to migrate onto briven.tech (alongside `CLAUDE.md`). It covers every starting point j's products are currently on, plus the common external-user cases for when this goes public in Phase 3.
 
 > This doc gets battle-tested with every migration. If you hit a step that isn't covered or isn't right, fix it here first, then continue the migration. By the time external users read this, every sentence should be proven by a real migration.
 
@@ -17,11 +17,11 @@ Use this when you have an existing project on one of:
 - **drizzle + postgres**
 - **firebase / firestore** (see §8, harder path)
 
-…and you want to move it to briven cloud (hosted) or a self-hosted briven-core instance.
+…and you want to move it to briven.tech (hosted) or a self-hosted briven-core instance.
 
 Do NOT use this doc for:
 
-- Moving between briven cloud projects — planned `briven export` + `briven import` (Phase 3, not yet implemented); for now, fall back to direct `pg_dump` / `pg_restore` against the data-plane Postgres
+- Moving between briven.tech projects — planned `briven export` + `briven import` (Phase 3, not yet implemented); for now, fall back to direct `pg_dump` / `pg_restore` against the data-plane Postgres
 - Moving a briven project between regions — file a support ticket (support flow itself is Phase 3)
 - Migrating only data without schema changes — use `pg_dump` + `pg_restore` directly
 
@@ -32,23 +32,23 @@ Do NOT use this doc for:
 Every briven migration follows the same five principles. If you violate these, you will lose data or break production.
 
 1. **Read before write.** Never run a migration step until you've read this entire file once. Migrations that "go sideways" almost always do so at step 2 because someone skipped step 1.
-2. **Parallel-run, don't switch.** For at least 48 hours, the old system and briven cloud run at the same time, with the same data, serving the same traffic. No cutover before the parallel-run window.
+2. **Parallel-run, don't switch.** For at least 48 hours, the old system and briven.tech run at the same time, with the same data, serving the same traffic. No cutover before the parallel-run window.
 3. **Back up twice.** Before you touch anything, take two independent backups to two independent destinations. See §3.
 4. **Migrate schema first, data second, functions third, traffic last.** In that order. Always.
 5. **One product at a time.** Never migrate two things in parallel. The cognitive load of a migration is enough; do not double it.
 
 ---
 
-## 1.5 briven cloud — what's live today vs still coming
+## 1.5 briven.tech — what's live today vs still coming
 
 Before you plan a migration, read this matrix. This doc describes the _intended_ migration flow, but not every piece is implemented yet. Rows flagged `⏳` require a manual fallback (documented inline where the command appears).
 
 | Feature                                                                                                             | State                                                  | Notes                                                                                                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Control-plane API (`api.briven.cloud`)                                                                              | ✅ live                                                | Hono on Bun, KVM4                                                                                                                                                                                                                                                                                                       |
+| Control-plane API (`api.briven.tech`)                                                                              | ✅ live                                                | Hono on Bun, KVM4                                                                                                                                                                                                                                                                                                       |
 | Control-plane Postgres (meta-DB)                                                                                    | ✅ live                                                | Dokploy-hosted, `briven_control`                                                                                                                                                                                                                                                                                        |
 | Data-plane Postgres (customer schemas)                                                                              | ✅ live                                                | Same KVM today; splits to dedicated in Phase 2 M3                                                                                                                                                                                                                                                                       |
-| Dashboard (`dev.briven.cloud`)                                                                                      | ✅ live                                                | Projects, billing, settings, admin pages all work                                                                                                                                                                                                                                                                       |
+| Dashboard (`dev.briven.tech`)                                                                                      | ✅ live                                                | Projects, billing, settings, admin pages all work                                                                                                                                                                                                                                                                       |
 | Multi-tenant orgs (`organizations`, `org_members`)                                                                  | ✅ live                                                | Every user has an auto-created `personal=true` org. See §2.5                                                                                                                                                                                                                                                            |
 | Better Auth via magic link (Resend)                                                                                 | ✅ live                                                | `briven.session_token` cookie (prod: `__Secure-` prefix)                                                                                                                                                                                                                                                                |
 | GitHub OAuth                                                                                                        | ⚙️ env wired                                           | Flow not verified end-to-end yet                                                                                                                                                                                                                                                                                        |
@@ -92,7 +92,7 @@ Before touching anything:
 
 Write this down in a `migration-inventory.md` next to this file. If you skip this step, later steps will surprise you.
 
-### Step 2 — Set up the briven cloud project
+### Step 2 — Set up the briven.tech project
 
 **Prerequisites on your briven account before you start:**
 
@@ -116,8 +116,8 @@ Write this down in a `migration-inventory.md` next to this file. If you skip thi
   (Phase 0–2, while the repo is private: replace `@briven/cli` with the local tarball path, e.g. `file:/path/to/briven-cli-0.1.0.tgz`. Phase 3 flips this to `^0.1.0` from the real npm registry.)
 - [ ] `briven login` (magic link today; GitHub OAuth ⚙️ pending verification)
 - [ ] `briven init` in the target repo — this creates the `briven/` folder
-- [ ] Create the project on briven cloud:
-  - **Recommended (works today):** open the dashboard at `dev.briven.cloud/dashboard/projects`, click **New project**, choose name + slug + region. The project auto-attaches to your personal org.
+- [ ] Create the project on briven.tech:
+  - **Recommended (works today):** open the dashboard at `dev.briven.tech/dashboard/projects`, click **New project**, choose name + slug + region. The project auto-attaches to your personal org.
   - **Planned (not yet implemented):** `briven link --create` from the CLI will do the same without leaving the terminal.
 - [ ] Note down the project ID (format: `p_xxxxxxx`) and the admin key — store in 1Password/Bitwarden
 - [ ] Configure the region — pick the briven region closest to your users (EU available today; US/APAC planned). Default is `eu-west-1`.
@@ -293,9 +293,9 @@ This is the step most teams skip. Don't.
 
 ---
 
-## 2.5 Organisations on briven cloud
+## 2.5 Organisations on briven.tech
 
-briven cloud is multi-tenant at the **organisation** level, not the user level. When you sign up, a `personal=true` organisation is auto-created for you and you become its `owner` in `org_members`. Every project and every subscription attaches to an org via `org_id` — not to a user.
+briven.tech is multi-tenant at the **organisation** level, not the user level. When you sign up, a `personal=true` organisation is auto-created for you and you become its `owner` in `org_members`. Every project and every subscription attaches to an org via `org_id` — not to a user.
 
 Why a migrating agent needs to know this:
 
@@ -330,7 +330,7 @@ Backups are not optional. This section is what "back up twice" means concretely.
 
 ### After cutover
 
-- **briven cloud auto-backups kick in** — daily pg_dump per project, 30-day retention on Pro/Team
+- **briven.tech auto-backups kick in** — daily pg_dump per project, 30-day retention on Pro/Team
 - For Pro+ projects: WAL archiving enables point-in-time recovery
 - **Your own off-briven backup**: weekly `briven export` to your own S3 bucket, forever
 
@@ -571,7 +571,7 @@ Don't start the migration until ALL of these are true:
 - [ ] You have 4+ hours of focused time ahead — no meetings, no interruptions
 - [ ] You have rollback access to the source (admin credentials, not just the app's connection string)
 - [ ] You have told anyone depending on the product that a migration window is coming
-- [ ] Your briven cloud project is created and the admin key is stored
+- [ ] Your briven.tech project is created and the admin key is stored
 - [ ] Your briven profile has legal name + billing address filled in; VAT ID if EU (only _required_ for Pro/Team — Free works without)
 - [ ] Your local dev environment can reach briven (`briven whoami` works)
 
@@ -635,7 +635,7 @@ Every migration needs to answer "how do users sign in after the cutover." Here's
 - **Magic link via Resend** is the canonical sign-in flow — `/v1/auth/sign-in/magic-link` sends a one-time link, `/v1/auth/magic-link/verify` exchanges it for a session.
 - **Session cookie**: `briven.session_token` in dev, `__Secure-briven.session_token` in prod (the `__Secure-` prefix enforces HTTPS + host-only per RFC-6265bis). Sessions live in the `sessions` table (`userId`, `token`, `expiresAt`, `ipAddress`, `userAgent`).
 - **`users`, `accounts`, `sessions`, `verifications`** are the four auth tables in the control-plane meta-DB. `accounts` holds per-provider identity links (one row per OAuth provider the user uses); `verifications` holds short-lived magic-link tokens.
-- **GitHub OAuth**: `BRIVEN_GITHUB_CLIENT_ID` / `BRIVEN_GITHUB_CLIENT_SECRET` are wired; the full flow is unverified end-to-end. If you're migrating from a GitHub-OAuth-dependent app, test the round-trip against `dev.briven.cloud` before relying on it.
+- **GitHub OAuth**: `BRIVEN_GITHUB_CLIENT_ID` / `BRIVEN_GITHUB_CLIENT_SECRET` are wired; the full flow is unverified end-to-end. If you're migrating from a GitHub-OAuth-dependent app, test the round-trip against `dev.briven.tech` before relying on it.
 - **Email + password**: supported by Better Auth, not exercised yet. If your source app requires it, either verify it works before migrating or fall back to magic link.
 
 ### Identity translation table
@@ -674,7 +674,7 @@ If you're stuck:
 
 - **Phase 0-2** (j's own migrations): update this doc with what broke, keep going
 - **Phase 3** (private beta): a dedicated support channel will be announced — do **not** assume a mailto: address works today. Support channel is an explicit Phase 3 deliverable.
-- **Phase 4+** (public): docs.briven.cloud/support, plus community channel
+- **Phase 4+** (public): docs.briven.tech/support, plus community channel
 
 Never, ever blindly retry a migration step that failed. Read the error, read this doc's relevant section, then retry.
 

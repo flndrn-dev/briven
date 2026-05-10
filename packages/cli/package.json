@@ -28,7 +28,7 @@
   },
   "scripts": {
     "build": "tsup && chmod +x bin/briven.js",
-    "lint": "echo 'lint wired in phase 1'",
+    "lint": "eslint . --max-warnings 0",
     "pack:tarball": "pnpm build && pnpm pack --pack-destination ../../dist-pack",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/cli.test.ts",
@@ -67,6 +67,6 @@
     "url": "git+https://code.konnos.org/flndrn/briven.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://docs.briven.cloud",
+  "homepage": "https://docs.briven.tech",
   "bugs": "https://code.konnos.org/flndrn/briven/issues"
 }

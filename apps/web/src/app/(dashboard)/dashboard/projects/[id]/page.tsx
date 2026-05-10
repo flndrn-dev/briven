@@ -21,7 +21,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     `/v1/projects/${id}/deployments?limit=5`,
   ).catch(() => ({ deployments: [] as Deployment[] }));
 
-  const endpoint = `${project.slug}.apps.briven.cloud`;
+  const endpoint = `${project.slug}.apps.briven.tech`;
   const latest = deployments[0];
 
   return (

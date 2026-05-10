@@ -75,9 +75,9 @@ export const auth = betterAuth({
         ? { enabled: true, domain: `.${env.BRIVEN_DOMAIN}` }
         : { enabled: false },
     defaultCookieAttributes: {
-      // 'strict' — kills cross-site form-POST CSRF. Dashboard at briven.cloud
-      // and API at api.briven.cloud are same-site (registrable domain
-      // briven.cloud), so the dashboard's authenticated XHR/fetch keeps
+      // 'strict' — kills cross-site form-POST CSRF. Dashboard at briven.tech
+      // and API at api.briven.tech are same-site (registrable domain
+      // briven.tech), so the dashboard's authenticated XHR/fetch keeps
       // working; only cross-site navigations from third-party origins lose
       // the cookie.
       sameSite: 'strict',

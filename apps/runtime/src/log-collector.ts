@@ -140,7 +140,6 @@ export function ingestIsolateLogLine(
   projectId: string,
   envValues: readonly string[] = [],
   sink: (payload: string) => void = (s) => {
-    // eslint-disable-next-line no-console
     console.error(s);
   },
 ): void {

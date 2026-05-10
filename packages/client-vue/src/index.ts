@@ -7,8 +7,8 @@
  *   // once at app boot, before app.mount()
  *   setBrivenClient(createBrivenClient({
  *     projectId: 'p_...',
- *     apiOrigin: 'https://api.briven.cloud',
- *     wsOrigin:  'wss://ws.briven.cloud',
+ *     apiOrigin: 'https://api.briven.tech',
+ *     wsOrigin:  'wss://ws.briven.tech',
  *     token:     () => session.token,
  *   }));
  *

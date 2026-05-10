@@ -6,7 +6,7 @@ briven is an open-core, reactive backend platform for typescript developers. con
 
 three surfaces:
 
-- [**briven.cloud**](https://briven.cloud) — managed hosted service
+- [**briven.tech**](https://briven.tech) — managed hosted service
 - **briven-core** — the open-source engine, self-hostable under agpl-3.0
 - **[`npx briven`](https://www.npmjs.com/package/@briven/cli)** — the developer cli, mit-licensed
 
@@ -18,9 +18,9 @@ pre-build. phase 0 foundations in progress. this repo is private until phase 3 (
 
 ```
 apps/
-  web/        briven.cloud — marketing + dashboard (next.js 16)
-  docs/       docs.briven.cloud — documentation (next.js 16 + fumadocs)
-  api/        api.briven.cloud — control plane (hono on bun)
+  web/        briven.tech — marketing + dashboard (next.js 16)
+  docs/       docs.briven.tech — documentation (next.js 16 + fumadocs)
+  api/        api.briven.tech — control plane (hono on bun)
   runtime/    function runtime host (deno + node bridge)
   realtime/   websocket service for reactive queries
   studio/     embedded data browser
@@ -84,5 +84,5 @@ lowercase everywhere. dark-theme only. one primary accent: `#00e87a`. assets in 
 ## links
 
 - source: [code.konnos.org/flndrn/briven](https://code.konnos.org/flndrn/briven)
-- managed product: [briven.cloud](https://briven.cloud)
-- docs: [docs.briven.cloud](https://docs.briven.cloud)
+- managed product: [briven.tech](https://briven.tech)
+- docs: [docs.briven.tech](https://docs.briven.tech)

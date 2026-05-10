@@ -30,7 +30,7 @@
     "src"
   ],
   "scripts": {
-    "lint": "echo 'lint wired in phase 1'",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/observability/redaction.test.ts src/observability/logger.test.ts"
   },

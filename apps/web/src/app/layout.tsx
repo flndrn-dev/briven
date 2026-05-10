@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'briven',
     description: 'the postgres backend you actually own',
-    url: 'https://briven.cloud',
+    url: 'https://briven.tech',
     siteName: 'briven',
     locale: 'en_US',
     type: 'website',
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     title: 'briven',
     description: 'the postgres backend you actually own',
   },
-  metadataBase: new URL('https://briven.cloud'),
+  metadataBase: new URL('https://briven.tech'),
 };
 
 export const viewport: Viewport = {

@@ -10,10 +10,10 @@ export function printNotImplemented(command: string): void {
   blankLine();
   const when = PHASE_NOTE[command];
   if (when) {
-    error(`scheduled for ${when} — see the changelog at docs.briven.cloud`);
+    error(`scheduled for ${when} — see the changelog at docs.briven.tech`);
   } else {
     error('unknown command');
   }
-  link('https://docs.briven.cloud');
+  link('https://docs.briven.tech');
   process.exit(1);
 }

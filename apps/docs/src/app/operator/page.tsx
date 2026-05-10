@@ -190,7 +190,7 @@ docker compose up -d api`}</Snippet>
       <Section title="incident disclosure">
         <p>
           incidents that touch customer data — get a short message out within 72h and post the
-          full post-mortem at <code>docs.briven.cloud/changelog</code> within 30 days. template:
+          full post-mortem at <code>docs.briven.tech/changelog</code> within 30 days. template:
         </p>
         <Snippet>{`Title: <one-line summary, no jargon>
 Detected: <utc>

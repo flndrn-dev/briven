@@ -32,7 +32,6 @@ export function startLogFanoutWorker(): void {
 async function runLoop(): Promise<void> {
   let attempt = 0;
   let lastId = '$'; // start from NEW entries on fresh boot
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const sharedRedis = getRedis();
     if (!sharedRedis) {

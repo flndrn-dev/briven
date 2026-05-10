@@ -67,7 +67,7 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
       body: JSON.stringify({
         email,
         role,
-        callbackURL: `https://briven.cloud/dashboard/invitations/accept`,
+        callbackURL: `https://briven.tech/dashboard/invitations/accept`,
       }),
     });
     if (!res.ok) {

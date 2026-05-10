@@ -202,7 +202,6 @@ function sameSchema(a: SchemaDef | null, b: SchemaDef | null): boolean {
 async function streamLogs(cred: ProjectCredential, projectId: string): Promise<void> {
   const url = `${cred.apiOrigin}/v1/projects/${projectId}/logs/stream`;
   let backoff = 1_000;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const res = await fetch(url, {

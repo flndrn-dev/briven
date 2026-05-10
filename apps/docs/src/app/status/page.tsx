@@ -13,17 +13,17 @@ interface ServiceProbe {
 const PROBES: readonly ServiceProbe[] = [
   {
     name: 'api',
-    url: process.env.BRIVEN_STATUS_API_URL ?? 'https://api.briven.cloud/ready',
+    url: process.env.BRIVEN_STATUS_API_URL ?? 'https://api.briven.tech/ready',
     description: 'control plane — accounts, projects, billing, deploy intake',
   },
   {
     name: 'runtime',
-    url: process.env.BRIVEN_STATUS_RUNTIME_URL ?? 'https://api.briven.cloud/v1/runtime/health',
+    url: process.env.BRIVEN_STATUS_RUNTIME_URL ?? 'https://api.briven.tech/v1/runtime/health',
     description: 'function host — deno isolates, cold-start budget',
   },
   {
     name: 'realtime',
-    url: process.env.BRIVEN_STATUS_REALTIME_URL ?? 'https://api.briven.cloud/v1/realtime/health',
+    url: process.env.BRIVEN_STATUS_REALTIME_URL ?? 'https://api.briven.tech/v1/realtime/health',
     description: 'reactive query websocket service',
   },
 ];

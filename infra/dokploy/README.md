@@ -47,7 +47,7 @@ on dokploy itself the equivalent flow is:
      -c "UPDATE users SET is_admin = true WHERE email = '<your-email>'"
    ```
 3. create your first project from the dashboard. the data-plane schema (`proj_<projectId>`) provisions automatically.
-4. install the cli in any project repo: `pnpm add -D @briven/cli` and follow the [quickstart](https://docs.briven.cloud/quickstart).
+4. install the cli in any project repo: `pnpm add -D @briven/cli` and follow the [quickstart](https://docs.briven.tech/quickstart).
 
 ## what each container does
 

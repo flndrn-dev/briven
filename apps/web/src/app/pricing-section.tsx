@@ -15,7 +15,7 @@ interface Tier {
 }
 
 /**
- * Pricing copy for briven cloud.
+ * Pricing copy for briven.tech.
  *
  * Model: every tier includes a monthly allowance, then meters beyond it.
  * Phase 2/3 enforces hard caps at the included limits; Phase 4 (public beta)
