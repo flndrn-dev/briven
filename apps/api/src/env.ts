@@ -64,9 +64,14 @@ const envSchema = z.object({
   BRIVEN_DOKPLOY_API_URL: z.string().url().optional(),
   BRIVEN_DOKPLOY_API_TOKEN: z.string().optional(),
 
-  // GitHub OAuth — used by Better Auth for the "sign in with github" flow.
-  BRIVEN_GITHUB_CLIENT_ID: z.string().optional(),
-  BRIVEN_GITHUB_CLIENT_SECRET: z.string().optional(),
+  // Google OAuth — used by Better Auth for the "sign in with google" flow.
+  BRIVEN_GOOGLE_CLIENT_ID: z.string().optional(),
+  BRIVEN_GOOGLE_CLIENT_SECRET: z.string().optional(),
+
+  // Public domain (registrable, no scheme). Drives cross-subdomain cookie
+  // scope so the session cookie set on api.<domain> is readable by the
+  // dashboard at <domain> (and docs/realtime). Required in production.
+  BRIVEN_DOMAIN: z.string().optional(),
 
   // Web origin for email link callbacks.
   BRIVEN_WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
@@ -87,7 +92,7 @@ const envSchema = z.object({
 
   // Public-signups gate. Default false — invite-only beta. Flip to `true`
   // when public open-signups land per BUILD_PLAN Phase 4. Affects every
-  // first-time auth path (email+password, magic link, GitHub OAuth);
+  // first-time auth path (email+password, magic link, Google OAuth);
   // existing users always retain sign-IN regardless of this flag.
   BRIVEN_OPEN_SIGNUPS: z
     .string()

@@ -15,6 +15,12 @@ export default async function SignInPage({
   const params = await searchParams;
   const next = params.next ?? '/dashboard';
 
+  // Public api origin — surfaced via NEXT_PUBLIC_BRIVEN_API_ORIGIN so the
+  // signin form posts directly to it instead of going through Next.js's
+  // /api/* rewrite (which proxy edges sometimes mangle).
+  const apiOrigin = process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+  const hasGoogle = process.env.NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH === 'true';
+
   return (
     <main className="relative flex min-h-dvh items-center justify-center bg-[var(--color-bg)] px-6 text-[var(--color-text)]">
       <div className="w-full max-w-sm">
@@ -26,7 +32,7 @@ export default async function SignInPage({
         <h1 className="font-mono text-2xl tracking-tight">sign in</h1>
 
         <div className="mt-8">
-          <SignInForm next={next} />
+          <SignInForm next={next} apiOrigin={apiOrigin} hasGoogle={hasGoogle} />
         </div>
 
         <p className="mt-10 font-mono text-xs text-[var(--color-text-subtle)]">
