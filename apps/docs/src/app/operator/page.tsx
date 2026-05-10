@@ -44,7 +44,7 @@ export default function OperatorPage() {
 
       <Section title="magic link doesn't arrive">
         <p>
-          if <code>BRIVEN_MITTERA_API_URL</code> or <code>BRIVEN_MITTERA_SIGNING_SECRET</code> is
+          if <code>BRIVEN_MITTERA_API_URL</code> or <code>BRIVEN_MITTERA_API_KEY</code> is
           unset, briven prints the magic link to api stdout instead of sending email. that&rsquo;s
           intentional for self-host first boot. find it:
         </p>

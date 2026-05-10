@@ -22,7 +22,8 @@ drop-in template for [coolify 4.x](https://coolify.io). same compose as `infra/d
    | name                          | what it enables                            |
    | ----------------------------- | ------------------------------------------ |
    | `BRIVEN_MITTERA_API_URL`      | `https://api.mittera.eu` (or your install) |
-   | `BRIVEN_MITTERA_SIGNING_SECRET` | shared HMAC secret with mittera          |
+   | `BRIVEN_MITTERA_API_KEY`      | bearer token for outbound /api/v1/emails   |
+   | `BRIVEN_MITTERA_WEBHOOK_SECRET` | HMAC secret for inbound webhook verify   |
    | `BRIVEN_GITHUB_CLIENT_ID`     | github oauth signin                        |
    | `BRIVEN_GITHUB_CLIENT_SECRET` | github oauth signin                        |
 

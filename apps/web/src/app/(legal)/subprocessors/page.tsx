@@ -31,7 +31,7 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
     location: 'EU (operator-controlled)',
     status: 'planned',
     notes:
-      "Sister product to briven, also operated by the briven Operator. Outbound sends are signed with HMAC-SHA256 against a shared secret (Stripe-style) and posted to https://api.mittera.eu/v1/send; delivery / bounce / complaint events come back to briven.tech/api/mittera-webhook with the same signature scheme. Until BRIVEN_MITTERA_API_URL and BRIVEN_MITTERA_SIGNING_SECRET are configured, magic-link emails print to the api container stdout for first-user bootstrap.",
+      "Sister product to briven, also operated by the briven Operator. Outbound sends authenticate with a Bearer API key (POST https://api.mittera.eu/api/v1/emails); delivery / bounce / complaint events come back to https://api.briven.tech/mittera-webhook signed with HMAC-SHA256 of `${ts_ms}.${body}` and verified against BRIVEN_MITTERA_WEBHOOK_SECRET. Until BRIVEN_MITTERA_API_URL and BRIVEN_MITTERA_API_KEY are configured, magic-link emails print to the api container stdout for first-user bootstrap.",
   },
   {
     name: 'Polar Software Inc.',
