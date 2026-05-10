@@ -24,13 +24,18 @@ import { invokeRouter } from './routes/invoke.js';
 import { logsRouter } from './routes/logs.js';
 import { meRouter } from './routes/me.js';
 import { mitteraWebhookRouter } from './routes/mittera-webhook.js';
+import { polarWebhookRouter } from './routes/polar-webhook.js';
 import { projectEnvRouter } from './routes/project-env.js';
 import { membersRouter } from './routes/project-members.js';
 import { projectsRouter } from './routes/projects.js';
 import { rootRouter } from './routes/root.js';
 import { studioRouter } from './routes/studio.js';
 import { usageRouter } from './routes/usage.js';
-import { startLogFanoutWorker, startLogRetentionCron } from './workers/log-fanout.js';
+import {
+  startAuditRetentionCron,
+  startLogFanoutWorker,
+  startLogRetentionCron,
+} from './workers/log-fanout.js';
 
 type AppEnv = {
   Variables: {
@@ -80,6 +85,7 @@ app.route('/', abuseRouter);
 app.route('/', studioRouter);
 app.route('/', exportRouter);
 app.route('/', mitteraWebhookRouter);
+app.route('/', polarWebhookRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);
@@ -90,6 +96,7 @@ log.info('api_boot', { port: env.BRIVEN_API_PORT, origin: env.BRIVEN_API_ORIGIN 
 // isn't configured (log-fanout sleeps, retention prunes nothing).
 startLogFanoutWorker();
 startLogRetentionCron();
+startAuditRetentionCron();
 
 export default {
   port: env.BRIVEN_API_PORT,

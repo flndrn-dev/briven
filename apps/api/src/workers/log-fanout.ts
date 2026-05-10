@@ -2,7 +2,13 @@ import { newId } from '@briven/shared';
 import { and, eq, isNull, lt, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { functionLogs, projects, type NewFunctionLog, type ProjectTier } from '../db/schema.js';
+import {
+  auditLogs,
+  functionLogs,
+  projects,
+  type NewFunctionLog,
+  type ProjectTier,
+} from '../db/schema.js';
 import { getRedis } from '../lib/redis.js';
 import { log } from '../lib/logger.js';
 
@@ -257,6 +263,57 @@ export function startLogRetentionCron(): void {
   // the previous tick fired a few minutes before), then every 6h.
   setTimeout(run, 30_000);
   setInterval(run, RETENTION_TICK_MS);
+}
+
+/* ─── audit-log retention (privacy policy §5) ───────────────────────── */
+// Privacy policy commits to a 13-month audit retention window. Anything
+// older gets deleted on a daily sweep. Volume is low (a few hundred rows
+// per day at our current scale) so we don't need batched deletes; the
+// single statement runs in ms.
+
+export const AUDIT_RETENTION_DAYS = 30 * 13; // 13 months ≈ 390 days
+
+/**
+ * Cutoff date for audit-log retention based on `now`. Extracted so the
+ * boundary logic is unit-testable without standing up the DB.
+ */
+export function auditRetentionCutoff(nowMs: number): Date {
+  return new Date(nowMs - AUDIT_RETENTION_DAYS * 86_400_000);
+}
+
+export async function pruneOldAuditLogs(): Promise<number> {
+  const db = getDb();
+  const cutoff = auditRetentionCutoff(Date.now());
+  const res = await db
+    .delete(auditLogs)
+    .where(lt(auditLogs.createdAt, cutoff))
+    .returning({ id: auditLogs.id });
+  if (res.length > 0) {
+    log.info('audit_logs_pruned', {
+      count: res.length,
+      retentionDays: AUDIT_RETENTION_DAYS,
+      cutoff: cutoff.toISOString(),
+    });
+  }
+  return res.length;
+}
+
+// 24h between runs. Audit volume is low so checking more often wastes
+// db round-trips for no operational benefit.
+const AUDIT_RETENTION_TICK_MS = 24 * 60 * 60 * 1000;
+
+export function startAuditRetentionCron(): void {
+  const run = (): void => {
+    void pruneOldAuditLogs().catch((err: unknown) => {
+      log.warn('audit_logs_prune_failed', {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
+  // 60s after boot (small offset from function-logs cron at 30s so a
+  // fresh boot doesn't fire both simultaneously), then daily.
+  setTimeout(run, 60_000);
+  setInterval(run, AUDIT_RETENTION_TICK_MS);
 }
 
 function sleep(ms: number): Promise<void> {
