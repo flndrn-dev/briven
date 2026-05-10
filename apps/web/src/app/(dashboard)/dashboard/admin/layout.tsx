@@ -40,6 +40,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         >
           abuse reports
         </Link>
+        <Link
+          href="/dashboard/admin/email-events"
+          className="px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        >
+          email events
+        </Link>
       </nav>
       <section>{children}</section>
     </div>

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { newId } from '@briven/shared';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, like } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { auditLogs, type NewAuditLog } from '../db/schema.js';
@@ -83,6 +83,36 @@ export async function listAuditForProject(projectId: string, limit = 100): Promi
     })
     .from(auditLogs)
     .where(eq(auditLogs.projectId, projectId))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({
+    ...r,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+  }));
+}
+
+/**
+ * Recent platform-level audit entries matching an action prefix
+ * (e.g. "mittera.email.") — used by the admin dashboard to render
+ * email-event history without provisioning a dedicated table.
+ * Newest first; both project-scoped and platform-wide rows surface.
+ */
+export async function listAuditByActionPrefix(
+  prefix: string,
+  limit = 200,
+): Promise<AuditRow[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      actorId: auditLogs.actorId,
+      ipHash: auditLogs.ipHash,
+      metadata: auditLogs.metadata,
+      createdAt: auditLogs.createdAt,
+    })
+    .from(auditLogs)
+    .where(like(auditLogs.action, `${prefix}%`))
     .orderBy(desc(auditLogs.createdAt))
     .limit(limit);
   return rows.map((r) => ({
