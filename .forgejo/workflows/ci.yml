@@ -1,0 +1,65 @@
+# Forgejo Actions — runs on every push and pull-request to main.
+# If you don't have a runner registered yet:
+#   docker run -d --name forgejo-runner --restart=unless-stopped \
+#     -v $PWD/runner:/data \
+#     code.forgejo.org/forgejo/runner:6 \
+#     forgejo-runner register --no-interactive \
+#       --instance https://code.konnos.org \
+#       --token <token-from-Site Admin → Runners→ Create Runner> \
+#       --name briven-ci \
+#       --labels docker
+# Until then the workflow queues silently — no harm.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run on the same ref when a new push lands —
+# saves runner minutes during quick iteration.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: lint · typecheck · test
+    runs-on: docker
+    container:
+      image: oven/bun:1.3
+    steps:
+      - name: checkout
+        uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: install pnpm
+        run: |
+          npm install -g pnpm@9.12.0
+          pnpm --version
+
+      - name: cache pnpm store
+        uses: https://code.forgejo.org/actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: pnpm-
+
+      - name: install
+        # frozen lockfile = lockfile drift fails the build,
+        # which is what we want.
+        run: pnpm install --frozen-lockfile
+
+      - name: lint
+        run: pnpm -r lint
+
+      - name: typecheck
+        run: pnpm -r typecheck
+
+      - name: test
+        # bun is already in the container image; -r runs each
+        # workspace's own test script.
+        run: pnpm -r test
