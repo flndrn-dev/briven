@@ -3,10 +3,26 @@ import Link from 'next/link';
 
 import { DashboardSidebar } from './dashboard-sidebar';
 import { SignOutButton } from './sign-out-button';
+import { apiJson } from '../../lib/api';
 import { requireUser } from '../../lib/session';
 
+interface BuildInfo {
+  buildSha: string;
+  buildAt: string;
+}
+
+async function fetchBuildInfo(): Promise<BuildInfo | null> {
+  // /info is unauthenticated + cheap. If it ever fails (dev mode,
+  // old deploy), suppress — the footer just doesn't render the sha.
+  try {
+    return await apiJson<BuildInfo>('/info');
+  } catch {
+    return null;
+  }
+}
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
+  const [user, info] = await Promise.all([requireUser(), fetchBuildInfo()]);
 
   return (
     <div className="flex h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
@@ -15,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Link href="/dashboard" className="flex items-center gap-3" aria-label="briven dashboard">
             <Image src="/icon.svg" alt="" width={24} height={24} priority />
             <span className="font-mono text-sm">briven</span>
-            <span className="font-mono text-xs text-[var(--color-text-subtle)]">· cloud</span>
+            <span className="font-mono text-xs text-[var(--color-text-subtle)]">· tech</span>
           </Link>
 
           <div className="flex items-center gap-4">
@@ -47,6 +63,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
         />
         <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
+
+      <footer className="shrink-0 border-t border-[var(--color-border-subtle)]">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-2 font-mono text-[10px] text-[var(--color-text-subtle)]">
+          <span>
+            built with <span className="text-[#e8344a]">♥</span> in Flanders
+            <span className="ml-3">flndrn Limited, Limassol, Cyprus</span>
+          </span>
+          {info ? (
+            <span title={`built ${info.buildAt}`}>build {info.buildSha.slice(0, 7)}</span>
+          ) : null}
+        </div>
+      </footer>
     </div>
   );
 }
