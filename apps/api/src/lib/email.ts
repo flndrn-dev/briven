@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { env } from '../env.js';
+import { isSuppressed } from '../services/suppressions.js';
 import { log } from './logger.js';
 
 /**
@@ -48,6 +49,19 @@ function isConfigured(): boolean {
 }
 
 async function send(label: string, args: SendArgs): Promise<void> {
+  // Suppression guard — never POST to mittera for a recipient on the
+  // local suppression list (permanent bounce, complaint, mittera-side
+  // suppression). Cheaper than a 4xx + retry storm; protects sender
+  // reputation from re-sending to a known-bad address.
+  if (await isSuppressed(args.to)) {
+    log.warn(`${label}_recipient_suppressed`, {
+      // recipient logged ONLY at this stage — already on our suppression
+      // list, not new PII.
+      to: args.to,
+    });
+    return;
+  }
+
   // Dev fallback: print so j can complete bootstrap without external email.
   if (!isConfigured()) {
     log.warn(`${label}_logged_only`);

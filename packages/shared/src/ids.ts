@@ -21,7 +21,8 @@ export type IdPrefix =
   | 'fn' // function record
   | 'ev' // event
   | 'inv' // invocation — per-call id attached to function logs
-  | 'iso'; // isolate — per-process id used by the runtime pool
+  | 'iso' // isolate — per-process id used by the runtime pool
+  | 'sup'; // email suppression entry
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;
