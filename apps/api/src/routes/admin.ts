@@ -22,6 +22,7 @@ import {
   unsuspendUser,
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
+import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
 
@@ -75,6 +76,60 @@ adminRouter.get('/v1/admin/email-events', async (c) => {
     createdAt: r.createdAt,
   }));
   return c.json({ events });
+});
+
+/**
+ * Suppression list — emails we won't send to. Populated by the mittera
+ * webhook on permanent bounces, complaints, and mittera-side
+ * suppressions. Operator can also suppress / unsuppress manually.
+ */
+adminRouter.get('/v1/admin/email-suppressions', async (c) => {
+  const rows = await listSuppressions(500);
+  return c.json({ suppressions: rows });
+});
+
+const suppressActionSchema = z.object({
+  email: z.string().email(),
+  reason: z.enum(['permanent_bounce', 'complaint', 'mittera_suppressed', 'manual']).optional(),
+  detail: z.string().max(240).optional(),
+});
+
+adminRouter.post('/v1/admin/email-suppressions', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = suppressActionSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const row = await suppress({
+    email: parsed.data.email,
+    reason: parsed.data.reason ?? 'manual',
+    detail: parsed.data.detail ?? null,
+  });
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.email.suppress',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { email: parsed.data.email, reason: parsed.data.reason ?? 'manual' },
+  });
+  return c.json({ suppressed: parsed.data.email, created: Boolean(row) });
+});
+
+adminRouter.delete('/v1/admin/email-suppressions/:email', async (c) => {
+  const actor = c.get('user')!;
+  const email = decodeURIComponent(c.req.param('email'));
+  const removed = await unsuppress(email);
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.email.unsuppress',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { email },
+  });
+  return c.json({ unsuppressed: email, removed });
 });
 
 async function parseUserAction(c: Context<AppEnv>) {

@@ -441,6 +441,40 @@ export const auditLogs = pgTable(
   }),
 );
 
+/* ─── email_suppressions ──────────────────────────────────────────── */
+// Recipients we won't send to. Populated from mittera webhook events
+// (email.bounced+permanent, email.complained, email.suppressed) and
+// optionally by operator action. The outbound send path (lib/email.ts)
+// short-circuits when the recipient is found here.
+export const suppressionReason = [
+  'permanent_bounce',
+  'complaint',
+  'mittera_suppressed',
+  'manual',
+] as const;
+
+export const emailSuppressions = pgTable(
+  'email_suppressions',
+  {
+    id: id(),
+    // Stored lower-case so the lookup is case-insensitive without
+    // requiring an expression index.
+    email: text('email').notNull().unique(),
+    reason: text('reason', { enum: suppressionReason }).notNull(),
+    // Free-form context from the webhook event (bounce.message,
+    // complaint reason text, suppression source). Never includes PII
+    // beyond the email itself.
+    detail: text('detail'),
+    // The mittera event id that produced this row (idempotency).
+    sourceEventId: text('source_event_id'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    emailIdx: index('email_suppressions_email_idx').on(t.email),
+    createdIdx: index('email_suppressions_created_idx').on(t.createdAt),
+  }),
+);
+
 /* ─── type exports ────────────────────────────────────────────────── */
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -454,3 +488,5 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type FunctionLog = typeof functionLogs.$inferSelect;
 export type NewFunctionLog = typeof functionLogs.$inferInsert;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+export type EmailSuppression = typeof emailSuppressions.$inferSelect;
+export type NewEmailSuppression = typeof emailSuppressions.$inferInsert;
