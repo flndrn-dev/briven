@@ -55,10 +55,14 @@ adminRouter.get('/v1/admin/projects', async (c) => {
  * compact shape the dashboard renders without further normalisation.
  */
 adminRouter.get('/v1/admin/email-events', async (c) => {
-  const rows = await listAuditByActionPrefix('mittera.email.', 200);
+  // Match both shapes during the audit-log changeover: the old
+  // double-prefixed `mittera.email.*` rows (from before 2026-05-10
+  // 22:00 UTC) and the new single-prefixed `mittera.*` rows.
+  const rows = await listAuditByActionPrefix('mittera.', 200);
   const events = rows.map((r) => ({
     id: r.id,
-    eventType: r.action.replace(/^mittera\.email\./, ''),
+    // Strip whichever prefix actually fired.
+    eventType: r.action.replace(/^mittera\.(email\.)?/, ''),
     messageId:
       r.metadata && typeof r.metadata.messageId === 'string' ? r.metadata.messageId : null,
     bounceCode:
