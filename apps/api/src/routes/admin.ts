@@ -21,7 +21,7 @@ import {
   suspendUser,
   unsuspendUser,
 } from '../services/admin.js';
-import { audit, hashIp } from '../services/audit.js';
+import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
 
@@ -46,6 +46,35 @@ adminRouter.get('/v1/admin/users', async (c) => {
 adminRouter.get('/v1/admin/projects', async (c) => {
   const rows = await listProjects(500);
   return c.json({ projects: rows });
+});
+
+/**
+ * Mittera email events — pulled from audit_logs filtered to the
+ * `mittera.email.*` action prefix. Returns the most recent 200 with a
+ * compact shape the dashboard renders without further normalisation.
+ */
+adminRouter.get('/v1/admin/email-events', async (c) => {
+  const rows = await listAuditByActionPrefix('mittera.email.', 200);
+  const events = rows.map((r) => ({
+    id: r.id,
+    eventType: r.action.replace(/^mittera\.email\./, ''),
+    messageId:
+      r.metadata && typeof r.metadata.messageId === 'string' ? r.metadata.messageId : null,
+    bounceCode:
+      r.metadata && typeof r.metadata.bounceCode === 'string' ? r.metadata.bounceCode : null,
+    bounceMessage:
+      r.metadata && typeof r.metadata.bounceMessage === 'string'
+        ? r.metadata.bounceMessage
+        : null,
+    complaintReason:
+      r.metadata && typeof r.metadata.complaintReason === 'string'
+        ? r.metadata.complaintReason
+        : null,
+    deliveredAt:
+      r.metadata && typeof r.metadata.deliveredAt === 'string' ? r.metadata.deliveredAt : null,
+    createdAt: r.createdAt,
+  }));
+  return c.json({ events });
 });
 
 async function parseUserAction(c: Context<AppEnv>) {

@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import { verifySignature } from '../lib/email.js';
+import { audit } from '../services/audit.js';
 
 /**
  * Inbound webhook receiver for mittera.eu — registered at the URL
@@ -14,10 +15,13 @@ import { verifySignature } from '../lib/email.js';
  * the shared signing secret and sends the signature in the
  * `Mittera-Signature` header (Stripe convention: `t=<ts>,v1=<hex>`).
  *
- * Event payloads are deliberately not yet stored — this initial slice
- * verifies, logs, and ack-200's so mittera's retry queue stops. Once
- * we have a `email_events` table (delivered / opened / bounced /
- * complained) we can dispatch from here.
+ * Event payloads land in audit_logs with action="mittera.email.<type>"
+ * so the operator can review delivery / bounce / complaint history
+ * from the admin dashboard without provisioning a dedicated table.
+ * Per CLAUDE.md §5.1 the recipient address is never written to the
+ * audit log — we keep messageId so a support inquiry can be correlated
+ * back to the original mittera message, but PII stays on mittera's
+ * side.
  */
 
 export const mitteraWebhookRouter = new Hono();
@@ -50,18 +54,45 @@ mitteraWebhookRouter.post('/mittera-webhook', async (c) => {
 
   // Best-effort parse for log enrichment. If it isn't JSON, accept anyway —
   // mittera's signature already proves authenticity.
-  let event: { type?: string; messageId?: string; to?: string } = {};
+  let event: {
+    type?: string;
+    messageId?: string;
+    to?: string;
+    // Optional context fields — captured if mittera provides them.
+    bounceCode?: string;
+    bounceMessage?: string;
+    complaintReason?: string;
+    deliveredAt?: string;
+  } = {};
   try {
     event = JSON.parse(raw) as typeof event;
   } catch {
     // ignore
   }
 
+  const eventType = event.type ?? 'unknown';
+
   log.info('mittera_webhook_received', {
-    type: event.type ?? null,
+    type: eventType,
     messageId: event.messageId ?? null,
-    // Don't log the recipient — PII. Hash later when we add events table.
     hasRecipient: Boolean(event.to),
+  });
+
+  // Persist to audit_logs so the admin dashboard can render history.
+  // No recipient (PII per §5.1); messageId is opaque to us so safe.
+  await audit({
+    actorId: null,
+    projectId: null,
+    action: `mittera.email.${eventType}`,
+    ipHash: null,
+    userAgent: 'mittera-webhook',
+    metadata: {
+      messageId: event.messageId ?? null,
+      bounceCode: event.bounceCode ?? null,
+      bounceMessage: event.bounceMessage ?? null,
+      complaintReason: event.complaintReason ?? null,
+      deliveredAt: event.deliveredAt ?? null,
+    },
   });
 
   return c.json({ ok: true });
