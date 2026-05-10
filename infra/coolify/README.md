@@ -1,16 +1,15 @@
 # self-host briven on coolify
 
-drop-in template for [coolify 4.x](https://coolify.io). same compose as `infra/dokploy/compose.yml`, minus the traefik labels — coolify owns routing through its own UI.
+drop-in template for [coolify 4.x](https://coolify.io). same compose as `infra/dokploy/compose.yml`, minus the traefik labels — coolify owns routing through its own UI. images are **built from source** off `code.konnos.org/flndrn/briven`; no prebuilt image registry is involved.
 
 ## install
 
-1. **create a new resource** in your coolify project: **Docker Compose**, paste the contents of `compose.yml` (or point at this directory if you've cloned the repo onto your coolify host).
+1. **create a new resource** in your coolify project: **Docker Compose**, point its git source at `https://code.konnos.org/flndrn/briven.git` (branch `main`), compose path `infra/coolify/compose.yml`. coolify clones the repo and runs `docker compose build` + `up -d`.
 2. **set environment variables** under the resource's *Environment Variables* tab. The minimum:
 
    | name                            | value                                      |
    | ------------------------------- | ------------------------------------------ |
    | `BRIVEN_DOMAIN`                 | the domain you control (e.g. `briven.example.com`) |
-   | `BRIVEN_VERSION`                | `latest` or a pinned tag like `v0.5.0`     |
    | `BRIVEN_POSTGRES_PASSWORD`      | strong random — used by every service      |
    | `BRIVEN_BETTER_AUTH_SECRET`     | `openssl rand -hex 32`                     |
    | `BRIVEN_AUDIT_IP_PEPPER`        | `openssl rand -hex 32`                     |
@@ -45,7 +44,7 @@ same as the dokploy template — sign in via magic link, promote yourself to pla
 
 - **routing**: coolify's per-service Domains UI replaces the `traefik.*` labels.
 - **persistent volumes**: coolify auto-manages volume names with project-scoped prefixes; the names declared here (`postgres_data`, etc.) become `briven_postgres_data` or similar in coolify's storage tab.
-- **upgrades**: change `BRIVEN_VERSION` and click *Deploy* — coolify pulls the new image without an explicit `docker compose pull`.
+- **upgrades**: click *Redeploy* — coolify re-clones `main` and rebuilds the images from source. there's no `docker compose pull` step because nothing is hosted in a registry.
 
 ## upgrade path
 

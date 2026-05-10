@@ -24,7 +24,7 @@ options:
   --help, -h        print this help and exit
 
 docs:    https://docs.briven.cloud
-source:  https://github.com/flndrn-dev/briven
+source:  https://code.konnos.org/flndrn/briven
 `;
 
 export function printHelp(): void {

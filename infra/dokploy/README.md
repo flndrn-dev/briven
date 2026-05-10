@@ -2,9 +2,11 @@
 
 single-machine compose template for running briven-core on your own infrastructure. all four services + postgres + redis + minio in one stack, fronted by traefik. tested on dokploy 0.20+, coolify 4.x, and plain `docker compose` on ubuntu 24.04.
 
+briven is **built from source** off `code.konnos.org/flndrn/briven`. there are no prebuilt images — `docker compose build` produces the per-service images locally on the deploy host. that keeps the stack self-contained and avoids relying on a hosted registry.
+
 ## prereqs
 
-- a vps with docker + docker compose (4 vcpu / 8 gb ram comfortably runs a dozen briven projects)
+- a vps with docker + docker compose (4 vcpu / 8 gb ram comfortably runs a dozen briven projects). cpu/ram during the first `docker compose build` peaks around 4 gb — size accordingly.
 - a domain pointed at the vps with a wildcard A record covering `*.<your-domain>`
 - traefik already running on the host with the `web` and `websecure` entrypoints + a `letsencrypt` cert resolver. dokploy gives you all of this out of the box.
 
@@ -13,21 +15,28 @@ if you're new to traefik, the dokploy quick-start handles it; for raw `docker co
 ## five-minute install
 
 ```bash
-# 1. clone the repo (or download just this directory)
-git clone https://github.com/flndrn-dev/briven.git
+# 1. clone the repo
+git clone https://code.konnos.org/flndrn/briven.git
 cd briven/infra/dokploy
 
 # 2. copy + fill the env file
 cp .env.example .env
-# edit .env and fill the four secrets + BRIVEN_DOMAIN + BRIVEN_POSTGRES_PASSWORD
+# edit .env and fill the secrets + BRIVEN_DOMAIN + BRIVEN_POSTGRES_PASSWORD
 # generate each secret with: openssl rand -hex 32
 
-# 3. start the stack
+# 3. build + start the stack (first build takes ~5-8 min)
+docker compose build
 docker compose up -d
 
 # 4. watch the boot logs (api should reach "api_boot" within ~10s)
 docker compose logs -f api
 ```
+
+on dokploy itself the equivalent flow is:
+
+1. **new project → docker compose**, point the git source at `https://code.konnos.org/flndrn/briven.git` (branch `main`), compose path `infra/dokploy/compose.yml`.
+2. paste the env vars under *Environment Variables*.
+3. dokploy runs `docker compose build` + `up -d` for you on every deploy.
 
 ## post-boot
 
@@ -63,13 +72,15 @@ add a second `briven` overlay network spanning the two hosts (docker swarm or ta
 
 ## upgrades
 
-pin a release tag in `.env`:
+build-from-source means upgrades pull and rebuild rather than pull a tag:
 
-```env
-BRIVEN_VERSION=v0.5.0
+```bash
+git pull origin main
+docker compose build
+docker compose up -d
 ```
 
-then `docker compose pull && docker compose up -d`. all four services accept the same env, so they stay in lockstep across the upgrade. backups before any upgrade — see [`infra/backups/`](../backups/).
+on dokploy, *Redeploy* runs the same sequence after re-cloning. all services share the same env, so they stay in lockstep across the upgrade. take a backup before any upgrade — see [`infra/backups/`](../backups/).
 
 ## licence
 
@@ -85,5 +96,4 @@ contact the team for a commercial-licence carve-out if AGPL is incompatible with
 
 ## not bundled here yet
 
-- **coolify-specific service definitions** — coolify reads the same compose with one tweak: drop the `traefik.*` labels in favour of coolify's own routing UI. the compose works on coolify as-is; the `coolify.json` service descriptor lands with the public release.
 - **k8s helm charts** — year-two scope. swap when you hit ~100 projects per host.

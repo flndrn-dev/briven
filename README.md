@@ -83,6 +83,6 @@ lowercase everywhere. dark-theme only. one primary accent: `#00e87a`. assets in 
 
 ## links
 
-- source: [github.com/flndrn-dev/briven](https://github.com/flndrn-dev/briven)
+- source: [code.konnos.org/flndrn/briven](https://code.konnos.org/flndrn/briven)
 - managed product: [briven.cloud](https://briven.cloud)
 - docs: [docs.briven.cloud](https://docs.briven.cloud)
