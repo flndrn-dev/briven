@@ -7,6 +7,12 @@ import { renderPrometheus } from '../lib/metrics.js';
 import { pingRedis } from '../lib/redis.js';
 
 const BOOT_TIME = new Date().toISOString();
+// Commit SHA + build timestamp are injected at image-build time via
+// BRIVEN_BUILD_SHA + BRIVEN_BUILD_AT (Dockerfile ARGs). Fallback strings
+// surface in /info when running outside a docker build (local `bun
+// dev`, fresh checkout, etc.) so the endpoint never 500s.
+const BUILD_SHA = process.env.BRIVEN_BUILD_SHA ?? 'dev';
+const BUILD_AT = process.env.BRIVEN_BUILD_AT ?? 'dev';
 
 export const healthRouter = new Hono();
 
@@ -57,6 +63,25 @@ healthRouter.get('/ready', async (c) => {
   const ready = controlOk && dataOk && runtimeOk && (!redisRequired || redisOk);
   return c.json({ status: ready ? 'ready' : 'not_ready', checks }, ready ? 200 : 503);
 });
+
+/**
+ * /info — build + runtime metadata. Public (no auth) so:
+ *   - `briven doctor` can show "running build abc1234 / booted 2h ago"
+ *   - support can verify which commit a customer's deploy is on
+ *   - the post-deploy CI gate can assert a fresh sha is live
+ * Intentionally narrow — no secrets, no env-key listing.
+ */
+healthRouter.get('/info', (c) =>
+  c.json({
+    service: 'api',
+    env: env.BRIVEN_ENV,
+    buildSha: BUILD_SHA,
+    buildAt: BUILD_AT,
+    bootedAt: BOOT_TIME,
+    uptimeSec: Math.floor(process.uptime()),
+    domain: env.BRIVEN_DOMAIN ?? null,
+  }),
+);
 
 /**
  * /metrics — Prometheus exposition. Intentionally unauthenticated; the

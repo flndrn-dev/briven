@@ -17,6 +17,16 @@ interface HealthResponse {
 }
 
 interface InfoResponse {
+  service: string;
+  env: string;
+  buildSha: string;
+  buildAt: string;
+  bootedAt: string;
+  uptimeSec: number;
+  domain: string | null;
+}
+
+interface InfoResponse {
   projectId: string;
   authenticatedVia: 'api_key' | 'session';
   apiKeyId: string | null;
@@ -85,6 +95,16 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
       'ok',
       `${health.body.service} env=${health.body.env} booted=${formatBoot(health.body.bootedAt)}`,
     );
+  }
+
+  // Build identity — non-fatal if missing (older deploys, dev mode).
+  const info = await fetchJson<InfoResponse>(`${origin}/info`);
+  if (info.ok) {
+    const sha = info.body.buildSha.slice(0, 12);
+    const uptime = formatUptime(info.body.uptimeSec);
+    check('api/info', 'ok', `build=${sha} built=${info.body.buildAt} up=${uptime}`);
+  } else {
+    check('api/info', 'warn', `unavailable (${info.error})`);
   }
 
   // Dependency readiness — surfaces every sub-status.
@@ -194,4 +214,12 @@ function formatBoot(iso: string): string {
   if (sec < 60) return `${sec}s ago`;
   if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
   return `${Math.round(sec / 3600)}h ago`;
+}
+
+function formatUptime(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '?';
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m`;
+  if (sec < 86400) return `${Math.round(sec / 3600)}h`;
+  return `${Math.round(sec / 86400)}d`;
 }
