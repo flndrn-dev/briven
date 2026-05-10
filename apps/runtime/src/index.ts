@@ -1,7 +1,15 @@
+import { constantTimeEqual } from '@briven/shared';
+import { createLogger } from '@briven/shared/observability';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { env } from './env.js';
+
+const log = createLogger({
+  service: 'runtime',
+  env: env.BRIVEN_ENV,
+  level: env.BRIVEN_LOG_LEVEL,
+});
 import { handleInvoke } from './invoke.js';
 import { registerPoolGauges, renderPrometheus } from './metrics.js';
 import { getPool } from './runtime-bootstrap.js';
@@ -81,7 +89,7 @@ app.post('/invoke', async (c) => {
   if (expected) {
     const auth = c.req.header('authorization');
     const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
-    if (token !== expected) {
+    if (!token || !constantTimeEqual(token, expected)) {
       return c.json({ code: 'unauthorized', message: 'runtime is not open to the public' }, 401);
     }
   }
@@ -119,14 +127,11 @@ registerPoolGauges(getPool());
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 
-console.log(
-  JSON.stringify({
-    event: 'runtime_boot',
-    port: env.BRIVEN_RUNTIME_PORT,
-    executor: env.BRIVEN_RUNTIME_EXECUTOR,
-    bundleDir: env.BRIVEN_RUNTIME_BUNDLE_DIR,
-  }),
-);
+log.info('runtime_boot', {
+  port: env.BRIVEN_RUNTIME_PORT,
+  executor: env.BRIVEN_RUNTIME_EXECUTOR,
+  bundleDir: env.BRIVEN_RUNTIME_BUNDLE_DIR,
+});
 
 export default {
   port: env.BRIVEN_RUNTIME_PORT,

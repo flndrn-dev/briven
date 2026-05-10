@@ -6,14 +6,17 @@ import { log } from './lib/logger.js';
 import { accessLog } from './middleware/access-log.js';
 import { csrfOriginCheck } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error.js';
+import { metricsMiddleware } from './middleware/metrics.js';
 import { requestId } from './middleware/request-id.js';
 import { attachSession, type Session, type User } from './middleware/session.js';
+import { abuseRouter } from './routes/abuse.js';
 import { adminRouter } from './routes/admin.js';
 import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
 import { billingRouter } from './routes/billing.js';
 import { dbRouter } from './routes/db.js';
 import { deploymentsRouter } from './routes/deployments.js';
+import { exportRouter } from './routes/export.js';
 import { healthRouter } from './routes/health.js';
 import { internalRouter } from './routes/internal.js';
 import { invitationsRouter } from './routes/invitations.js';
@@ -24,6 +27,8 @@ import { projectEnvRouter } from './routes/project-env.js';
 import { membersRouter } from './routes/project-members.js';
 import { projectsRouter } from './routes/projects.js';
 import { rootRouter } from './routes/root.js';
+import { studioRouter } from './routes/studio.js';
+import { usageRouter } from './routes/usage.js';
 import { startLogFanoutWorker, startLogRetentionCron } from './workers/log-fanout.js';
 
 type AppEnv = {
@@ -49,6 +54,7 @@ app.use(
 
 app.use('*', requestId());
 app.use('*', accessLog());
+app.use('*', metricsMiddleware());
 app.use('*', attachSession());
 app.use('*', csrfOriginCheck());
 
@@ -68,6 +74,10 @@ app.route('/', adminRouter);
 app.route('/', billingRouter);
 app.route('/', dbRouter);
 app.route('/', logsRouter);
+app.route('/', usageRouter);
+app.route('/', abuseRouter);
+app.route('/', studioRouter);
+app.route('/', exportRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);
