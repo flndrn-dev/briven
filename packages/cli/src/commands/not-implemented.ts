@@ -1,9 +1,8 @@
 import { banner, blankLine, error, link } from '../output.js';
 
 const PHASE_NOTE: Record<string, string> = {
-  export: 'Phase 1 week 7-8',
-  import: 'Phase 1 week 7-8',
-  projects: 'Phase 1 week 3-4',
+  export: 'private beta',
+  import: 'private beta',
 };
 
 export function printNotImplemented(command: string): void {
@@ -11,7 +10,7 @@ export function printNotImplemented(command: string): void {
   blankLine();
   const when = PHASE_NOTE[command];
   if (when) {
-    error(`scheduled for ${when} — see BUILD_PLAN.md`);
+    error(`scheduled for ${when} — see the changelog at docs.briven.cloud`);
   } else {
     error('unknown command');
   }

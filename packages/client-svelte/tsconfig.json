@@ -1,5 +1,10 @@
 {
   "extends": "@briven/config/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "moduleResolution": "Bundler",
+    "types": []
+  },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
 }

@@ -3,16 +3,17 @@ import { runDb } from './commands/db.js';
 import { runDeploy } from './commands/deploy.js';
 import { runDev } from './commands/dev.js';
 import { runEnv } from './commands/env.js';
+import { runExport } from './commands/export.js';
+import { runImport } from './commands/import.js';
 import { runInit } from './commands/init.js';
+import { runInvoke } from './commands/invoke.js';
 import { runLink } from './commands/link.js';
 import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
 import { runLogs } from './commands/logs.js';
-import { printNotImplemented } from './commands/not-implemented.js';
+import { runProjects } from './commands/projects.js';
 import { printVersion } from './commands/version.js';
 import { runWhoami } from './commands/whoami.js';
-
-const STUB_COMMANDS = new Set(['export', 'import', 'projects']);
 
 export async function run(argv: readonly string[]): Promise<number> {
   const [first, ...rest] = argv;
@@ -40,6 +41,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runWhoami();
     case 'deploy':
       return runDeploy(rest);
+    case 'invoke':
+      return runInvoke(rest);
     case 'env':
       return runEnv(rest);
     case 'db':
@@ -48,11 +51,12 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runLogs(rest);
     case 'dev':
       return runDev(rest);
-  }
-
-  if (STUB_COMMANDS.has(first)) {
-    printNotImplemented(first);
-    return 0;
+    case 'projects':
+      return runProjects(rest);
+    case 'export':
+      return runExport(rest);
+    case 'import':
+      return runImport(rest);
   }
 
   process.stderr.write(`briven: unknown command '${first}'\n`);
