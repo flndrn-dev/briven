@@ -17,7 +17,8 @@
 #   BRIVEN_ENCRYPTION_KEY         openssl rand -hex 32
 #   BRIVEN_RUNTIME_SHARED_SECRET  openssl rand -hex 32
 #   BRIVEN_POSTGRES_PASSWORD      strong; used by every service
-#   BRIVEN_RESEND_API_KEY         optional — magic-link emails
+#   BRIVEN_MITTERA_API_URL        optional — base URL of mittera.eu (e.g. https://api.mittera.eu)
+#   BRIVEN_MITTERA_SIGNING_SECRET optional — shared HMAC secret with mittera
 #   BRIVEN_GOOGLE_CLIENT_ID       optional — google oauth signin
 #   BRIVEN_GOOGLE_CLIENT_SECRET   optional
 #   BRIVEN_OPEN_SIGNUPS           true | false (default false)
@@ -76,7 +77,8 @@ services:
       BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
       BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
       BRIVEN_ENCRYPTION_KEY: ${BRIVEN_ENCRYPTION_KEY}
-      BRIVEN_RESEND_API_KEY: ${BRIVEN_RESEND_API_KEY:-}
+      BRIVEN_MITTERA_API_URL: ${BRIVEN_MITTERA_API_URL:-}
+      BRIVEN_MITTERA_SIGNING_SECRET: ${BRIVEN_MITTERA_SIGNING_SECRET:-}
       BRIVEN_GOOGLE_CLIENT_ID: ${BRIVEN_GOOGLE_CLIENT_ID:-}
       BRIVEN_GOOGLE_CLIENT_SECRET: ${BRIVEN_GOOGLE_CLIENT_SECRET:-}
       BRIVEN_DOMAIN: ${BRIVEN_DOMAIN}

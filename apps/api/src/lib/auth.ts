@@ -36,8 +36,8 @@ function resolveAuthSecret(): string {
 
 /**
  * Better Auth instance. Per BUILD_PLAN Phase 1 week 1-2 we wire all three
- * auth methods from day one: email + password, magic link via Resend, and
- * Google OAuth — so j can sign into the dashboard on day one.
+ * auth methods from day one: email + password, magic link via mittera.eu,
+ * and Google OAuth — so j can sign into the dashboard on day one.
  *
  * All cookies are HTTP-only and SameSite=strict. Session TTL is 30 days; the
  * sliding-refresh refresh window is 7 days (session is extended on any

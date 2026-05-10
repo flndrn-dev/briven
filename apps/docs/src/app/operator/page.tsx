@@ -44,15 +44,17 @@ export default function OperatorPage() {
 
       <Section title="magic link doesn't arrive">
         <p>
-          if <code>BRIVEN_RESEND_API_KEY</code> is unset, briven prints the magic link to api
-          stdout instead of sending email. that's intentional for self-host first boot. find it:
+          if <code>BRIVEN_MITTERA_API_URL</code> or <code>BRIVEN_MITTERA_SIGNING_SECRET</code> is
+          unset, briven prints the magic link to api stdout instead of sending email. that&rsquo;s
+          intentional for self-host first boot. find it:
         </p>
         <Snippet>{`docker compose logs api 2>&1 | grep magic_link | tail -1`}</Snippet>
         <p>
-          if Resend is configured but mail still isn't arriving, check the api log for{' '}
-          <code>resend_send_failed</code> entries — Resend's API key may be revoked, or the
-          sender domain isn't verified. The link itself is always valid for 15 minutes;
-          re-requesting just sends a fresh one.
+          if mittera is configured but mail still isn&rsquo;t arriving, check the api log for{' '}
+          <code>mittera_send_failed</code> entries — the signing secret may be wrong, the sender
+          domain isn&rsquo;t verified on the mittera side, or the registered webhook URL{' '}
+          <code>https://&lt;domain&gt;/api/mittera-webhook</code> is unreachable. The link itself
+          is always valid for 10 minutes; re-requesting just sends a fresh one.
         </p>
       </Section>
 

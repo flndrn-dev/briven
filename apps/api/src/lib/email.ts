@@ -1,63 +1,180 @@
-import { Resend } from 'resend';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { env } from '../env.js';
 import { log } from './logger.js';
 
 /**
- * Transactional email client. Lazy-init so the API boots even without a
- * Resend key in dev. Magic-link sends throw a loud error if Resend is
- * unconfigured, rather than silently dropping the mail.
+ * Transactional email client — talks to mittera.eu over HTTP with
+ * Stripe-style HMAC-SHA256 signing on the request body. The signing
+ * secret is shared with the mittera side; the same secret is used to
+ * verify inbound webhooks (delivery / bounce / complaint events) at
+ * the /mittera-webhook endpoint.
+ *
+ * Outbound request shape:
+ *   POST {BRIVEN_MITTERA_API_URL}/v1/send
+ *   Content-Type: application/json
+ *   Mittera-Signature: t=<unix_ts>,v1=<hex_hmac_sha256>
+ *   { from, to, subject, html, text }
+ *
+ * In dev (no signing secret configured) emails print to stdout so the
+ * first-user bootstrap flow still works on a fresh self-host.
  */
-let _resend: Resend | null = null;
 
-function getResend(): Resend {
-  if (!env.BRIVEN_RESEND_API_KEY) {
-    throw new Error('BRIVEN_RESEND_API_KEY is not configured');
-  }
-  if (!_resend) _resend = new Resend(env.BRIVEN_RESEND_API_KEY);
-  return _resend;
+const SEND_PATH = '/v1/send';
+
+interface SendArgs {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
 }
 
-const FROM =
-  env.BRIVEN_ENV === 'production'
-    ? 'briven <noreply@briven.cloud>'
-    : 'briven dev <onboarding@resend.dev>';
+function fromAddress(): string {
+  // Use the configured public domain so the From: matches the deployment.
+  // Falls back to a literal in dev so the env never has to be set locally.
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.local';
+  return `briven <noreply@${domain}>`;
+}
 
-export async function sendMagicLink(to: string, url: string): Promise<void> {
-  // In dev without a Resend key, log the link so j can click it.
-  if (!env.BRIVEN_RESEND_API_KEY) {
-    log.warn('magic_link_logged_only', { host: new URL(url).host });
-    process.stdout.write(`\n  magic link (dev only, paste in browser):\n  ${url}\n\n`);
+function isConfigured(): boolean {
+  return Boolean(env.BRIVEN_MITTERA_API_URL && env.BRIVEN_MITTERA_SIGNING_SECRET);
+}
+
+async function send(label: string, args: SendArgs): Promise<void> {
+  // Dev fallback: print so j can complete bootstrap without external email.
+  if (!isConfigured()) {
+    log.warn(`${label}_logged_only`);
+    process.stdout.write(`\n  ${label} (dev only):\n  to: ${args.to}\n  subject: ${args.subject}\n\n`);
     return;
   }
 
-  const { error } = await getResend().emails.send({
-    from: FROM,
+  const body = JSON.stringify({
+    from: fromAddress(),
+    to: args.to,
+    subject: args.subject,
+    html: args.html,
+    text: args.text,
+  });
+
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const sig = signPayload(env.BRIVEN_MITTERA_SIGNING_SECRET!, ts, body);
+  const url = `${env.BRIVEN_MITTERA_API_URL!.replace(/\/$/, '')}${SEND_PATH}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'mittera-signature': `t=${ts},v1=${sig}`,
+    },
+    body,
+    // Hard cap so a hung mittera doesn't tie up the magic-link request.
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    log.error('mittera_send_failed', {
+      status: res.status,
+      label,
+      // Truncate so a misconfigured server returning HTML doesn't bloat logs.
+      body: text.slice(0, 240),
+    });
+    throw new Error(`mittera send failed: ${res.status}`);
+  }
+}
+
+export async function sendMagicLink(to: string, url: string): Promise<void> {
+  await send('magic_link', {
     to,
     subject: 'your briven sign-in link',
     html: magicLinkHtml(url),
     text: magicLinkText(url),
   });
-
-  if (error) {
-    throw new Error(`resend send failed: ${error.message}`);
-  }
 }
 
 export async function sendInvitation(to: string, url: string): Promise<void> {
-  if (!env.BRIVEN_RESEND_API_KEY) {
-    log.warn('invitation_logged_only', { host: new URL(url).host });
-    process.stdout.write(`\n  invitation link (dev only):\n  ${url}\n\n`);
-    return;
-  }
-  const { error } = await getResend().emails.send({
-    from: FROM,
+  await send('invitation', {
     to,
     subject: 'you were invited to a briven project',
     html: invitationHtml(url),
     text: invitationText(url),
   });
-  if (error) throw new Error(`resend send failed: ${error.message}`);
+}
+
+export async function sendEmailVerification(to: string, url: string): Promise<void> {
+  await send('verify_email', {
+    to,
+    subject: 'verify your briven email',
+    html: verifyEmailHtml(url),
+    text: verifyEmailText(url),
+  });
+}
+
+/**
+ * Sign the canonical Stripe-style payload `<timestamp>.<body>` with
+ * HMAC-SHA256, return as lowercase hex.
+ */
+export function signPayload(secret: string, timestamp: string, body: string): string {
+  return createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+}
+
+/**
+ * Verify an inbound `Mittera-Signature: t=<ts>,v1=<hex>` header against
+ * the raw request body. Returns true only when the signature is valid
+ * AND the timestamp is within ±5 minutes of now (replay defence).
+ */
+export function verifySignature(args: {
+  secret: string;
+  header: string | null;
+  body: string;
+  toleranceSec?: number;
+  nowSec?: number;
+}): boolean {
+  if (!args.header) return false;
+  const tolerance = args.toleranceSec ?? 300;
+  const now = args.nowSec ?? Math.floor(Date.now() / 1000);
+
+  // Header format: `t=<ts>,v1=<hex>` — extract the two fields.
+  const parts = args.header.split(',').map((s) => s.trim());
+  let ts: string | null = null;
+  let v1: string | null = null;
+  for (const p of parts) {
+    const [k, v] = p.split('=');
+    if (k === 't' && v) ts = v;
+    if (k === 'v1' && v) v1 = v;
+  }
+  if (!ts || !v1) return false;
+
+  const tsNum = Number(ts);
+  if (!Number.isFinite(tsNum)) return false;
+  if (Math.abs(now - tsNum) > tolerance) return false;
+
+  const expected = signPayload(args.secret, ts, args.body);
+  if (expected.length !== v1.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Email HTML — dark palette, single column, primary CTA in brand green.      */
+/* -------------------------------------------------------------------------- */
+
+function magicLinkHtml(url: string): string {
+  return shell(
+    'sign in to briven',
+    `
+    <p>click the button below to sign in. this link expires in 10 minutes.</p>
+    ${cta('sign in', url)}
+    <p class="muted">if you didn't request this, you can ignore this email.</p>
+  `,
+  );
+}
+
+function magicLinkText(url: string): string {
+  return `sign in to briven\n\n${url}\n\nthis link expires in 10 minutes. if you didn't request it, ignore this email.`;
 }
 
 function invitationHtml(url: string): string {
@@ -73,46 +190,6 @@ function invitationHtml(url: string): string {
 
 function invitationText(url: string): string {
   return `you were invited to a briven project\n\n${url}\n\nexpires in 7 days.`;
-}
-
-export async function sendEmailVerification(to: string, url: string): Promise<void> {
-  if (!env.BRIVEN_RESEND_API_KEY) {
-    log.warn('verify_email_logged_only', { host: new URL(url).host });
-    process.stdout.write(`\n  verify-email link (dev only):\n  ${url}\n\n`);
-    return;
-  }
-
-  const { error } = await getResend().emails.send({
-    from: FROM,
-    to,
-    subject: 'verify your briven email',
-    html: verifyEmailHtml(url),
-    text: verifyEmailText(url),
-  });
-
-  if (error) {
-    throw new Error(`resend send failed: ${error.message}`);
-  }
-}
-
-/*
- * Email HTML per BRAND.md §8 — dark palette, single column, primary CTA uses
- * brand green on dark-zero text. Plain-text fallback always provided.
- */
-
-function magicLinkHtml(url: string): string {
-  return shell(
-    'sign in to briven',
-    `
-    <p>click the button below to sign in. this link expires in 10 minutes.</p>
-    ${cta('sign in', url)}
-    <p class="muted">if you didn't request this, you can ignore this email.</p>
-  `,
-  );
-}
-
-function magicLinkText(url: string): string {
-  return `sign in to briven\n\n${url}\n\nthis link expires in 10 minutes. if you didn't request it, ignore this email.`;
 }
 
 function verifyEmailHtml(url: string): string {
@@ -134,6 +211,7 @@ function cta(label: string, href: string): string {
 }
 
 function shell(title: string, body: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
   return `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>${title}</title></head>
 <body style="margin:0;background:#0a0b0d;color:#f5f7fa;font-family:system-ui,-apple-system,sans-serif;line-height:1.6">
@@ -145,7 +223,7 @@ function shell(title: string, body: string): string {
           <h2 style="font-family:system-ui,sans-serif;font-size:18px;font-weight:500;margin:0 0 16px 0">${title}</h2>
           <div style="color:#9ba3af;font-size:15px">${body}</div>
           <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
-            briven · <a style="color:#9ba3af" href="https://briven.cloud">briven.cloud</a>
+            briven · <a style="color:#9ba3af" href="https://${domain}">${domain}</a>
           </p>
         </td></tr>
       </table>
