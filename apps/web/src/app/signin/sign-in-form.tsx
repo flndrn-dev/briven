@@ -1,27 +1,35 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { RiGithubFill } from 'react-icons/ri';
+import { FcGoogle } from 'react-icons/fc';
 
 interface Props {
   next: string;
+  apiOrigin: string;
   disabled?: boolean;
+  hasGoogle: boolean;
 }
 
-export function SignInForm({ next, disabled }: Props) {
+export function SignInForm({ next, apiOrigin, disabled, hasGoogle }: Props) {
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
   const [oauthPending, setOauthPending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Why we POST directly to the api origin instead of going through the
+  // Next.js `/api/...` rewrite: in production, edge proxies (Cloudflare,
+  // some CDNs) inspect rewrite-proxied request bodies and can corrupt
+  // Better Auth's callbackURL validation, producing a spurious
+  // INVALID_CALLBACK_URL 403. Talking directly to the api avoids the
+  // proxy hop entirely. CORS on the api allows the dashboard origin.
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
     setError(null);
     try {
       const callbackURL = `${window.location.origin}${next}`;
-      const res = await fetch('/api/v1/auth/sign-in/magic-link', {
+      const res = await fetch(`${apiOrigin}/v1/auth/sign-in/magic-link`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
@@ -39,16 +47,16 @@ export function SignInForm({ next, disabled }: Props) {
     }
   }
 
-  async function onGithub() {
+  async function onGoogle() {
     setOauthPending(true);
     setError(null);
     try {
       const callbackURL = `${window.location.origin}${next}`;
-      const res = await fetch('/api/v1/auth/sign-in/social', {
+      const res = await fetch(`${apiOrigin}/v1/auth/sign-in/social`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ provider: 'github', callbackURL }),
+        body: JSON.stringify({ provider: 'google', callbackURL }),
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
@@ -58,7 +66,7 @@ export function SignInForm({ next, disabled }: Props) {
       if (!data.url) throw new Error('no redirect url returned');
       window.location.href = data.url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'github sign-in failed');
+      setError(err instanceof Error ? err.message : 'google sign-in failed');
       setOauthPending(false);
     }
   }
@@ -91,21 +99,25 @@ export function SignInForm({ next, disabled }: Props) {
 
   return (
     <div className="flex flex-col gap-4" aria-busy={anyPending}>
-      <button
-        type="button"
-        onClick={onGithub}
-        disabled={disabled || anyPending}
-        className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
-      >
-        <RiGithubFill className="h-5 w-5" />
-        {oauthPending ? 'redirecting...' : 'continue with github'}
-      </button>
+      {hasGoogle ? (
+        <>
+          <button
+            type="button"
+            onClick={onGoogle}
+            disabled={disabled || anyPending}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
+          >
+            <FcGoogle className="h-5 w-5" />
+            {oauthPending ? 'redirecting...' : 'continue with google'}
+          </button>
 
-      <div className="flex items-center gap-3">
-        <span className="h-px flex-1 bg-[var(--color-border-subtle)]" />
-        <span className="font-mono text-xs text-[var(--color-text-subtle)]">or</span>
-        <span className="h-px flex-1 bg-[var(--color-border-subtle)]" />
-      </div>
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-[var(--color-border-subtle)]" />
+            <span className="font-mono text-xs text-[var(--color-text-subtle)]">or</span>
+            <span className="h-px flex-1 bg-[var(--color-border-subtle)]" />
+          </div>
+        </>
+      ) : null}
 
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
         <label className="flex flex-col gap-2">

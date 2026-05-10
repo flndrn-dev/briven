@@ -37,7 +37,7 @@ function resolveAuthSecret(): string {
 /**
  * Better Auth instance. Per BUILD_PLAN Phase 1 week 1-2 we wire all three
  * auth methods from day one: email + password, magic link via Resend, and
- * GitHub OAuth — so j can sign into the dashboard on day one.
+ * Google OAuth — so j can sign into the dashboard on day one.
  *
  * All cookies are HTTP-only and SameSite=strict. Session TTL is 30 days; the
  * sliding-refresh refresh window is 7 days (session is extended on any
@@ -67,12 +67,12 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: 'briven',
     useSecureCookies: env.BRIVEN_ENV === 'production',
-    // `.briven.cloud` lets the session cookie set on api.briven.cloud be
-    // read by briven.cloud and every other subdomain (ws, docs, etc.).
-    // In non-prod the browser won't accept `.localhost`, so we skip it.
+    // Cross-subdomain cookie: `.<BRIVEN_DOMAIN>` lets the session cookie
+    // set on api.<domain> be read by <domain> and every other subdomain
+    // (docs, realtime). Skip in non-prod where browsers reject `.localhost`.
     crossSubDomainCookies:
-      env.BRIVEN_ENV === 'production'
-        ? { enabled: true, domain: '.briven.cloud' }
+      env.BRIVEN_ENV === 'production' && env.BRIVEN_DOMAIN
+        ? { enabled: true, domain: `.${env.BRIVEN_DOMAIN}` }
         : { enabled: false },
     defaultCookieAttributes: {
       // 'strict' — kills cross-site form-POST CSRF. Dashboard at briven.cloud
@@ -113,11 +113,11 @@ export const auth = betterAuth({
   },
 
   socialProviders:
-    env.BRIVEN_GITHUB_CLIENT_ID && env.BRIVEN_GITHUB_CLIENT_SECRET
+    env.BRIVEN_GOOGLE_CLIENT_ID && env.BRIVEN_GOOGLE_CLIENT_SECRET
       ? {
-          github: {
-            clientId: env.BRIVEN_GITHUB_CLIENT_ID,
-            clientSecret: env.BRIVEN_GITHUB_CLIENT_SECRET,
+          google: {
+            clientId: env.BRIVEN_GOOGLE_CLIENT_ID,
+            clientSecret: env.BRIVEN_GOOGLE_CLIENT_SECRET,
             disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
           },
         }
@@ -137,7 +137,7 @@ export const auth = betterAuth({
   ],
 
   // Auto-create the personal org for every new user (email/password,
-  // magic link, GitHub OAuth — all paths funnel through this hook).
+  // magic link, Google OAuth — all paths funnel through this hook).
   // Migration 0010 backfilled existing users; this closes the gap for
   // signups that happen after that migration ran. Failures are logged
   // but never re-thrown — `getDefaultOrgForUser` self-heals on first

@@ -99,8 +99,9 @@ services:
       BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
       BRIVEN_ENCRYPTION_KEY: ${BRIVEN_ENCRYPTION_KEY}
       BRIVEN_RESEND_API_KEY: ${BRIVEN_RESEND_API_KEY:-}
-      BRIVEN_GITHUB_CLIENT_ID: ${BRIVEN_GITHUB_CLIENT_ID:-}
-      BRIVEN_GITHUB_CLIENT_SECRET: ${BRIVEN_GITHUB_CLIENT_SECRET:-}
+      BRIVEN_GOOGLE_CLIENT_ID: ${BRIVEN_GOOGLE_CLIENT_ID:-}
+      BRIVEN_GOOGLE_CLIENT_SECRET: ${BRIVEN_GOOGLE_CLIENT_SECRET:-}
+      BRIVEN_DOMAIN: ${BRIVEN_DOMAIN}
       BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
       BRIVEN_MINIO_ENDPOINT: http://briven-minio:9000
       BRIVEN_MINIO_ACCESS_KEY: briven
@@ -167,6 +168,11 @@ services:
     environment:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+      # Surfaced to the browser so the signin form can hit the api
+      # directly (avoids the Next.js rewrite proxy hop that some edge
+      # CDNs mangle for POST bodies).
+      NEXT_PUBLIC_BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+true}
     networks:
       - briven
     labels:
