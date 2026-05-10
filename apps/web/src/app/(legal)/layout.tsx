@@ -20,6 +20,9 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
             <Link href="/terms" className="hover:text-[var(--color-text)]">
               terms
             </Link>
+            <Link href="/subprocessors" className="hover:text-[var(--color-text)]">
+              subprocessors
+            </Link>
           </nav>
         </div>
       </header>
