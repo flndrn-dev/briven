@@ -55,6 +55,34 @@ const TIER_PRICE: Record<SubscriptionSummary['tier'], string> = {
   team: '€99 / month',
 };
 
+interface SlaRow {
+  uptime: string;
+  responseTarget: string;
+  supportResponse: string;
+  rollbackWindow: string;
+}
+
+const TIER_SLA: Record<SubscriptionSummary['tier'], SlaRow> = {
+  free: {
+    uptime: 'best-effort',
+    responseTarget: 'no target',
+    supportResponse: 'community (github + discord)',
+    rollbackWindow: '7 days log retention',
+  },
+  pro: {
+    uptime: '99.5% monthly',
+    responseTarget: 'p99 < 500ms invoke',
+    supportResponse: 'email · 24h business-day response',
+    rollbackWindow: '30 days log retention · 24h pg_dump',
+  },
+  team: {
+    uptime: '99.9% monthly',
+    responseTarget: 'p99 < 200ms invoke · p99 < 100ms realtime fan-out',
+    supportResponse: 'email · 4h business-day response · slack-connect on request',
+    rollbackWindow: '90 days log retention · 24h pg_dump + cross-region replica',
+  },
+};
+
 const STATUS_LABEL: Record<SubscriptionSummary['status'], string> = {
   free: '—',
   trialing: 'trialing',
@@ -180,6 +208,25 @@ export default async function BillingPage({
         <p className="font-mono text-xs text-[var(--color-text-subtle)]">
           phase 2/3 enforces hard caps at these limits. the meter + overage billing turn on for
           public beta (phase 4).
+        </p>
+      </section>
+
+      {/* SLA card */}
+      <section className="flex flex-col gap-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-mono text-sm text-[var(--color-text)]">service-level commitment</h2>
+          <span className="font-mono text-xs text-[var(--color-text-subtle)]">{tier} tier</span>
+        </div>
+        <dl className="grid grid-cols-[200px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm">
+          <FragmentRow label="uptime" value={TIER_SLA[tier].uptime} />
+          <FragmentRow label="response target" value={TIER_SLA[tier].responseTarget} />
+          <FragmentRow label="support" value={TIER_SLA[tier].supportResponse} />
+          <FragmentRow label="rollback window" value={TIER_SLA[tier].rollbackWindow} />
+        </dl>
+        <p className="font-mono text-xs text-[var(--color-text-subtle)]">
+          live operational health is at <a className="underline underline-offset-2" href="https://docs.briven.cloud/status">docs.briven.cloud/status</a>.
+          formal credit-eligible SLA terms ship with the public beta — current targets are
+          operational commitments, not contractual.
         </p>
       </section>
 

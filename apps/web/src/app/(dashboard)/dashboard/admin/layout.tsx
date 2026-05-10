@@ -34,6 +34,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         >
           projects
         </Link>
+        <Link
+          href="/dashboard/admin/abuse-reports"
+          className="px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        >
+          abuse reports
+        </Link>
       </nav>
       <section>{children}</section>
     </div>
