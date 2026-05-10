@@ -52,11 +52,15 @@ const envSchema = z.object({
   BRIVEN_POLAR_PRO_PRODUCT_ID: z.string().optional(),
   BRIVEN_POLAR_TEAM_PRODUCT_ID: z.string().optional(),
 
-  // mittera.eu transactional email. Both URL and signing secret must be
-  // set for mail to actually go out; missing either falls back to
-  // stdout-only for first-user bootstrap.
+  // mittera.eu transactional email. Outbound sends authenticate with
+  // the API key; inbound webhooks (delivery / bounce / complaint) are
+  // verified with the webhook secret. URL + API key must both be set
+  // for mail to go out; missing either falls back to stdout-only for
+  // first-user bootstrap. Webhook secret is only required if mittera
+  // posts events back — without it the receiver returns 503.
   BRIVEN_MITTERA_API_URL: z.string().url().optional(),
-  BRIVEN_MITTERA_SIGNING_SECRET: z.string().optional(),
+  BRIVEN_MITTERA_API_KEY: z.string().optional(),
+  BRIVEN_MITTERA_WEBHOOK_SECRET: z.string().optional(),
 
   // MinIO — object storage.
   BRIVEN_MINIO_ENDPOINT: z.string().url().optional(),

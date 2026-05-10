@@ -4,23 +4,30 @@ import { env } from '../env.js';
 import { log } from './logger.js';
 
 /**
- * Transactional email client — talks to mittera.eu over HTTP with
- * Stripe-style HMAC-SHA256 signing on the request body. The signing
- * secret is shared with the mittera side; the same secret is used to
- * verify inbound webhooks (delivery / bounce / complaint events) at
- * the /mittera-webhook endpoint.
+ * Transactional email client — talks to mittera.eu's REST API at
+ * /api/v1/emails using Bearer-token auth. Inbound delivery / bounce /
+ * complaint events arrive at /mittera-webhook signed with mittera's
+ * X-mittera-Signature scheme; verifySignature below mirrors mittera's
+ * own SDK so the receiver stays in lock-step with the publisher.
  *
  * Outbound request shape:
- *   POST {BRIVEN_MITTERA_API_URL}/v1/send
+ *   POST {BRIVEN_MITTERA_API_URL}/api/v1/emails
+ *   Authorization: Bearer {BRIVEN_MITTERA_API_KEY}
  *   Content-Type: application/json
- *   Mittera-Signature: t=<unix_ts>,v1=<hex_hmac_sha256>
  *   { from, to, subject, html, text }
  *
- * In dev (no signing secret configured) emails print to stdout so the
+ * Inbound webhook headers (verified by verifySignature, not produced
+ * by this module):
+ *   X-mittera-Signature: v1=<hex_hmac_sha256("${ts_ms}.${rawBody}")>
+ *   X-mittera-Timestamp: <unix_milliseconds>
+ *
+ * In dev (no API key configured) emails print to stdout so the
  * first-user bootstrap flow still works on a fresh self-host.
  */
 
-const SEND_PATH = '/v1/send';
+const SEND_PATH = '/api/v1/emails';
+const SIGNATURE_PREFIX = 'v1=';
+const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
 
 interface SendArgs {
   to: string;
@@ -37,7 +44,7 @@ function fromAddress(): string {
 }
 
 function isConfigured(): boolean {
-  return Boolean(env.BRIVEN_MITTERA_API_URL && env.BRIVEN_MITTERA_SIGNING_SECRET);
+  return Boolean(env.BRIVEN_MITTERA_API_URL && env.BRIVEN_MITTERA_API_KEY);
 }
 
 async function send(label: string, args: SendArgs): Promise<void> {
@@ -56,15 +63,13 @@ async function send(label: string, args: SendArgs): Promise<void> {
     text: args.text,
   });
 
-  const ts = Math.floor(Date.now() / 1000).toString();
-  const sig = signPayload(env.BRIVEN_MITTERA_SIGNING_SECRET!, ts, body);
   const url = `${env.BRIVEN_MITTERA_API_URL!.replace(/\/$/, '')}${SEND_PATH}`;
 
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'mittera-signature': `t=${ts},v1=${sig}`,
+      authorization: `Bearer ${env.BRIVEN_MITTERA_API_KEY!}`,
     },
     body,
     // Hard cap so a hung mittera doesn't tie up the magic-link request.
@@ -111,48 +116,43 @@ export async function sendEmailVerification(to: string, url: string): Promise<vo
 }
 
 /**
- * Sign the canonical Stripe-style payload `<timestamp>.<body>` with
- * HMAC-SHA256, return as lowercase hex.
- */
-export function signPayload(secret: string, timestamp: string, body: string): string {
-  return createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
-}
-
-/**
- * Verify an inbound `Mittera-Signature: t=<ts>,v1=<hex>` header against
- * the raw request body. Returns true only when the signature is valid
- * AND the timestamp is within ±5 minutes of now (replay defence).
+ * Verify a `X-mittera-Signature: v1=<hex>` header against the raw
+ * request body using the shared webhook secret. The timestamp lives
+ * in a separate `X-mittera-Timestamp` header (unix milliseconds) and
+ * is checked against `nowMs` (default `Date.now()`) with the configured
+ * `toleranceMs` (default ±5 min) to defeat replay.
+ *
+ * Mirrors `@mittera/sdk`'s Webhooks verifier exactly so a future swap
+ * to the SDK is one-line.
  */
 export function verifySignature(args: {
   secret: string;
-  header: string | null;
+  signatureHeader: string | null;
+  timestampHeader: string | null;
   body: string;
-  toleranceSec?: number;
-  nowSec?: number;
+  toleranceMs?: number;
+  nowMs?: number;
 }): boolean {
-  if (!args.header) return false;
-  const tolerance = args.toleranceSec ?? 300;
-  const now = args.nowSec ?? Math.floor(Date.now() / 1000);
+  if (!args.signatureHeader || !args.timestampHeader) return false;
+  if (!args.signatureHeader.startsWith(SIGNATURE_PREFIX)) return false;
 
-  // Header format: `t=<ts>,v1=<hex>` — extract the two fields.
-  const parts = args.header.split(',').map((s) => s.trim());
-  let ts: string | null = null;
-  let v1: string | null = null;
-  for (const p of parts) {
-    const [k, v] = p.split('=');
-    if (k === 't' && v) ts = v;
-    if (k === 'v1' && v) v1 = v;
-  }
-  if (!ts || !v1) return false;
+  const ts = Number(args.timestampHeader);
+  if (!Number.isFinite(ts)) return false;
 
-  const tsNum = Number(ts);
-  if (!Number.isFinite(tsNum)) return false;
-  if (Math.abs(now - tsNum) > tolerance) return false;
+  const tolerance = args.toleranceMs ?? DEFAULT_TOLERANCE_MS;
+  const now = args.nowMs ?? Date.now();
+  if (Math.abs(now - ts) > tolerance) return false;
 
-  const expected = signPayload(args.secret, ts, args.body);
-  if (expected.length !== v1.length) return false;
+  const expected = `${SIGNATURE_PREFIX}${createHmac('sha256', args.secret)
+    .update(`${args.timestampHeader}.${args.body}`)
+    .digest('hex')}`;
+
+  if (expected.length !== args.signatureHeader.length) return false;
   try {
-    return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
+    return timingSafeEqual(
+      Buffer.from(expected, 'utf8'),
+      Buffer.from(args.signatureHeader, 'utf8'),
+    );
   } catch {
     return false;
   }

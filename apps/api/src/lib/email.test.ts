@@ -1,44 +1,59 @@
 import { describe, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 
-import { signPayload, verifySignature } from './email.js';
+import { verifySignature } from './email.js';
 
 const SECRET = 'whsec_test_20ef8a6f8c5166ae0872f6a4847b67782e44e3da2ef1e840277020cb42c26a4c';
 
-describe('signPayload', () => {
-  test('produces a deterministic 64-char hex digest', () => {
-    const sig = signPayload(SECRET, '1747000000', '{"type":"email.delivered"}');
-    expect(sig).toMatch(/^[0-9a-f]{64}$/);
-    expect(signPayload(SECRET, '1747000000', '{"type":"email.delivered"}')).toBe(sig);
-  });
-
-  test('changes when timestamp, body, or secret change', () => {
-    const base = signPayload(SECRET, '1747000000', '{"a":1}');
-    expect(signPayload(SECRET, '1747000001', '{"a":1}')).not.toBe(base);
-    expect(signPayload(SECRET, '1747000000', '{"a":2}')).not.toBe(base);
-    expect(signPayload(`${SECRET}x`, '1747000000', '{"a":1}')).not.toBe(base);
-  });
-});
+function sign(secret: string, tsMs: string, body: string): string {
+  return `v1=${createHmac('sha256', secret).update(`${tsMs}.${body}`).digest('hex')}`;
+}
 
 describe('verifySignature', () => {
-  const now = 1_747_000_000;
+  const NOW = 1_747_000_000_000; // milliseconds
   const body = '{"type":"email.delivered","messageId":"m_1"}';
-  const validSig = signPayload(SECRET, String(now), body);
-  const validHeader = `t=${now},v1=${validSig}`;
+  const validSig = sign(SECRET, String(NOW), body);
 
   test('accepts a freshly-signed payload within the tolerance window', () => {
-    expect(verifySignature({ secret: SECRET, header: validHeader, body, nowSec: now })).toBe(true);
-    // 4 minutes 50 sec drift — still under the 300s default tolerance
     expect(
-      verifySignature({ secret: SECRET, header: validHeader, body, nowSec: now + 290 }),
+      verifySignature({
+        secret: SECRET,
+        signatureHeader: validSig,
+        timestampHeader: String(NOW),
+        body,
+        nowMs: NOW,
+      }),
+    ).toBe(true);
+    // 4 minutes 50 seconds drift — still under the 5 min default
+    expect(
+      verifySignature({
+        secret: SECRET,
+        signatureHeader: validSig,
+        timestampHeader: String(NOW),
+        body,
+        nowMs: NOW + 290_000,
+      }),
     ).toBe(true);
   });
 
   test('rejects a payload outside the tolerance window (replay defence)', () => {
     expect(
-      verifySignature({ secret: SECRET, header: validHeader, body, nowSec: now + 301 }),
+      verifySignature({
+        secret: SECRET,
+        signatureHeader: validSig,
+        timestampHeader: String(NOW),
+        body,
+        nowMs: NOW + 301_000,
+      }),
     ).toBe(false);
     expect(
-      verifySignature({ secret: SECRET, header: validHeader, body, nowSec: now - 301 }),
+      verifySignature({
+        secret: SECRET,
+        signatureHeader: validSig,
+        timestampHeader: String(NOW),
+        body,
+        nowMs: NOW - 301_000,
+      }),
     ).toBe(false);
   });
 
@@ -46,17 +61,26 @@ describe('verifySignature', () => {
     expect(
       verifySignature({
         secret: SECRET,
-        header: validHeader,
+        signatureHeader: validSig,
+        timestampHeader: String(NOW),
         body: '{"type":"email.delivered","messageId":"m_2"}',
-        nowSec: now,
+        nowMs: NOW,
       }),
     ).toBe(false);
   });
 
   test('rejects when the signature byte does not match', () => {
-    const flipped = validSig.replace(/.$/, validSig.endsWith('a') ? 'b' : 'a');
+    const flipped = validSig.endsWith('a')
+      ? validSig.replace(/a$/, 'b')
+      : validSig.replace(/.$/, 'a');
     expect(
-      verifySignature({ secret: SECRET, header: `t=${now},v1=${flipped}`, body, nowSec: now }),
+      verifySignature({
+        secret: SECRET,
+        signatureHeader: flipped,
+        timestampHeader: String(NOW),
+        body,
+        nowMs: NOW,
+      }),
     ).toBe(false);
   });
 
@@ -64,25 +88,39 @@ describe('verifySignature', () => {
     expect(
       verifySignature({
         secret: `${SECRET}_different`,
-        header: validHeader,
+        signatureHeader: validSig,
+        timestampHeader: String(NOW),
         body,
-        nowSec: now,
+        nowMs: NOW,
       }),
     ).toBe(false);
   });
 
-  test('rejects malformed headers', () => {
-    expect(verifySignature({ secret: SECRET, header: null, body, nowSec: now })).toBe(false);
-    expect(verifySignature({ secret: SECRET, header: '', body, nowSec: now })).toBe(false);
-    expect(verifySignature({ secret: SECRET, header: 'not-a-header', body, nowSec: now })).toBe(
-      false,
-    );
-    expect(verifySignature({ secret: SECRET, header: `t=${now}`, body, nowSec: now })).toBe(false);
-    expect(verifySignature({ secret: SECRET, header: `v1=${validSig}`, body, nowSec: now })).toBe(
-      false,
-    );
+  test('rejects malformed or missing headers', () => {
     expect(
-      verifySignature({ secret: SECRET, header: `t=notanumber,v1=${validSig}`, body, nowSec: now }),
+      verifySignature({ secret: SECRET, signatureHeader: null, timestampHeader: String(NOW), body, nowMs: NOW }),
+    ).toBe(false);
+    expect(
+      verifySignature({ secret: SECRET, signatureHeader: validSig, timestampHeader: null, body, nowMs: NOW }),
+    ).toBe(false);
+    expect(
+      verifySignature({
+        secret: SECRET,
+        // Missing the v1= prefix → reject.
+        signatureHeader: validSig.replace('v1=', ''),
+        timestampHeader: String(NOW),
+        body,
+        nowMs: NOW,
+      }),
+    ).toBe(false);
+    expect(
+      verifySignature({
+        secret: SECRET,
+        signatureHeader: validSig,
+        timestampHeader: 'not-a-number',
+        body,
+        nowMs: NOW,
+      }),
     ).toBe(false);
   });
 
@@ -90,9 +128,10 @@ describe('verifySignature', () => {
     expect(
       verifySignature({
         secret: SECRET,
-        header: `t=${now},v1=${validSig.slice(0, 32)}`,
+        signatureHeader: validSig.slice(0, validSig.length / 2),
+        timestampHeader: String(NOW),
         body,
-        nowSec: now,
+        nowMs: NOW,
       }),
     ).toBe(false);
   });
@@ -101,10 +140,11 @@ describe('verifySignature', () => {
     expect(
       verifySignature({
         secret: SECRET,
-        header: validHeader,
+        signatureHeader: validSig,
+        timestampHeader: String(NOW),
         body,
-        nowSec: now + 60,
-        toleranceSec: 30,
+        nowMs: NOW + 60_000,
+        toleranceMs: 30_000,
       }),
     ).toBe(false);
   });

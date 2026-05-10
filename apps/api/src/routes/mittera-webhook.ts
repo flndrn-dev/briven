@@ -9,11 +9,14 @@ import { audit } from '../services/audit.js';
  * Inbound webhook receiver for mittera.eu — registered at the URL
  * configured on the mittera side (briven.tech/api/mittera-webhook,
  * which the dashboard's Next.js rewrite forwards to the api at
- * /mittera-webhook).
+ * /mittera-webhook; for production traffic mittera should hit
+ * https://api.briven.tech/mittera-webhook directly to avoid the
+ * Cloudflare-edge mangling we saw on POST bodies through the rewrite).
  *
- * mittera signs each request with HMAC-SHA256 of `<ts>.<body>` using
- * the shared signing secret and sends the signature in the
- * `Mittera-Signature` header (Stripe convention: `t=<ts>,v1=<hex>`).
+ * mittera signs each request with HMAC-SHA256(`${ts_ms}.${rawBody}`)
+ * using the shared webhook secret and sends it across two headers:
+ *   X-mittera-Signature: v1=<hex>
+ *   X-mittera-Timestamp: <unix_milliseconds>
  *
  * Event payloads land in audit_logs with action="mittera.email.<type>"
  * so the operator can review delivery / bounce / complaint history
@@ -27,26 +30,29 @@ import { audit } from '../services/audit.js';
 export const mitteraWebhookRouter = new Hono();
 
 mitteraWebhookRouter.post('/mittera-webhook', async (c) => {
-  if (!env.BRIVEN_MITTERA_SIGNING_SECRET) {
+  if (!env.BRIVEN_MITTERA_WEBHOOK_SECRET) {
     log.warn('mittera_webhook_unconfigured');
-    return c.json({ code: 'not_configured', message: 'mittera signing secret unset' }, 503);
+    return c.json({ code: 'not_configured', message: 'mittera webhook secret unset' }, 503);
   }
 
   // Read the raw body — verifySignature operates on the exact bytes
   // mittera signed, so we must not let JSON.parse round-trip and lose
   // whitespace/escape ordering.
   const raw = await c.req.text();
-  const sigHeader = c.req.header('mittera-signature') ?? null;
+  const sigHeader = c.req.header('x-mittera-signature') ?? c.req.header('mittera-signature') ?? null;
+  const tsHeader = c.req.header('x-mittera-timestamp') ?? c.req.header('mittera-timestamp') ?? null;
 
   const ok = verifySignature({
-    secret: env.BRIVEN_MITTERA_SIGNING_SECRET,
-    header: sigHeader,
+    secret: env.BRIVEN_MITTERA_WEBHOOK_SECRET,
+    signatureHeader: sigHeader,
+    timestampHeader: tsHeader,
     body: raw,
   });
 
   if (!ok) {
     log.warn('mittera_webhook_signature_invalid', {
-      hasHeader: Boolean(sigHeader),
+      hasSig: Boolean(sigHeader),
+      hasTs: Boolean(tsHeader),
       bodyLen: raw.length,
     });
     return c.json({ code: 'invalid_signature', message: 'signature invalid or expired' }, 401);
