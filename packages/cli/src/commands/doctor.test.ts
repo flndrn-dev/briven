@@ -5,7 +5,8 @@
  * integration suite that lives in infra/.
  */
 
-import { describe, expect, test } from 'bun:test';
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
 
 describe('realtime origin derivation', () => {
   // Mirrors the regex in doctor.ts. Refactor target: extract the helper
@@ -17,14 +18,17 @@ describe('realtime origin derivation', () => {
   }
 
   test('rewrites api.<domain> → realtime.<domain>', () => {
-    expect(deriveRealtime('https://api.briven.tech')).toBe('https://realtime.briven.tech');
-    expect(deriveRealtime('http://api.briven.local:3001')).toBe('http://realtime.briven.local:3001');
+    assert.equal(deriveRealtime('https://api.briven.tech'), 'https://realtime.briven.tech');
+    assert.equal(
+      deriveRealtime('http://api.briven.local:3001'),
+      'http://realtime.briven.local:3001',
+    );
   });
 
   test('leaves origins without an api. prefix unchanged', () => {
-    expect(deriveRealtime('http://localhost:3001')).toBe('http://localhost:3001');
-    expect(deriveRealtime('https://briven.tech')).toBe('https://briven.tech');
-    expect(deriveRealtime('https://my-api.example.com')).toBe('https://my-api.example.com');
+    assert.equal(deriveRealtime('http://localhost:3001'), 'http://localhost:3001');
+    assert.equal(deriveRealtime('https://briven.tech'), 'https://briven.tech');
+    assert.equal(deriveRealtime('https://my-api.example.com'), 'https://my-api.example.com');
   });
 });
 
@@ -41,24 +45,24 @@ describe('boot-time formatting', () => {
   const NOW = new Date('2026-05-10T20:00:00Z').getTime();
 
   test('seconds-ago window', () => {
-    expect(formatBoot('2026-05-10T19:59:30Z', NOW)).toBe('30s ago');
-    expect(formatBoot('2026-05-10T19:59:01Z', NOW)).toBe('59s ago');
+    assert.equal(formatBoot('2026-05-10T19:59:30Z', NOW), '30s ago');
+    assert.equal(formatBoot('2026-05-10T19:59:01Z', NOW), '59s ago');
   });
 
   test('minutes-ago window', () => {
-    expect(formatBoot('2026-05-10T19:55:00Z', NOW)).toBe('5m ago');
-    expect(formatBoot('2026-05-10T19:01:00Z', NOW)).toBe('59m ago');
+    assert.equal(formatBoot('2026-05-10T19:55:00Z', NOW), '5m ago');
+    assert.equal(formatBoot('2026-05-10T19:01:00Z', NOW), '59m ago');
   });
 
   test('hours-ago window', () => {
-    expect(formatBoot('2026-05-10T15:00:00Z', NOW)).toBe('5h ago');
+    assert.equal(formatBoot('2026-05-10T15:00:00Z', NOW), '5h ago');
   });
 
   test('clamps negative deltas to zero (clock-skew safety)', () => {
-    expect(formatBoot('2026-05-10T20:01:00Z', NOW)).toBe('0s ago');
+    assert.equal(formatBoot('2026-05-10T20:01:00Z', NOW), '0s ago');
   });
 
   test('returns the raw string for unparseable input (best-effort)', () => {
-    expect(formatBoot('not-a-date', NOW)).toBe('not-a-date');
+    assert.equal(formatBoot('not-a-date', NOW), 'not-a-date');
   });
 });
