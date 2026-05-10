@@ -70,11 +70,75 @@ export default async function ProjectsPage() {
       </header>
 
       {projects.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
-          <p className="font-mono text-sm text-[var(--color-text-muted)]">
-            projects are the unit of isolation on briven — one postgres schema, one function
-            runtime, one set of deploy keys.
-          </p>
+        <div className="rounded-md border border-dashed border-[var(--color-border)] p-8">
+          <div className="flex flex-col gap-6">
+            <div>
+              <p className="font-mono text-sm text-[var(--color-text)]">
+                welcome to briven.
+              </p>
+              <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+                a project is one postgres schema + one function runtime + one set of deploy
+                keys. you&rsquo;ll usually have one per app you ship.
+              </p>
+            </div>
+
+            <ol className="flex flex-col gap-4 font-mono text-xs">
+              <li>
+                <p className="text-[var(--color-text)]">1 · create your first project</p>
+                <p className="mt-1 text-[var(--color-text-muted)]">
+                  click <em>new project</em> above. takes ~3 seconds — postgres schema +
+                  runtime spin up in the background.
+                </p>
+              </li>
+              <li>
+                <p className="text-[var(--color-text)]">2 · scaffold a local copy</p>
+                <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
+                  <code>
+                    {`pnpm dlx @briven/cli init my-app --template todo-app
+cd my-app
+briven login --project <p_id> --key <brk_key>
+briven link
+briven deploy`}
+                  </code>
+                </pre>
+                <p className="mt-1 text-[var(--color-text-muted)]">
+                  <code>--template todo-app</code> ships a working schema + 4 mutations + 1
+                  reactive query. swap for <code>chat</code> or <code>blank</code>.
+                </p>
+              </li>
+              <li>
+                <p className="text-[var(--color-text)]">3 · invoke + iterate</p>
+                <p className="mt-1 text-[var(--color-text-muted)]">
+                  <code>briven invoke listTodos</code> to test from the cli, or wire{' '}
+                  <code>@briven/react</code> /{' '}
+                  <code>@briven/svelte</code> /{' '}
+                  <code>@briven/vue</code> into your frontend. queries are reactive by
+                  default — they re-run when the underlying rows change.
+                </p>
+              </li>
+            </ol>
+
+            <div className="flex flex-wrap gap-3 font-mono text-xs">
+              <a
+                href="https://docs.briven.tech/quickstart"
+                className="underline underline-offset-2 hover:text-[var(--color-text)]"
+              >
+                full quickstart →
+              </a>
+              <a
+                href="https://docs.briven.tech/cli"
+                className="text-[var(--color-text-muted)] underline underline-offset-2 hover:text-[var(--color-text)]"
+              >
+                cli reference
+              </a>
+              <a
+                href="https://docs.briven.tech/functions"
+                className="text-[var(--color-text-muted)] underline underline-offset-2 hover:text-[var(--color-text)]"
+              >
+                functions
+              </a>
+            </div>
+          </div>
         </div>
       ) : (
         <ul className="flex flex-col gap-2">

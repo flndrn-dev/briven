@@ -25,7 +25,6 @@
 services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.16.0
-    container_name: postgres-exporter
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DATA_SOURCE_NAME}
@@ -35,14 +34,17 @@ services:
       PG_EXPORTER_AUTO_DISCOVER_DATABASES: 'true'
       PG_EXPORTER_EXCLUDE_DATABASES: 'template0,template1'
     networks:
-      - briven
+      # Explicit alias: this container lives in its own compose project
+      # (briven-pg-exporter), but the prometheus container scrapes us by
+      # the short name `postgres-exporter`. Docker compose normally
+      # only aliases within its own project; we need a cross-project
+      # alias on the shared dokploy-network so prometheus can resolve.
+      dokploy-network:
+        aliases:
+          - postgres-exporter
     labels:
-      # Promtail picks up structured logs; the exporter mostly emits
-      # access-log lines but it's cheap to keep them in Loki for incident
-      # forensics.
       - 'briven_logs=true'
 
 networks:
-  briven:
+  dokploy-network:
     external: true
-    name: briven
