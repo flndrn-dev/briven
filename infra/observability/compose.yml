@@ -10,7 +10,6 @@
 services:
   prometheus:
     image: prom/prometheus:v3.0.1
-    container_name: briven-prometheus
     restart: unless-stopped
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -22,22 +21,20 @@ services:
       - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     networks:
-      - briven
+      - dokploy-network
 
   loki:
     image: grafana/loki:3.3.2
-    container_name: briven-loki
     restart: unless-stopped
     command: -config.file=/etc/loki/config.yaml
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
       - loki_data:/loki
     networks:
-      - briven
+      - dokploy-network
 
   promtail:
     image: grafana/promtail:3.3.2
-    container_name: briven-promtail
     restart: unless-stopped
     command: -config.file=/etc/promtail/config.yaml
     volumes:
@@ -47,21 +44,17 @@ services:
     depends_on:
       - loki
     networks:
-      - briven
+      - dokploy-network
 
   grafana:
     image: grafana/grafana:11.4.0
-    container_name: briven-grafana
     restart: unless-stopped
     environment:
-      # Auth is via Cloudflare Access — Grafana itself runs without local
-      # auth and trusts the upstream. The compose template lets the
-      # operator override these for an air-gapped deploy.
-      GF_AUTH_PROXY_ENABLED: 'true'
-      GF_AUTH_PROXY_HEADER_NAME: 'cf-access-authenticated-user-email'
-      GF_AUTH_PROXY_HEADER_PROPERTY: 'email'
-      GF_AUTH_PROXY_AUTO_SIGN_UP: 'true'
-      GF_AUTH_DISABLE_LOGIN_FORM: 'true'
+      # Local-auth mode — operator signs in with the bootstrap admin
+      # password set via env. Promotable to cf-access proxy auth later
+      # by overriding GF_AUTH_PROXY_ENABLED=true and the header vars.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_SECURITY_ALLOW_EMBEDDING: 'false'
       GF_ANALYTICS_REPORTING_ENABLED: 'false'
@@ -75,15 +68,14 @@ services:
       - prometheus
       - loki
     networks:
-      - briven
+      - dokploy-network
     labels:
-      # Traefik-only routing; Cloudflare Access fronts the public hostname
-      # and injects the cf-access-authenticated-user-email header.
       - 'traefik.enable=true'
-      - 'traefik.http.routers.grafana.rule=Host(`grafana.briven.tech`)'
-      - 'traefik.http.routers.grafana.entrypoints=websecure'
-      - 'traefik.http.routers.grafana.tls.certresolver=cloudflare'
-      - 'traefik.http.services.grafana.loadbalancer.server.port=3000'
+      - 'traefik.docker.network=dokploy-network'
+      - 'traefik.http.routers.briven-grafana.rule=Host(`grafana.briven.tech`)'
+      - 'traefik.http.routers.briven-grafana.entrypoints=websecure'
+      - 'traefik.http.routers.briven-grafana.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-grafana.loadbalancer.server.port=3000'
 
 volumes:
   prometheus_data:
@@ -91,6 +83,5 @@ volumes:
   grafana_data:
 
 networks:
-  briven:
+  dokploy-network:
     external: true
-    name: briven

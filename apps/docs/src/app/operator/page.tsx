@@ -51,10 +51,10 @@ export default function OperatorPage() {
         <Snippet>{`docker compose logs api 2>&1 | grep magic_link | tail -1`}</Snippet>
         <p>
           if mittera is configured but mail still isn&rsquo;t arriving, check the api log for{' '}
-          <code>mittera_send_failed</code> entries — the signing secret may be wrong, the sender
-          domain isn&rsquo;t verified on the mittera side, or the registered webhook URL{' '}
-          <code>https://&lt;domain&gt;/api/mittera-webhook</code> is unreachable. The link itself
-          is always valid for 10 minutes; re-requesting just sends a fresh one.
+          <code>mittera_send_failed</code> entries — the API key may be wrong, the sender
+          domain isn&rsquo;t verified on the mittera side, or mittera is rejecting the request
+          for another reason (the response body is logged, truncated to 240 chars). The link
+          itself is always valid for 10 minutes; re-requesting just sends a fresh one.
         </p>
       </Section>
 
