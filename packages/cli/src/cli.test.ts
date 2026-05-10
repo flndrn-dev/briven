@@ -29,4 +29,60 @@ describe('@briven/cli entry', () => {
     const code = await run(['link']);
     assert.equal(code, 1);
   });
+
+  it('returns 0 for "invoke --help"', async () => {
+    const code = await run(['invoke', '--help']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 1 for "invoke" with no function name', async () => {
+    const code = await run(['invoke']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 1 for "invoke <name>" with invalid --body json', async () => {
+    const code = await run(['invoke', 'someFn', '--body', '{not-json']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 1 for "invoke <name>" with no linked project', async () => {
+    // No briven.json + no default credential → exits before any network call.
+    const code = await run(['invoke', 'someFn']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 0 for "projects --help"', async () => {
+    const code = await run(['projects', '--help']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 0 for "projects list" (works against an empty creds file)', async () => {
+    const code = await run(['projects', 'list']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 1 for "projects set-default" without an argument', async () => {
+    const code = await run(['projects', 'set-default']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 0 for "export --help"', async () => {
+    const code = await run(['export', '--help']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 1 for "export" with no linked project', async () => {
+    const code = await run(['export']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 0 for "import --help"', async () => {
+    const code = await run(['import', '--help']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 1 for "import" with no path argument', async () => {
+    const code = await run(['import']);
+    assert.equal(code, 1);
+  });
 });
