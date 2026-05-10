@@ -413,7 +413,6 @@ export class IsolatePoolImpl implements PoolManager {
 
     void (async () => {
       try {
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const line = await child.stdout.next();
           if (line === null) return;
@@ -508,7 +507,6 @@ export class IsolatePoolImpl implements PoolManager {
     const projectId = entry.projectId;
     const envValues = entry.envValues;
     void (async () => {
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const line = await child.stderr.next();
         if (line === null) return;

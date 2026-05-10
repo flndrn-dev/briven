@@ -224,7 +224,7 @@ export default async function BillingPage({
           <FragmentRow label="rollback window" value={TIER_SLA[tier].rollbackWindow} />
         </dl>
         <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-          live operational health is at <a className="underline underline-offset-2" href="https://docs.briven.cloud/status">docs.briven.cloud/status</a>.
+          live operational health is at <a className="underline underline-offset-2" href="https://docs.briven.tech/status">docs.briven.tech/status</a>.
           formal credit-eligible SLA terms ship with the public beta — current targets are
           operational commitments, not contractual.
         </p>

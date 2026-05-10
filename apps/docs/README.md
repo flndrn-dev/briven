@@ -1,4 +1,4 @@
-# @briven/docs — docs.briven.cloud
+# @briven/docs — docs.briven.tech
 
 developer docs for briven. **skeleton only in phase 0** — real content writing starts in phase 1 week 7-8 once the cli + sdk are live enough to document.
 

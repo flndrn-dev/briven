@@ -42,7 +42,7 @@ export default async function UpgradePage({
 
   const h = await headers();
   const proto = h.get('x-forwarded-proto') ?? 'https';
-  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'briven.cloud';
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'briven.tech';
   const origin = `${proto}://${host}`;
 
   const body: CheckoutBody = {

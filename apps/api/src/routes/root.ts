@@ -6,6 +6,6 @@ rootRouter.get('/', (c) =>
   c.json({
     service: 'briven.api',
     status: 'running',
-    docs: 'https://docs.briven.cloud',
+    docs: 'https://docs.briven.tech',
   }),
 );

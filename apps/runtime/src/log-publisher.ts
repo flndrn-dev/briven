@@ -56,7 +56,6 @@ export async function publishInvocation(envelope: InvocationEnvelope): Promise<v
     await redis.xadd(key, 'MAXLEN', '~', String(env.BRIVEN_LOGS_STREAM_MAX), '*', ...fields);
   } catch (err) {
     // Don't let a flaky Redis kill the invocation path. Log to real stderr.
-    // eslint-disable-next-line no-console
     console.warn(
       '[runtime] logs publish failed:',
       err instanceof Error ? err.message : String(err),

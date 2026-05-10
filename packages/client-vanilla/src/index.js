@@ -3,8 +3,8 @@
  *
  *   const briven = createBrivenClient({
  *     projectId: 'p_...',
- *     apiOrigin: 'https://api.briven.cloud',
- *     wsOrigin: 'wss://ws.briven.cloud',
+ *     apiOrigin: 'https://api.briven.tech',
+ *     wsOrigin: 'wss://ws.briven.tech',
  *   });
  *
  *   const notes = await briven.invoke('listNotes');

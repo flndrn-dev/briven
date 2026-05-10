@@ -145,7 +145,7 @@ export function UserMenuButton({ user, collapsed }: Props) {
             <li>
               <MenuRow
                 as="a"
-                href="https://docs.briven.cloud"
+                href="https://docs.briven.tech"
                 target="_blank"
                 rel="noreferrer"
                 onSelect={() => setOpen(false)}
@@ -260,7 +260,6 @@ function Avatar({ user, size }: { user: UserInfo; size: number }) {
   const initials = getInitials(user.legalName ?? user.name ?? user.email);
   if (user.image) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={user.image}
         alt=""

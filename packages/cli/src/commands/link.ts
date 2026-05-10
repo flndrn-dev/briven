@@ -102,7 +102,7 @@ export async function runLink(argv: readonly string[]): Promise<number> {
   blankLine();
   success(`linked ${local.name} → ${projectId}`);
   step('next: briven deploy   |   briven dev');
-  printLink('https://docs.briven.cloud/cli');
+  printLink('https://docs.briven.tech/cli');
   return 0;
 }
 

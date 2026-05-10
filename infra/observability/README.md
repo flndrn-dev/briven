@@ -56,7 +56,7 @@ curl -fsS http://localhost:3100/ready            # loki ready
 docker compose ps                                 # all four containers up
 ```
 
-then point cloudflare access at `grafana.briven.cloud` (the traefik labels in `compose.yml` cover the rest).
+then point cloudflare access at `grafana.briven.tech` (the traefik labels in `compose.yml` cover the rest).
 
 ## scale-out path
 

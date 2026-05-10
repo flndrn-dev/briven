@@ -24,7 +24,7 @@ export default function QuickstartPage() {
 
       <ol className="mt-8 flex flex-col gap-6 font-mono text-sm text-[var(--color-text-muted)]">
         <Step n={1} title="create a project in the dashboard">
-          Sign in at <a href="https://briven.cloud">briven.cloud</a>, click <em>new project</em>,
+          Sign in at <a href="https://briven.tech">briven.tech</a>, click <em>new project</em>,
           copy the resulting project id.
         </Step>
         <Step n={2} title="generate an api key">

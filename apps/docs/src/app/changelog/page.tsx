@@ -54,7 +54,7 @@ const ENTRIES: readonly Entry[] = [
     date: '2026-05-10',
     tags: ['feat'],
     title: 'public status page',
-    body: 'docs.briven.cloud/status — live probes against api / runtime / realtime, red/green per service, latency + http status, no cache. dns cutover to status.briven.cloud is a future ops move.',
+    body: 'docs.briven.tech/status — live probes against api / runtime / realtime, red/green per service, latency + http status, no cache. dns cutover to status.briven.tech is a future ops move.',
   },
   {
     date: '2026-05-10',
@@ -78,7 +78,7 @@ const ENTRIES: readonly Entry[] = [
     date: '2026-05-10',
     tags: ['feat', 'docs'],
     title: 'public migration guide + public changelog',
-    body: 'docs.briven.cloud/migration documents the five principles + ten-step playbook that every briven migration follows, with per-source teasers for convex / supabase / raw-postgres / firebase. this changelog ships alongside.',
+    body: 'docs.briven.tech/migration documents the five principles + ten-step playbook that every briven migration follows, with per-source teasers for convex / supabase / raw-postgres / firebase. this changelog ships alongside.',
   },
   {
     date: '2026-05-10',
@@ -204,7 +204,7 @@ const ENTRIES: readonly Entry[] = [
     date: '2026-04-24',
     tags: ['infra'],
     title: 'wildcard TLS via Cloudflare DNS-01 (PR #9)',
-    body: 'traefik issues *.apps.briven.cloud certificates via the cloudflare DNS challenge. each customer project gets its own routable subdomain at deploy time.',
+    body: 'traefik issues *.apps.briven.tech certificates via the cloudflare DNS challenge. each customer project gets its own routable subdomain at deploy time.',
   },
   {
     date: '2026-04-23',

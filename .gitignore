@@ -66,7 +66,7 @@ apps/**/data/
 # internal reference docs — never pushed to remote
 # covers /docs/ at repo root and every file + subfolder inside it
 # EXCEPTION: MIGRATION.md is tracked — it's the user-facing playbook for
-# migrating onto briven cloud and is meant to be distributed alongside
+# migrating onto briven.tech and is meant to be distributed alongside
 # briven into any project that wants to migrate.
 /docs/**
 !/docs/MIGRATION.md

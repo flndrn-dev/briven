@@ -2,7 +2,7 @@
 
 > ship typescript backends to your own postgres
 
-The developer CLI for [briven](https://briven.cloud).
+The developer CLI for [briven](https://briven.tech).
 
 ## install
 

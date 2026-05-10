@@ -3,8 +3,8 @@
  *
  *   const briven = createBrivenClient({
  *     projectId: 'p_...',
- *     apiOrigin: 'https://api.briven.cloud',
- *     wsOrigin: 'wss://ws.briven.cloud',
+ *     apiOrigin: 'https://api.briven.tech',
+ *     wsOrigin: 'wss://ws.briven.tech',
  *   });
  *
  *   const notes = await briven.invoke('listNotes');
@@ -17,9 +17,9 @@
 export interface BrivenClientOptions {
   /** Briven project id (`p_...`). Required. */
   readonly projectId: string;
-  /** REST control plane origin, e.g. `https://api.briven.cloud`. */
+  /** REST control plane origin, e.g. `https://api.briven.tech`. */
   readonly apiOrigin: string;
-  /** WebSocket origin for reactive queries, e.g. `wss://ws.briven.cloud`. */
+  /** WebSocket origin for reactive queries, e.g. `wss://ws.briven.tech`. */
   readonly wsOrigin?: string;
   /** Session token / api key forwarded as `Authorization: Bearer <token>`. */
   readonly token?: string | (() => string | Promise<string>);

@@ -7,14 +7,14 @@
 #       root@187.124.64.116:/etc/dokploy/traefik/dynamic/uptime.yml
 #
 # TLS: single hostname, served via the existing letsencrypt resolver
-# (HTTP-01 challenge). DNS for dev-uptime.briven.cloud is set to
+# (HTTP-01 challenge). DNS for dev-uptime.briven.tech is set to
 # DNS-only (grey cloud) on Cloudflare so Let's Encrypt can reach the
 # origin on port 80 during the challenge.
 
 http:
   routers:
     briven-uptime-kuma-web:
-      rule: "Host(`dev-uptime.briven.cloud`)"
+      rule: "Host(`dev-uptime.briven.tech`)"
       entryPoints:
         - web
       service: briven-uptime-kuma-api
@@ -22,7 +22,7 @@ http:
         - redirect-to-https
 
     briven-uptime-kuma-websecure:
-      rule: "Host(`dev-uptime.briven.cloud`)"
+      rule: "Host(`dev-uptime.briven.tech`)"
       entryPoints:
         - websecure
       service: briven-uptime-kuma-api

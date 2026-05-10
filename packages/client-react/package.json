@@ -16,7 +16,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "echo 'lint wired in phase 1'",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -40,5 +40,5 @@
     "url": "git+https://code.konnos.org/flndrn/briven.git",
     "directory": "packages/client-react"
   },
-  "homepage": "https://docs.briven.cloud"
+  "homepage": "https://docs.briven.tech"
 }

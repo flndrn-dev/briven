@@ -20,7 +20,7 @@ const envSchema = z.object({
   BRIVEN_RUNTIME_SHARED_SECRET: z.string().min(32).optional(),
 
   // Internal apps/api URL, reachable on the swarm overlay network. Used
-  // only for bundle fetches; never the public api.briven.cloud hostname.
+  // only for bundle fetches; never the public api.briven.tech hostname.
   BRIVEN_API_INTERNAL_URL: z.string().url().default('http://localhost:3001'),
 
   // Data-plane postgres URL — same cluster the api provisions per-project

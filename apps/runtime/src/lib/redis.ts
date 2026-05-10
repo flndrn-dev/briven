@@ -18,7 +18,6 @@ export function getRedis(): Redis | null {
       lazyConnect: false,
     });
     _redis.on('error', (err) => {
-      // eslint-disable-next-line no-console
       console.warn('[runtime] redis error:', err.message);
     });
   }

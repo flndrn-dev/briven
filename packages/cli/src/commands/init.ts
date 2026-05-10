@@ -77,7 +77,7 @@ export async function runInit(argv: readonly string[]): Promise<number> {
   step('next: create a project in the dashboard, then run');
   step('      briven login --project <id> --key <brk_...>');
   step('      briven link');
-  link('https://docs.briven.cloud/cli');
+  link('https://docs.briven.tech/cli');
   return 0;
 }
 

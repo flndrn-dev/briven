@@ -29,7 +29,7 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="flex items-center gap-4 font-mono text-xs">
             <Link
-              href="https://briven.cloud"
+              href="https://briven.tech"
               className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             >
               dashboard

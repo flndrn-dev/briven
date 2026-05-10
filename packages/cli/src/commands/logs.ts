@@ -58,7 +58,6 @@ export async function runLogs(argv: readonly string[]): Promise<number> {
   }`;
 
   let backoff = 1_000;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       await streamOnce(url, cred.apiKey);

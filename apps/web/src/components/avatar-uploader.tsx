@@ -83,7 +83,6 @@ export function AvatarUploader({ currentImage, displayName }: Props) {
     <div className="flex items-center gap-5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5">
       <div className="relative">
         {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={preview}
             alt="avatar preview"

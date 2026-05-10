@@ -2,7 +2,7 @@ import { apiCall, ApiCallError } from '../api-client.js';
 import { readCredentials, writeCredentials } from '../config.js';
 import { banner, blankLine, error as printError, step, success } from '../output.js';
 
-const DEFAULT_API_ORIGIN = 'https://api.briven.cloud';
+const DEFAULT_API_ORIGIN = 'https://api.briven.tech';
 
 interface ParsedArgs {
   projectId?: string;
