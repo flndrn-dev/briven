@@ -24,12 +24,27 @@ export default function DocsIndex() {
         <DocCard
           href="/schema"
           title="schema dsl"
-          body="declare tables and migrations in typescript."
+          body="declare tables, columns, indexes in typescript."
+        />
+        <DocCard
+          href="/functions"
+          title="functions"
+          body="query, mutation, action — typed db client and ctx."
+        />
+        <DocCard
+          href="/migration"
+          title="migration"
+          body="moving from convex, supabase, postgres, prisma, drizzle."
         />
         <DocCard
           href="/self-host"
           title="self-host"
-          body="dokploy, coolify, bare postgres. your call."
+          body="agpl engine, mit cli. dokploy, coolify, your vps."
+        />
+        <DocCard
+          href="/changelog"
+          title="changelog"
+          body="what shipped, when, with what impact."
         />
       </div>
     </DocsShell>
