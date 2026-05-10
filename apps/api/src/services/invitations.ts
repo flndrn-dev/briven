@@ -8,6 +8,7 @@ import {
   memberRole,
   projectInvitations,
   projectMembers,
+  projects,
   users,
   type MemberRole,
   type ProjectInvitation,
@@ -140,12 +141,15 @@ export async function acceptInvitation(
 
 /**
  * Look up any pending invitations for a user's email that the signed-in
- * user owns. Used by the dashboard's "pending invitations" surface.
+ * user owns. Used by the dashboard's "pending invitations" surface. Joins
+ * to `projects` so the surface can show the project name without a
+ * second round-trip per row.
  */
 export async function pendingInvitationsForEmail(email: string): Promise<
   Array<{
     id: string;
     projectId: string;
+    projectName: string;
     role: MemberRole;
     invitedBy: string | null;
     expiresAt: Date;
@@ -156,19 +160,69 @@ export async function pendingInvitationsForEmail(email: string): Promise<
     .select({
       id: projectInvitations.id,
       projectId: projectInvitations.projectId,
+      projectName: projects.name,
       role: projectInvitations.role,
       invitedBy: projectInvitations.invitedBy,
       expiresAt: projectInvitations.expiresAt,
     })
     .from(projectInvitations)
+    .innerJoin(projects, eq(projects.id, projectInvitations.projectId))
     .where(
       and(
         eq(projectInvitations.email, email.toLowerCase()),
         isNull(projectInvitations.acceptedAt),
         isNull(projectInvitations.revokedAt),
+        isNull(projects.deletedAt),
       ),
     );
   return rows;
+}
+
+/**
+ * Accept an invitation by its id. Session-auth replaces the token —
+ * being signed in with an email that matches the invite is sufficient
+ * proof of identity, and avoids leaking the one-time token through the
+ * dashboard listing API. Token-based acceptance (the email-link flow,
+ * `acceptInvitation` above) stays intact for users who haven't signed
+ * in yet.
+ */
+export async function acceptInvitationById(
+  userId: string,
+  userEmail: string,
+  invitationId: string,
+): Promise<AcceptedInvitation> {
+  const db = getDb();
+  const [invite] = await db
+    .select()
+    .from(projectInvitations)
+    .where(
+      and(
+        eq(projectInvitations.id, invitationId),
+        isNull(projectInvitations.acceptedAt),
+        isNull(projectInvitations.revokedAt),
+      ),
+    )
+    .limit(1);
+  if (!invite) throw new NotFoundError('invitation', invitationId);
+  if (invite.expiresAt.getTime() < Date.now()) {
+    throw new ValidationError('invitation expired');
+  }
+  if (invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+    throw new ValidationError('invitation was sent to a different email');
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(projectInvitations)
+      .set({ acceptedAt: new Date() })
+      .where(eq(projectInvitations.id, invite.id));
+    await tx
+      .insert(projectMembers)
+      .values({ projectId: invite.projectId, userId, role: invite.role })
+      .onConflictDoNothing();
+  });
+
+  return { projectId: invite.projectId, userId, role: invite.role };
 }
 
 // Keep users import referenced for type flow
