@@ -1,7 +1,16 @@
+import { constantTimeEqual } from '@briven/shared';
+import { createLogger } from '@briven/shared/observability';
 import postgres from 'postgres';
 import { z } from 'zod';
 
 import { env } from './env.js';
+import { incCounter, registerGauge, renderPrometheus } from './metrics.js';
+
+const log = createLogger({
+  service: 'realtime',
+  env: env.BRIVEN_ENV,
+  level: env.BRIVEN_LOG_LEVEL,
+});
 
 /**
  * Reactive WebSocket service.
@@ -86,7 +95,15 @@ async function ensureListen(channel: string): Promise<void> {
   if (subs && subs.size > 0) return; // already listening
   const sql = await getListener();
   if (!sql) return;
-  await sql.listen(channel, () => fireChannel(channel));
+  // postgres.js v3 re-issues LISTEN automatically on reconnect when the
+  // subscription is still attached; the third callback fires every time the
+  // attachment goes live, including after a reconnect. We log it so the loss
+  // and recovery of a connection is visible in ops.
+  await sql.listen(
+    channel,
+    () => fireChannel(channel),
+    () => log.info('realtime_listen_attached', { channel }),
+  );
 }
 
 async function ensureUnlisten(channel: string): Promise<void> {
@@ -101,16 +118,28 @@ async function ensureUnlisten(channel: string): Promise<void> {
 async function fireChannel(channel: string): Promise<void> {
   const subIds = channelToSubs.get(channel);
   if (!subIds) return;
-  for (const subId of subIds) {
+  incCounter('briven_realtime_notifies_total');
+  // why: invokeOnce mutates channelToSubs.get(channel) via attach/detach
+  // when touchedTables drift. Iterating the live Set would skip subs added
+  // mid-fan-out and re-visit subs being removed. Snapshot once.
+  const snapshot = [...subIds];
+  for (const subId of snapshot) {
     const sub = subscriptions.get(subId);
     if (!sub) continue;
     const result = await invokeOnce(sub);
+    incCounter('briven_realtime_invokes_total', {
+      outcome: (result as { ok?: boolean }).ok ? 'ok' : 'err',
+    });
     sub.send({ type: 'data', subscriptionId: sub.subscriptionId, ...result });
   }
 }
 
 async function invokeOnce(sub: Subscription): Promise<Record<string, unknown>> {
-  const url = `${env.BRIVEN_API_INTERNAL_URL}/v1/projects/${sub.projectId}/functions/${sub.functionName}`;
+  // why: the public /v1/projects/:id/functions/:name route requires a
+  // session or api-key with developer role. Realtime is a system caller,
+  // not a user — it authenticates as the runtime via the shared secret
+  // and uses the internal invoke endpoint, which threads `auth: null`.
+  const url = `${env.BRIVEN_API_INTERNAL_URL}/v1/internal/projects/${sub.projectId}/functions/${sub.functionName}`;
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (env.BRIVEN_RUNTIME_SHARED_SECRET) {
     headers['authorization'] = `Bearer ${env.BRIVEN_RUNTIME_SHARED_SECRET}`;
@@ -189,27 +218,31 @@ function authorise(req: Request): boolean {
   if (!env.BRIVEN_RUNTIME_SHARED_SECRET) return false;
   const auth = req.headers.get('authorization');
   const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
-  return token === env.BRIVEN_RUNTIME_SHARED_SECRET;
+  if (!token) return false;
+  return constantTimeEqual(token, env.BRIVEN_RUNTIME_SHARED_SECRET);
 }
 
 if (!env.BRIVEN_RUNTIME_SHARED_SECRET) {
-  console.error(
-    JSON.stringify({
-      event: 'realtime_boot_warning',
-      msg: 'BRIVEN_RUNTIME_SHARED_SECRET is unset — every WS upgrade will be rejected with 401 until configured',
-    }),
+  log.warn(
+    'realtime_boot_warning: BRIVEN_RUNTIME_SHARED_SECRET is unset — every WS upgrade will be rejected with 401 until configured',
   );
 }
 
-console.log(
-  JSON.stringify({
-    event: 'realtime_boot',
-    port: env.BRIVEN_REALTIME_PORT,
-    apiUrl: env.BRIVEN_API_INTERNAL_URL,
-    auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
-    listen: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
-  }),
-);
+// Pull-based gauges — snapshot at scrape time. Keeps the subscribe /
+// unsubscribe hot paths free of gauge bookkeeping.
+registerGauge('briven_realtime_subscriptions_active', () => [
+  { labels: {}, value: subscriptions.size },
+]);
+registerGauge('briven_realtime_channels_active', () => [
+  { labels: {}, value: channelToSubs.size },
+]);
+
+log.info('realtime_boot', {
+  port: env.BRIVEN_REALTIME_PORT,
+  apiUrl: env.BRIVEN_API_INTERNAL_URL,
+  auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
+  listen: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
+});
 
 interface SocketHandle {
   send: (data: string) => void;
@@ -224,6 +257,12 @@ export default {
       return Response.json({
         status: env.BRIVEN_DATA_PLANE_URL ? 'ready' : 'degraded',
         listen: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
+      });
+    }
+    if (url.pathname === '/metrics') {
+      return new Response(renderPrometheus(), {
+        status: 200,
+        headers: { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' },
       });
     }
     if (url.pathname === '/v1/subscribe') {

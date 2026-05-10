@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { pingDb } from '../db/client.js';
 import { pingDataPlane } from '../db/data-plane.js';
 import { env } from '../env.js';
+import { renderPrometheus } from '../lib/metrics.js';
 
 const BOOT_TIME = new Date().toISOString();
 
@@ -50,6 +51,17 @@ healthRouter.get('/ready', async (c) => {
   const ready = controlOk && dataOk && runtimeOk;
   return c.json({ status: ready ? 'ready' : 'not_ready', checks }, ready ? 200 : 503);
 });
+
+/**
+ * /metrics — Prometheus exposition. Intentionally unauthenticated; the
+ * scraper runs on the same docker network and the host firewall is the
+ * trust boundary. Per CLAUDE.md §11 every service exposes /metrics.
+ */
+healthRouter.get('/metrics', (c) =>
+  c.text(renderPrometheus(), 200, {
+    'content-type': 'text/plain; version=0.0.4; charset=utf-8',
+  }),
+);
 
 async function probeRuntime(): Promise<boolean> {
   if (!env.BRIVEN_RUNTIME_URL) return false;
