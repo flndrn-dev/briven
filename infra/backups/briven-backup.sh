@@ -1,41 +1,35 @@
 #!/usr/bin/env bash
-# Daily pg_dump of briven's two control-plane-adjacent databases to
-# object storage. Runs on the KVM via a systemd timer (see
-# briven-backup.{service,timer}).
+# Daily pg_dump of briven's two databases. Runs on the KVM via a systemd
+# timer (see briven-backup.{service,timer}).
 #
-# Today's destination: local MinIO on the same KVM (`briven-minio`
-# service on dokploy-network). Phase 0 exit criterion requires
-# off-site (R2 / B2 / cross-region) — that's a follow-up swap; point
-# this script at a different `mc alias` once credentials land.
+# Today's destination: local disk under /var/backups/briven/. Once
+# B2/R2 credentials land, the upload step at the bottom is enabled by
+# setting BRIVEN_BACKUP_S3_* env vars in /etc/briven/backup.env.
 #
-# What gets backed up:
-#   - briven_control  (meta-DB: users, orgs, projects, subscriptions, auth tables)
-#   - briven_data     (customer schemas — schema-per-tenant)
+# What gets backed up (both live in the briven-postgres-1 container):
+#   - briven_control  — meta-DB (users, orgs, projects, subscriptions, auth)
+#   - briven_data     — customer schemas (schema-per-tenant)
 #
-# Output format:
-#   s3://briven-backups/<db-name>/<YYYY-MM-DD>/<hh-mm-ss>.dump.gz
-#   The date prefix lets lifecycle rules prune by age.
+# Local layout:
+#   /var/backups/briven/<db-name>/<YYYY-MM-DD>/<hh-mm-ss>.dump.gz
 #
-# Exit codes:
-#   0  both dumps uploaded successfully
-#   1+ at least one step failed — see logs
+# Off-site layout (when configured):
+#   s3://${BRIVEN_BACKUP_S3_BUCKET}/<db-name>/<YYYY-MM-DD>/<hh-mm-ss>.dump.gz
+#
+# Retention: 30 days local; off-site lifecycle is handled by the bucket.
 
 set -euo pipefail
 
 # ─── config ────────────────────────────────────────────────────────────
-# Dokploy-managed swarm service names (resolvable inside dokploy-network).
-PG_CONTROL_SERVICE="postgres-quantify-virtual-pixel-2q7jlc"
-PG_DATA_SERVICE="postgres-calculate-primary-array-iykeiy"
-PG_USER="briven"
+PG_CONTAINER="briven-postgres-1"
+PG_USER="postgres"
+DBS=("briven_control" "briven_data")
+LOCAL_BACKUP_ROOT="/var/backups/briven"
+LOCAL_RETENTION_DAYS=30
 
-# MinIO alias config.
-MINIO_ENDPOINT="http://briven-minio:9000"
-MINIO_ACCESS_KEY="briven"
-# Password comes from /etc/briven/backup.env — NOT baked into the script.
-# See the systemd unit; Dokploy's MinIO root password is what gets written there.
-MINIO_SECRET_KEY_FILE="/etc/briven/backup.env"
+# Optional config file with BRIVEN_BACKUP_S3_* — see below.
+BACKUP_ENV_FILE="/etc/briven/backup.env"
 
-BUCKET="briven-backups"
 STAMP="$(date -u +'%Y-%m-%d/%H-%M-%S')"
 
 # ─── helpers ───────────────────────────────────────────────────────────
@@ -48,66 +42,76 @@ die() {
   exit 1
 }
 
-# Load MINIO_SECRET_KEY from the env file. The file has lines like
-# MINIO_SECRET_KEY=<value> and is chmod 600 root:root.
-[ -f "$MINIO_SECRET_KEY_FILE" ] || die "$MINIO_SECRET_KEY_FILE missing"
-# shellcheck disable=SC1090
-source "$MINIO_SECRET_KEY_FILE"
-[ -n "${MINIO_SECRET_KEY:-}" ] || die "MINIO_SECRET_KEY not set in $MINIO_SECRET_KEY_FILE"
+# Optional off-site config. When unset, we just write to local disk —
+# good enough for first weeks; the prune step still runs.
+if [ -f "$BACKUP_ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  source "$BACKUP_ENV_FILE"
+fi
 
-# ─── dump + upload per DB ──────────────────────────────────────────────
-dump_and_upload() {
+# ─── dump per DB ──────────────────────────────────────────────────────
+dump_one() {
   local db_name="$1"
-  local pg_service="$2"
-  local pg_container
-  pg_container="$(docker ps -q --filter "label=com.docker.swarm.service.name=${pg_service}" | head -1)"
-  [ -n "$pg_container" ] || die "no running container for pg service ${pg_service}"
+  local local_dir="${LOCAL_BACKUP_ROOT}/${db_name}/${STAMP%/*}"
+  local local_file="${local_dir}/${STAMP##*/}.dump.gz"
 
-  local tmp="/tmp/briven-backup-${db_name}-$$.dump.gz"
-  log "dumping ${db_name} (pg container: ${pg_container:0:12})"
+  mkdir -p "$local_dir"
 
-  # pg_dump --format=custom streams a binary dump; pipe through gzip then
-  # straight to disk. --format=custom is restorable via pg_restore with
-  # granular options (selective table restore, parallel, etc.).
-  if ! docker exec "$pg_container" pg_dump \
+  log "dumping ${db_name} from ${PG_CONTAINER}"
+  if ! docker exec "$PG_CONTAINER" pg_dump \
         --username="$PG_USER" \
         --format=custom \
         --compress=0 \
         --no-owner --no-privileges \
         "$db_name" \
-        | gzip -9 > "$tmp"; then
-    rm -f "$tmp"
+        | gzip -9 > "$local_file"; then
+    rm -f "$local_file"
     die "pg_dump failed for ${db_name}"
   fi
 
   local size
-  size="$(stat -c%s "$tmp")"
-  log "dump ok: ${size} bytes"
+  size="$(stat -c%s "$local_file")"
+  log "ok ${db_name}: ${size} bytes → ${local_file}"
 
-  # Use a one-shot mc container on the swarm overlay to push the dump.
-  # --rm so it cleans up; mount the tmp file read-only.
-  local object="s3://${BUCKET}/${db_name}/${STAMP}.dump.gz"
-  log "uploading to ${object}"
-
-  if ! docker run --rm \
-        --network dokploy-network \
-        -v "${tmp}:/backup.dump.gz:ro" \
-        --entrypoint sh \
-        minio/mc:latest \
-        -c "mc alias set bm ${MINIO_ENDPOINT} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} > /dev/null \
-            && mc cp /backup.dump.gz bm/${BUCKET}/${db_name}/${STAMP}.dump.gz"; then
-    rm -f "$tmp"
-    die "mc upload failed for ${db_name}"
+  # ─── optional off-site upload ───────────────────────────────────────
+  if [ -n "${BRIVEN_BACKUP_S3_ENDPOINT:-}" ] \
+     && [ -n "${BRIVEN_BACKUP_S3_BUCKET:-}" ] \
+     && [ -n "${BRIVEN_BACKUP_S3_ACCESS_KEY:-}" ] \
+     && [ -n "${BRIVEN_BACKUP_S3_SECRET_KEY:-}" ]; then
+    local object="s3://${BRIVEN_BACKUP_S3_BUCKET}/${db_name}/${STAMP}.dump.gz"
+    log "uploading ${object}"
+    if ! docker run --rm \
+          -v "${local_file}:/backup.dump.gz:ro" \
+          --entrypoint sh \
+          minio/mc:latest \
+          -c "mc alias set off ${BRIVEN_BACKUP_S3_ENDPOINT} ${BRIVEN_BACKUP_S3_ACCESS_KEY} ${BRIVEN_BACKUP_S3_SECRET_KEY} > /dev/null \
+              && mc cp /backup.dump.gz off/${BRIVEN_BACKUP_S3_BUCKET}/${db_name}/${STAMP}.dump.gz"; then
+      log "WARN: off-site upload failed for ${db_name} — local copy still safe"
+    else
+      log "off-site upload ok"
+    fi
+  else
+    log "off-site upload skipped (BRIVEN_BACKUP_S3_* unset)"
   fi
+}
 
-  rm -f "$tmp"
-  log "uploaded ${db_name} backup"
+# ─── prune old local backups ───────────────────────────────────────────
+prune_local() {
+  log "pruning local dumps older than ${LOCAL_RETENTION_DAYS}d"
+  if [ -d "$LOCAL_BACKUP_ROOT" ]; then
+    find "$LOCAL_BACKUP_ROOT" -type f -name '*.dump.gz' -mtime +"$LOCAL_RETENTION_DAYS" -delete || true
+    # Tidy empty directories left by the find above.
+    find "$LOCAL_BACKUP_ROOT" -type d -empty -delete || true
+  fi
 }
 
 # ─── run ───────────────────────────────────────────────────────────────
 log "briven backup run starting"
 
-dump_and_upload "briven_control" "$PG_CONTROL_SERVICE"
-dump_and_upload "briven_data"    "$PG_DATA_SERVICE"
+for db in "${DBS[@]}"; do
+  dump_one "$db"
+done
+
+prune_local
 
 log "briven backup run complete"
