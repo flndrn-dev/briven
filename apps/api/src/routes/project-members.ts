@@ -1,7 +1,9 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
-import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { projectRateLimit } from '../middleware/rate-limit.js';
+import { requireAuth } from '../middleware/session.js';
+import type { AppEnv } from '../types/app-env.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
@@ -11,14 +13,6 @@ import {
   updateMemberRole,
 } from '../services/members.js';
 import { memberRole } from '../db/schema.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    requestId: string;
-  };
-};
 
 const roleSchema = z.enum(memberRole);
 
@@ -49,7 +43,7 @@ membersRouter.get('/v1/projects/:id/members', async (c) => {
   return c.json({ members: rows });
 });
 
-membersRouter.post('/v1/projects/:id/members', async (c) => {
+membersRouter.post('/v1/projects/:id/members', projectRateLimit('mutate'), async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
 
@@ -82,7 +76,7 @@ membersRouter.post('/v1/projects/:id/members', async (c) => {
   return c.json({ member }, 201);
 });
 
-membersRouter.patch('/v1/projects/:id/members/:userId', async (c) => {
+membersRouter.patch('/v1/projects/:id/members/:userId', projectRateLimit('mutate'), async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
 
@@ -110,7 +104,7 @@ membersRouter.patch('/v1/projects/:id/members/:userId', async (c) => {
   return c.json({ member });
 });
 
-membersRouter.delete('/v1/projects/:id/members/:userId', async (c) => {
+membersRouter.delete('/v1/projects/:id/members/:userId', projectRateLimit('mutate'), async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
 

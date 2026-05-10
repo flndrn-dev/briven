@@ -17,6 +17,7 @@ export type IdPrefix =
   | 'k' // api key
   | 'm' // member
   | 'au' // audit log
+  | 'ar' // abuse report
   | 'fn' // function record
   | 'ev' // event
   | 'inv' // invocation — per-call id attached to function logs

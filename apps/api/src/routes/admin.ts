@@ -2,7 +2,15 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import { requireAdmin } from '../middleware/admin.js';
-import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { requireAuth } from '../middleware/session.js';
+import type { AppEnv } from '../types/app-env.js';
+import {
+  ABUSE_RESOLUTION,
+  listAbuseReports,
+  resolveAbuseReport,
+  triageAbuseReport,
+  type AbuseStatus,
+} from '../services/abuse.js';
 import {
   adminStats,
   forceSignOut,
@@ -14,14 +22,6 @@ import {
   unsuspendUser,
 } from '../services/admin.js';
 import { audit, hashIp } from '../services/audit.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    requestId: string;
-  };
-};
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
 
@@ -135,4 +135,69 @@ adminRouter.post('/v1/admin/users/revoke-admin', async (c) => {
     metadata: { userId: parsed.userId },
   });
   return c.json({ userId: parsed.userId, isAdmin: false });
+});
+
+/* ─── abuse-report triage ───────────────────────────────────────────── */
+
+const abuseStatusQuery = z.enum(['open', 'triaged', 'resolved']);
+const abuseTransitionSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('triage'),
+    notes: z.string().max(2000).optional(),
+  }),
+  z.object({
+    action: z.literal('resolve'),
+    resolution: z.enum(ABUSE_RESOLUTION),
+    notes: z.string().max(2000).optional(),
+  }),
+]);
+
+adminRouter.get('/v1/admin/abuse-reports', async (c) => {
+  const statusParam = c.req.query('status');
+  let status: AbuseStatus | undefined;
+  if (statusParam) {
+    const parsed = abuseStatusQuery.safeParse(statusParam);
+    if (!parsed.success) {
+      return c.json({ code: 'validation_failed', message: 'invalid status' }, 400);
+    }
+    status = parsed.data;
+  }
+  const limit = Number(c.req.query('limit') ?? '100');
+  const reports = await listAbuseReports({ status, limit: Number.isFinite(limit) ? limit : 100 });
+  return c.json({ reports });
+});
+
+adminRouter.patch('/v1/admin/abuse-reports/:reportId', async (c) => {
+  const actor = c.get('user')!;
+  const reportId = c.req.param('reportId');
+  if (!reportId) {
+    return c.json({ code: 'validation_failed', message: 'reportId required' }, 400);
+  }
+  const body = await c.req.json().catch(() => null);
+  const parsed = abuseTransitionSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
+      400,
+    );
+  }
+  if (parsed.data.action === 'triage') {
+    await triageAbuseReport({
+      reportId,
+      triagerId: actor.id,
+      notes: parsed.data.notes,
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+    });
+    return c.json({ reportId, status: 'triaged' });
+  }
+  await resolveAbuseReport({
+    reportId,
+    resolverId: actor.id,
+    resolution: parsed.data.resolution,
+    notes: parsed.data.notes,
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+  });
+  return c.json({ reportId, status: 'resolved', resolution: parsed.data.resolution });
 });

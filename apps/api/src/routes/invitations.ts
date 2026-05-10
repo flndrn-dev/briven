@@ -2,24 +2,19 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import { memberRole } from '../db/schema.js';
-import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { projectRateLimit } from '../middleware/rate-limit.js';
+import { requireAuth } from '../middleware/session.js';
+import type { AppEnv } from '../types/app-env.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   acceptInvitation,
+  acceptInvitationById,
   createInvitation,
   listInvitations,
   pendingInvitationsForEmail,
   revokeInvitation,
 } from '../services/invitations.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    requestId: string;
-  };
-};
 
 const createSchema = z.object({
   email: z.string().email().max(320),
@@ -51,7 +46,7 @@ invitationsRouter.get('/v1/projects/:id/invitations', async (c) => {
   return c.json({ invitations: rows });
 });
 
-invitationsRouter.post('/v1/projects/:id/invitations', async (c) => {
+invitationsRouter.post('/v1/projects/:id/invitations', projectRateLimit('mutate'), async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const body = await c.req.json().catch(() => null);
@@ -83,7 +78,7 @@ invitationsRouter.post('/v1/projects/:id/invitations', async (c) => {
   return c.json({ invitation: { id: invitation.id, role: invitation.role } }, 201);
 });
 
-invitationsRouter.delete('/v1/projects/:id/invitations/:invitationId', async (c) => {
+invitationsRouter.delete('/v1/projects/:id/invitations/:invitationId', projectRateLimit('mutate'), async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const invitationId = c.req.param('invitationId');
@@ -124,7 +119,31 @@ invitationsRouter.post('/v1/me/invitations/accept', async (c) => {
     action: 'invitation.accept',
     ipHash: ipHash(c),
     userAgent: c.req.header('user-agent') ?? null,
-    metadata: { role: result.role },
+    metadata: { role: result.role, via: 'token' },
+  });
+  return c.json(result);
+});
+
+// why: accept-by-id replaces the token-based flow inside the dashboard.
+// The recipient is already signed in with the matching email, which is
+// itself proof of identity — exposing the one-time token in the listing
+// API would defeat the model where the token is the email's second
+// factor. The email-link flow above stays intact for not-yet-signed-in
+// users who click straight from the inbox.
+invitationsRouter.post('/v1/me/invitations/:invitationId/accept', async (c) => {
+  const user = c.get('user')!;
+  const invitationId = c.req.param('invitationId');
+  if (!invitationId) {
+    return c.json({ code: 'validation_failed', message: 'invitationId required' }, 400);
+  }
+  const result = await acceptInvitationById(user.id, user.email, invitationId);
+  await audit({
+    actorId: user.id,
+    projectId: result.projectId,
+    action: 'invitation.accept',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { role: result.role, via: 'dashboard' },
   });
   return c.json(result);
 });

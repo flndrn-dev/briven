@@ -3,8 +3,9 @@ import { z } from 'zod';
 
 import { schemaSnapshotSchema } from '@briven/schema';
 
+import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
-import type { Session, User } from '../middleware/session.js';
+import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 import {
   cancelPendingDeployment,
   createDeployment,
@@ -18,15 +19,6 @@ import { audit, hashIp } from '../services/audit.js';
 import { applySchema, type SchemaDef } from '../services/schema-apply.js';
 import { assertFunctionCountAllowed } from '../services/tiers.js';
 import { log } from '../lib/logger.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    apiKeyId: string | null;
-    requestId: string;
-  };
-};
 
 const MAX_LIMIT = 100;
 
@@ -104,6 +96,11 @@ deploymentsRouter.get('/v1/projects/:id/deployments', async (c) => {
 
 deploymentsRouter.post(
   '/v1/projects/:id/deployments',
+  // why: tier-aware burst cap on the deploy path. Free tier = 5/min;
+  // a developer iterating locally never hits that, but it stops a
+  // leaked key from spamming schema-apply (which runs DDL inside a
+  // transaction on the shared data plane).
+  projectRateLimit('deploy'),
   requireProjectRole('developer'),
   async (c) => {
     const body = await c.req.json().catch(() => ({}));

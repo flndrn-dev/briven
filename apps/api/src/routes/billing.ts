@@ -3,7 +3,8 @@ import { Webhook, WebhookVerificationError } from 'standardwebhooks';
 import { z } from 'zod';
 
 import { env } from '../env.js';
-import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { requireAuth } from '../middleware/session.js';
+import type { AppEnv } from '../types/app-env.js';
 import {
   checkVatWithVies,
   configuredPlans,
@@ -15,14 +16,6 @@ import {
 } from '../services/billing.js';
 import { log } from '../lib/logger.js';
 import { getDefaultOrgForUser } from '../services/orgs.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    requestId: string;
-  };
-};
 
 const checkoutSchema = z.object({
   tier: z.enum(['pro', 'team']),
