@@ -116,10 +116,16 @@ export default async function HomePage() {
       <PricingSection />
 
       <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 border-t border-[var(--color-border-subtle)] px-6 py-6 font-mono text-[10px] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
-        <div className="flex items-center gap-1">
-          <Image src="/icon.svg" alt="" width={22} height={22} className="opacity-70" />
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex items-center gap-1">
+            <Image src="/icon.svg" alt="" width={22} height={22} className="opacity-70" />
+            <span>
+              © {new Date().getFullYear()} flndrn Limited · agpl-3.0 core · mit cli
+            </span>
+          </div>
+          <span className="hidden sm:inline">·</span>
           <span>
-            © {new Date().getFullYear()} briven by flndrn · worldwide · agpl-3.0 core · mit cli
+            built with <span className="text-[#e8344a]">♥</span> in Flanders
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -132,7 +138,10 @@ export default async function HomePage() {
           <Link href="/terms" className="hover:text-[var(--color-text-muted)]">
             terms
           </Link>
-          <Link href="https://docs.briven.cloud" className="hover:text-[var(--color-text-muted)]">
+          <Link href="/subprocessors" className="hover:text-[var(--color-text-muted)]">
+            subprocessors
+          </Link>
+          <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">
             docs
           </Link>
         </div>
