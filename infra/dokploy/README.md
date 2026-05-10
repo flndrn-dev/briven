@@ -40,7 +40,7 @@ on dokploy itself the equivalent flow is:
 
 ## post-boot
 
-1. open `https://<your-domain>` and sign in via magic link. without `BRIVEN_RESEND_API_KEY` set, the magic link prints to the api container's stdout — `docker compose logs api | grep magic_link` to find it.
+1. open `https://<your-domain>` and sign in via magic link. without `BRIVEN_MITTERA_API_URL` and `BRIVEN_MITTERA_SIGNING_SECRET` set, the magic link prints to the api container's stdout — `docker compose logs api | grep magic_link` to find it. Once mittera.eu is wired, also register `https://<your-domain>/api/mittera-webhook` on the mittera side so delivery and bounce events flow back.
 2. give yourself platform-admin so the `/admin` tab unlocks:
    ```bash
    docker compose exec postgres psql -U postgres -d briven_control \

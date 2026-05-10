@@ -26,12 +26,12 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
       'No personal data is shared beyond the public domain name being certified. Renewals are automatic via ACME.',
   },
   {
-    name: 'Resend Inc.',
-    purpose: 'Transactional email delivery (magic-link sign-in, password reset, account notices)',
-    location: 'United States; sub-processes via AWS US-East and EU-West',
+    name: 'mittera.eu',
+    purpose: 'Transactional email delivery (magic-link sign-in, email verification, project invitations, account notices)',
+    location: 'EU (operator-controlled)',
     status: 'planned',
     notes:
-      'Wired up only when BRIVEN_RESEND_API_KEY is set. Until then, magic-link emails print to the api container stdout for first-user bootstrap.',
+      "Sister product to briven, also operated by the briven Operator. Outbound sends are signed with HMAC-SHA256 against a shared secret (Stripe-style) and posted to https://api.mittera.eu/v1/send; delivery / bounce / complaint events come back to briven.tech/api/mittera-webhook with the same signature scheme. Until BRIVEN_MITTERA_API_URL and BRIVEN_MITTERA_SIGNING_SECRET are configured, magic-link emails print to the api container stdout for first-user bootstrap.",
   },
   {
     name: 'Polar Software Inc.',

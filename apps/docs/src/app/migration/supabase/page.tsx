@@ -93,7 +93,7 @@ export default query(async (ctx: Ctx) => {
         <Snippet>{`// supabase: supabase/functions/sendInvite/index.ts
 serve(async (req) => {
   const { email, role } = await req.json();
-  // ... call resend, write to db ...
+  // ... call mittera, write to db ...
   return new Response(JSON.stringify({ ok: true }));
 });
 
@@ -105,7 +105,7 @@ const Args = z.object({ email: z.string().email(), role: z.string() });
 
 export default mutation(async (ctx: Ctx, raw: unknown) => {
   const { email, role } = Args.parse(raw);
-  // ... call resend (the api key is in ctx.env), write to db ...
+  // ... call mittera (signing secret in ctx.env), write to db ...
   return { ok: true };
 });`}</Snippet>
       </Section>

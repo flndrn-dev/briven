@@ -52,8 +52,11 @@ const envSchema = z.object({
   BRIVEN_POLAR_PRO_PRODUCT_ID: z.string().optional(),
   BRIVEN_POLAR_TEAM_PRODUCT_ID: z.string().optional(),
 
-  // Resend transactional email.
-  BRIVEN_RESEND_API_KEY: z.string().optional(),
+  // mittera.eu transactional email. Both URL and signing secret must be
+  // set for mail to actually go out; missing either falls back to
+  // stdout-only for first-user bootstrap.
+  BRIVEN_MITTERA_API_URL: z.string().url().optional(),
+  BRIVEN_MITTERA_SIGNING_SECRET: z.string().optional(),
 
   // MinIO — object storage.
   BRIVEN_MINIO_ENDPOINT: z.string().url().optional(),
