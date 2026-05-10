@@ -1,7 +1,9 @@
+import { constantTimeEqual } from '@briven/shared';
 import { Hono } from 'hono';
 
 import { env } from '../env.js';
 import { getDeployment, getDeploymentBundle } from '../services/deployments.js';
+import { invoke } from '../services/invoke.js';
 import { getPlainEnvForProject } from '../services/project-env.js';
 
 /**
@@ -16,7 +18,9 @@ internalRouter.use('/v1/internal/*', async (c, next) => {
   if (!expected) return c.json({ code: 'not_configured', message: 'runtime secret missing' }, 503);
   const auth = c.req.header('authorization');
   const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
-  if (token !== expected) return c.json({ code: 'unauthorized' }, 401);
+  if (!token || !constantTimeEqual(token, expected)) {
+    return c.json({ code: 'unauthorized' }, 401);
+  }
   await next();
   return;
 });
@@ -48,4 +52,39 @@ internalRouter.get('/v1/internal/projects/:projectId/env', async (c) => {
   const projectId = c.req.param('projectId');
   const values = await getPlainEnvForProject(projectId);
   return c.json(values);
+});
+
+/**
+ * Internal invoke for system callers (realtime fan-out). The public route
+ * at /v1/projects/:id/functions/:name requires a session/api-key with
+ * developer role; realtime holds neither — it authenticates as the runtime
+ * via BRIVEN_RUNTIME_SHARED_SECRET (already gated above) and invokes on
+ * behalf of an anonymous system identity. The invoke service threads
+ * `auth: null` through to the runtime, which records the call in audit
+ * logs as a system-originated invocation.
+ */
+internalRouter.post('/v1/internal/projects/:projectId/functions/:functionName', async (c) => {
+  const projectId = c.req.param('projectId');
+  const functionName = c.req.param('functionName');
+  const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+
+  const raw = await c.req.text();
+  let args: unknown = null;
+  if (raw.length > 0) {
+    try {
+      args = JSON.parse(raw);
+    } catch {
+      return c.json({ code: 'invalid_json', message: 'request body is not valid json' }, 400);
+    }
+  }
+
+  const result = await invoke({
+    projectId,
+    functionName,
+    args,
+    requestId,
+    auth: null,
+  });
+  const status = result.ok ? 200 : 500;
+  return c.json(result, status);
 });

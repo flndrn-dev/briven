@@ -92,6 +92,12 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
+    // why: invite-only beta until BRIVEN_OPEN_SIGNUPS flips. Existing
+    // users still sign in; only first-time signup is gated. The
+    // per-method flags (here + on each social provider + on the magic
+    // link plugin) are the same toggle to keep the override surface
+    // small.
+    disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
     requireEmailVerification: env.BRIVEN_ENV === 'production',
     minPasswordLength: 10,
     maxPasswordLength: 128,
@@ -112,6 +118,7 @@ export const auth = betterAuth({
           github: {
             clientId: env.BRIVEN_GITHUB_CLIENT_ID,
             clientSecret: env.BRIVEN_GITHUB_CLIENT_SECRET,
+            disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
           },
         }
       : {},
@@ -119,6 +126,10 @@ export const auth = betterAuth({
   plugins: [
     magicLink({
       expiresIn: 60 * 10, // 10 minutes
+      // Same gate as emailAndPassword.disableSignUp — magic-link sign-IN
+      // for existing users is allowed; first-time signup is rejected
+      // when BRIVEN_OPEN_SIGNUPS is false.
+      disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
       sendMagicLink: async ({ email, url }) => {
         await sendMagicLink(email, url);
       },
