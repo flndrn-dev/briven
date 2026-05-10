@@ -38,7 +38,7 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
               href="https://code.konnos.org/flndrn/briven"
               className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             >
-              github
+              konnos
             </Link>
           </nav>
         </div>
