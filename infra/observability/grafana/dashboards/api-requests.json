@@ -1,0 +1,73 @@
+{
+  "uid": "briven-api-requests",
+  "title": "api · requests",
+  "tags": ["briven", "api"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "request rate (req/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(http_requests_total{service=\"api\"}[1m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "p99 latency (ms)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, route) (rate(http_request_duration_ms_bucket{service=\"api\"}[5m])))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "5xx error rate (%)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 4 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{service=\"api\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{service=\"api\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 1, "color": "yellow" },
+              { "value": 5, "color": "red" }
+            ]
+          },
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "recent 5xx logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 4 },
+      "targets": [
+        {
+          "expr": "{service=\"api\", level=\"error\"}"
+        }
+      ]
+    }
+  ]
+}

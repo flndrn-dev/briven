@@ -1,0 +1,12 @@
+[Unit]
+Description=Run briven restore drill on the 1st of every month at 04:30 UTC
+
+[Timer]
+# 1st day of each month, 04:30 UTC — well after any monthly close-out
+# work and well before any business-hours window in EU/US.
+OnCalendar=*-*-01 04:30:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

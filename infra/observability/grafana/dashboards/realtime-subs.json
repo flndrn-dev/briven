@@ -1,0 +1,59 @@
+{
+  "uid": "briven-realtime-subs",
+  "title": "realtime · subscriptions",
+  "tags": ["briven", "realtime"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "active subscriptions",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "briven_realtime_subscriptions_active"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "active LISTEN channels",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "briven_realtime_channels_active"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "NOTIFY → fan-out rate (msg/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(briven_realtime_notifies_total[1m])"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "listener reconnect events (last 1h)",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "{service=\"realtime\"} |= \"realtime_listen_attached\""
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+# Phase 0 alert rules. Wired to alertmanager (not in this stack yet —
+# Phase 0 ships pagable signals via Discord webhooks per BUILD_PLAN). For
+# now these surface as red panels in Grafana when triggered.
+
+groups:
+  - name: briven-services
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.service }} is unreachable'
+          description: '/metrics on {{ $labels.instance }} has been down for >2 minutes.'
+
+      - alert: HighErrorRate
+        # Triggers when a service's 5xx rate exceeds 5% over the last 5
+        # minutes. Requires the service to expose http_requests_total
+        # with a `status` label — apps/api should add this when its
+        # /metrics endpoint lands.
+        expr: |
+          sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+            /
+          sum by (service) (rate(http_requests_total[5m]))
+            > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} 5xx rate above 5%'
+
+      - alert: PostgresConnectionsHigh
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'postgres has {{ $value }} active connections (>80)'
+          description: 'pool exhaustion is likely if this trends up.'
