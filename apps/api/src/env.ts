@@ -84,6 +84,15 @@ const envSchema = z.object({
   // or unreadable, IP → city lookups return null and callers show a dash.
   // Refresh the DB monthly via the free MaxMind account download portal.
   BRIVEN_GEOIP_DB_PATH: z.string().optional(),
+
+  // Public-signups gate. Default false — invite-only beta. Flip to `true`
+  // when public open-signups land per BUILD_PLAN Phase 4. Affects every
+  // first-time auth path (email+password, magic link, GitHub OAuth);
+  // existing users always retain sign-IN regardless of this flag.
+  BRIVEN_OPEN_SIGNUPS: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true' || v === '1'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -104,6 +113,15 @@ if (env.BRIVEN_ENV !== 'development') {
   if (!env.BRIVEN_WEB_ORIGIN.startsWith('https://')) {
     throw new Error(
       `BRIVEN_WEB_ORIGIN must be HTTPS outside development (got: ${env.BRIVEN_WEB_ORIGIN})`,
+    );
+  }
+  // why: BRIVEN_ENCRYPTION_KEY decrypts customer env vars at rest. If
+  // unset, services/project-env.ts fails-closed at request time — but a
+  // deploy that forgot the key would only surface the misconfiguration
+  // when the first customer reads encrypted env. Fail at boot instead.
+  if (!env.BRIVEN_ENCRYPTION_KEY) {
+    throw new Error(
+      'BRIVEN_ENCRYPTION_KEY must be set outside development (AES-256 KEK for customer env vars at rest)',
     );
   }
 }
