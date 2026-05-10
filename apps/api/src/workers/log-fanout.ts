@@ -1,8 +1,8 @@
 import { newId } from '@briven/shared';
-import { lt } from 'drizzle-orm';
+import { and, eq, isNull, lt, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { functionLogs, type NewFunctionLog } from '../db/schema.js';
+import { functionLogs, projects, type NewFunctionLog, type ProjectTier } from '../db/schema.js';
 import { getRedis } from '../lib/redis.js';
 import { log } from '../lib/logger.js';
 
@@ -159,19 +159,89 @@ function parseFields(flat: string[]): Record<string, string> {
   return out;
 }
 
+/** Days of function-log retention per tier. Used by `pruneOldFunctionLogs`. */
+export const RETENTION_DAYS_BY_TIER: Record<ProjectTier, number> = {
+  free: 7,
+  pro: 30,
+  team: 90,
+};
+
 /**
- * Retention: drop function_log rows older than 7 days on free tier. Called
- * from the daily cron in apps/api/src/workers/cron.ts (or similar). Tier-
- * aware retention is a Phase 3 refinement.
+ * Retention: drop `function_log` rows older than the per-tier cutoff. The
+ * `projects.tier` column is the denormalised tier; we group projects by
+ * tier (only three groups) and issue one DELETE per tier with that
+ * tier's cutoff. A project that's been soft-deleted is treated as `free`
+ * (shortest retention) — its data is on the way out anyway.
+ *
+ * Returns the total deleted-row count summed across tiers.
  */
-export async function pruneOldFunctionLogs(days = 7): Promise<number> {
-  const cutoff = new Date(Date.now() - days * 86_400_000);
+export async function pruneOldFunctionLogs(): Promise<number> {
   const db = getDb();
-  const res = await db.delete(functionLogs).where(lt(functionLogs.createdAt, cutoff)).returning({
-    id: functionLogs.id,
-  });
-  log.info('function_logs_pruned', { count: res.length, cutoff: cutoff.toISOString() });
-  return res.length;
+  let total = 0;
+  const now = Date.now();
+
+  for (const [tier, days] of Object.entries(RETENTION_DAYS_BY_TIER) as Array<
+    [ProjectTier, number]
+  >) {
+    const cutoff = new Date(now - days * 86_400_000);
+    // Subquery: every project on this tier that isn't soft-deleted.
+    // Soft-deleted projects fall through to the `free` (shortest) branch.
+    const tierProjects = db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.tier, tier), isNull(projects.deletedAt)));
+
+    const res = await db
+      .delete(functionLogs)
+      .where(
+        and(
+          lt(functionLogs.createdAt, cutoff),
+          sql`${functionLogs.projectId} IN ${tierProjects}`,
+        ),
+      )
+      .returning({ id: functionLogs.id });
+    total += res.length;
+    if (res.length > 0) {
+      log.info('function_logs_pruned', {
+        tier,
+        days,
+        count: res.length,
+        cutoff: cutoff.toISOString(),
+      });
+    }
+  }
+
+  // Catch-all: soft-deleted projects + any projects whose tier somehow
+  // doesn't match free|pro|team (data corruption hedge). Apply the
+  // shortest retention.
+  const freeCutoff = new Date(now - RETENTION_DAYS_BY_TIER.free * 86_400_000);
+  const knownTiers = sql.raw(
+    Object.keys(RETENTION_DAYS_BY_TIER).map((t) => `'${t}'`).join(','),
+  );
+  const orphans = db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(sql`${projects.deletedAt} IS NOT NULL OR ${projects.tier} NOT IN (${knownTiers})`);
+  const orphanRes = await db
+    .delete(functionLogs)
+    .where(
+      and(
+        lt(functionLogs.createdAt, freeCutoff),
+        sql`${functionLogs.projectId} IN ${orphans}`,
+      ),
+    )
+    .returning({ id: functionLogs.id });
+  total += orphanRes.length;
+  if (orphanRes.length > 0) {
+    log.info('function_logs_pruned', {
+      tier: 'orphan',
+      days: RETENTION_DAYS_BY_TIER.free,
+      count: orphanRes.length,
+      cutoff: freeCutoff.toISOString(),
+    });
+  }
+
+  return total;
 }
 
 const RETENTION_TICK_MS = 6 * 60 * 60 * 1000;
