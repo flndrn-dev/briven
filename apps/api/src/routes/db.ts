@@ -2,18 +2,9 @@ import { Hono, type Context } from 'hono';
 
 import { rateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
-import type { Session, User } from '../middleware/session.js';
+import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
 import { issueShellToken } from '../services/db-shell.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    apiKeyId: string | null;
-    requestId: string;
-  };
-};
 
 function ipHash(c: Context<AppEnv>): string | null {
   const fwd = c.req.raw.headers.get('x-forwarded-for');

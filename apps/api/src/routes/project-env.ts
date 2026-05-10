@@ -1,9 +1,9 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
-import { rateLimit } from '../middleware/rate-limit.js';
+import { projectRateLimit, rateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
-import type { Session, User } from '../middleware/session.js';
+import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   deleteEnvVar,
@@ -12,15 +12,6 @@ import {
   listEnvForProject,
   upsertEnvVar,
 } from '../services/project-env.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    apiKeyId: string | null;
-    requestId: string;
-  };
-};
 
 const putSchema = z.object({
   key: z.string().min(1).max(64),
@@ -47,7 +38,7 @@ projectEnvRouter.get('/v1/projects/:id/env', async (c) => {
   return c.json({ env: vars });
 });
 
-projectEnvRouter.put('/v1/projects/:id/env', async (c) => {
+projectEnvRouter.put('/v1/projects/:id/env', projectRateLimit('mutate'), async (c) => {
   const projectId = c.req.param('id');
   const user = c.get('user');
   const apiKeyId = c.get('apiKeyId');
@@ -77,7 +68,7 @@ projectEnvRouter.put('/v1/projects/:id/env', async (c) => {
   return c.json({ key: parsed.data.key });
 });
 
-projectEnvRouter.delete('/v1/projects/:id/env/:envVarId', async (c) => {
+projectEnvRouter.delete('/v1/projects/:id/env/:envVarId', projectRateLimit('mutate'), async (c) => {
   const projectId = c.req.param('id');
   const envVarId = c.req.param('envVarId');
   // Guard against the by-key path shadowing this one — by-key is mounted
@@ -99,7 +90,7 @@ projectEnvRouter.delete('/v1/projects/:id/env/:envVarId', async (c) => {
   return c.json({ deleted: envVarId });
 });
 
-projectEnvRouter.delete('/v1/projects/:id/env/by-key/:key', async (c) => {
+projectEnvRouter.delete('/v1/projects/:id/env/by-key/:key', projectRateLimit('mutate'), async (c) => {
   const projectId = c.req.param('id');
   const key = c.req.param('key');
   const user = c.get('user');

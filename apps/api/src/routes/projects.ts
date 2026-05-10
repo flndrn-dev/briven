@@ -2,7 +2,8 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import { requireProjectAuth } from '../middleware/project-auth.js';
-import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { requireAuth } from '../middleware/session.js';
+import type { AppEnv } from '../types/app-env.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
 import { getDefaultOrgForUser } from '../services/orgs.js';
@@ -14,14 +15,6 @@ import {
   softDeleteProjectForUser,
   updateProjectForUser,
 } from '../services/projects.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    requestId: string;
-  };
-};
 
 const createSchema = z.object({
   name: z.string().min(1).max(80),

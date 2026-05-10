@@ -5,16 +5,7 @@ import { streamSSE } from 'hono/streaming';
 import { getRedis } from '../lib/redis.js';
 import { log } from '../lib/logger.js';
 import { requireProjectAuth } from '../middleware/project-auth.js';
-import type { Session, User } from '../middleware/session.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    apiKeyId: string | null;
-    requestId: string;
-  };
-};
+import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
 const MAX_CONCURRENT_PER_PROJECT = 10;
 const HEARTBEAT_MS = 15_000;

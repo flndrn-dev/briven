@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { requireAuth } from '../middleware/session.js';
+import type { AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   createApiKey,
@@ -10,14 +11,6 @@ import {
   revokeApiKey,
 } from '../services/api-keys.js';
 import { assertProjectRole } from '../services/access.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    requestId: string;
-  };
-};
 
 // Per-key role scoping: human users can issue a key at the same role as the
 // caller or lower (viewer/developer/admin). 'owner' is never assignable.

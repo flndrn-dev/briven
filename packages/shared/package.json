@@ -32,7 +32,7 @@
   "scripts": {
     "lint": "echo 'lint wired in phase 1'",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/observability/redaction.test.ts"
+    "test": "tsx --test src/observability/redaction.test.ts src/observability/logger.test.ts"
   },
   "dependencies": {
     "@briven/config": "workspace:*",

@@ -1,19 +1,17 @@
 import { Hono } from 'hono';
 
+import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
-import type { Session, User } from '../middleware/session.js';
 import { invoke } from '../services/invoke.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    apiKeyId: string | null;
-    requestId: string;
-  };
-};
+import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
 export const invokeRouter = new Hono<AppEnv>();
+
+// Tier-aware burst limit. Runs BEFORE auth so an unauthenticated flood
+// can't drive the auth path; the helper returns null when the project
+// doesn't exist, which the middleware treats as a pass-through (the
+// auth check below 401s anyway).
+invokeRouter.use('/v1/projects/:id/functions/:name', projectRateLimit('invoke'));
 
 // Functions are project-scoped resources, so they share project-auth with
 // deployments and api-keys: either a session-bound owner or a matching brk_.

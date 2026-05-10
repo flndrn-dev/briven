@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { requireAuth, type Session, type User } from '../middleware/session.js';
+import { requireAuth } from '../middleware/session.js';
+import type { AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
 import { checkVatWithVies } from '../services/billing.js';
 import {
@@ -11,14 +12,6 @@ import {
   updateProfile,
   type ProfilePatch,
 } from '../services/me.js';
-
-type AppEnv = {
-  Variables: {
-    user: User | null;
-    session: Session | null;
-    requestId: string;
-  };
-};
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
