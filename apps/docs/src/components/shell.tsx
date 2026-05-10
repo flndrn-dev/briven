@@ -62,13 +62,15 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
 
       <footer className="border-t border-[var(--color-border-subtle)] py-6">
         <p className="mx-auto max-w-6xl px-6 font-mono text-xs text-[var(--color-text-subtle)]">
-          briven · open-core reactive postgres ·{' '}
+          briven · open-core reactive postgres · ©{' '}
+          {new Date().getFullYear()} flndrn Limited ·{' '}
           <Link
             href="https://code.konnos.org/flndrn/briven"
             className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
           >
             source
-          </Link>
+          </Link>{' '}
+          · built with <span className="text-[#e8344a]">♥</span> in Flanders
         </p>
       </footer>
     </div>

@@ -76,10 +76,12 @@ export default function SubprocessorsPage() {
       </p>
 
       <p className="mt-8">
-        This page lists every third-party service that processes briven Customer data on the
-        Operator&rsquo;s behalf. Where a subprocessor is &ldquo;planned&rdquo;, the integration
-        exists in code but is disabled until the corresponding configuration is provided; we list
-        them here so you can audit what your account will be exposed to as features turn on.
+        This page lists every third-party service that processes briven Customer data on behalf
+        of <strong>flndrn Limited</strong> (the Operator), a company registered at Arch. Makariou
+        III 171, Vanezis Business Center 4th floor, 3027 Limassol, Cyprus. Where a subprocessor
+        is &ldquo;planned&rdquo;, the integration exists in code but is disabled until the
+        corresponding configuration is provided; we list them here so you can audit what your
+        account will be exposed to as features turn on.
       </p>
 
       <p className="mt-4">

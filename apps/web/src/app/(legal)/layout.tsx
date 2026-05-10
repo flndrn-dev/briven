@@ -30,6 +30,14 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       <article className="prose prose-invert mx-auto max-w-3xl px-6 py-12 font-sans leading-[1.7] text-[var(--color-text-muted)]">
         {children}
       </article>
+
+      <footer className="border-t border-[var(--color-border-subtle)] py-6">
+        <p className="mx-auto max-w-3xl px-6 font-mono text-xs text-[var(--color-text-subtle)]">
+          flndrn Limited · Arch. Makariou III 171, Vanezis Business Center 4th floor, 3027
+          Limassol, Cyprus · built with{' '}
+          <span className="text-[#e8344a]">♥</span> in Flanders
+        </p>
+      </footer>
     </main>
   );
 }

@@ -10,9 +10,11 @@ export default function TermsPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">1. who and what</h2>
       <p>
-        briven is an open-core reactive Postgres backend platform operated by an individual
-        EU-based developer (the &ldquo;Operator&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;). This
-        document, together with the{' '}
+        briven is an open-core reactive Postgres backend platform operated by{' '}
+        <strong>flndrn Limited</strong> (the &ldquo;Operator&rdquo;, &ldquo;we&rdquo;,
+        &ldquo;us&rdquo;), a company registered at Arch. Makariou III 171, Vanezis Business
+        Center 4th floor, 3027 Limassol, Cyprus. Day-to-day development happens in Flanders,
+        Belgium. This document, together with the{' '}
         <a href="/privacy" className="text-[var(--color-text-link)]">
           Privacy Policy
         </a>{' '}
