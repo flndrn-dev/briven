@@ -1,0 +1,179 @@
+# briven-core — Dokploy-managed compose template.
+#
+# Use this file when adding briven as a managed Compose project on a host
+# that already runs Dokploy. Differences from the plain `compose.yml`:
+#   - the four traefik-fronted services attach to the existing
+#     `dokploy-network` overlay (external) so dokploy-traefik routes to
+#     them out of the box;
+#   - container_name is omitted (Dokploy assigns its own slug);
+#   - no `briven` private bridge network — every service is on
+#     dokploy-network and resolves siblings by service name.
+#
+# Required env (set on the Dokploy compose project's Environment tab):
+#
+#   BRIVEN_DOMAIN                  e.g. briven.tech
+#   BRIVEN_BETTER_AUTH_SECRET     openssl rand -hex 32
+#   BRIVEN_AUDIT_IP_PEPPER        openssl rand -hex 32
+#   BRIVEN_ENCRYPTION_KEY         openssl rand -hex 32
+#   BRIVEN_RUNTIME_SHARED_SECRET  openssl rand -hex 32
+#   BRIVEN_POSTGRES_PASSWORD      strong; used by every service
+#   BRIVEN_RESEND_API_KEY         optional — magic-link emails
+#   BRIVEN_GOOGLE_CLIENT_ID       optional — google oauth signin
+#   BRIVEN_GOOGLE_CLIENT_SECRET   optional
+#   BRIVEN_OPEN_SIGNUPS           true | false (default false)
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+      POSTGRES_DB: briven_control
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - dokploy-network
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - dokploy-network
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: briven
+      MINIO_ROOT_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks:
+      - dokploy-network
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on: [postgres, redis]
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_API_PORT: '3001'
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+      BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN}
+      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_data?sslmode=disable
+      BRIVEN_REDIS_URL: redis://redis:6379
+      BRIVEN_RUNTIME_URL: http://runtime:3003
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
+      BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
+      BRIVEN_ENCRYPTION_KEY: ${BRIVEN_ENCRYPTION_KEY}
+      BRIVEN_RESEND_API_KEY: ${BRIVEN_RESEND_API_KEY:-}
+      BRIVEN_GOOGLE_CLIENT_ID: ${BRIVEN_GOOGLE_CLIENT_ID:-}
+      BRIVEN_GOOGLE_CLIENT_SECRET: ${BRIVEN_GOOGLE_CLIENT_SECRET:-}
+      BRIVEN_DOMAIN: ${BRIVEN_DOMAIN}
+      BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
+      BRIVEN_MINIO_ENDPOINT: http://minio:9000
+      BRIVEN_MINIO_ACCESS_KEY: briven
+      BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_POSTGRES_PASSWORD}
+    networks:
+      - dokploy-network
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
+      - 'traefik.http.routers.briven-api.rule=Host(`api.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-api.entrypoints=websecure'
+      - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
+
+  runtime:
+    build:
+      context: ../..
+      dockerfile: apps/runtime/Dockerfile
+    restart: unless-stopped
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_RUNTIME_PORT: '3003'
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_RUNTIME_EXECUTOR: deno
+      BRIVEN_RUNTIME_BUNDLE_DIR: /var/lib/briven/bundles
+    volumes:
+      - runtime_bundles:/var/lib/briven/bundles
+    networks:
+      - dokploy-network
+
+  realtime:
+    build:
+      context: ../..
+      dockerfile: apps/realtime/Dockerfile
+    restart: unless-stopped
+    depends_on: [postgres]
+    environment:
+      BRIVEN_ENV: production
+      BRIVEN_REALTIME_PORT: '3004'
+      BRIVEN_API_INTERNAL_URL: http://api:3001
+      BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_data?sslmode=disable
+    networks:
+      - dokploy-network
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
+      - 'traefik.http.routers.briven-realtime.rule=Host(`realtime.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-realtime.entrypoints=websecure'
+      - 'traefik.http.routers.briven-realtime.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-realtime.loadbalancer.server.port=3004'
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+      NEXT_PUBLIC_BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+      NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+true}
+    networks:
+      - dokploy-network
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
+      - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-web.entrypoints=websecure'
+      - 'traefik.http.routers.briven-web.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-web.loadbalancer.server.port=3000'
+
+  docs:
+    build:
+      context: ../..
+      dockerfile: apps/docs/Dockerfile
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
+      - 'traefik.http.routers.briven-docs.rule=Host(`docs.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-docs.entrypoints=websecure'
+      - 'traefik.http.routers.briven-docs.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-docs.loadbalancer.server.port=3002'
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  runtime_bundles:
+
+networks:
+  dokploy-network:
+    external: true
