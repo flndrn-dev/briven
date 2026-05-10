@@ -42,6 +42,14 @@ test-results/
 # os
 .DS_Store
 Thumbs.db
+# macOS Finder / Spotlight occasionally drops "<name> 2.<ext>" duplicates
+# alongside the originals. Always accidental, never source.
+* 2.ts
+* 2.tsx
+* 2.js
+* 2.json
+* 2.yml
+* 2.md
 
 # misc
 *.tsbuildinfo

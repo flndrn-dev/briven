@@ -2,6 +2,7 @@ import { printHelp } from './commands/help.js';
 import { runDb } from './commands/db.js';
 import { runDeploy } from './commands/deploy.js';
 import { runDev } from './commands/dev.js';
+import { runDoctor } from './commands/doctor.js';
 import { runEnv } from './commands/env.js';
 import { runExport } from './commands/export.js';
 import { runImport } from './commands/import.js';
@@ -57,6 +58,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runExport(rest);
     case 'import':
       return runImport(rest);
+    case 'doctor':
+      return runDoctor(rest);
   }
 
   process.stderr.write(`briven: unknown command '${first}'\n`);
