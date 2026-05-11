@@ -1,4 +1,6 @@
-import { constantTimeEqual } from '@briven/shared';
+import { resolve } from 'node:path';
+
+import { constantTimeEqual, resolveBuildIdentity } from '@briven/shared';
 import { createLogger } from '@briven/shared/observability';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -14,6 +16,13 @@ import { handleInvoke } from './invoke.js';
 import { registerPoolGauges, renderPrometheus } from './metrics.js';
 import { getPool } from './runtime-bootstrap.js';
 import type { InvokeRequest } from './types.js';
+
+const BOOT_TIME = new Date().toISOString();
+// Same .git/HEAD fallback as apps/api + apps/realtime. From
+// /app/apps/runtime, the repo root's .git is two levels up.
+const { buildSha: BUILD_SHA, buildAt: BUILD_AT } = resolveBuildIdentity(
+  resolve(process.cwd(), '../../.git'),
+);
 
 const invokeSchema = z.object({
   projectId: z.string().min(1),
@@ -35,6 +44,18 @@ const app = new Hono();
 
 app.get('/health', (c) =>
   c.json({ status: 'ok', service: 'runtime', executor: env.BRIVEN_RUNTIME_EXECUTOR }),
+);
+
+app.get('/info', (c) =>
+  c.json({
+    service: 'runtime',
+    env: env.BRIVEN_ENV,
+    buildSha: BUILD_SHA,
+    buildAt: BUILD_AT,
+    bootedAt: BOOT_TIME,
+    uptimeSec: Math.floor(process.uptime()),
+    executor: env.BRIVEN_RUNTIME_EXECUTOR,
+  }),
 );
 
 app.get('/ready', async (c) => {

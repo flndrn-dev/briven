@@ -8,22 +8,25 @@ interface ServiceProbe {
   name: string;
   url: string;
   description: string;
+  // For api /ready we extract per-dependency status from the response
+  // body. For simple /health pings this stays false.
+  expandChecks?: boolean;
 }
 
+// Runtime isn't probed directly — it lives on an internal network and
+// the api /ready endpoint already reports its reachability under
+// `checks.runtime`. The status page extracts that field when api/ready
+// returns. Realtime is on its own public subdomain (realtime.briven.tech).
 const PROBES: readonly ServiceProbe[] = [
   {
     name: 'api',
     url: process.env.BRIVEN_STATUS_API_URL ?? 'https://api.briven.tech/ready',
     description: 'control plane — accounts, projects, billing, deploy intake',
-  },
-  {
-    name: 'runtime',
-    url: process.env.BRIVEN_STATUS_RUNTIME_URL ?? 'https://api.briven.tech/v1/runtime/health',
-    description: 'function host — deno isolates, cold-start budget',
+    expandChecks: true,
   },
   {
     name: 'realtime',
-    url: process.env.BRIVEN_STATUS_REALTIME_URL ?? 'https://api.briven.tech/v1/realtime/health',
+    url: process.env.BRIVEN_STATUS_REALTIME_URL ?? 'https://realtime.briven.tech/ready',
     description: 'reactive query websocket service',
   },
 ];
@@ -35,6 +38,9 @@ interface ProbeResult {
   status: number | null;
   durationMs: number;
   detail: string | null;
+  // For probes with expandChecks=true: per-dependency states extracted
+  // from the api /ready body. null when the probe didn't ask for them.
+  checks: Record<string, 'ok' | 'unreachable' | 'not_configured' | 'degraded'> | null;
 }
 
 async function probe(svc: ServiceProbe): Promise<ProbeResult> {
@@ -48,10 +54,20 @@ async function probe(svc: ServiceProbe): Promise<ProbeResult> {
       cache: 'no-store',
     });
     const durationMs = Date.now() - t0;
+    const body = await res.text().catch(() => '');
     let detail: string | null = null;
-    if (!res.ok) {
-      detail = await res.text().catch(() => null);
-      if (detail && detail.length > 200) detail = `${detail.slice(0, 200)}…`;
+    let checks: ProbeResult['checks'] = null;
+    if (svc.expandChecks) {
+      try {
+        const parsed = JSON.parse(body) as { checks?: Record<string, string> };
+        if (parsed.checks) checks = parsed.checks as ProbeResult['checks'];
+      } catch {
+        // non-JSON body; checks stay null
+      }
+    }
+    if (!res.ok && !detail) {
+      detail = body.slice(0, 200) || null;
+      if (detail && body.length > 200) detail = `${detail}…`;
     }
     return {
       name: svc.name,
@@ -60,6 +76,7 @@ async function probe(svc: ServiceProbe): Promise<ProbeResult> {
       status: res.status,
       durationMs,
       detail,
+      checks,
     };
   } catch (err) {
     return {
@@ -69,6 +86,7 @@ async function probe(svc: ServiceProbe): Promise<ProbeResult> {
       status: null,
       durationMs: Date.now() - t0,
       detail: err instanceof Error ? err.message : 'unreachable',
+      checks: null,
     };
   }
 }
@@ -123,6 +141,23 @@ export default async function StatusPage() {
                 </span>
               </div>
               <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">{p.description}</p>
+              {p.checks ? (
+                <ul className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
+                  {Object.entries(p.checks).map(([name, state]) => {
+                    const stateClass =
+                      state === 'ok'
+                        ? 'text-[var(--color-primary)] bg-[var(--color-primary-subtle)]'
+                        : state === 'not_configured'
+                          ? 'text-[var(--color-text-subtle)] bg-[var(--color-surface)]'
+                          : 'text-[var(--color-text-error)] bg-red-500/10';
+                    return (
+                      <li key={name} className={`inline-flex rounded-md px-2 py-0.5 ${stateClass}`}>
+                        {name.replace(/_/g, ' ')} · {state}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
               {p.detail ? (
                 <p className="mt-2 truncate font-mono text-xs text-[var(--color-text-error)]" title={p.detail}>
                   {p.detail}
