@@ -11,6 +11,7 @@ import {
   createOrg,
   getDefaultOrgForUser,
   listOrgsForUser,
+  renameOrg,
 } from '../services/orgs.js';
 import { getTierForOrg } from '../services/billing.js';
 
@@ -116,6 +117,52 @@ orgsRouter.post('/v1/orgs', async (c) => {
       name: org.name,
       personal: org.personal,
       createdAt: org.createdAt,
+    },
+  });
+});
+
+const renameSchema = z.object({
+  name: z.string().min(2).max(200),
+});
+
+orgsRouter.use('/v1/orgs/:id', requireAuth());
+
+orgsRouter.patch('/v1/orgs/:id', async (c) => {
+  const user = c.get('user')!;
+  const orgId = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = renameSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const updated = await renameOrg({
+    orgId,
+    userId: user.id,
+    name: parsed.data.name,
+  });
+  if (!updated) {
+    return c.json(
+      {
+        code: 'not_found_or_not_writable',
+        message: 'org not found, not a member, or it is a personal org',
+      },
+      404,
+    );
+  }
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'org.renamed',
+    ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { orgId, newName: updated.name },
+  });
+  return c.json({
+    org: {
+      id: updated.id,
+      slug: updated.slug,
+      name: updated.name,
+      personal: updated.personal,
     },
   });
 });

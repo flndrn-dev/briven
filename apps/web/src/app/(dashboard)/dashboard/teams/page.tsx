@@ -76,7 +76,10 @@ export default async function TeamsPage() {
 
 function OrgCard({ org }: { org: Org }) {
   return (
-    <div className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+    <Link
+      href={`/dashboard/teams/${org.id}`}
+      className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-border)]"
+    >
       <div className="min-w-0">
         <p className="font-mono text-sm text-[var(--color-text)]">{org.name}</p>
         <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
@@ -86,6 +89,6 @@ function OrgCard({ org }: { org: Org }) {
       <span className="rounded-md bg-[var(--color-surface-raised)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-text-muted)]">
         {org.personal ? 'personal' : 'team'}
       </span>
-    </div>
+    </Link>
   );
 }
