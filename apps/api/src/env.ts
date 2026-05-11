@@ -52,6 +52,13 @@ const envSchema = z.object({
   BRIVEN_POLAR_PRO_PRODUCT_ID: z.string().optional(),
   BRIVEN_POLAR_TEAM_PRODUCT_ID: z.string().optional(),
 
+  // Polar meter UUIDs per metric — read by the meter-push worker. Until
+  // set, usage_events rows are marked `skipped` and the operator can
+  // verify what we'd push via the admin usage page.
+  BRIVEN_POLAR_METER_INVOCATIONS_ID: z.string().optional(),
+  BRIVEN_POLAR_METER_STORAGE_ID: z.string().optional(),
+  BRIVEN_POLAR_METER_CONNECTION_ID: z.string().optional(),
+
   // mittera.eu transactional email. Outbound sends authenticate with
   // the API key; inbound webhooks (delivery / bounce / complaint) are
   // verified with the webhook secret. URL + API key must both be set
