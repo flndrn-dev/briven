@@ -11,6 +11,7 @@ import { requestId } from './middleware/request-id.js';
 import { attachSession, type Session, type User } from './middleware/session.js';
 import { abuseRouter } from './routes/abuse.js';
 import { adminRouter } from './routes/admin.js';
+import { aiRouter } from './routes/ai.js';
 import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
 import { billingRouter } from './routes/billing.js';
@@ -86,6 +87,7 @@ app.route('/', usageRouter);
 app.route('/', abuseRouter);
 app.route('/', studioRouter);
 app.route('/', exportRouter);
+app.route('/', aiRouter);
 app.route('/', mitteraWebhookRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
