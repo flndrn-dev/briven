@@ -10,6 +10,7 @@ import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
 import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/credit-card';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
+import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
 const STORAGE_KEY = 'briven.sidebar.collapsed';
 
@@ -35,6 +36,12 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/dashboard/projects'),
   },
   {
+    href: '/dashboard/teams',
+    label: 'teams',
+    Icon: UsersIcon as never,
+    match: (p) => p.startsWith('/dashboard/teams'),
+  },
+  {
     href: '/dashboard/billing',
     label: 'billing',
     Icon: CreditCardIcon as never,
@@ -55,7 +62,12 @@ const NAV: NavItem[] = [
   },
 ];
 
-type IconHandle = FoldersIconHandle | CogIconHandle | ShieldCheckIconHandle | CreditCardIconHandle;
+type IconHandle =
+  | FoldersIconHandle
+  | CogIconHandle
+  | ShieldCheckIconHandle
+  | CreditCardIconHandle
+  | UsersIconHandle;
 
 interface SidebarUser {
   name: string | null;
