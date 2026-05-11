@@ -75,6 +75,18 @@ const envSchema = z.object({
   BRIVEN_GOOGLE_CLIENT_ID: z.string().optional(),
   BRIVEN_GOOGLE_CLIENT_SECRET: z.string().optional(),
 
+  // GitHub OAuth — paired with Google for the second mainstream provider.
+  BRIVEN_GITHUB_CLIENT_ID: z.string().optional(),
+  BRIVEN_GITHUB_CLIENT_SECRET: z.string().optional(),
+
+  // Konnos OAuth — Forgejo at code.konnos.org. Better Auth's generic OAuth
+  // plugin lets us reuse the same callback shape for any OAuth2/OIDC
+  // provider; the Forgejo endpoints (authorize / token / userinfo) are
+  // pinned below.
+  BRIVEN_KONNOS_CLIENT_ID: z.string().optional(),
+  BRIVEN_KONNOS_CLIENT_SECRET: z.string().optional(),
+  BRIVEN_KONNOS_ISSUER: z.string().url().default('https://code.konnos.org'),
+
   // Public domain (registrable, no scheme). Drives cross-subdomain cookie
   // scope so the session cookie set on api.<domain> is readable by the
   // dashboard at <domain> (and docs/realtime). Required in production.

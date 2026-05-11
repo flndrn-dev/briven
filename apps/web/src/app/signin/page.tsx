@@ -19,7 +19,13 @@ export default async function SignInPage({
   // signin form posts directly to it instead of going through Next.js's
   // /api/* rewrite (which proxy edges sometimes mangle).
   const apiOrigin = process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
-  const hasGoogle = process.env.NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH === 'true';
+  // Each provider flag mirrors a server-side env: when the credentials
+  // aren't configured, hide the button so users don't trigger a 500.
+  const providers = {
+    google: process.env.NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH === 'true',
+    github: process.env.NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH === 'true',
+    konnos: process.env.NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH === 'true',
+  };
 
   return (
     <main className="relative flex min-h-dvh items-center justify-center bg-[var(--color-bg)] px-6 text-[var(--color-text)]">
@@ -32,7 +38,7 @@ export default async function SignInPage({
         <h1 className="font-mono text-2xl tracking-tight">sign in</h1>
 
         <div className="mt-8">
-          <SignInForm next={next} apiOrigin={apiOrigin} hasGoogle={hasGoogle} />
+          <SignInForm next={next} apiOrigin={apiOrigin} providers={providers} />
         </div>
 
         <p className="mt-10 font-mono text-xs text-[var(--color-text-subtle)]">

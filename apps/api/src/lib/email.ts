@@ -100,6 +100,26 @@ async function send(label: string, args: SendArgs): Promise<void> {
     });
     throw new Error(`mittera send failed: ${res.status}`);
   }
+
+  // Successful POST. mittera returns the email's id in the body; we
+  // capture it so an operator chasing "did my magic link actually
+  // ship?" can grep for the messageId in the audit-log webhook stream.
+  const responseBody = await res.text().catch(() => '');
+  let messageId: string | null = null;
+  try {
+    const parsed = JSON.parse(responseBody) as { id?: string; messageId?: string };
+    messageId = parsed.id ?? parsed.messageId ?? null;
+  } catch {
+    // Non-JSON body — log raw so we can see what mittera actually returned.
+  }
+  log.info('mittera_send_ok', {
+    label,
+    status: res.status,
+    messageId,
+    // Only logged on warn+: in case of a non-JSON success body, surface
+    // the first 240 chars so we can see what mittera said.
+    bodyPreview: messageId ? undefined : responseBody.slice(0, 240),
+  });
 }
 
 export async function sendMagicLink(to: string, url: string): Promise<void> {
