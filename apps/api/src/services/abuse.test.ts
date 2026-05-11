@@ -41,3 +41,32 @@ describe('ABUSE_RESOLUTION', () => {
     }
   });
 });
+
+describe('auto-suspension decision', () => {
+  // Mirrors the rule in resolveAbuseReport — keep them in lock-step so a
+  // future change to escalation policy surfaces here.
+  function shouldAutoSuspend(resolution: AbuseResolution, projectId: string | undefined): boolean {
+    const isEscalation = resolution === 'suspended' || resolution === 'banned';
+    return isEscalation && Boolean(projectId);
+  }
+
+  test('no_action never suspends, even with a projectId', () => {
+    expect(shouldAutoSuspend('no_action', 'p_abc')).toBe(false);
+  });
+
+  test('warned never suspends, even with a projectId', () => {
+    expect(shouldAutoSuspend('warned', 'p_abc')).toBe(false);
+  });
+
+  test('suspended without a projectId is a no-op (admin will set later)', () => {
+    expect(shouldAutoSuspend('suspended', undefined)).toBe(false);
+  });
+
+  test('suspended with a projectId triggers the auto-suspend', () => {
+    expect(shouldAutoSuspend('suspended', 'p_abc')).toBe(true);
+  });
+
+  test('banned with a projectId triggers the auto-suspend', () => {
+    expect(shouldAutoSuspend('banned', 'p_abc')).toBe(true);
+  });
+});

@@ -8,7 +8,9 @@ import {
   ABUSE_RESOLUTION,
   listAbuseReports,
   resolveAbuseReport,
+  suspendProject,
   triageAbuseReport,
+  unsuspendProject,
   type AbuseStatus,
 } from '../services/abuse.js';
 import {
@@ -262,6 +264,10 @@ const abuseTransitionSchema = z.discriminatedUnion('action', [
     action: z.literal('resolve'),
     resolution: z.enum(ABUSE_RESOLUTION),
     notes: z.string().max(2000).optional(),
+    // When resolution is 'suspended' or 'banned' AND a projectId is
+    // provided, the resolve path auto-flips projects.suspended_at. For
+    // 'no_action' / 'warned' this field is ignored.
+    projectId: z.string().min(1).optional(),
   }),
 ]);
 
@@ -309,8 +315,55 @@ adminRouter.patch('/v1/admin/abuse-reports/:reportId', async (c) => {
     resolverId: actor.id,
     resolution: parsed.data.resolution,
     notes: parsed.data.notes,
+    projectId: parsed.data.projectId,
     ipHash: ipHash(c),
     userAgent: c.req.header('user-agent') ?? null,
   });
-  return c.json({ reportId, status: 'resolved', resolution: parsed.data.resolution });
+  return c.json({
+    reportId,
+    status: 'resolved',
+    resolution: parsed.data.resolution,
+    projectSuspended:
+      (parsed.data.resolution === 'suspended' || parsed.data.resolution === 'banned') &&
+      Boolean(parsed.data.projectId),
+  });
+});
+
+/* ─── admin: manual project suspend / unsuspend ─────────────────────── */
+const projectSuspensionSchema = z.object({
+  projectId: z.string().min(1),
+  reason: z.string().min(1).max(500).optional(),
+});
+
+adminRouter.post('/v1/admin/projects/suspend', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = projectSuspensionSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const ok = await suspendProject({
+    projectId: parsed.data.projectId,
+    actorId: actor.id,
+    reason: parsed.data.reason ?? 'admin_action',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+  });
+  return c.json({ projectId: parsed.data.projectId, suspended: ok });
+});
+
+adminRouter.post('/v1/admin/projects/unsuspend', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({ projectId: z.string().min(1) }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const ok = await unsuspendProject({
+    projectId: parsed.data.projectId,
+    actorId: actor.id,
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+  });
+  return c.json({ projectId: parsed.data.projectId, unsuspended: ok });
 });

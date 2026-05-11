@@ -1,8 +1,9 @@
 import { newId } from '@briven/shared';
-import { desc, like } from 'drizzle-orm';
+import { desc, eq, like } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { auditLogs } from '../db/schema.js';
+import { auditLogs, projects } from '../db/schema.js';
+import { log } from '../lib/logger.js';
 import { audit } from './audit.js';
 
 /**
@@ -195,12 +196,49 @@ export interface ResolveInput {
   ipHash: string | null;
   userAgent: string | null;
   notes?: string;
+  // Optional — the project being suspended/banned. When provided AND
+  // the resolution is 'suspended' or 'banned', we flip projects.suspended_at.
+  // For 'no_action' / 'warned' resolutions this is ignored.
+  projectId?: string;
 }
 
 export async function resolveAbuseReport(input: ResolveInput): Promise<void> {
+  const shouldSuspend = input.resolution === 'suspended' || input.resolution === 'banned';
+  let suspended = false;
+
+  if (shouldSuspend && input.projectId) {
+    try {
+      const db = getDb();
+      const result = await db
+        .update(projects)
+        .set({
+          suspendedAt: new Date(),
+          suspendReason: `abuse_report:${input.reportId}:${input.resolution}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(projects.id, input.projectId))
+        .returning({ id: projects.id });
+      suspended = result.length > 0;
+      if (!suspended) {
+        log.warn('abuse_resolve_project_not_found', {
+          reportId: input.reportId,
+          projectId: input.projectId,
+        });
+      }
+    } catch (err) {
+      // Don't block the audit row on a DB hiccup — the operator can
+      // suspend manually from the admin UI as a recovery path.
+      log.error('abuse_resolve_suspend_failed', {
+        reportId: input.reportId,
+        projectId: input.projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   await audit({
     actorId: input.resolverId,
-    projectId: null,
+    projectId: input.projectId ?? null,
     action: 'abuse.report.resolved',
     ipHash: input.ipHash,
     userAgent: input.userAgent,
@@ -209,6 +247,85 @@ export async function resolveAbuseReport(input: ResolveInput): Promise<void> {
       resolverId: input.resolverId,
       resolution: input.resolution,
       notes: input.notes ?? null,
+      projectId: input.projectId ?? null,
+      projectSuspended: suspended,
     },
   });
+}
+
+/**
+ * Manual suspension — for admin actions outside the abuse pipeline
+ * (e.g. operator notices something during a routine sweep). Mirrors the
+ * resolve path but doesn't need a report id. Returns true when the
+ * UPDATE matched a row.
+ */
+export async function suspendProject(args: {
+  projectId: string;
+  actorId: string;
+  reason: string;
+  ipHash: string | null;
+  userAgent: string | null;
+}): Promise<boolean> {
+  const db = getDb();
+  const result = await db
+    .update(projects)
+    .set({
+      suspendedAt: new Date(),
+      suspendReason: `manual:${args.reason}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(projects.id, args.projectId))
+    .returning({ id: projects.id });
+  const ok = result.length > 0;
+  await audit({
+    actorId: args.actorId,
+    projectId: args.projectId,
+    action: 'admin.project.suspend',
+    ipHash: args.ipHash,
+    userAgent: args.userAgent,
+    metadata: { reason: args.reason, matched: ok },
+  });
+  return ok;
+}
+
+export async function unsuspendProject(args: {
+  projectId: string;
+  actorId: string;
+  ipHash: string | null;
+  userAgent: string | null;
+}): Promise<boolean> {
+  const db = getDb();
+  const result = await db
+    .update(projects)
+    .set({ suspendedAt: null, suspendReason: null, updatedAt: new Date() })
+    .where(eq(projects.id, args.projectId))
+    .returning({ id: projects.id });
+  const ok = result.length > 0;
+  await audit({
+    actorId: args.actorId,
+    projectId: args.projectId,
+    action: 'admin.project.unsuspend',
+    ipHash: args.ipHash,
+    userAgent: args.userAgent,
+    metadata: { matched: ok },
+  });
+  return ok;
+}
+
+/**
+ * Returns the suspension state for a project, or null when the project
+ * isn't suspended. Used by the project-suspended middleware to gate
+ * state-changing routes (invokes, deploys, env writes).
+ */
+export async function getProjectSuspension(
+  projectId: string,
+): Promise<{ suspendedAt: Date; reason: string | null } | null> {
+  const db = getDb();
+  const [row] = await db
+    .select({ suspendedAt: projects.suspendedAt, suspendReason: projects.suspendReason })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!row || !row.suspendedAt) return null;
+  return { suspendedAt: row.suspendedAt, reason: row.suspendReason };
 }
