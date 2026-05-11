@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { Hono } from 'hono';
@@ -16,7 +16,7 @@ const BOOT_TIME = new Date().toISOString();
 // triggers a plain `docker compose build` without build-args, so without
 // this branch /info would lie about which commit is live.
 const BUILD_SHA = process.env.BRIVEN_BUILD_SHA?.trim() || resolveShaFromGit() || 'dev';
-const BUILD_AT = process.env.BRIVEN_BUILD_AT?.trim() || 'dev';
+const BUILD_AT = process.env.BRIVEN_BUILD_AT?.trim() || resolveBuildAtFromGit() || 'dev';
 
 export const healthRouter = new Hono();
 
@@ -138,6 +138,26 @@ export function resolveShaFromGit(gitDir = resolve(process.cwd(), '../../.git'))
       if (name === ref && sha && /^[0-9a-f]{40}$/.test(sha)) return sha;
     }
     return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build timestamp fallback — when BRIVEN_BUILD_AT isn't passed at image
+ * build time, we approximate it from the mtime of .git/HEAD. The mtime
+ * is updated whenever HEAD moves (checkout / commit / fetch+reset), so
+ * inside a freshly-built image it reflects when the docker build copied
+ * the .git tree — which for an auto-deploy is within seconds of the
+ * commit that triggered it. Good enough for /info's "when was this
+ * built?" signal. Exported for tests.
+ */
+export function resolveBuildAtFromGit(
+  gitDir = resolve(process.cwd(), '../../.git'),
+): string | null {
+  try {
+    const stat = statSync(resolve(gitDir, 'HEAD'));
+    return new Date(stat.mtimeMs).toISOString();
   } catch {
     return null;
   }
