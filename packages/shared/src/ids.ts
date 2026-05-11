@@ -22,7 +22,8 @@ export type IdPrefix =
   | 'ev' // event
   | 'inv' // invocation — per-call id attached to function logs
   | 'iso' // isolate — per-process id used by the runtime pool
-  | 'sup'; // email suppression entry
+  | 'sup' // email suppression entry
+  | 'dh'; // deploy history entry
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

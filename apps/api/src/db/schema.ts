@@ -475,6 +475,33 @@ export const emailSuppressions = pgTable(
   }),
 );
 
+/* ─── deploy history ─────────────────────────────────────────────── */
+/**
+ * One row per api boot — the audit trail behind /info.buildSha. Drives
+ * the admin "Deploys" widget (last N rollouts: which sha, when, which
+ * env) so operators can correlate "the bug appeared at 14:32" with
+ * "deploy abc1234 went live at 14:30".
+ *
+ * Written from src/index.ts after migrations succeed; failure to insert
+ * is logged but not fatal (the api still boots — observability is not
+ * load-bearing for the request path).
+ */
+export const deployHistory = pgTable(
+  'deploy_history',
+  {
+    id: id(),
+    service: text('service').notNull(),
+    buildSha: text('build_sha').notNull(),
+    buildAt: text('build_at'),
+    env: text('env').notNull(),
+    bootedAt: createdAt(),
+  },
+  (t) => ({
+    serviceBootedIdx: index('deploy_history_service_booted_idx').on(t.service, t.bootedAt),
+    buildShaIdx: index('deploy_history_build_sha_idx').on(t.buildSha),
+  }),
+);
+
 /* ─── type exports ────────────────────────────────────────────────── */
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -490,3 +517,5 @@ export type NewFunctionLog = typeof functionLogs.$inferInsert;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type EmailSuppression = typeof emailSuppressions.$inferSelect;
 export type NewEmailSuppression = typeof emailSuppressions.$inferInsert;
+export type DeployHistoryEntry = typeof deployHistory.$inferSelect;
+export type NewDeployHistoryEntry = typeof deployHistory.$inferInsert;

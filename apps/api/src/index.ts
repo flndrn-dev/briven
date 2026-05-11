@@ -17,7 +17,7 @@ import { billingRouter } from './routes/billing.js';
 import { dbRouter } from './routes/db.js';
 import { deploymentsRouter } from './routes/deployments.js';
 import { exportRouter } from './routes/export.js';
-import { healthRouter } from './routes/health.js';
+import { BUILD_AT, BUILD_SHA, healthRouter } from './routes/health.js';
 import { internalRouter } from './routes/internal.js';
 import { invitationsRouter } from './routes/invitations.js';
 import { invokeRouter } from './routes/invoke.js';
@@ -31,6 +31,7 @@ import { projectsRouter } from './routes/projects.js';
 import { rootRouter } from './routes/root.js';
 import { studioRouter } from './routes/studio.js';
 import { usageRouter } from './routes/usage.js';
+import { recordDeploy } from './services/deploy-history.js';
 import {
   startAuditRetentionCron,
   startLogFanoutWorker,
@@ -97,6 +98,16 @@ log.info('api_boot', { port: env.BRIVEN_API_PORT, origin: env.BRIVEN_API_ORIGIN 
 startLogFanoutWorker();
 startLogRetentionCron();
 startAuditRetentionCron();
+
+// Audit-trail behind /info — one row per boot. recordDeploy itself
+// short-circuits when buildSha is the "dev" sentinel and never throws,
+// so the request path stays alive even if the meta-DB is unreachable.
+void recordDeploy({
+  service: 'api',
+  buildSha: BUILD_SHA,
+  buildAt: BUILD_AT === 'dev' ? null : BUILD_AT,
+  env: env.BRIVEN_ENV,
+});
 
 export default {
   port: env.BRIVEN_API_PORT,

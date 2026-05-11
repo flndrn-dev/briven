@@ -18,33 +18,37 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { resolveBuildAtFromGit, resolveShaFromGit } from './health.js';
 
 describe('/info build identity fallbacks', () => {
-  // Replicates the small helper in health.ts. When BRIVEN_BUILD_SHA /
-  // BRIVEN_BUILD_AT are passed at docker build time via ARG, they
-  // surface as process.env in the runtime container. Outside docker
-  // they're undefined; the endpoint returns the literal string "dev"
-  // so /info never 500s on a fresh local checkout.
-  function resolveBuildSha(envVar: string | undefined): string {
-    return envVar ?? 'dev';
-  }
-  function resolveBuildAt(envVar: string | undefined): string {
-    return envVar ?? 'dev';
+  // Replicates the env→git→"dev" fallback chain in health.ts. The
+  // "dev" literal is a sentinel — it's both the ARG default in the
+  // Dockerfile (so Dokploy auto-deploys without --build-arg surface as
+  // BRIVEN_BUILD_SHA=dev in the runtime env) and the final fallback
+  // when no other source resolves. Treating it as "unset" lets the
+  // .git/HEAD branch fire on auto-deploys.
+  function resolveBuildSha(envVar: string | undefined, gitSha: string | null): string {
+    const v = envVar?.trim();
+    const fromEnv = !v || v === 'dev' ? null : v;
+    return fromEnv ?? gitSha ?? 'dev';
   }
 
-  test('uses the env value when set', () => {
-    expect(resolveBuildSha('a42bd57')).toBe('a42bd57');
-    expect(resolveBuildAt('2026-05-10T22:08:32Z')).toBe('2026-05-10T22:08:32Z');
+  test('uses the env value when set to a real sha', () => {
+    expect(resolveBuildSha('a42bd57', null)).toBe('a42bd57');
   });
 
-  test('falls back to "dev" when env is unset', () => {
-    expect(resolveBuildSha(undefined)).toBe('dev');
-    expect(resolveBuildAt(undefined)).toBe('dev');
+  test('falls back to .git when env is the "dev" sentinel (Dokploy auto-deploy case)', () => {
+    expect(resolveBuildSha('dev', 'a75e2b1b3c4d')).toBe('a75e2b1b3c4d');
   });
 
-  test('the empty string is treated as set (intentional: deploy may pass empty)', () => {
-    // If the docker --build-arg gets an empty value, we still record
-    // it — the operator sees "buildSha=" in /info and knows to
-    // re-deploy with the sha actually populated.
-    expect(resolveBuildSha('')).toBe('');
+  test('falls back to .git when env is unset', () => {
+    expect(resolveBuildSha(undefined, 'a75e2b1b3c4d')).toBe('a75e2b1b3c4d');
+  });
+
+  test('returns "dev" when neither env nor .git provide a sha', () => {
+    expect(resolveBuildSha(undefined, null)).toBe('dev');
+    expect(resolveBuildSha('dev', null)).toBe('dev');
+  });
+
+  test('whitespace-only env value is treated as unset', () => {
+    expect(resolveBuildSha('   ', 'a75e2b1b3c4d')).toBe('a75e2b1b3c4d');
   });
 });
 

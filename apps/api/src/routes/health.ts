@@ -9,14 +9,27 @@ import { env } from '../env.js';
 import { renderPrometheus } from '../lib/metrics.js';
 import { pingRedis } from '../lib/redis.js';
 
-const BOOT_TIME = new Date().toISOString();
+export const BOOT_TIME = new Date().toISOString();
 // Commit SHA + build timestamp surface in /info. Preferred source is the
 // BRIVEN_BUILD_SHA Dockerfile ARG (passed by scripts/deploy-kvm4.sh).
 // Fallback: read .git/HEAD inside the image — Dokploy's auto-deploy
 // triggers a plain `docker compose build` without build-args, so without
 // this branch /info would lie about which commit is live.
-const BUILD_SHA = process.env.BRIVEN_BUILD_SHA?.trim() || resolveShaFromGit() || 'dev';
-const BUILD_AT = process.env.BRIVEN_BUILD_AT?.trim() || resolveBuildAtFromGit() || 'dev';
+//
+// "dev" is treated identically to undefined here because that's the ARG
+// default in the Dockerfile — when Dokploy builds without a build-arg
+// the ENV resolves to the literal string "dev", and we want the .git
+// fallback to fire in that case too.
+function envSha(): string | null {
+  const v = process.env.BRIVEN_BUILD_SHA?.trim();
+  return !v || v === 'dev' ? null : v;
+}
+function envAt(): string | null {
+  const v = process.env.BRIVEN_BUILD_AT?.trim();
+  return !v || v === 'dev' ? null : v;
+}
+export const BUILD_SHA = envSha() ?? resolveShaFromGit() ?? 'dev';
+export const BUILD_AT = envAt() ?? resolveBuildAtFromGit() ?? 'dev';
 
 export const healthRouter = new Hono();
 
