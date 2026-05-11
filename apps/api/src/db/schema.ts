@@ -494,7 +494,11 @@ export const deployHistory = pgTable(
     buildSha: text('build_sha').notNull(),
     buildAt: text('build_at'),
     env: text('env').notNull(),
-    bootedAt: createdAt(),
+    // Explicit "booted_at" column name — semantically clearer than the
+    // generic createdAt() helper for a row that records the moment of
+    // process boot. (Also: the helper maps to "created_at" which would
+    // mismatch the SQL migration.)
+    bootedAt: ts('booted_at').defaultNow().notNull(),
   },
   (t) => ({
     serviceBootedIdx: index('deploy_history_service_booted_idx').on(t.service, t.bootedAt),
