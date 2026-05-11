@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { Hono } from 'hono';
 
 import { pingDb } from '../db/client.js';
@@ -7,12 +10,13 @@ import { renderPrometheus } from '../lib/metrics.js';
 import { pingRedis } from '../lib/redis.js';
 
 const BOOT_TIME = new Date().toISOString();
-// Commit SHA + build timestamp are injected at image-build time via
-// BRIVEN_BUILD_SHA + BRIVEN_BUILD_AT (Dockerfile ARGs). Fallback strings
-// surface in /info when running outside a docker build (local `bun
-// dev`, fresh checkout, etc.) so the endpoint never 500s.
-const BUILD_SHA = process.env.BRIVEN_BUILD_SHA ?? 'dev';
-const BUILD_AT = process.env.BRIVEN_BUILD_AT ?? 'dev';
+// Commit SHA + build timestamp surface in /info. Preferred source is the
+// BRIVEN_BUILD_SHA Dockerfile ARG (passed by scripts/deploy-kvm4.sh).
+// Fallback: read .git/HEAD inside the image — Dokploy's auto-deploy
+// triggers a plain `docker compose build` without build-args, so without
+// this branch /info would lie about which commit is live.
+const BUILD_SHA = process.env.BRIVEN_BUILD_SHA?.trim() || resolveShaFromGit() || 'dev';
+const BUILD_AT = process.env.BRIVEN_BUILD_AT?.trim() || 'dev';
 
 export const healthRouter = new Hono();
 
@@ -103,5 +107,38 @@ async function probeRuntime(): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Read the commit sha from .git/HEAD without shelling out to `git`.
+ * Handles three layouts:
+ *   1. detached HEAD             — HEAD contains the sha directly
+ *   2. ref pointing at a loose   — .git/refs/heads/<name> exists
+ *   3. ref pointing at a packed  — entry lives in .git/packed-refs
+ *
+ * Returns null on any I/O failure so the caller can fall back to "dev".
+ * Exported for tests.
+ */
+export function resolveShaFromGit(gitDir = resolve(process.cwd(), '../../.git')): string | null {
+  try {
+    const head = readFileSync(resolve(gitDir, 'HEAD'), 'utf8').trim();
+    if (!head.startsWith('ref:')) return /^[0-9a-f]{40}$/.test(head) ? head : null;
+    const ref = head.slice(4).trim();
+    try {
+      const sha = readFileSync(resolve(gitDir, ref), 'utf8').trim();
+      if (/^[0-9a-f]{40}$/.test(sha)) return sha;
+    } catch {
+      // loose ref missing — try packed-refs
+    }
+    const packed = readFileSync(resolve(gitDir, 'packed-refs'), 'utf8');
+    for (const line of packed.split('\n')) {
+      if (line.startsWith('#') || line.startsWith('^')) continue;
+      const [sha, name] = line.split(' ');
+      if (name === ref && sha && /^[0-9a-f]{40}$/.test(sha)) return sha;
+    }
+    return null;
+  } catch {
+    return null;
   }
 }

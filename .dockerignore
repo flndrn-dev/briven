@@ -6,7 +6,9 @@ node_modules
 **/.turbo
 dist
 **/dist
-.git
+# .git is intentionally NOT ignored — apps/api/src/routes/health.ts reads
+# .git/HEAD at boot to populate /info.buildSha when a docker build doesn't
+# pass BRIVEN_BUILD_SHA as a build-arg (e.g. Dokploy auto-deploys).
 .github
 .vscode
 .idea
