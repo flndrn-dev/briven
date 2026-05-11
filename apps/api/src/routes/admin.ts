@@ -22,6 +22,7 @@ import {
   unsuspendUser,
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
+import { listDeploys } from '../services/deploy-history.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
@@ -90,6 +91,30 @@ adminRouter.get('/v1/admin/email-events', async (c) => {
 adminRouter.get('/v1/admin/email-suppressions', async (c) => {
   const rows = await listSuppressions(500);
   return c.json({ suppressions: rows });
+});
+
+/**
+ * Deploy history — last N api/realtime/runtime boots. Paired with the
+ * `/info.buildSha` endpoint: /info answers "what's running RIGHT NOW",
+ * this answers "what happened when". Dashboard renders a compact
+ * timeline so an operator can connect "the bug appeared at 14:32" with
+ * "deploy abc1234 went live at 14:30".
+ */
+adminRouter.get('/v1/admin/deploys', async (c) => {
+  const service = c.req.query('service') ?? undefined;
+  const limitRaw = c.req.query('limit');
+  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 50;
+  const rows = await listDeploys({ service, limit: Number.isFinite(limit) ? limit : 50 });
+  return c.json({
+    deploys: rows.map((r) => ({
+      id: r.id,
+      service: r.service,
+      buildSha: r.buildSha,
+      buildAt: r.buildAt,
+      env: r.env,
+      bootedAt: r.bootedAt,
+    })),
+  });
 });
 
 const suppressActionSchema = z.object({
