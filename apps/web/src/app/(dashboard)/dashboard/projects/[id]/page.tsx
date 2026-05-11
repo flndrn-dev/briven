@@ -12,7 +12,27 @@ interface Deployment {
   functionCount: string | null;
 }
 
+interface UsageResponse {
+  tier: 'free' | 'pro' | 'team';
+  invocations: { count: number; totalDurationMs: number };
+  storage: { bytes: number; tableCount: number };
+  limits: { invokesPerMonth: number };
+}
+
 export const dynamic = 'force-dynamic';
+
+function formatBytes(b: number): string {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function formatCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
 
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,6 +40,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
   const { deployments } = await apiJson<{ deployments: Deployment[] }>(
     `/v1/projects/${id}/deployments?limit=5`,
   ).catch(() => ({ deployments: [] as Deployment[] }));
+  const usage = await apiJson<UsageResponse>(`/v1/projects/${id}/usage`).catch(() => null);
 
   const endpoint = `${project.slug}.apps.briven.tech`;
   const latest = deployments[0];
@@ -39,6 +60,31 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         />
         <Card label="functions (last deploy)" value={latest?.functionCount ?? '—'} />
       </div>
+
+      {usage ? (
+        <div>
+          <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">
+            this month so far
+          </h2>
+          <div className="grid grid-cols-3 gap-4">
+            <Card
+              label="invocations"
+              value={`${formatCount(usage.invocations.count)} / ${formatCount(usage.limits.invokesPerMonth)}`}
+              hint={`${usage.tier} tier`}
+            />
+            <Card
+              label="storage"
+              value={formatBytes(usage.storage.bytes)}
+              hint={`${usage.storage.tableCount} table${usage.storage.tableCount === 1 ? '' : 's'}`}
+            />
+            <Card
+              label="compute"
+              value={`${Math.round(usage.invocations.totalDurationMs / 1000)}s`}
+              hint="aggregated runtime"
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div>
         <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">
@@ -71,11 +117,24 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
   );
 }
 
-function Card({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Card({
+  label,
+  value,
+  mono,
+  hint,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  hint?: string;
+}) {
   return (
     <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">{label}</p>
       <p className={`mt-1 text-sm ${mono ? 'font-mono' : ''}`}>{value}</p>
+      {hint ? (
+        <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">{hint}</p>
+      ) : null}
     </div>
   );
 }
