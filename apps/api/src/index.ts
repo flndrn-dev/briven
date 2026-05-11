@@ -25,6 +25,7 @@ import { invokeRouter } from './routes/invoke.js';
 import { logsRouter } from './routes/logs.js';
 import { meRouter } from './routes/me.js';
 import { mitteraWebhookRouter } from './routes/mittera-webhook.js';
+import { orgsRouter } from './routes/orgs.js';
 import { projectEnvRouter } from './routes/project-env.js';
 import { membersRouter } from './routes/project-members.js';
 import { projectsRouter } from './routes/projects.js';
@@ -88,6 +89,7 @@ app.route('/', abuseRouter);
 app.route('/', studioRouter);
 app.route('/', exportRouter);
 app.route('/', aiRouter);
+app.route('/', orgsRouter);
 app.route('/', mitteraWebhookRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
