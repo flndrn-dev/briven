@@ -52,12 +52,16 @@ export default async function AbuseReportsAdminPage({
     revalidatePath('/dashboard/admin/abuse-reports');
   }
 
-  async function resolve(reportId: string, resolution: Resolution): Promise<void> {
+  async function resolve(
+    reportId: string,
+    resolution: Resolution,
+    projectId: string | undefined,
+  ): Promise<void> {
     'use server';
     const res = await apiFetch(`/v1/admin/abuse-reports/${reportId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'resolve', resolution }),
+      body: JSON.stringify({ action: 'resolve', resolution, projectId }),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
