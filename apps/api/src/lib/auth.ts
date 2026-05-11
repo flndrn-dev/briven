@@ -75,12 +75,19 @@ export const auth = betterAuth({
         ? { enabled: true, domain: `.${env.BRIVEN_DOMAIN}` }
         : { enabled: false },
     defaultCookieAttributes: {
-      // 'strict' — kills cross-site form-POST CSRF. Dashboard at briven.tech
-      // and API at api.briven.tech are same-site (registrable domain
-      // briven.tech), so the dashboard's authenticated XHR/fetch keeps
-      // working; only cross-site navigations from third-party origins lose
-      // the cookie.
-      sameSite: 'strict',
+      // 'lax' is required for OAuth callbacks. With 'strict', the state
+      // cookie set when the user clicks "sign in with google" wouldn't
+      // be sent when Google redirects back to api.briven.tech/v1/auth/
+      // callback/google (the browser treats it as a cross-site nav from
+      // accounts.google.com → api.briven.tech and strips strict cookies).
+      // The result: every OAuth callback hits state_mismatch.
+      //
+      // 'lax' allows the cookie on top-level GET navigations (which is
+      // exactly what OAuth callbacks are) while still blocking cross-site
+      // POSTs that would defeat CSRF protection. CSRF on POST routes is
+      // additionally guarded by the origin-check middleware
+      // (apps/api/src/middleware/csrf.ts), so we lose nothing here.
+      sameSite: 'lax',
       httpOnly: true,
     },
   },
