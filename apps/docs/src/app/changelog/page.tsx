@@ -17,6 +17,48 @@ const ENTRIES: readonly Entry[] = [
   {
     date: '2026-05-11',
     tags: ['docs'],
+    title: 'migration guide: nextauth / auth.js → briven',
+    body: 'sixth per-source migration page. schema maps 1:1 (both target Better Auth\'s shape); the work is the api shape (getServerSession → brivenServer.session(), useSession imports). covers account preservation strategies, provider port, callback hooks, and the cutover checklist.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'usage metering: hourly aggregation cron + usage_events table',
+    body: 'phase 3 GA-blocker progress. startUsageAggregator() runs ~5min after every wall-clock hour and writes one usage_events row per (project, hour, metric) for invocations + storage_bytes. Idempotent via the unique index, so a catch-up re-run after a restart is safe. Polar metering push is a separate worker landing once meter IDs are configured.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'realtime connection-seconds metric per project',
+    body: 'apps/realtime tracks per-project cumulative subscription-seconds (closed subs + live deltas) via briven_realtime_connection_seconds_total{project} on /metrics. Drives the eventual Polar metering push for connection-minutes billing.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'project auto-suspension on abuse-report resolution',
+    body: 'projects.suspended_at column + blockIfProjectSuspended() middleware on invoke + deploy routes (403 project_suspended). The /v1/admin/abuse-reports/:id PATCH endpoint now accepts an optional projectId; resolving with resolution=suspended or banned flips the project in one step. Manual /v1/admin/projects/{suspend,unsuspend} endpoints for the non-abuse paths. Admin triage modal in the dashboard surfaces the new projectId input only when the resolution implies suspension.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'github + konnos OAuth alongside google + magic link',
+    body: 'sign-in page now wires four auth methods: magic-link via email, Google OAuth, GitHub OAuth, and Konnos OAuth (Forgejo at code.konnos.org via the generic-oauth plugin). Each button is gated by NEXT_PUBLIC_BRIVEN_HAS_*_OAUTH so the UI hides providers whose creds aren\'t configured.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['fix'],
+    title: '/info reports a real sha on dokploy auto-deploys',
+    body: 'health.ts now resolves the commit sha from .git/HEAD when BRIVEN_BUILD_SHA isn\'t passed at image build time (which is exactly the case for dokploy auto-deploys). loose refs + packed-refs both supported. Paired with treating the literal "dev" env value as "fall back to git" sentinel. Promoted to @briven/shared so apps/realtime + apps/runtime use the same chain.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'deploy_history table + /dashboard/admin/deploys',
+    body: 'every api boot now writes one row into deploy_history (service, buildSha, buildAt, env, bootedAt). new admin page renders a timeline with "live" badge on the most recent row so operators can correlate "the bug appeared at 14:32" with "deploy abc1234 went live at 14:30" without ssh-ing to the box. /v1/admin/deploys?service=api&limit=N exposes the raw stream.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['docs'],
     title: 'migration guide: hasura → briven',
     body: 'fifth per-source migration page. postgres half ports for free via pg_dump; the work is the permissions port — every (role, table, action) triple from hasura metadata becomes a guard in function code. covers actions, event triggers, scheduled triggers, remote schemas, auth (preserve-ids vs preserve-jwts) and subscriptions vs briven\'s reactive useQuery.',
   },

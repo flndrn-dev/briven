@@ -136,6 +136,12 @@ export default function MigrationPage() {
           href="/migration/hasura"
           summary="postgres half ports for free; the work is the permissions port — every (role, table, action) triple from hasura metadata becomes a guard in function code."
         />
+        <SourceItem
+          name="nextauth / auth.js"
+          status="documented"
+          href="/migration/nextauth"
+          summary="schema maps 1:1 (both target Better Auth's shape); provider port is trivial; the work is replacing getServerSession + useSession callsites and choosing preserve-ids vs preserve-sessions cutover."
+        />
       </ul>
 
       <h2 className="mt-12 font-mono text-xl tracking-tight">when not to use this</h2>
