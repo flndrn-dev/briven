@@ -1,56 +1,12 @@
 /**
- * /info contract tests — pin the shape and the dev-fallback behaviour
- * so a doctor / CI deploy-gate / support tool that depends on these
- * fields fails loudly at build time when the response shape drifts.
- *
- * We don't spin up the full Hono app + DB here — that's covered by
- * the post-deploy production smoke. This file asserts the
- * environment-variable handling that decides BUILD_SHA / BUILD_AT
- * fallbacks.
+ * /info + /ready contract tests for apps/api — pin the readiness gate
+ * logic so the matrix of (configured? × reachable?) stays testable
+ * without standing up postgres / redis. Build-identity resolution is
+ * exercised by packages/shared/src/build-identity.test.ts since the
+ * resolver lives there now.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-
-import { resolveBuildAtFromGit, resolveShaFromGit } from './health.js';
-
-describe('/info build identity fallbacks', () => {
-  // Replicates the env→git→"dev" fallback chain in health.ts. The
-  // "dev" literal is a sentinel — it's both the ARG default in the
-  // Dockerfile (so Dokploy auto-deploys without --build-arg surface as
-  // BRIVEN_BUILD_SHA=dev in the runtime env) and the final fallback
-  // when no other source resolves. Treating it as "unset" lets the
-  // .git/HEAD branch fire on auto-deploys.
-  function resolveBuildSha(envVar: string | undefined, gitSha: string | null): string {
-    const v = envVar?.trim();
-    const fromEnv = !v || v === 'dev' ? null : v;
-    return fromEnv ?? gitSha ?? 'dev';
-  }
-
-  test('uses the env value when set to a real sha', () => {
-    expect(resolveBuildSha('a42bd57', null)).toBe('a42bd57');
-  });
-
-  test('falls back to .git when env is the "dev" sentinel (Dokploy auto-deploy case)', () => {
-    expect(resolveBuildSha('dev', 'a75e2b1b3c4d')).toBe('a75e2b1b3c4d');
-  });
-
-  test('falls back to .git when env is unset', () => {
-    expect(resolveBuildSha(undefined, 'a75e2b1b3c4d')).toBe('a75e2b1b3c4d');
-  });
-
-  test('returns "dev" when neither env nor .git provide a sha', () => {
-    expect(resolveBuildSha(undefined, null)).toBe('dev');
-    expect(resolveBuildSha('dev', null)).toBe('dev');
-  });
-
-  test('whitespace-only env value is treated as unset', () => {
-    expect(resolveBuildSha('   ', 'a75e2b1b3c4d')).toBe('a75e2b1b3c4d');
-  });
-});
+import { describe, expect, test } from 'bun:test';
 
 describe('/ready check states', () => {
   // Mirrors the ready endpoint's check projection. Decoupling the
@@ -141,98 +97,5 @@ describe('redis-required readiness gate', () => {
         redisOk: false,
       }),
     ).toBe(false);
-  });
-});
-
-describe('resolveShaFromGit', () => {
-  // Build a fake .git directory in each test so we don't depend on the
-  // host's checkout — same paths the real one uses, just under /tmp.
-  let tmp: string;
-  let gitDir: string;
-  const SHA = 'a42bd57b3c1d8e2f4a6b7c9d0e1f2a3b4c5d6e7f';
-
-  beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'briven-git-'));
-    gitDir = join(tmp, '.git');
-    mkdirSync(gitDir, { recursive: true });
-  });
-
-  afterEach(() => {
-    rmSync(tmp, { recursive: true, force: true });
-  });
-
-  test('returns null when .git/HEAD is missing (dev tarball case)', () => {
-    expect(resolveShaFromGit(gitDir)).toBeNull();
-  });
-
-  test('resolves a detached HEAD (sha written directly)', () => {
-    writeFileSync(join(gitDir, 'HEAD'), SHA + '\n');
-    expect(resolveShaFromGit(gitDir)).toBe(SHA);
-  });
-
-  test('resolves a loose ref (refs/heads/main)', () => {
-    writeFileSync(join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
-    mkdirSync(join(gitDir, 'refs/heads'), { recursive: true });
-    writeFileSync(join(gitDir, 'refs/heads/main'), SHA + '\n');
-    expect(resolveShaFromGit(gitDir)).toBe(SHA);
-  });
-
-  test('falls back to packed-refs when loose ref is absent', () => {
-    writeFileSync(join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
-    writeFileSync(
-      join(gitDir, 'packed-refs'),
-      `# pack-refs with: peeled fully-peeled sorted\n${SHA} refs/heads/main\n`,
-    );
-    expect(resolveShaFromGit(gitDir)).toBe(SHA);
-  });
-
-  test('skips comment + peeled lines in packed-refs', () => {
-    writeFileSync(join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
-    writeFileSync(
-      join(gitDir, 'packed-refs'),
-      [
-        '# pack-refs with: peeled fully-peeled sorted',
-        'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef refs/heads/other',
-        `${SHA} refs/heads/main`,
-        '^cafebabecafebabecafebabecafebabecafebabe',
-      ].join('\n') + '\n',
-    );
-    expect(resolveShaFromGit(gitDir)).toBe(SHA);
-  });
-
-  test('returns null on malformed sha (corrupted ref)', () => {
-    writeFileSync(join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
-    mkdirSync(join(gitDir, 'refs/heads'), { recursive: true });
-    writeFileSync(join(gitDir, 'refs/heads/main'), 'not-a-sha\n');
-    expect(resolveShaFromGit(gitDir)).toBeNull();
-  });
-});
-
-describe('resolveBuildAtFromGit', () => {
-  let tmp: string;
-  let gitDir: string;
-
-  beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'briven-git-at-'));
-    gitDir = join(tmp, '.git');
-    mkdirSync(gitDir, { recursive: true });
-  });
-
-  afterEach(() => {
-    rmSync(tmp, { recursive: true, force: true });
-  });
-
-  test('returns ISO timestamp derived from HEAD mtime', () => {
-    writeFileSync(join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
-    const out = resolveBuildAtFromGit(gitDir);
-    expect(out).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-    // Within ~5s of "now" — guards against accidentally returning epoch 0
-    // or a fixed string from misreading the stat result.
-    const delta = Math.abs(Date.now() - new Date(out as string).getTime());
-    expect(delta).toBeLessThan(5_000);
-  });
-
-  test('returns null when HEAD is absent (dev tarball, missing git)', () => {
-    expect(resolveBuildAtFromGit(gitDir)).toBeNull();
   });
 });

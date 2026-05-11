@@ -1,10 +1,19 @@
-import { constantTimeEqual } from '@briven/shared';
+import { resolve } from 'node:path';
+
+import { constantTimeEqual, resolveBuildIdentity } from '@briven/shared';
 import { createLogger } from '@briven/shared/observability';
 import postgres from 'postgres';
 import { z } from 'zod';
 
 import { env } from './env.js';
 import { incCounter, registerGauge, renderPrometheus } from './metrics.js';
+
+const BOOT_TIME = new Date().toISOString();
+// apps/realtime runs from /app/apps/realtime; the repo root is two
+// levels up.
+const { buildSha: BUILD_SHA, buildAt: BUILD_AT } = resolveBuildIdentity(
+  resolve(process.cwd(), '../../.git'),
+);
 
 const log = createLogger({
   service: 'realtime',
@@ -257,6 +266,16 @@ export default {
       return Response.json({
         status: env.BRIVEN_DATA_PLANE_URL ? 'ready' : 'degraded',
         listen: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
+      });
+    }
+    if (url.pathname === '/info') {
+      return Response.json({
+        service: 'realtime',
+        env: env.BRIVEN_ENV,
+        buildSha: BUILD_SHA,
+        buildAt: BUILD_AT,
+        bootedAt: BOOT_TIME,
+        uptimeSec: Math.floor(process.uptime()),
       });
     }
     if (url.pathname === '/metrics') {
