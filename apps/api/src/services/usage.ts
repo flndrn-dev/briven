@@ -1,7 +1,9 @@
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
+import { dataPlaneClient, schemaNameFor } from '../db/data-plane.js';
 import { functionLogs } from '../db/schema.js';
+import { log } from '../lib/logger.js';
 
 /**
  * Phase 3 usage metering — invocations slice.
@@ -86,4 +88,64 @@ export async function getCurrentMonthInvocationUsage(
 ): Promise<InvocationUsage> {
   const { periodStart, periodEnd } = currentMonthBounds(now);
   return getInvocationUsage(projectId, periodStart, periodEnd);
+}
+
+export interface StorageUsage {
+  /**
+   * Total bytes on disk for every relation in the project's schema —
+   * sums table data + indexes + toast via pg_total_relation_size.
+   * Excludes the platform's _briven_* tables so the customer's usage
+   * isn't inflated by our bookkeeping.
+   */
+  readonly bytes: number;
+  /** Number of user tables (excludes _briven_*). */
+  readonly tableCount: number;
+  /** Echoed back so callers know which schema was measured. */
+  readonly schema: string;
+  /** Timestamp at which the size was sampled. */
+  readonly sampledAt: string;
+}
+
+/**
+ * Query the data-plane for the storage footprint of a project's schema.
+ * Cheap — single round-trip with a pg_total_relation_size aggregate.
+ * Used by the dashboard usage widget and (Phase 3 follow-up) by the
+ * Polar metering push.
+ *
+ * Returns {bytes:0, tableCount:0} when the schema doesn't exist yet
+ * (project was just created but no deploy has landed) instead of
+ * throwing — the dashboard renders this as "—" naturally.
+ */
+export async function getStorageUsage(projectId: string): Promise<StorageUsage> {
+  const schema = schemaNameFor(projectId);
+  const sampledAt = new Date().toISOString();
+  try {
+    const sql = dataPlaneClient();
+    const rows = await sql<
+      { bytes: string; table_count: string }[]
+    >`
+      SELECT
+        COALESCE(SUM(pg_total_relation_size(format('%I.%I', n.nspname, c.relname)::regclass)), 0)::bigint AS bytes,
+        COUNT(*)::bigint AS table_count
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = ${schema}
+        AND c.relkind IN ('r', 'p')  -- ordinary + partitioned tables
+        AND c.relname NOT LIKE '_briven_%'
+    `;
+    const row = rows[0];
+    return {
+      bytes: row ? Number.parseInt(row.bytes, 10) : 0,
+      tableCount: row ? Number.parseInt(row.table_count, 10) : 0,
+      schema,
+      sampledAt,
+    };
+  } catch (err) {
+    log.warn('storage_usage_query_failed', {
+      projectId,
+      schema,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return { bytes: 0, tableCount: 0, schema, sampledAt };
+  }
 }

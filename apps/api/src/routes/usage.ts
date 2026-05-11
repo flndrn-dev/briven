@@ -4,6 +4,7 @@ import { requireProjectAuth } from '../middleware/project-auth.js';
 import {
   getCurrentMonthInvocationUsage,
   getInvocationUsage,
+  getStorageUsage,
 } from '../services/usage.js';
 import { getProjectTier, TIERS } from '../services/tiers.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
@@ -68,6 +69,12 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
   const tier = (await getProjectTier(projectId)) ?? 'free';
   const monthlyCap = TIERS[tier].invokesPerMonth;
 
+  // Storage is sampled live (single round-trip to the data plane) — at
+  // 25-customer scale the cost is negligible. If it ever becomes a hot
+  // path the natural cache is a `usage_rollups` snapshot updated every
+  // 5 min by the same cron that will push to Polar metering.
+  const storage = await getStorageUsage(projectId);
+
   return c.json({
     projectId,
     periodStart,
@@ -76,6 +83,11 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
     invocations: {
       count: invocations.count,
       totalDurationMs: invocations.totalDurationMs,
+    },
+    storage: {
+      bytes: storage.bytes,
+      tableCount: storage.tableCount,
+      sampledAt: storage.sampledAt,
     },
     limits: {
       invokesPerMonth: monthlyCap,
