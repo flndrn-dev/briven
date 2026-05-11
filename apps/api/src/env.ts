@@ -116,6 +116,14 @@ const envSchema = z.object({
   // Refresh the DB monthly via the free MaxMind account download portal.
   BRIVEN_GEOIP_DB_PATH: z.string().optional(),
 
+  // Ollama base URL for the AI schema generator (Phase 3 differentiator).
+  // Points at the DGX VPS in production. When unset, /v1/ai/* endpoints
+  // return 503 not_configured and the dashboard hides the AI affordances.
+  BRIVEN_OLLAMA_URL: z.string().url().optional(),
+  // Model id — must match what Ollama has pulled. Default targets Qwen
+  // 2.5-coder 32B per the build plan's recommendation.
+  BRIVEN_OLLAMA_MODEL: z.string().default('qwen2.5-coder:32b'),
+
   // Public-signups gate. Default false — invite-only beta. Flip to `true`
   // when public open-signups land per BUILD_PLAN Phase 4. Affects every
   // first-time auth path (email+password, magic link, Google OAuth);
