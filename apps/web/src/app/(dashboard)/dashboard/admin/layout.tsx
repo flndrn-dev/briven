@@ -52,6 +52,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         >
           suppressions
         </Link>
+        <Link
+          href="/dashboard/admin/deploys"
+          className="px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        >
+          deploys
+        </Link>
       </nav>
       <section>{children}</section>
     </div>
