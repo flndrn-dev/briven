@@ -1,11 +1,12 @@
 import { brivenError } from '@briven/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { subscriptions, type SubscriptionStatus } from '../db/schema.js';
+import { projects, subscriptions, type SubscriptionStatus } from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import type { ProjectTier } from '../db/schema.js';
+import { invalidateTierCache } from './tiers.js';
 
 /**
  * Polar.sh integration.
@@ -159,11 +160,27 @@ export async function upsertSubscriptionFromPolar(input: {
       },
     });
 
+  // Propagate the org-level tier change down to every active project
+  // owned by that org. Without this, projects.tier stays 'free' even
+  // after a successful Polar subscription — the rate-limit middleware
+  // reads projects.tier directly. Suspended-or-past-due subscriptions
+  // collapse back to 'free' here.
+  const effectiveTier: ProjectTier =
+    input.status === 'canceled' || input.status === 'past_due' ? 'free' : tier;
+  const updated = await db
+    .update(projects)
+    .set({ tier: effectiveTier, updatedAt: new Date() })
+    .where(and(eq(projects.orgId, input.orgId), isNull(projects.deletedAt)))
+    .returning({ id: projects.id });
+  for (const row of updated) invalidateTierCache(row.id);
+
   log.info('subscription_synced', {
     polarSubscriptionId: input.polarSubscriptionId,
     orgId: input.orgId,
     tier,
+    effectiveTier,
     status: input.status,
+    projectsRetiered: updated.length,
   });
 }
 

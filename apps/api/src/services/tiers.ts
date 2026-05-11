@@ -55,16 +55,46 @@ export const RATE_LIMIT_WINDOW_MS = 60_000;
  * Falls back to 'free' if the project doesn't exist — callers (e.g.
  * rate-limit middleware) pass `null` through so an unknown project ID
  * doesn't amplify into a DoS vector via a tight DB-lookup loop.
+ *
+ * In-process cache with a 60-second TTL. Every invoke / deploy / mutate
+ * route hits this on the rate-limit path, so a tight per-request DB
+ * lookup is a meaningful cost at moderate scale; tier changes via
+ * Polar webhook are rare (~hourly at peak) and a 60s staleness window
+ * is well inside the wider rate-limit window. Cache is cleared by
+ * `invalidateTierCache(projectId)` from the Polar webhook handler so a
+ * paid upgrade takes effect within seconds, not after the TTL.
  */
+interface CacheEntry {
+  tier: ProjectTier | null;
+  expiresAt: number;
+}
+const TIER_CACHE_TTL_MS = 60_000;
+const tierCache = new Map<string, CacheEntry>();
+
 export async function getProjectTier(projectId: string): Promise<ProjectTier | null> {
+  const now = Date.now();
+  const hit = tierCache.get(projectId);
+  if (hit && hit.expiresAt > now) {
+    return hit.tier;
+  }
   const db = getDb();
   const [row] = await db
     .select({ tier: projects.tier, deletedAt: projects.deletedAt })
     .from(projects)
     .where(eq(projects.id, projectId))
     .limit(1);
-  if (!row || row.deletedAt) return null;
-  return row.tier;
+  const tier = !row || row.deletedAt ? null : row.tier;
+  tierCache.set(projectId, { tier, expiresAt: now + TIER_CACHE_TTL_MS });
+  return tier;
+}
+
+/**
+ * Drop the cached tier for a project. Called from the Polar webhook
+ * handler after a successful subscription upsert so the new tier
+ * takes effect on the very next request, not after the TTL.
+ */
+export function invalidateTierCache(projectId: string): void {
+  tierCache.delete(projectId);
 }
 
 /**
