@@ -4,6 +4,7 @@ interface EmailEvent {
   id: string;
   eventType: string;
   messageId: string | null;
+  recipientRedacted: string | null;
   bounceCode: string | null;
   bounceMessage: string | null;
   complaintReason: string | null;
@@ -19,6 +20,9 @@ const SEVERITY: Record<string, 'ok' | 'warn' | 'fail'> = {
   opened: 'ok',
   clicked: 'ok',
   sent: 'ok',
+  'magic_link.sent': 'ok',
+  'invitation.sent': 'ok',
+  'email_verification.sent': 'ok',
   queued: 'ok',
   bounced: 'fail',
   complained: 'fail',
@@ -115,6 +119,8 @@ export default async function EmailEventsAdminPage() {
                         <span>{e.complaintReason}</span>
                       ) : e.deliveredAt ? (
                         <span>delivered {formatTs(e.deliveredAt)}</span>
+                      ) : e.recipientRedacted ? (
+                        <span>to {e.recipientRedacted}</span>
                       ) : (
                         '—'
                       )}

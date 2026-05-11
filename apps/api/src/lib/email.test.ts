@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 
-import { verifySignature } from './email.js';
+import { redactEmail, verifySignature } from './email.js';
 
 const SECRET = 'whsec_test_20ef8a6f8c5166ae0872f6a4847b67782e44e3da2ef1e840277020cb42c26a4c';
 
@@ -147,5 +147,27 @@ describe('verifySignature', () => {
         toleranceMs: 30_000,
       }),
     ).toBe(false);
+  });
+});
+
+describe('redactEmail', () => {
+  test('redacts a typical address', () => {
+    expect(redactEmail('flandriendev@hotmail.com')).toBe('f•••v@h•••m');
+  });
+
+  test('handles a two-letter local part', () => {
+    expect(redactEmail('jo@example.com')).toBe('j•••o@e•••m');
+  });
+
+  test('handles a single-letter local part', () => {
+    expect(redactEmail('a@example.com')).toBe('a@e•••m');
+  });
+
+  test('returns a safe sentinel on a malformed input (no @)', () => {
+    expect(redactEmail('not-an-email')).toBe('•••');
+  });
+
+  test('handles an empty local part (edge case)', () => {
+    expect(redactEmail('@example.com')).toBe('@e•••m');
   });
 });

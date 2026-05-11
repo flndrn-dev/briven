@@ -68,6 +68,11 @@ adminRouter.get('/v1/admin/email-events', async (c) => {
     eventType: r.action.replace(/^mittera\.(email\.)?/, ''),
     messageId:
       r.metadata && typeof r.metadata.messageId === 'string' ? r.metadata.messageId : null,
+    // Only present on .sent rows; redacted at write time in lib/email.ts.
+    recipientRedacted:
+      r.metadata && typeof r.metadata.recipientRedacted === 'string'
+        ? r.metadata.recipientRedacted
+        : null,
     bounceCode:
       r.metadata && typeof r.metadata.bounceCode === 'string' ? r.metadata.bounceCode : null,
     bounceMessage:
