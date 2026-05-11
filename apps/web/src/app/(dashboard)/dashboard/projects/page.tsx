@@ -9,6 +9,8 @@ interface Project {
   region: string;
   tier: 'free' | 'pro' | 'team';
   createdAt: string;
+  orgName: string | null;
+  orgPersonal: boolean | null;
 }
 
 interface PendingInvitation {
@@ -152,6 +154,15 @@ briven deploy`}
                   <p className="font-mono text-sm">{p.name}</p>
                   <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
                     {p.slug} · {p.region} · {p.tier}
+                    {p.orgName ? (
+                      <span>
+                        {' · '}
+                        <span className="text-[var(--color-text-muted)]">
+                          {p.orgName}
+                          {p.orgPersonal ? '' : ' (team)'}
+                        </span>
+                      </span>
+                    ) : null}
                   </p>
                 </div>
                 <span className="font-mono text-xs text-[var(--color-text-subtle)]">
