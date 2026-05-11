@@ -130,6 +130,12 @@ export default function MigrationPage() {
           href="/migration/firebase"
           summary="document model → relational model is a manual remap. plan for an extended parallel-run window (2+ weeks) to catch shape mismatches."
         />
+        <SourceItem
+          name="hasura"
+          status="documented"
+          href="/migration/hasura"
+          summary="postgres half ports for free; the work is the permissions port — every (role, table, action) triple from hasura metadata becomes a guard in function code."
+        />
       </ul>
 
       <h2 className="mt-12 font-mono text-xl tracking-tight">when not to use this</h2>
