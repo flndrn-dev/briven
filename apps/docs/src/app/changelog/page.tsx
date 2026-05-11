@@ -16,6 +16,24 @@ type Tag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'chore';
 const ENTRIES: readonly Entry[] = [
   {
     date: '2026-05-11',
+    tags: ['docs'],
+    title: 'migration guide: hasura → briven',
+    body: 'fifth per-source migration page. postgres half ports for free via pg_dump; the work is the permissions port — every (role, table, action) triple from hasura metadata becomes a guard in function code. covers actions, event triggers, scheduled triggers, remote schemas, auth (preserve-ids vs preserve-jwts) and subscriptions vs briven\'s reactive useQuery.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'deploy_history table + /dashboard/admin/deploys',
+    body: 'every api boot now writes one row into deploy_history (service, buildSha, buildAt, env, bootedAt). new admin page renders a timeline with "live" badge on the most recent row so operators can correlate "the bug appeared at 14:32" with "deploy abc1234 went live at 14:30" without ssh-ing to the box. /v1/admin/deploys?service=api&limit=N exposes the raw stream.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['fix'],
+    title: '/info reports a real sha on dokploy auto-deploys',
+    body: 'health.ts now resolves the commit sha from .git/HEAD when BRIVEN_BUILD_SHA isn\'t passed at image build time (which is exactly the case for dokploy auto-deploys). loose refs + packed-refs both supported. paired with treating the literal "dev" string as a "fall back to git" sentinel since that\'s the dockerfile ARG default.',
+  },
+  {
+    date: '2026-05-11',
     tags: ['infra'],
     title: 'observability stack live + postgres-exporter sidecar',
     body: 'grafana / loki / prometheus / promtail running on briven.tech kvm4 as compose project briven-obs; postgres-exporter ships pg_stat_* metrics from briven-postgres. all five prometheus jobs (api / runtime / realtime / postgres / prometheus) report up; four starter dashboards (api requests, runtime invocations, realtime subs, postgres health) populated.',
