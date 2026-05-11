@@ -12,7 +12,7 @@ three surfaces:
 
 ## status
 
-pre-build. phase 0 foundations in progress. this repo is private until phase 3 (oct 2026).
+phase 1 closing — runtime + realtime + studio + dashboard + cli all live on briven.tech. observability stack + nightly backups + automated deploys via konnos all running. private until the phase 3 dogfood window clears (oct 2026).
 
 ## monorepo layout
 
@@ -70,7 +70,8 @@ see the internal build docs for the authoritative spec. headlines:
 - hono on bun for the control plane
 - deno isolates for the customer function runtime
 - postgres 17 + pgvector + pg_cron + pgmq
-- better auth, polar.sh, resend, minio, redis
+- better auth (google + github + konnos + magic link), polar.sh, mittera.eu, minio, redis
+- grafana + loki + prometheus + postgres-exporter for observability
 
 ## brand
 
