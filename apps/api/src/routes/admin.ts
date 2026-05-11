@@ -25,6 +25,7 @@ import {
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
 import { listDeploys } from '../services/deploy-history.js';
+import { listUsageEvents } from '../services/usage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
@@ -122,6 +123,22 @@ adminRouter.get('/v1/admin/deploys', async (c) => {
       bootedAt: r.bootedAt,
     })),
   });
+});
+
+/**
+ * Usage events — the rows the hourly aggregator writes. Drives the admin
+ * "Usage" page so an operator can verify the cron is running and inspect
+ * what the Polar push worker is about to send.
+ */
+adminRouter.get('/v1/admin/usage-events', async (c) => {
+  const limitRaw = c.req.query('limit');
+  const limit = Math.min(
+    Math.max(limitRaw ? Number.parseInt(limitRaw, 10) : 200, 1),
+    1000,
+  );
+  const status = c.req.query('status');
+  const rows = await listUsageEvents({ limit, status });
+  return c.json({ events: rows });
 });
 
 const suppressActionSchema = z.object({
