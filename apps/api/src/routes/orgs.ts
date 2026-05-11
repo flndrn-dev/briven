@@ -6,7 +6,13 @@ import { newId } from '@briven/shared';
 import { requireAuth } from '../middleware/session.js';
 import type { AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
-import { createOrg, listOrgsForUser } from '../services/orgs.js';
+import {
+  canUserCreateAnotherOrg,
+  createOrg,
+  getDefaultOrgForUser,
+  listOrgsForUser,
+} from '../services/orgs.js';
+import { getTierForOrg } from '../services/billing.js';
 
 /**
  * Multi-org surface — team creation + list. Personal orgs are auto-
@@ -62,6 +68,24 @@ orgsRouter.post('/v1/orgs', async (c) => {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+
+  // Tier-cap check — free users can't create team orgs (limit=1 owned;
+  // their personal org already takes that slot). Pro users get 3 owned
+  // orgs total. Team-tier is unlimited. Tier is resolved from the user's
+  // personal org since teams don't carry their own subscription yet.
+  const personal = await getDefaultOrgForUser(user.id);
+  const tier = await getTierForOrg(personal.id);
+  const gate = await canUserCreateAnotherOrg(user.id, tier);
+  if (!gate.allowed) {
+    return c.json(
+      {
+        code: 'team_limit_reached',
+        message: gate.reason,
+        upgradeURL: '/dashboard/billing/upgrade',
+      },
+      402,
+    );
   }
   const slug =
     parsed.data.slug ??
