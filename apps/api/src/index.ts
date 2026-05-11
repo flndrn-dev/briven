@@ -36,6 +36,7 @@ import {
   startLogFanoutWorker,
   startLogRetentionCron,
 } from './workers/log-fanout.js';
+import { startPolarMeterPush } from './workers/polar-meter-push.js';
 import { startUsageAggregator } from './workers/usage-aggregator.js';
 
 type AppEnv = {
@@ -98,6 +99,7 @@ startLogFanoutWorker();
 startLogRetentionCron();
 startAuditRetentionCron();
 startUsageAggregator();
+startPolarMeterPush();
 
 // Audit-trail behind /info — one row per boot. recordDeploy itself
 // short-circuits when buildSha is the "dev" sentinel and never throws,
