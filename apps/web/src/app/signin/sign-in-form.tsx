@@ -86,12 +86,16 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
     setError(null);
     try {
       const callbackURL = `${window.location.origin}${next}`;
+      // When Better Auth rejects the callback (state_mismatch, scope
+      // denied, etc.) we want the user to land back on /signin with
+      // a friendly error chip, not the api origin's JSON.
+      const errorCallbackURL = `${window.location.origin}/signin?error=oauth_${kind}`;
       const endpoint =
         kind === 'konnos' ? '/v1/auth/sign-in/oauth2' : '/v1/auth/sign-in/social';
       const body =
         kind === 'konnos'
-          ? { providerId: 'konnos', callbackURL }
-          : { provider: kind, callbackURL };
+          ? { providerId: 'konnos', callbackURL, errorCallbackURL }
+          : { provider: kind, callbackURL, errorCallbackURL };
       const res = await fetch(`${apiOrigin}${endpoint}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
