@@ -4,9 +4,10 @@ each subdirectory is a self-contained briven project you can copy as a starting 
 
 | example | what it covers |
 |---|---|
+| [counter](./counter) | the smallest possible briven app: one row, two functions, reactive query end-to-end |
 | [todo-app](./todo-app) | the canonical hello-world: schema, four mutations + one reactive query, the react client |
 | [realtime-chat](./realtime-chat) | two-table schema + per-room reactive queries — a multi-room chat in ~80 lines |
-| (more on the way — counter, file-uploads, oauth-protected api) | |
+| (more on the way — file-uploads, oauth-protected api) | |
 
 ## use one of these
 

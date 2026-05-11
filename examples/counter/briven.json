@@ -1,0 +1,5 @@
+{
+  "name": "counter",
+  "schemaPath": "briven/schema.ts",
+  "functionsPath": "briven/functions"
+}
