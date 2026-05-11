@@ -19,16 +19,20 @@ interface Props {
 }
 
 /**
- * Konnos logo — Forgejo at code.konnos.org doesn't have a brand mark
- * we can reuse, so the button shows a literal "K" badge in the green
- * primary colour to match the briven mark. Kept inline so the bundle
- * doesn't grow for a single tile glyph.
+ * Konnos brand mark — the official two-tone icon shipped under
+ * /assets/konnos by the konnos team. Serving from /konnos.svg so it
+ * gets cached + compressed alongside the other static assets.
  */
 function KonnosMark() {
   return (
-    <span className="inline-flex h-5 w-5 items-center justify-center rounded-sm bg-[var(--color-primary)] text-[10px] font-bold text-[var(--color-text-inverse)]">
-      K
-    </span>
+    <img
+      src="/konnos.svg"
+      alt=""
+      aria-hidden
+      width={20}
+      height={20}
+      className="h-5 w-5"
+    />
   );
 }
 
