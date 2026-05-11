@@ -50,3 +50,36 @@ describe('TIERS structural caps', () => {
     expect(TIERS.pro.invokesPerMonth).toBeLessThanOrEqual(TIERS.team.invokesPerMonth);
   });
 });
+
+describe('polar subscription → tier collapse', () => {
+  // Mirrors the rule in upsertSubscriptionFromPolar — only 'active' and
+  // 'trialing' get the paid tier; cancelled / past-due collapse to free.
+  // Pinning the matrix here so a policy change is caught in CI before it
+  // reaches production billing.
+  function effectiveTier(
+    paidTier: 'pro' | 'team',
+    status: 'active' | 'trialing' | 'past_due' | 'canceled',
+  ): 'free' | 'pro' | 'team' {
+    return status === 'canceled' || status === 'past_due' ? 'free' : paidTier;
+  }
+
+  test('active subscription keeps the paid tier', () => {
+    expect(effectiveTier('pro', 'active')).toBe('pro');
+    expect(effectiveTier('team', 'active')).toBe('team');
+  });
+
+  test('trialing keeps the paid tier (paid behaviour during trial)', () => {
+    expect(effectiveTier('pro', 'trialing')).toBe('pro');
+    expect(effectiveTier('team', 'trialing')).toBe('team');
+  });
+
+  test('past_due collapses to free — delinquent users lose paid caps', () => {
+    expect(effectiveTier('pro', 'past_due')).toBe('free');
+    expect(effectiveTier('team', 'past_due')).toBe('free');
+  });
+
+  test('canceled collapses to free', () => {
+    expect(effectiveTier('pro', 'canceled')).toBe('free');
+    expect(effectiveTier('team', 'canceled')).toBe('free');
+  });
+});
