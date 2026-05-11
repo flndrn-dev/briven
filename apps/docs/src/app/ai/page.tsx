@@ -45,7 +45,7 @@ export default function AiPage() {
           </li>
           <li>
             <strong>name your domain entities</strong>: &quot;projects, tasks, time-tracking
-            entries&quot; > &quot;a productivity app&quot;
+            entries&quot; beats &quot;a productivity app&quot;
           </li>
           <li>
             <strong>call out denormalised fields</strong>: &quot;each post stores its current
