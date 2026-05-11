@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { magicLink } from 'better-auth/plugins';
+import { genericOAuth, magicLink } from 'better-auth/plugins';
 
 import { getDb } from '../db/client.js';
 import { accounts, sessions, users, verifications } from '../db/schema.js';
@@ -112,8 +112,11 @@ export const auth = betterAuth({
     },
   },
 
-  socialProviders:
-    env.BRIVEN_GOOGLE_CLIENT_ID && env.BRIVEN_GOOGLE_CLIENT_SECRET
+  // Google + GitHub use Better Auth's built-in socialProviders config.
+  // Konnos (Forgejo at code.konnos.org) uses the genericOAuth plugin
+  // since Forgejo isn't on Better Auth's hard-coded list.
+  socialProviders: {
+    ...(env.BRIVEN_GOOGLE_CLIENT_ID && env.BRIVEN_GOOGLE_CLIENT_SECRET
       ? {
           google: {
             clientId: env.BRIVEN_GOOGLE_CLIENT_ID,
@@ -121,7 +124,17 @@ export const auth = betterAuth({
             disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
           },
         }
-      : {},
+      : {}),
+    ...(env.BRIVEN_GITHUB_CLIENT_ID && env.BRIVEN_GITHUB_CLIENT_SECRET
+      ? {
+          github: {
+            clientId: env.BRIVEN_GITHUB_CLIENT_ID,
+            clientSecret: env.BRIVEN_GITHUB_CLIENT_SECRET,
+            disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
+          },
+        }
+      : {}),
+  },
 
   plugins: [
     magicLink({
@@ -134,6 +147,36 @@ export const auth = betterAuth({
         await sendMagicLink(email, url);
       },
     }),
+    // Konnos (Forgejo) OAuth — endpoints follow Forgejo's gitea-compatible
+    // shape: /login/oauth/authorize, /login/oauth/access_token,
+    // /api/v1/user. Forgejo's userinfo endpoint returns
+    // {id, login, email, full_name, avatar_url}; mapProfileToUser
+    // adapts it to Better Auth's expected shape.
+    ...(env.BRIVEN_KONNOS_CLIENT_ID && env.BRIVEN_KONNOS_CLIENT_SECRET
+      ? [
+          genericOAuth({
+            config: [
+              {
+                providerId: 'konnos',
+                clientId: env.BRIVEN_KONNOS_CLIENT_ID,
+                clientSecret: env.BRIVEN_KONNOS_CLIENT_SECRET,
+                authorizationUrl: `${env.BRIVEN_KONNOS_ISSUER}/login/oauth/authorize`,
+                tokenUrl: `${env.BRIVEN_KONNOS_ISSUER}/login/oauth/access_token`,
+                userInfoUrl: `${env.BRIVEN_KONNOS_ISSUER}/api/v1/user`,
+                scopes: ['read:user'],
+                disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
+                mapProfileToUser: (profile) => ({
+                  id: String(profile.id),
+                  email: profile.email,
+                  name: profile.full_name || profile.login,
+                  image: profile.avatar_url,
+                  emailVerified: true,
+                }),
+              },
+            ],
+          }),
+        ]
+      : []),
   ],
 
   // Auto-create the personal org for every new user (email/password,

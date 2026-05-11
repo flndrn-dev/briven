@@ -1,19 +1,48 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { FaGithub } from 'react-icons/fa';
 import { FcGoogle } from 'react-icons/fc';
+
+export interface Providers {
+  google: boolean;
+  github: boolean;
+  konnos: boolean;
+}
 
 interface Props {
   next: string;
   apiOrigin: string;
   disabled?: boolean;
-  hasGoogle: boolean;
+  providers: Providers;
 }
 
-export function SignInForm({ next, apiOrigin, disabled, hasGoogle }: Props) {
+/**
+ * Konnos logo — Forgejo at code.konnos.org doesn't have a brand mark
+ * we can reuse, so the button shows a literal "K" badge in the green
+ * primary colour to match the briven mark. Kept inline so the bundle
+ * doesn't grow for a single tile glyph.
+ */
+function KonnosMark() {
+  return (
+    <span className="inline-flex h-5 w-5 items-center justify-center rounded-sm bg-[var(--color-primary)] text-[10px] font-bold text-[var(--color-text-inverse)]">
+      K
+    </span>
+  );
+}
+
+/**
+ * `social` vs `oauth2`: Google + GitHub are first-class in Better Auth's
+ * socialProviders config, so they go through /v1/auth/sign-in/social.
+ * Konnos (Forgejo) is registered via the genericOAuth plugin, which
+ * exposes /v1/auth/sign-in/oauth2 with a `providerId` field.
+ */
+type ProviderKind = 'google' | 'github' | 'konnos';
+
+export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
-  const [oauthPending, setOauthPending] = useState(false);
+  const [oauthPending, setOauthPending] = useState<ProviderKind | null>(null);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,31 +76,38 @@ export function SignInForm({ next, apiOrigin, disabled, hasGoogle }: Props) {
     }
   }
 
-  async function onGoogle() {
-    setOauthPending(true);
+  async function onOAuth(kind: ProviderKind) {
+    setOauthPending(kind);
     setError(null);
     try {
       const callbackURL = `${window.location.origin}${next}`;
-      const res = await fetch(`${apiOrigin}/v1/auth/sign-in/social`, {
+      const endpoint =
+        kind === 'konnos' ? '/v1/auth/sign-in/oauth2' : '/v1/auth/sign-in/social';
+      const body =
+        kind === 'konnos'
+          ? { providerId: 'konnos', callbackURL }
+          : { provider: kind, callbackURL };
+      const res = await fetch(`${apiOrigin}${endpoint}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ provider: 'google', callbackURL }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(body || `request failed (${res.status})`);
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `request failed (${res.status})`);
       }
       const data = (await res.json()) as { url?: string };
       if (!data.url) throw new Error('no redirect url returned');
       window.location.href = data.url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'google sign-in failed');
-      setOauthPending(false);
+      setError(err instanceof Error ? err.message : `${kind} sign-in failed`);
+      setOauthPending(null);
     }
   }
 
-  const anyPending = pending || oauthPending;
+  const anyPending = pending || oauthPending !== null;
+  const anyOAuth = providers.google || providers.github || providers.konnos;
 
   if (sent) {
     return (
@@ -99,17 +135,43 @@ export function SignInForm({ next, apiOrigin, disabled, hasGoogle }: Props) {
 
   return (
     <div className="flex flex-col gap-4" aria-busy={anyPending}>
-      {hasGoogle ? (
+      {anyOAuth ? (
         <>
-          <button
-            type="button"
-            onClick={onGoogle}
-            disabled={disabled || anyPending}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
-          >
-            <FcGoogle className="h-5 w-5" />
-            {oauthPending ? 'redirecting...' : 'continue with google'}
-          </button>
+          {providers.google ? (
+            <button
+              type="button"
+              onClick={() => onOAuth('google')}
+              disabled={disabled || anyPending}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
+            >
+              <FcGoogle className="h-5 w-5" />
+              {oauthPending === 'google' ? 'redirecting...' : 'continue with google'}
+            </button>
+          ) : null}
+
+          {providers.github ? (
+            <button
+              type="button"
+              onClick={() => onOAuth('github')}
+              disabled={disabled || anyPending}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
+            >
+              <FaGithub className="h-5 w-5" />
+              {oauthPending === 'github' ? 'redirecting...' : 'continue with github'}
+            </button>
+          ) : null}
+
+          {providers.konnos ? (
+            <button
+              type="button"
+              onClick={() => onOAuth('konnos')}
+              disabled={disabled || anyPending}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
+            >
+              <KonnosMark />
+              {oauthPending === 'konnos' ? 'redirecting...' : 'continue with konnos'}
+            </button>
+          ) : null}
 
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-[var(--color-border-subtle)]" />
