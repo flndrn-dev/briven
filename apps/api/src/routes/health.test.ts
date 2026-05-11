@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import { resolveShaFromGit } from './health.js';
+import { resolveBuildAtFromGit, resolveShaFromGit } from './health.js';
 
 describe('/info build identity fallbacks', () => {
   // Replicates the small helper in health.ts. When BRIVEN_BUILD_SHA /
@@ -201,5 +201,34 @@ describe('resolveShaFromGit', () => {
     mkdirSync(join(gitDir, 'refs/heads'), { recursive: true });
     writeFileSync(join(gitDir, 'refs/heads/main'), 'not-a-sha\n');
     expect(resolveShaFromGit(gitDir)).toBeNull();
+  });
+});
+
+describe('resolveBuildAtFromGit', () => {
+  let tmp: string;
+  let gitDir: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'briven-git-at-'));
+    gitDir = join(tmp, '.git');
+    mkdirSync(gitDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('returns ISO timestamp derived from HEAD mtime', () => {
+    writeFileSync(join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
+    const out = resolveBuildAtFromGit(gitDir);
+    expect(out).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    // Within ~5s of "now" — guards against accidentally returning epoch 0
+    // or a fixed string from misreading the stat result.
+    const delta = Math.abs(Date.now() - new Date(out as string).getTime());
+    expect(delta).toBeLessThan(5_000);
+  });
+
+  test('returns null when HEAD is absent (dev tarball, missing git)', () => {
+    expect(resolveBuildAtFromGit(gitDir)).toBeNull();
   });
 });
