@@ -229,6 +229,22 @@ export interface CreateOrgInput {
  * Create a new org + make the creator its owner. Not wired to any route
  * this project; exposed for future invite/create-org flows.
  */
+/**
+ * Returns true when the user belongs to the given org. Used at project
+ * creation to validate the orgId the dashboard sends actually belongs
+ * to the caller — defends against an attacker scrolling through org
+ * ids and dropping projects into other people's orgs.
+ */
+export async function isOrgMember(userId: string, orgId: string): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ orgId: orgMembers.orgId })
+    .from(orgMembers)
+    .where(and(eq(orgMembers.userId, userId), eq(orgMembers.orgId, orgId)))
+    .limit(1);
+  return Boolean(row);
+}
+
 export async function createOrg(input: CreateOrgInput): Promise<Organization> {
   const db = getDb();
   const id = newId('org');

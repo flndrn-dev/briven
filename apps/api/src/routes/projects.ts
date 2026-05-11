@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/session.js';
 import type { AppEnv } from '../types/app-env.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
-import { getDefaultOrgForUser } from '../services/orgs.js';
+import { getDefaultOrgForUser, isOrgMember, listOrgsForUser } from '../services/orgs.js';
 import {
   createProject,
   getProjectForUser,
@@ -20,6 +20,11 @@ const createSchema = z.object({
   name: z.string().min(1).max(80),
   slug: z.string().min(1).max(32).optional(),
   region: z.string().min(2).max(32).optional(),
+  // Optional — when present, the project lands in this org. When
+  // omitted, defaults to the user's personal org. We validate
+  // membership before honouring the value (defense against an
+  // attacker poking at other people's orgs).
+  orgId: z.string().min(1).optional(),
 });
 
 const updateSchema = z.object({
@@ -56,8 +61,23 @@ projectsRouter.use('/v1/projects/*', requireAuth());
 
 projectsRouter.get('/v1/projects', async (c) => {
   const user = c.get('user')!;
-  const rows = await listProjectsForUser(user.id);
-  return c.json({ projects: rows });
+  const [rows, orgs] = await Promise.all([
+    listProjectsForUser(user.id),
+    listOrgsForUser(user.id),
+  ]);
+  const orgsById = new Map(orgs.map((o) => [o.id, o]));
+  // Enrich each project with its org name/personal flag so the
+  // dashboard can show "p · personal" / "p · acme inc" without a
+  // second round-trip.
+  const enriched = rows.map((p) => {
+    const org = orgsById.get(p.orgId);
+    return {
+      ...p,
+      orgName: org?.name ?? null,
+      orgPersonal: org?.personal ?? null,
+    };
+  });
+  return c.json({ projects: enriched });
 });
 
 projectsRouter.post('/v1/projects', async (c) => {
@@ -75,10 +95,23 @@ projectsRouter.post('/v1/projects', async (c) => {
     );
   }
 
-  const org = await getDefaultOrgForUser(user.id);
+  // Resolve target org: when the caller passes an explicit orgId,
+  // validate they belong to it; otherwise fall back to their personal
+  // org (the legacy single-org behaviour).
+  let targetOrgId: string;
+  if (parsed.data.orgId) {
+    const isMember = await isOrgMember(user.id, parsed.data.orgId);
+    if (!isMember) {
+      return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+    }
+    targetOrgId = parsed.data.orgId;
+  } else {
+    const org = await getDefaultOrgForUser(user.id);
+    targetOrgId = org.id;
+  }
   const project = await createProject({
     name: parsed.data.name,
-    orgId: org.id,
+    orgId: targetOrgId,
     createdByUserId: user.id,
     slug: parsed.data.slug,
     region: parsed.data.region,
