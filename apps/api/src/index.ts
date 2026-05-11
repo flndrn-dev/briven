@@ -36,6 +36,7 @@ import {
   startLogFanoutWorker,
   startLogRetentionCron,
 } from './workers/log-fanout.js';
+import { startUsageAggregator } from './workers/usage-aggregator.js';
 
 type AppEnv = {
   Variables: {
@@ -96,6 +97,7 @@ log.info('api_boot', { port: env.BRIVEN_API_PORT, origin: env.BRIVEN_API_ORIGIN 
 startLogFanoutWorker();
 startLogRetentionCron();
 startAuditRetentionCron();
+startUsageAggregator();
 
 // Audit-trail behind /info — one row per boot. recordDeploy itself
 // short-circuits when buildSha is the "dev" sentinel and never throws,

@@ -10,6 +10,7 @@
  * via its drizzle adapter; schema here matches Better Auth's expected shape so
  * the adapter works without translation.
  */
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -481,6 +482,53 @@ export const emailSuppressions = pgTable(
   }),
 );
 
+/* ─── usage events ───────────────────────────────────────────────── */
+/**
+ * Hourly usage rollups, one row per (project, hour, metric). Populated
+ * by the apps/api usage-aggregation cron — reads function_logs +
+ * pg_total_relation_size + the realtime /metrics endpoint and writes
+ * one row per metric. Survives function_logs retention windows so
+ * historical usage queries beyond 7 days (free tier) still resolve.
+ *
+ * Polar metering push reads from here. The push side is a separate
+ * worker so a Polar outage doesn't block the aggregation cron.
+ */
+export const usageMetric = ['invocations', 'storage_bytes', 'connection_seconds'] as const;
+export type UsageMetric = (typeof usageMetric)[number];
+
+export const usageEvents = pgTable(
+  'usage_events',
+  {
+    id: id(),
+    projectId: text('project_id').notNull(),
+    metric: text('metric', { enum: usageMetric }).notNull(),
+    // First millisecond of the UTC hour this row covers.
+    periodStart: ts('period_start').notNull(),
+    // For counters (invocations, connection_seconds): the delta in this
+    // window. For gauges (storage_bytes): the sample value at period_end.
+    value: text('value').notNull(),
+    // 'pushed' once the Polar meter accepts it. Until then, 'pending'.
+    // The push worker scans for pending rows and batches them.
+    polarPushStatus: text('polar_push_status', {
+      enum: ['pending', 'pushed', 'skipped'],
+    })
+      .notNull()
+      .default('pending'),
+    polarPushedAt: ts('polar_pushed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    projectPeriodIdx: uniqueIndex('usage_events_project_period_metric_idx').on(
+      t.projectId,
+      t.periodStart,
+      t.metric,
+    ),
+    pendingIdx: index('usage_events_pending_idx')
+      .on(t.polarPushStatus, t.periodStart)
+      .where(sql`polar_push_status = 'pending'`),
+  }),
+);
+
 /* ─── deploy history ─────────────────────────────────────────────── */
 /**
  * One row per api boot — the audit trail behind /info.buildSha. Drives
@@ -529,3 +577,5 @@ export type EmailSuppression = typeof emailSuppressions.$inferSelect;
 export type NewEmailSuppression = typeof emailSuppressions.$inferInsert;
 export type DeployHistoryEntry = typeof deployHistory.$inferSelect;
 export type NewDeployHistoryEntry = typeof deployHistory.$inferInsert;
+export type UsageEvent = typeof usageEvents.$inferSelect;
+export type NewUsageEvent = typeof usageEvents.$inferInsert;
