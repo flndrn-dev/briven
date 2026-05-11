@@ -191,6 +191,15 @@ export async function sendEmailVerification(to: string, url: string): Promise<vo
   });
 }
 
+export async function sendPasswordReset(to: string, url: string): Promise<void> {
+  await send('reset_password', {
+    to,
+    subject: 'reset your briven password',
+    html: resetPasswordHtml(url),
+    text: resetPasswordText(url),
+  });
+}
+
 /**
  * Verify a `X-mittera-Signature: v1=<hex>` header against the raw
  * request body using the shared webhook secret. The timestamp lives
@@ -280,6 +289,21 @@ function verifyEmailHtml(url: string): string {
 
 function verifyEmailText(url: string): string {
   return `verify your briven email\n\n${url}\n`;
+}
+
+function resetPasswordHtml(url: string): string {
+  return shell(
+    'reset your briven password',
+    `
+    <p>click below to set a new password. this link expires in 1 hour.</p>
+    ${cta('reset password', url)}
+    <p class="muted">if you didn't request a reset, you can ignore this email — your password stays unchanged.</p>
+  `,
+  );
+}
+
+function resetPasswordText(url: string): string {
+  return `reset your briven password\n\n${url}\n\nthis link expires in 1 hour. if you didn't request a reset, ignore this email.`;
 }
 
 function cta(label: string, href: string): string {
