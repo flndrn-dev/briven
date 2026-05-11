@@ -101,14 +101,21 @@ async function send(label: string, args: SendArgs): Promise<void> {
     throw new Error(`mittera send failed: ${res.status}`);
   }
 
-  // Successful POST. mittera returns the email's id in the body; we
-  // capture it so an operator chasing "did my magic link actually
-  // ship?" can grep for the messageId in the audit-log webhook stream.
+  // Successful POST. mittera returns the email id under `emailId`
+  // (verified empirically; `id`/`messageId` are accepted as fallbacks
+  // in case the API shape evolves). The id is what shows up later in
+  // delivery / bounce webhook events under `messageId`, so capturing
+  // it here lets an operator correlate "did my magic link ship?" with
+  // "did mittera accept it / did the recipient bounce?" via grep.
   const responseBody = await res.text().catch(() => '');
   let messageId: string | null = null;
   try {
-    const parsed = JSON.parse(responseBody) as { id?: string; messageId?: string };
-    messageId = parsed.id ?? parsed.messageId ?? null;
+    const parsed = JSON.parse(responseBody) as {
+      emailId?: string;
+      id?: string;
+      messageId?: string;
+    };
+    messageId = parsed.emailId ?? parsed.id ?? parsed.messageId ?? null;
   } catch {
     // Non-JSON body — log raw so we can see what mittera actually returned.
   }
@@ -116,8 +123,6 @@ async function send(label: string, args: SendArgs): Promise<void> {
     label,
     status: res.status,
     messageId,
-    // Only logged on warn+: in case of a non-JSON success body, surface
-    // the first 240 chars so we can see what mittera said.
     bodyPreview: messageId ? undefined : responseBody.slice(0, 240),
   });
 }
