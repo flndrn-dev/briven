@@ -71,11 +71,23 @@ interface Subscription {
   args: unknown;
   channels: Set<string>;
   send: (frame: Record<string, unknown>) => void;
+  // Wall-clock ms at subscription open. Closed-out subs flush their
+  // duration into closedSubSecondsByProject (cumulative billable
+  // seconds-of-connection per project). Active subs contribute to the
+  // pull-based gauge below — at scrape time we add (now - startedAt)
+  // for every still-live sub so the metric never under-counts.
+  startedAt: number;
 }
 
 const subscriptions = new Map<string, Subscription>(); // subscriptionId → sub
 const channelToSubs = new Map<string, Set<string>>(); // channel → set of subscriptionIds
 const sockets = new WeakMap<object, Set<string>>(); // ws → set of subscriptionIds it owns
+
+// Cumulative connection-seconds, per project, from subs that have
+// already closed. Phase 3 usage-metering pillar #3 — Polar metering
+// push reads this via /metrics. Kept in memory (resets on process
+// restart); a durable rollup is the natural follow-up.
+const closedSubSecondsByProject = new Map<string, number>();
 
 function schemaNameFor(projectId: string): string {
   return `proj_${projectId.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
@@ -213,6 +225,15 @@ async function dropSubscription(subId: string): Promise<void> {
   const sub = subscriptions.get(subId);
   if (!sub) return;
   for (const ch of sub.channels) await detachSubFromChannel(subId, ch);
+  // Flush this sub's connection seconds into the per-project tally so
+  // the metric survives the sub teardown. (Math.max guards against
+  // a clock skew producing a negative — postgres NTP is solid here
+  // but the realtime container's clock isn't authoritative.)
+  const seconds = Math.max(0, (Date.now() - sub.startedAt) / 1000);
+  closedSubSecondsByProject.set(
+    sub.projectId,
+    (closedSubSecondsByProject.get(sub.projectId) ?? 0) + seconds,
+  );
   subscriptions.delete(subId);
 }
 
@@ -245,6 +266,32 @@ registerGauge('briven_realtime_subscriptions_active', () => [
 registerGauge('briven_realtime_channels_active', () => [
   { labels: {}, value: channelToSubs.size },
 ]);
+
+// Per-project cumulative connection-seconds. The closed-sub tally is the
+// authoritative base; we add (now - startedAt) for every still-live sub
+// so a scrape during a long-running subscription doesn't show 0. Polar
+// metering reads this via /metrics on the aggregation cron in apps/api.
+registerGauge('briven_realtime_connection_seconds_total', () => {
+  const out: { labels: { project: string }; value: number }[] = [];
+  const now = Date.now();
+  const liveByProject = new Map<string, number>();
+  for (const sub of subscriptions.values()) {
+    liveByProject.set(
+      sub.projectId,
+      (liveByProject.get(sub.projectId) ?? 0) + (now - sub.startedAt) / 1000,
+    );
+  }
+  const projects = new Set<string>([
+    ...closedSubSecondsByProject.keys(),
+    ...liveByProject.keys(),
+  ]);
+  for (const projectId of projects) {
+    const value =
+      (closedSubSecondsByProject.get(projectId) ?? 0) + (liveByProject.get(projectId) ?? 0);
+    out.push({ labels: { project: projectId }, value });
+  }
+  return out;
+});
 
 log.info('realtime_boot', {
   port: env.BRIVEN_REALTIME_PORT,
@@ -323,6 +370,7 @@ export default {
         args: parsed.args,
         channels: new Set<string>(),
         send: (frame) => ws.send(JSON.stringify(frame)),
+        startedAt: Date.now(),
       };
       subscriptions.set(sub.subscriptionId, sub);
       owned.add(sub.subscriptionId);
