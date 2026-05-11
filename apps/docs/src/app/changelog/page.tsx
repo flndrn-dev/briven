@@ -16,6 +16,24 @@ type Tag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'chore';
 const ENTRIES: readonly Entry[] = [
   {
     date: '2026-05-11',
+    tags: ['feat'],
+    title: 'AI schema generator — Phase 3 differentiator',
+    body: 'POST /v1/projects/:id/ai/generate-schema accepts a natural-language prompt and returns a draft briven schema.ts via a self-hosted Qwen 2.5-coder 32B running on briven infrastructure (no third-party AI provider). Dashboard surface at /dashboard/projects/:id/ai-schema with a copy button. Gated on BRIVEN_OLLAMA_URL — service shows a friendly "AI assistant offline" message until configured. Prompts and responses are not logged.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'github + konnos OAuth credentials live on briven.tech',
+    body: 'all three OAuth providers (Google + GitHub + Konnos) now have their credentials configured in the production env. signin page shows all three buttons; existing magic-link flow continues to work in parallel.',
+  },
+  {
+    date: '2026-05-11',
+    tags: ['feat'],
+    title: 'polar billing wired end-to-end',
+    body: 'production polar configured: access token, webhook secret, and product IDs for briven Pro ($21.99/mo) and briven Team ($99.99/mo). Existing webhook receiver at /v1/billing/webhook now authoritative for tier sync — subscription.* events flip projects.tier in the same transaction. checkout flow + customer portal both live.',
+  },
+  {
+    date: '2026-05-11',
     tags: ['docs'],
     title: 'migration guide: nextauth / auth.js → briven',
     body: 'sixth per-source migration page. schema maps 1:1 (both target Better Auth\'s shape); the work is the api shape (getServerSession → brivenServer.session(), useSession imports). covers account preservation strategies, provider port, callback hooks, and the cutover checklist.',
