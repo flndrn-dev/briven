@@ -25,8 +25,13 @@
 #   BRIVEN_MITTERA_API_URL        optional — base URL of mittera.eu transactional email (e.g. https://api.mittera.eu)
 #   BRIVEN_MITTERA_API_KEY        optional — bearer token for outbound mittera POST /api/v1/emails
 #   BRIVEN_MITTERA_WEBHOOK_SECRET optional — HMAC secret used to verify inbound delivery/bounce webhooks
+#   BRIVEN_GOOGLE_CLIENT_ID/      optional — google oauth signin
+#   BRIVEN_GOOGLE_CLIENT_SECRET
 #   BRIVEN_GITHUB_CLIENT_ID/      optional — github oauth signin
 #   BRIVEN_GITHUB_CLIENT_SECRET
+#   BRIVEN_KONNOS_CLIENT_ID/      optional — konnos (forgejo) oauth signin
+#   BRIVEN_KONNOS_CLIENT_SECRET
+#   BRIVEN_KONNOS_ISSUER          optional — forgejo issuer base url (default https://code.konnos.org)
 #   BRIVEN_POLAR_*                optional — billing (skip for self-host)
 #   BRIVEN_OPEN_SIGNUPS           true | false (default false; flip for public instance)
 #
@@ -105,6 +110,16 @@ services:
       BRIVEN_MITTERA_WEBHOOK_SECRET: ${BRIVEN_MITTERA_WEBHOOK_SECRET:-}
       BRIVEN_GOOGLE_CLIENT_ID: ${BRIVEN_GOOGLE_CLIENT_ID:-}
       BRIVEN_GOOGLE_CLIENT_SECRET: ${BRIVEN_GOOGLE_CLIENT_SECRET:-}
+      BRIVEN_GITHUB_CLIENT_ID: ${BRIVEN_GITHUB_CLIENT_ID:-}
+      BRIVEN_GITHUB_CLIENT_SECRET: ${BRIVEN_GITHUB_CLIENT_SECRET:-}
+      BRIVEN_KONNOS_CLIENT_ID: ${BRIVEN_KONNOS_CLIENT_ID:-}
+      BRIVEN_KONNOS_CLIENT_SECRET: ${BRIVEN_KONNOS_CLIENT_SECRET:-}
+      BRIVEN_KONNOS_ISSUER: ${BRIVEN_KONNOS_ISSUER:-https://code.konnos.org}
+      BRIVEN_POLAR_API_BASE: ${BRIVEN_POLAR_API_BASE:-https://api.polar.sh}
+      BRIVEN_POLAR_ACCESS_TOKEN: ${BRIVEN_POLAR_ACCESS_TOKEN:-}
+      BRIVEN_POLAR_WEBHOOK_SECRET: ${BRIVEN_POLAR_WEBHOOK_SECRET:-}
+      BRIVEN_POLAR_PRO_PRODUCT_ID: ${BRIVEN_POLAR_PRO_PRODUCT_ID:-}
+      BRIVEN_POLAR_TEAM_PRODUCT_ID: ${BRIVEN_POLAR_TEAM_PRODUCT_ID:-}
       BRIVEN_DOMAIN: ${BRIVEN_DOMAIN}
       BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
       BRIVEN_MINIO_ENDPOINT: http://briven-minio:9000
@@ -177,6 +192,8 @@ services:
       # CDNs mangle for POST bodies).
       NEXT_PUBLIC_BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH: ${BRIVEN_KONNOS_CLIENT_ID:+true}
     networks:
       - briven
     labels:
