@@ -9,7 +9,7 @@ import { accounts, sessions, users, verifications } from '../db/schema.js';
 import { env } from '../env.js';
 import { ensurePersonalOrg } from '../services/orgs.js';
 import { log } from './logger.js';
-import { sendEmailVerification, sendMagicLink } from './email.js';
+import { sendEmailVerification, sendMagicLink, sendPasswordReset } from './email.js';
 
 /**
  * Resolve the Better Auth signing secret. Refuses to boot in non-development
@@ -102,6 +102,9 @@ export const auth = betterAuth({
     minPasswordLength: 10,
     maxPasswordLength: 128,
     autoSignIn: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordReset(user.email, url);
+    },
   },
 
   emailVerification: {
