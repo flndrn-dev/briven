@@ -13,13 +13,20 @@ import {
 
 /**
  * Tier → maximum number of orgs a user is allowed to OWN (not belong to).
- * 'Infinity' for Team so the check is a simple `<`. Read by
- * `canUserCreateAnotherOrg`, enforced at the future create-org endpoint
- * (no UI this project — Phase 3).
+ *
+ *   Free: 1 — that's the auto-created personal org; no team creation.
+ *   Pro:  unlimited — paying users can spin up as many team workspaces
+ *         as they need. Matches industry norms (Vercel, GitHub, Netlify);
+ *         Convex doesn't even surface a team count on their pricing page —
+ *         their cap is per-developer-seat, not per-workspace.
+ *   Team: unlimited.
+ *
+ * Independent of how many orgs they're INVITED to as a member — being
+ * added to 10 other Team orgs doesn't burn your own cap.
  */
 export const ORG_LIMIT_BY_TIER: Record<ProjectTier, number> = {
   free: 1,
-  pro: 3,
+  pro: Infinity,
   team: Infinity,
 };
 
@@ -229,6 +236,35 @@ export interface CreateOrgInput {
  * Create a new org + make the creator its owner. Not wired to any route
  * this project; exposed for future invite/create-org flows.
  */
+/**
+ * Rename a team org. Personal orgs are immutable (their name comes from
+ * the user's profile) — rename is rejected. Returns the updated row,
+ * or null when the org doesn't exist / isn't writable by the caller.
+ */
+export async function renameOrg(args: {
+  orgId: string;
+  userId: string;
+  name: string;
+}): Promise<Organization | null> {
+  const db = getDb();
+  const [target] = await db
+    .select()
+    .from(organizations)
+    .where(and(eq(organizations.id, args.orgId), isNull(organizations.deletedAt)))
+    .limit(1);
+  if (!target) return null;
+  if (target.personal) return null; // can't rename a personal org via this path
+  const member = await isOrgMember(args.userId, args.orgId);
+  if (!member) return null;
+
+  const [row] = await db
+    .update(organizations)
+    .set({ name: args.name, updatedAt: new Date() })
+    .where(eq(organizations.id, args.orgId))
+    .returning();
+  return row ?? null;
+}
+
 /**
  * Returns true when the user belongs to the given org. Used at project
  * creation to validate the orgId the dashboard sends actually belongs
