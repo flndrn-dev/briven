@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { env } from '../env.js';
+import { audit } from '../services/audit.js';
 import { isSuppressed } from '../services/suppressions.js';
 import { log } from './logger.js';
 
@@ -125,6 +126,42 @@ async function send(label: string, args: SendArgs): Promise<void> {
     messageId,
     bodyPreview: messageId ? undefined : responseBody.slice(0, 240),
   });
+
+  // Audit-log the send so operators can see it in the admin email-events
+  // stream alongside inbound webhook events. Recipient is redacted per
+  // CLAUDE.md §5.1; the messageId is the authoritative correlation key
+  // (mittera echoes it back on delivery / bounce / complaint webhooks).
+  await audit({
+    actorId: null,
+    projectId: null,
+    action: `mittera.${label}.sent`,
+    ipHash: null,
+    userAgent: 'briven-api',
+    metadata: {
+      messageId,
+      recipientRedacted: redactEmail(args.to),
+      subject: args.subject,
+    },
+  });
+}
+
+/**
+ * `flandriendev@hotmail.com` → `f•••v@h•••m`. Enough for an operator to
+ * disambiguate two recent sends in the admin stream without surfacing
+ * the full address. Same pattern documented in CLAUDE.md §5.1.
+ * Exported for tests.
+ */
+export function redactEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at < 0) return '•••';
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const head = (s: string): string => {
+    if (s.length === 0) return '';
+    if (s.length === 1) return s;
+    return `${s[0]}•••${s[s.length - 1]}`;
+  };
+  return `${head(local)}@${head(domain)}`;
 }
 
 export async function sendMagicLink(to: string, url: string): Promise<void> {
