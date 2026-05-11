@@ -25,6 +25,7 @@ export default async function SignInPage({
     google: process.env.NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH === 'true',
     github: process.env.NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH === 'true',
     konnos: process.env.NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH === 'true',
+    discord: process.env.NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH === 'true',
   };
 
   return (

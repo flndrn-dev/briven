@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { FaGithub } from 'react-icons/fa';
+import { FaDiscord, FaGithub } from 'react-icons/fa';
 import { FcGoogle } from 'react-icons/fc';
 
 export interface Providers {
   google: boolean;
   github: boolean;
   konnos: boolean;
+  discord: boolean;
 }
 
 interface Props {
@@ -37,7 +38,7 @@ function KonnosMark() {
  * Konnos (Forgejo) is registered via the genericOAuth plugin, which
  * exposes /v1/auth/sign-in/oauth2 with a `providerId` field.
  */
-type ProviderKind = 'google' | 'github' | 'konnos';
+type ProviderKind = 'google' | 'github' | 'konnos' | 'discord';
 
 export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
   const [email, setEmail] = useState('');
@@ -107,7 +108,8 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
   }
 
   const anyPending = pending || oauthPending !== null;
-  const anyOAuth = providers.google || providers.github || providers.konnos;
+  const anyOAuth =
+    providers.google || providers.github || providers.konnos || providers.discord;
 
   if (sent) {
     return (
@@ -170,6 +172,18 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
             >
               <KonnosMark />
               {oauthPending === 'konnos' ? 'redirecting...' : 'continue with konnos'}
+            </button>
+          ) : null}
+
+          {providers.discord ? (
+            <button
+              type="button"
+              onClick={() => onOAuth('discord')}
+              disabled={disabled || anyPending}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
+            >
+              <FaDiscord className="h-5 w-5 text-[#5865F2]" />
+              {oauthPending === 'discord' ? 'redirecting...' : 'continue with discord'}
             </button>
           ) : null}
 
