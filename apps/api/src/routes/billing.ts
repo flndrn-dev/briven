@@ -15,6 +15,7 @@ import {
   upsertSubscriptionFromPolar,
 } from '../services/billing.js';
 import { log } from '../lib/logger.js';
+import { audit } from '../services/audit.js';
 import { getDefaultOrgForUser } from '../services/orgs.js';
 
 const checkoutSchema = z.object({
@@ -264,6 +265,24 @@ billingRouter.post('/v1/billing/webhook', async (c) => {
     status: statusFromPolar(status),
     currentPeriodEnd: data.current_period_end ? new Date(data.current_period_end) : null,
     canceledAt: data.canceled_at ? new Date(data.canceled_at) : null,
+  });
+
+  // Audit-log every subscription lifecycle event so it surfaces in the
+  // admin event stream alongside email events. PII intentionally
+  // excluded — we keep subscription id + product id + status only;
+  // customer identity stays on polar's side.
+  await audit({
+    actorId: null,
+    projectId: null,
+    action: `polar.${payload.type}`,
+    ipHash: null,
+    userAgent: 'polar-webhook',
+    metadata: {
+      subscriptionId: data.id,
+      productId,
+      status: statusFromPolar(status),
+      orgId,
+    },
   });
   return c.json({ ok: true });
 });
