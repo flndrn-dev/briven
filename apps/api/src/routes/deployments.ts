@@ -5,6 +5,7 @@ import { schemaSnapshotSchema } from '@briven/schema';
 
 import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
+import { blockIfProjectSuspended } from '../middleware/project-suspended.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 import {
   cancelPendingDeployment,
@@ -101,6 +102,7 @@ deploymentsRouter.post(
   // leaked key from spamming schema-apply (which runs DDL inside a
   // transaction on the shared data plane).
   projectRateLimit('deploy'),
+  blockIfProjectSuspended(),
   requireProjectRole('developer'),
   async (c) => {
     const body = await c.req.json().catch(() => ({}));

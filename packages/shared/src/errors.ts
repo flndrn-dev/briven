@@ -45,8 +45,13 @@ export class UnauthorizedError extends brivenError {
 }
 
 export class ForbiddenError extends brivenError {
-  constructor(message = 'forbidden') {
-    super('forbidden', message, { status: 403 });
+  // The optional second arg lets a caller surface a more specific
+  // machine-readable code (e.g. 'project_suspended', 'tier_required')
+  // while still defaulting to the generic 'forbidden'. The HTTP status
+  // is always 403 — this only affects the error.code field that
+  // clients can branch on.
+  constructor(message = 'forbidden', code = 'forbidden') {
+    super(code, message, { status: 403 });
     this.name = 'ForbiddenError';
   }
 }

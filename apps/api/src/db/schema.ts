@@ -205,6 +205,12 @@ export const projects = pgTable(
     tier: text('tier').$type<ProjectTier>().notNull().default('free'),
     shardId: text('shard_id'),
     dataSchemaName: text('data_schema_name'),
+    // Set by an admin (manually or via abuse-report auto-suspension) to
+    // freeze every state-changing route on the project. Invokes return
+    // 403 with code=project_suspended; reads stay open so the operator
+    // can investigate via the dashboard. Setting to null re-enables.
+    suspendedAt: ts('suspended_at'),
+    suspendReason: text('suspend_reason'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

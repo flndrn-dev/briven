@@ -99,6 +99,13 @@
       "when": 1778544000000,
       "tag": "0013_deploy_history",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778580000000,
+      "tag": "0014_project_suspension",
+      "breakpoints": true
     }
   ]
 }

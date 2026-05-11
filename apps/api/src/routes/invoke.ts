@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
+import { blockIfProjectSuspended } from '../middleware/project-suspended.js';
 import { invoke } from '../services/invoke.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
@@ -16,6 +17,10 @@ invokeRouter.use('/v1/projects/:id/functions/:name', projectRateLimit('invoke'))
 // Functions are project-scoped resources, so they share project-auth with
 // deployments and api-keys: either a session-bound owner or a matching brk_.
 invokeRouter.use('/v1/projects/:id/functions/:name', requireProjectAuth());
+
+// Block invocations on suspended projects. Runs AFTER auth so we don't
+// leak "this project exists" to unauthenticated requests.
+invokeRouter.use('/v1/projects/:id/functions/:name', blockIfProjectSuspended());
 
 // Function invocations require developer minimum (writes through user code).
 invokeRouter.post(
