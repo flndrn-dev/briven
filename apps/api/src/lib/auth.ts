@@ -137,6 +137,15 @@ export const auth = betterAuth({
           },
         }
       : {}),
+    ...(env.BRIVEN_DISCORD_CLIENT_ID && env.BRIVEN_DISCORD_CLIENT_SECRET
+      ? {
+          discord: {
+            clientId: env.BRIVEN_DISCORD_CLIENT_ID,
+            clientSecret: env.BRIVEN_DISCORD_CLIENT_SECRET,
+            disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
+          },
+        }
+      : {}),
   },
 
   plugins: [

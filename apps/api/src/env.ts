@@ -86,6 +86,11 @@ const envSchema = z.object({
   BRIVEN_GITHUB_CLIENT_ID: z.string().optional(),
   BRIVEN_GITHUB_CLIENT_SECRET: z.string().optional(),
 
+  // Discord OAuth — useful for gaming / community-oriented apps. Falls
+  // back to "not available" in the signin UI when unset.
+  BRIVEN_DISCORD_CLIENT_ID: z.string().optional(),
+  BRIVEN_DISCORD_CLIENT_SECRET: z.string().optional(),
+
   // Konnos OAuth — Forgejo at code.konnos.org. Better Auth's generic OAuth
   // plugin lets us reuse the same callback shape for any OAuth2/OIDC
   // provider; the Forgejo endpoints (authorize / token / userinfo) are
