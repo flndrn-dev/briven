@@ -17,6 +17,12 @@ const ENTRIES: readonly Entry[] = [
   {
     date: '2026-05-12',
     tags: ['feat'],
+    title: 'function logs + per-function stats in the dashboard',
+    body: "new /logs tab on every project surfaces function_logs (already populated by the runtime log-fanout worker) with chip filters per function and ok/err status, cursor-based pagination, and a JSON export that walks the cursor for up to 1000 rows honoring the active filter. Per-function stats badge on the functions tab shows last-24h count + error rate + p50/p99 duration via a single percentile_cont query. Project overview surfaces last 5 errors in a red-tinted card with a deep-link to the filtered logs view.",
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
     title: 'dashboard-managed schemas — convex-style manual database creation',
     body: "studio gains the full DDL surface: + new table with typed columns (text/integer/bigint/boolean/timestamptz/jsonb/uuid/numeric), primary keys, foreign keys with ON DELETE behavior, defaults; add/drop column on a live table; create/drop indexes (multi-column + unique). Schema panel renders relationships as “→ users.id”. FK values in the data view become “↗” links to the referenced row. Copy-as-schema.ts generates the equivalent briven/schema.ts so anything you click can graduate to git. SQL editor at /studio/sql runs arbitrary statements scoped via SET LOCAL ROLE to the project owner role, 5s statement_timeout, every query audit-logged. New connect tab shows project endpoints + a button to issue a 15-minute shell DSN for psql / pgcli / external tools. CLI path unchanged; both write to the same schema.",
   },
