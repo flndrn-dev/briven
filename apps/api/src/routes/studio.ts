@@ -4,12 +4,19 @@ import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
+  addColumn,
+  createTable,
   deleteRow,
+  dropColumn,
+  dropTable,
   getTableColumns,
   getTableRows,
   insertRow,
   listProjectTables,
+  STUDIO_COLUMN_TYPES,
   updateCell,
+  type StudioColumnSpec,
+  type StudioColumnType,
 } from '../services/studio.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
@@ -190,6 +197,151 @@ studioRouter.post(
 /**
  * Delete a row by primary key. Body: `{ primaryKeyColumn, primaryKeyValue }`.
  */
+/**
+ * Create a new table. Body: `{ tableName, columns: [{ name, type, notNull?,
+ * primaryKey?, defaultExpr? }] }`. Service-side validates the type
+ * whitelist + identifier shape + at-least-one-pk rule.
+ */
+function parseColumnSpec(input: unknown): StudioColumnSpec | null {
+  if (!input || typeof input !== 'object') return null;
+  const c = input as Record<string, unknown>;
+  if (typeof c.name !== 'string') return null;
+  if (typeof c.type !== 'string') return null;
+  if (!(STUDIO_COLUMN_TYPES as readonly string[]).includes(c.type)) return null;
+  return {
+    name: c.name,
+    type: c.type as StudioColumnType,
+    notNull: typeof c.notNull === 'boolean' ? c.notNull : undefined,
+    primaryKey: typeof c.primaryKey === 'boolean' ? c.primaryKey : undefined,
+    defaultExpr:
+      typeof c.defaultExpr === 'string' || c.defaultExpr === null
+        ? (c.defaultExpr as string | null)
+        : undefined,
+  };
+}
+
+studioRouter.post(
+  '/v1/projects/:id/studio/tables',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const body = (await c.req.json().catch(() => null)) as {
+      tableName?: string;
+      columns?: unknown[];
+    } | null;
+    if (!body || typeof body.tableName !== 'string' || !Array.isArray(body.columns)) {
+      return c.json(
+        { code: 'validation_failed', message: 'expected { tableName, columns: [...] }' },
+        400,
+      );
+    }
+    const cols: StudioColumnSpec[] = [];
+    for (const raw of body.columns) {
+      const spec = parseColumnSpec(raw);
+      if (!spec) {
+        return c.json(
+          { code: 'validation_failed', message: 'each column needs { name, type } at minimum' },
+          400,
+        );
+      }
+      cols.push(spec);
+    }
+    const result = await createTable({ projectId, tableName: body.tableName, columns: cols });
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.table.create',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: result.name, columnCount: cols.length },
+    });
+    return c.json(result, 201);
+  },
+);
+
+studioRouter.delete(
+  '/v1/projects/:id/studio/tables/:table',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    await dropTable(projectId, tableName);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.table.drop',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: tableName },
+    });
+    return c.json({ dropped: tableName });
+  },
+);
+
+studioRouter.post(
+  '/v1/projects/:id/studio/tables/:table/columns',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const body = (await c.req.json().catch(() => null)) as { column?: unknown } | null;
+    const spec = body ? parseColumnSpec(body.column) : null;
+    if (!spec) {
+      return c.json(
+        { code: 'validation_failed', message: 'expected { column: { name, type, ... } }' },
+        400,
+      );
+    }
+    await addColumn({ projectId, tableName, column: spec });
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.column.add',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: tableName, column: spec.name, type: spec.type },
+    });
+    return c.json({ added: spec.name }, 201);
+  },
+);
+
+studioRouter.delete(
+  '/v1/projects/:id/studio/tables/:table/columns/:column',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    const column = c.req.param('column');
+    if (!projectId || !tableName || !column) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    await dropColumn({ projectId, tableName, column });
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.column.drop',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: tableName, column },
+    });
+    return c.json({ dropped: column });
+  },
+);
+
 studioRouter.delete(
   '/v1/projects/:id/studio/tables/:table/rows',
   projectRateLimit('mutate'),

@@ -47,9 +47,11 @@ export default async function NewProjectPage() {
   return (
     <section className="max-w-lg">
       <header className="mb-8">
-        <h1 className="font-mono text-xl tracking-tight">new project</h1>
+        <h1 className="font-mono text-xl tracking-tight">new project · new database</h1>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          one project = one postgres schema + one function runtime.
+          one project = one postgres schema (your database) + one function runtime. name it
+          here, then fill it with tables from the dashboard (studio) or via{' '}
+          <code>briven deploy</code> from the CLI.
         </p>
       </header>
 

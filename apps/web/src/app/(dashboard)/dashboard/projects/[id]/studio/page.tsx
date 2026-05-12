@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
+import { NewTableForm } from './new-table-form';
 
 interface TableSummary {
   name: string;
@@ -23,21 +24,31 @@ export default async function StudioPage({
 
   return (
     <section className="flex flex-col gap-6">
-      <header>
-        <h2 className="font-mono text-lg tracking-tight">studio</h2>
-        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          read-only data browser. row counts are approximate (
-          <code>pg_class.reltuples</code>, refreshed by autovacuum). inline edit lands in a
-          follow-up.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-mono text-lg tracking-tight">studio</h2>
+          <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+            build your database from here — create tables, add columns, edit rows. or
+            keep using the CLI (<code>briven deploy</code> with a <code>schema.ts</code>);
+            both paths write to the same schema.
+          </p>
+        </div>
+        {tables.length > 0 ? <NewTableForm projectId={id} /> : null}
       </header>
 
       {tables.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
-          <p className="font-mono text-sm text-[var(--color-text-muted)]">
-            no tables yet — deploy a <code>briven/schema.ts</code> with at least one table to
-            populate this view.
-          </p>
+        <div className="flex flex-col gap-4 rounded-md border border-dashed border-[var(--color-border)] p-6">
+          <div>
+            <p className="font-mono text-sm text-[var(--color-text)]">
+              your database is empty.
+            </p>
+            <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+              name your first table below to start. you can also deploy a{' '}
+              <code>briven/schema.ts</code> from the CLI — both paths land in the same
+              postgres schema for this project.
+            </p>
+          </div>
+          <NewTableForm projectId={id} />
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border border-[var(--color-border-subtle)]">

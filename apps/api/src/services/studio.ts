@@ -374,6 +374,176 @@ export interface DeleteRowResult {
 }
 
 /**
+ * Studio-supported column type vocabulary. Keep this list short — exotic
+ * types (arrays, enums, ranges) still work via the CLI schema.ts path. The
+ * names map 1:1 onto the actual postgres type a CREATE/ALTER statement uses.
+ */
+export const STUDIO_COLUMN_TYPES = [
+  'text',
+  'integer',
+  'bigint',
+  'boolean',
+  'timestamptz',
+  'jsonb',
+  'uuid',
+  'numeric',
+] as const;
+export type StudioColumnType = (typeof STUDIO_COLUMN_TYPES)[number];
+
+export interface StudioColumnSpec {
+  readonly name: string;
+  readonly type: StudioColumnType;
+  readonly notNull?: boolean;
+  readonly primaryKey?: boolean;
+  /** Raw SQL default expression — e.g. `'now()'`, `'gen_random_uuid()'`, `'0'`. */
+  readonly defaultExpr?: string | null;
+}
+
+export interface CreateTableInput {
+  readonly projectId: string;
+  readonly tableName: string;
+  readonly columns: readonly StudioColumnSpec[];
+}
+
+const DEFAULT_EXPR_RE = /^[A-Za-z0-9_().,:\s'"\-+/*]{1,200}$/;
+
+function assertColumnSpec(spec: StudioColumnSpec): void {
+  if (!COLUMN_NAME_RE.test(spec.name)) {
+    throw new ValidationError('invalid column name', { column: spec.name });
+  }
+  if (!STUDIO_COLUMN_TYPES.includes(spec.type)) {
+    throw new ValidationError('unsupported column type', {
+      type: spec.type,
+      supported: STUDIO_COLUMN_TYPES.join(','),
+    });
+  }
+  if (spec.defaultExpr != null && !DEFAULT_EXPR_RE.test(spec.defaultExpr)) {
+    throw new ValidationError('default expression contains disallowed characters', {
+      column: spec.name,
+    });
+  }
+}
+
+function columnDdl(spec: StudioColumnSpec): string {
+  const parts = [`"${spec.name}" ${spec.type}`];
+  if (spec.primaryKey) parts.push('PRIMARY KEY');
+  if (spec.notNull && !spec.primaryKey) parts.push('NOT NULL');
+  if (spec.defaultExpr != null && spec.defaultExpr !== '') {
+    parts.push(`DEFAULT ${spec.defaultExpr}`);
+  }
+  return parts.join(' ');
+}
+
+/**
+ * Create a new table in the project's schema. Refuses platform-owned
+ * `_briven_*` names, enforces the studio type whitelist on every column,
+ * and demands at least one primary-key column so the row-edit path keeps
+ * working downstream.
+ */
+export async function createTable(input: CreateTableInput): Promise<{ name: string }> {
+  if (!TABLE_NAME_RE.test(input.tableName)) {
+    throw new ValidationError('invalid table name', { tableName: input.tableName });
+  }
+  if (input.tableName.startsWith('_briven_')) {
+    throw new ValidationError('platform-owned table prefix is reserved', {
+      tableName: input.tableName,
+    });
+  }
+  if (input.columns.length === 0) {
+    throw new ValidationError('a table needs at least one column', {});
+  }
+  const seen = new Set<string>();
+  let pkCount = 0;
+  for (const col of input.columns) {
+    assertColumnSpec(col);
+    if (seen.has(col.name)) {
+      throw new ValidationError('duplicate column name', { column: col.name });
+    }
+    seen.add(col.name);
+    if (col.primaryKey) pkCount++;
+  }
+  if (pkCount === 0) {
+    throw new ValidationError('one column must be marked primaryKey', {});
+  }
+  if (pkCount > 1) {
+    // Composite PKs work but the studio row-edit path assumes a single-column
+    // PK today — reject until that's lifted.
+    throw new ValidationError('composite primary keys are not supported via studio yet', {});
+  }
+
+  const schema = schemaNameFor(input.projectId);
+  const sql = dataPlaneClient();
+  const colsSql = input.columns.map(columnDdl).join(', ');
+  await sql.unsafe(`CREATE TABLE "${schema}"."${input.tableName}" (${colsSql})`);
+  return { name: input.tableName };
+}
+
+/**
+ * Drop a table (cascade off — refuses if FKs point at it, so callers get
+ * a clear error rather than nuking dependent data silently).
+ */
+export async function dropTable(projectId: string, tableName: string): Promise<void> {
+  await assertTableExists(projectId, tableName);
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  await sql.unsafe(`DROP TABLE "${schema}"."${tableName}"`);
+}
+
+/**
+ * Add a column to an existing table. Same type whitelist + default-expr
+ * regex as createTable.
+ */
+export async function addColumn(input: {
+  projectId: string;
+  tableName: string;
+  column: StudioColumnSpec;
+}): Promise<void> {
+  await assertTableExists(input.projectId, input.tableName);
+  assertColumnSpec(input.column);
+  if (input.column.primaryKey) {
+    throw new ValidationError('cannot add a primary-key column to an existing table via studio', {});
+  }
+  const cols = await getTableColumns(input.projectId, input.tableName);
+  if (cols.find((c) => c.name === input.column.name)) {
+    throw new ValidationError('column already exists', { column: input.column.name });
+  }
+  const schema = schemaNameFor(input.projectId);
+  const sql = dataPlaneClient();
+  await sql.unsafe(
+    `ALTER TABLE "${schema}"."${input.tableName}" ADD COLUMN ${columnDdl(input.column)}`,
+  );
+}
+
+/**
+ * Drop a column. Refuses to drop a PK column — that would invalidate every
+ * row-level operation in studio and is almost always a mistake.
+ */
+export async function dropColumn(input: {
+  projectId: string;
+  tableName: string;
+  column: string;
+}): Promise<void> {
+  await assertTableExists(input.projectId, input.tableName);
+  if (!COLUMN_NAME_RE.test(input.column)) {
+    throw new ValidationError('invalid column name', { column: input.column });
+  }
+  const cols = await getTableColumns(input.projectId, input.tableName);
+  const target = cols.find((c) => c.name === input.column);
+  if (!target) {
+    throw new ValidationError('column not found on table', {
+      table: input.tableName,
+      column: input.column,
+    });
+  }
+  if (target.isPrimaryKey) {
+    throw new ValidationError('cannot drop a primary-key column', { column: input.column });
+  }
+  const schema = schemaNameFor(input.projectId);
+  const sql = dataPlaneClient();
+  await sql.unsafe(`ALTER TABLE "${schema}"."${input.tableName}" DROP COLUMN "${input.column}"`);
+}
+
+/**
  * Delete one row by primary key. Validates the table + pk-column
  * identifiers against the project's schema; parameterises the row-key.
  * Refuses to touch platform-owned `_briven_*` tables (caught by
