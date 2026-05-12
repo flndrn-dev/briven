@@ -299,6 +299,39 @@ export const projectInvitations = pgTable(
 
 export type ProjectInvitation = typeof projectInvitations.$inferSelect;
 
+/* ─── org_invitations ─────────────────────────────────────────────── */
+/**
+ * Pending invites to a team org. Mirrors project_invitations but
+ * scoped to an org id + carries an OrgRole instead of MemberRole.
+ * Acceptance creates the org_members row and marks accepted_at.
+ */
+export const orgInvitations = pgTable(
+  'org_invitations',
+  {
+    id: id(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: text('role').$type<OrgRole>().notNull().default('developer'),
+    // SHA-256 hash of the single-use accept token; plaintext only rides
+    // in the invite email and the recipient's URL.
+    tokenHash: text('token_hash').notNull(),
+    invitedBy: text('invited_by').references(() => users.id),
+    expiresAt: ts('expires_at').notNull(),
+    acceptedAt: ts('accepted_at'),
+    revokedAt: ts('revoked_at'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    orgEmailIdx: uniqueIndex('org_invitations_org_email_idx').on(t.orgId, t.email),
+    tokenIdx: uniqueIndex('org_invitations_token_idx').on(t.tokenHash),
+  }),
+);
+
+export type OrgInvitation = typeof orgInvitations.$inferSelect;
+export type NewOrgInvitation = typeof orgInvitations.$inferInsert;
+
 /* ─── project_env_vars ────────────────────────────────────────────── */
 export const projectEnvVars = pgTable(
   'project_env_vars',

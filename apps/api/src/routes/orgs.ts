@@ -10,10 +10,19 @@ import {
   canUserCreateAnotherOrg,
   createOrg,
   getDefaultOrgForUser,
+  isOrgMember,
   listOrgsForUser,
   renameOrg,
 } from '../services/orgs.js';
+import {
+  acceptOrgInvitation,
+  createOrgInvitation,
+  listOrgInvitations,
+  pendingOrgInvitationsForEmail,
+  revokeOrgInvitation,
+} from '../services/org-invitations.js';
 import { getTierForOrg } from '../services/billing.js';
+import { orgRole } from '../db/schema.js';
 
 /**
  * Multi-org surface — team creation + list. Personal orgs are auto-
@@ -165,4 +174,144 @@ orgsRouter.patch('/v1/orgs/:id', async (c) => {
       personal: updated.personal,
     },
   });
+});
+
+/* ─── org invitations ─────────────────────────────────────────────── */
+
+orgsRouter.use('/v1/orgs/:id/invitations', requireAuth());
+orgsRouter.use('/v1/orgs/:id/invitations/*', requireAuth());
+orgsRouter.use('/v1/me/org-invitations', requireAuth());
+orgsRouter.use('/v1/org-invitations/accept', requireAuth());
+
+const inviteSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(orgRole).default('developer'),
+  callbackURL: z.string().url(),
+});
+
+orgsRouter.get('/v1/orgs/:id/invitations', async (c) => {
+  const user = c.get('user')!;
+  const orgId = c.req.param('id');
+  if (!(await isOrgMember(user.id, orgId))) {
+    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  }
+  const rows = await listOrgInvitations(orgId);
+  return c.json({
+    invitations: rows.map((r) => ({
+      id: r.id,
+      email: r.email,
+      role: r.role,
+      expiresAt: r.expiresAt,
+      acceptedAt: r.acceptedAt,
+      revokedAt: r.revokedAt,
+      createdAt: r.createdAt,
+    })),
+  });
+});
+
+orgsRouter.post('/v1/orgs/:id/invitations', async (c) => {
+  const user = c.get('user')!;
+  const orgId = c.req.param('id');
+  if (!(await isOrgMember(user.id, orgId))) {
+    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  }
+  const body = await c.req.json().catch(() => null);
+  const parsed = inviteSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const inv = await createOrgInvitation({
+    orgId,
+    email: parsed.data.email,
+    role: parsed.data.role,
+    invitedBy: user.id,
+    callbackURL: parsed.data.callbackURL,
+  });
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'org.invitation.created',
+    ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { orgId, email: parsed.data.email, role: parsed.data.role },
+  });
+  return c.json({
+    invitation: {
+      id: inv.id,
+      email: inv.email,
+      role: inv.role,
+      expiresAt: inv.expiresAt,
+    },
+  });
+});
+
+orgsRouter.delete('/v1/orgs/:id/invitations/:invId', async (c) => {
+  const user = c.get('user')!;
+  const orgId = c.req.param('id');
+  const invId = c.req.param('invId');
+  if (!(await isOrgMember(user.id, orgId))) {
+    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  }
+  await revokeOrgInvitation(orgId, invId);
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'org.invitation.revoked',
+    ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { orgId, invitationId: invId },
+  });
+  return c.json({ revoked: invId });
+});
+
+/**
+ * Pending team invitations for the signed-in user. Drives the
+ * dashboard's "you have a pending team invite" banner — parallel to
+ * /v1/me/invitations which already does the project-level equivalent.
+ */
+orgsRouter.get('/v1/me/org-invitations', async (c) => {
+  const user = c.get('user')!;
+  const rows = await pendingOrgInvitationsForEmail(user.email);
+  return c.json({ invitations: rows });
+});
+
+/**
+ * Accept an org invitation. Token comes from the email link OR (when
+ * the user is already signed in) from a dashboard-initiated accept.
+ */
+const acceptSchema = z.object({
+  token: z.string().min(20).max(1024),
+});
+
+orgsRouter.post('/v1/org-invitations/accept', async (c) => {
+  const user = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = acceptSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const accepted = await acceptOrgInvitation({
+      token: parsed.data.token,
+      userId: user.id,
+      userEmail: user.email,
+    });
+    await audit({
+      actorId: user.id,
+      projectId: null,
+      action: 'org.invitation.accepted',
+      ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { orgId: accepted.orgId, role: accepted.role },
+    });
+    return c.json({ accepted: true, orgId: accepted.orgId, role: accepted.role });
+  } catch (err) {
+    return c.json(
+      {
+        code: 'invitation_invalid',
+        message: err instanceof Error ? err.message : 'invitation invalid',
+      },
+      400,
+    );
+  }
 });
