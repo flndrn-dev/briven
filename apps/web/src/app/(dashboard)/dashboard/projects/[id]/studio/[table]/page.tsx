@@ -6,6 +6,7 @@ import { DeleteRowButton } from './delete-row-button';
 import { EditableCell } from './editable-cell';
 import { FilterBar } from './filter-bar';
 import { InsertRowForm } from './insert-row-form';
+import { SchemaPanel } from './schema-panel';
 
 interface ColumnInfo {
   name: string;
@@ -316,6 +317,8 @@ export default async function TablePage({
           next →
         </Link>
       </nav>
+
+      <SchemaPanel projectId={id} table={table} columns={data.columns} />
     </section>
   );
 }
