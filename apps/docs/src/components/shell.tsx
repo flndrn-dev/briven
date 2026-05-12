@@ -5,25 +5,50 @@ interface NavItem {
   label: string;
 }
 
-const NAV: readonly NavItem[] = [
-  { href: '/', label: 'overview' },
-  { href: '/quickstart', label: 'quickstart' },
-  { href: '/cli', label: 'cli' },
-  { href: '/templates', label: 'templates' },
-  { href: '/schema', label: 'schema dsl' },
-  { href: '/examples', label: 'examples' },
-  { href: '/functions', label: 'functions' },
-  { href: '/realtime', label: 'realtime' },
-  { href: '/sdks', label: 'client sdks' },
-  { href: '/api', label: 'http api' },
-  { href: '/migration', label: 'migration' },
-  { href: '/ai', label: 'ai schema' },
-  { href: '/self-host', label: 'self-host' },
-  { href: '/operator', label: 'operator' },
-  { href: '/roadmap', label: 'roadmap' },
-  { href: '/changelog', label: 'changelog' },
-  { href: '/status', label: 'status' },
-  { href: '/support', label: 'support' },
+interface NavGroup {
+  label: string;
+  items: readonly NavItem[];
+}
+
+const GROUPS: readonly NavGroup[] = [
+  {
+    label: 'start',
+    items: [
+      { href: '/', label: 'overview' },
+      { href: '/quickstart', label: 'quickstart' },
+      { href: '/cli', label: 'cli' },
+      { href: '/templates', label: 'templates' },
+    ],
+  },
+  {
+    label: 'build',
+    items: [
+      { href: '/schema', label: 'schema dsl' },
+      { href: '/examples', label: 'examples' },
+      { href: '/functions', label: 'functions' },
+      { href: '/realtime', label: 'realtime' },
+      { href: '/sdks', label: 'client sdks' },
+      { href: '/api', label: 'http api' },
+      { href: '/ai', label: 'ai schema' },
+    ],
+  },
+  {
+    label: 'move + run',
+    items: [
+      { href: '/migration', label: 'migration' },
+      { href: '/self-host', label: 'self-host' },
+      { href: '/operator', label: 'operator' },
+    ],
+  },
+  {
+    label: 'meta',
+    items: [
+      { href: '/roadmap', label: 'roadmap' },
+      { href: '/changelog', label: 'changelog' },
+      { href: '/status', label: 'status' },
+      { href: '/support', label: 'support' },
+    ],
+  },
 ];
 
 export function DocsShell({ children }: { children: React.ReactNode }) {
@@ -52,15 +77,22 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="mx-auto grid w-full max-w-6xl grid-cols-[220px_1fr] gap-10 px-6 py-10">
-        <nav aria-label="docs sections" className="flex flex-col gap-1 font-mono text-sm">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-md px-3 py-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
-            >
-              {item.label}
-            </Link>
+        <nav aria-label="docs sections" className="flex flex-col gap-5 font-mono text-sm">
+          {GROUPS.map((group) => (
+            <div key={group.label} className="flex flex-col gap-1">
+              <p className="px-3 pb-1 text-[10px] uppercase tracking-wide text-[var(--color-text-subtle)]">
+                {group.label}
+              </p>
+              {group.items.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-md px-3 py-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
 
