@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/session.js';
 import type { AppEnv } from '../types/app-env.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
+import { listFunctionLogs, listFunctionNames } from '../services/function-logs.js';
 import { getDefaultOrgForUser, isOrgMember, listOrgsForUser } from '../services/orgs.js';
 import {
   createProject,
@@ -168,6 +169,40 @@ projectsRouter.delete('/v1/projects/:id', async (c) => {
     userAgent: c.req.header('user-agent') ?? null,
   });
   return c.json({ project });
+});
+
+projectsRouter.get('/v1/projects/:id/function-logs', async (c) => {
+  const user = c.get('user')!;
+  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const functionName = c.req.query('function');
+  const statusParam = c.req.query('status');
+  const beforeParam = c.req.query('before');
+  const limitParam = c.req.query('limit');
+
+  const status = statusParam === 'ok' || statusParam === 'err' ? statusParam : undefined;
+  let before: Date | undefined;
+  if (beforeParam) {
+    const d = new Date(beforeParam);
+    if (!Number.isNaN(d.getTime())) before = d;
+  }
+  const limit = limitParam ? Number(limitParam) : undefined;
+
+  const logs = await listFunctionLogs(project.id, {
+    functionName: functionName && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(functionName)
+      ? functionName
+      : undefined,
+    status,
+    before,
+    limit: Number.isFinite(limit) ? limit : undefined,
+  });
+  return c.json({ logs });
+});
+
+projectsRouter.get('/v1/projects/:id/function-names', async (c) => {
+  const user = c.get('user')!;
+  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const names = await listFunctionNames(project.id);
+  return c.json({ names });
 });
 
 projectsRouter.get('/v1/projects/:id/activity', async (c) => {
