@@ -1,4 +1,5 @@
 import { DocsShell } from '../../components/shell';
+import { INCIDENTS, sortedIncidents } from '../../lib/incidents';
 
 export const metadata = { title: 'status' };
 export const dynamic = 'force-dynamic';
@@ -172,8 +173,75 @@ export default async function StatusPage() {
         ))}
       </ul>
 
+      <section className="mt-12">
+        <div className="flex items-center justify-between">
+          <h2 className="font-mono text-lg">incident history</h2>
+          <a
+            href="/api/status/incidents.xml"
+            className="font-mono text-xs text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]"
+          >
+            rss
+          </a>
+        </div>
+        {INCIDENTS.length === 0 ? (
+          <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
+            no incidents on record. when one happens, an entry lands here and on the rss feed.
+          </p>
+        ) : (
+          <ul className="mt-4 flex flex-col gap-3">
+            {sortedIncidents().map((inc) => (
+              <li
+                key={inc.id}
+                id={inc.id}
+                className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 font-mono text-xs">
+                      <span
+                        className={`rounded-md px-2 py-0.5 ${
+                          inc.severity === 'critical'
+                            ? 'bg-red-500/15 text-red-300'
+                            : inc.severity === 'major'
+                              ? 'bg-yellow-500/15 text-yellow-300'
+                              : inc.severity === 'minor'
+                                ? 'bg-[var(--color-surface-raised)] text-[var(--color-text-subtle)]'
+                                : 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
+                        }`}
+                      >
+                        {inc.severity}
+                      </span>
+                      <span className="text-[var(--color-text-muted)]">
+                        {inc.services.join(', ')}
+                      </span>
+                      <span className="text-[var(--color-text-subtle)]">
+                        {inc.resolvedAt ? 'resolved' : 'ongoing'}
+                      </span>
+                    </div>
+                    <p className="mt-2 font-mono text-sm text-[var(--color-text)]">
+                      {inc.summary}
+                    </p>
+                    {inc.postmortem ? (
+                      <pre className="mt-2 whitespace-pre-wrap font-mono text-xs text-[var(--color-text-muted)]">
+                        {inc.postmortem}
+                      </pre>
+                    ) : null}
+                  </div>
+                  <div className="text-right font-mono text-[10px] text-[var(--color-text-subtle)]">
+                    <p>{inc.startedAt.slice(0, 10)}</p>
+                    {inc.resolvedAt ? <p className="mt-1">→ {inc.resolvedAt.slice(0, 10)}</p> : null}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <p className="mt-12 font-mono text-xs text-[var(--color-text-subtle)]">
-        page renders fresh on every request (no cache). probe timeout: 3000ms.
+        page renders fresh on every request (no cache). probe timeout: 3000ms. incidents are
+        operator-curated; alertmanager → discord persists them to docs/src/lib/incidents.ts
+        once the writer ships.
       </p>
     </DocsShell>
   );

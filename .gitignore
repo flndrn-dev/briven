@@ -77,6 +77,7 @@ apps/**/data/
 !/docs/runbooks/
 !/docs/runbooks/discord-setup.md
 !/docs/runbooks/polar-metering-setup.md
+!/docs/runbooks/status-domain-cutover.md
 
 # Local git worktrees for parallel branch work — never commit their contents
 .worktrees/
