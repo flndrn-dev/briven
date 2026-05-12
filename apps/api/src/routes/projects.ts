@@ -8,6 +8,7 @@ import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
 import {
   getFunctionStats,
+  getHourlyInvocations,
   listFunctionLogs,
   listFunctionNames,
 } from '../services/function-logs.js';
@@ -244,6 +245,13 @@ projectsRouter.get('/v1/projects/:id/function-names', async (c) => {
   const project = await getProjectForUser(c.req.param('id'), user.id);
   const names = await listFunctionNames(project.id);
   return c.json({ names });
+});
+
+projectsRouter.get('/v1/projects/:id/hourly-invocations', async (c) => {
+  const user = c.get('user')!;
+  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const hours = await getHourlyInvocations(project.id);
+  return c.json({ hours });
 });
 
 projectsRouter.get('/v1/projects/:id/function-stats', async (c) => {
