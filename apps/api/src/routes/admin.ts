@@ -25,6 +25,7 @@ import {
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
 import { listDeploys } from '../services/deploy-history.js';
+import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents } from '../services/usage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 
@@ -388,4 +389,17 @@ adminRouter.post('/v1/admin/projects/unsuspend', async (c) => {
     userAgent: c.req.header('user-agent') ?? null,
   });
   return c.json({ projectId: parsed.data.projectId, unsuspended: ok });
+});
+
+/**
+ * Live realtime snapshot — proxies the secret-gated /v1/realtime/stats
+ * endpoint on the realtime service. Returns 503 when realtime isn't
+ * configured (BRIVEN_REALTIME_URL / BRIVEN_RUNTIME_SHARED_SECRET unset)
+ * so the admin UI can render a clear "not available" state instead of
+ * an empty table.
+ */
+adminRouter.get('/v1/admin/realtime', async (c) => {
+  const stats = await fetchRealtimeStats();
+  if (!stats) return c.json({ code: 'realtime_unavailable' }, 503);
+  return c.json(stats);
 });
