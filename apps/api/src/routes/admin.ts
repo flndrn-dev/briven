@@ -26,7 +26,7 @@ import {
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
 import { listDeploys } from '../services/deploy-history.js';
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
-import { listUsageEvents } from '../services/usage-admin.js';
+import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
@@ -140,6 +140,32 @@ adminRouter.get('/v1/admin/usage-events', async (c) => {
   const status = c.req.query('status');
   const rows = await listUsageEvents({ limit, status });
   return c.json({ events: rows });
+});
+
+const retrySkippedSchema = z.object({
+  // Window in days. 1-90. Operator-supplied so the same endpoint
+  // serves both "I just fixed the meter id, retry the last hour" and
+  // "we discovered a month-long config gap during reconciliation".
+  sinceDays: z.coerce.number().int().min(1).max(90).default(7),
+});
+
+adminRouter.post('/v1/admin/usage-events/retry-skipped', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = retrySkippedSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const result = await retrySkippedUsageEvents({ sinceDays: parsed.data.sinceDays });
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.usage_events.retry_skipped',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { sinceDays: parsed.data.sinceDays, retried: result.retried },
+  });
+  return c.json({ retried: result.retried, sinceDays: parsed.data.sinceDays });
 });
 
 const suppressActionSchema = z.object({

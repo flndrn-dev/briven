@@ -11,6 +11,12 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
     tags: ['feat'],
+    title: 'admin · usage — retry skipped polar pushes',
+    body: 'when polar push rows land in `skipped` (missing meter id, bad customer mapping, durable 4xx), the operator had to UPDATE usage_events directly in psql to re-enable them. now /dashboard/admin/usage grows a "retry → pending" button (window: 1/7/30/90 days) that flips skipped rows back to pending in one click. window is bounded server-side so a runaway click can\'t re-push years of stale data. action is audit-logged with the row count.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
     title: 'admin · realtime — live subscription snapshot',
     body: 'new admin page at /dashboard/admin/realtime shows per-project subscription counts + per-channel refcounts + the current cap values, with severity coloring at 60% and 90% of the per-project cap so an operator can spot a noisy project before it gets clamped. backed by a shared-secret-gated /v1/realtime/stats on the realtime service (no PII leaked — only project ids and channel names). 503 with a clear "not configured" state when the realtime URL or shared secret is unset.',
   },
