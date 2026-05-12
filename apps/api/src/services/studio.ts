@@ -390,6 +390,13 @@ export const STUDIO_COLUMN_TYPES = [
 ] as const;
 export type StudioColumnType = (typeof STUDIO_COLUMN_TYPES)[number];
 
+export interface StudioColumnReference {
+  readonly table: string;
+  readonly column: string;
+  /** `cascade` | `restrict` | `setNull` | `noAction` — defaults to `noAction`. */
+  readonly onDelete?: 'cascade' | 'restrict' | 'setNull' | 'noAction';
+}
+
 export interface StudioColumnSpec {
   readonly name: string;
   readonly type: StudioColumnType;
@@ -397,6 +404,8 @@ export interface StudioColumnSpec {
   readonly primaryKey?: boolean;
   /** Raw SQL default expression — e.g. `'now()'`, `'gen_random_uuid()'`, `'0'`. */
   readonly defaultExpr?: string | null;
+  /** Optional foreign-key target. Same schema only. */
+  readonly references?: StudioColumnReference | null;
 }
 
 export interface CreateTableInput {
@@ -422,16 +431,67 @@ function assertColumnSpec(spec: StudioColumnSpec): void {
       column: spec.name,
     });
   }
+  if (spec.references) {
+    if (!TABLE_NAME_RE.test(spec.references.table)) {
+      throw new ValidationError('invalid referenced table name', {
+        table: spec.references.table,
+      });
+    }
+    if (!COLUMN_NAME_RE.test(spec.references.column)) {
+      throw new ValidationError('invalid referenced column name', {
+        column: spec.references.column,
+      });
+    }
+  }
 }
 
-function columnDdl(spec: StudioColumnSpec): string {
+const ON_DELETE_SQL: Record<NonNullable<StudioColumnReference['onDelete']>, string> = {
+  cascade: 'CASCADE',
+  restrict: 'RESTRICT',
+  setNull: 'SET NULL',
+  noAction: 'NO ACTION',
+};
+
+function columnDdl(spec: StudioColumnSpec, schemaName?: string): string {
   const parts = [`"${spec.name}" ${spec.type}`];
   if (spec.primaryKey) parts.push('PRIMARY KEY');
   if (spec.notNull && !spec.primaryKey) parts.push('NOT NULL');
   if (spec.defaultExpr != null && spec.defaultExpr !== '') {
     parts.push(`DEFAULT ${spec.defaultExpr}`);
   }
+  if (spec.references && schemaName) {
+    const onDelete = ON_DELETE_SQL[spec.references.onDelete ?? 'noAction'];
+    parts.push(
+      `REFERENCES "${schemaName}"."${spec.references.table}" ("${spec.references.column}") ON DELETE ${onDelete}`,
+    );
+  }
   return parts.join(' ');
+}
+
+async function assertFkTarget(
+  projectId: string,
+  ref: StudioColumnReference,
+  selfTable: string,
+): Promise<void> {
+  // Self-reference is allowed (e.g. parent_id on comments) — skip the
+  // existence probe so brand-new tables can FK to themselves.
+  if (ref.table === selfTable) return;
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  const [row] = await sql<Array<{ exists: boolean }>>`
+    SELECT EXISTS(
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = ${schema}
+        AND table_name = ${ref.table}
+        AND column_name = ${ref.column}
+    ) AS exists
+  `;
+  if (!row?.exists) {
+    throw new ValidationError('referenced table.column does not exist', {
+      table: ref.table,
+      column: ref.column,
+    });
+  }
 }
 
 /**
@@ -471,9 +531,15 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
     throw new ValidationError('composite primary keys are not supported via studio yet', {});
   }
 
+  for (const col of input.columns) {
+    if (col.references) {
+      await assertFkTarget(input.projectId, col.references, input.tableName);
+    }
+  }
+
   const schema = schemaNameFor(input.projectId);
   const sql = dataPlaneClient();
-  const colsSql = input.columns.map(columnDdl).join(', ');
+  const colsSql = input.columns.map((c) => columnDdl(c, schema)).join(', ');
   await sql.unsafe(`CREATE TABLE "${schema}"."${input.tableName}" (${colsSql})`);
   return { name: input.tableName };
 }
@@ -507,10 +573,13 @@ export async function addColumn(input: {
   if (cols.find((c) => c.name === input.column.name)) {
     throw new ValidationError('column already exists', { column: input.column.name });
   }
+  if (input.column.references) {
+    await assertFkTarget(input.projectId, input.column.references, input.tableName);
+  }
   const schema = schemaNameFor(input.projectId);
   const sql = dataPlaneClient();
   await sql.unsafe(
-    `ALTER TABLE "${schema}"."${input.tableName}" ADD COLUMN ${columnDdl(input.column)}`,
+    `ALTER TABLE "${schema}"."${input.tableName}" ADD COLUMN ${columnDdl(input.column, schema)}`,
   );
 }
 
