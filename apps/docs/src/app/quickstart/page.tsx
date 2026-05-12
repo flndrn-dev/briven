@@ -29,6 +29,14 @@ export default function QuickstartPage() {
           Sign in at <a className="underline" href="https://briven.tech">briven.tech</a>, click{' '}
           <em>new project</em>, copy the resulting project id (looks like{' '}
           <code>p_01HZ…</code>).
+          <div className="mt-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 text-xs">
+            <strong className="text-[var(--color-text)]">dashboard-only path:</strong> if you
+            want to avoid the CLI entirely, open the project&apos;s <em>studio</em> tab and
+            click <em>+ new table</em> — define columns, set PKs/FKs/indexes, then insert rows
+            and run queries from the SQL editor. The <em>copy as schema.ts</em> button
+            graduates you to CLI + git when you&apos;re ready. The steps below describe the
+            CLI flow.
+          </div>
         </Step>
         <Step n={2} title="generate an api key">
           Open <em>api keys</em> on the new project and create one — pick the{' '}
