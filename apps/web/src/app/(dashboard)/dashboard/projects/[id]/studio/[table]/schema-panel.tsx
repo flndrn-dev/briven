@@ -23,13 +23,21 @@ interface ColumnInfo {
   isPrimaryKey: boolean;
 }
 
+interface IndexInfo {
+  name: string;
+  columns: string[];
+  unique: boolean;
+  isPrimary: boolean;
+}
+
 interface Props {
   projectId: string;
   table: string;
   columns: ColumnInfo[];
+  indexes: IndexInfo[];
 }
 
-export function SchemaPanel({ projectId, table, columns }: Props) {
+export function SchemaPanel({ projectId, table, columns, indexes }: Props) {
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState('');
@@ -96,6 +104,47 @@ export function SchemaPanel({ projectId, table, columns }: Props) {
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
         throw new Error(body.message ?? body.code ?? `drop column failed: ${res.status}`);
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'drop failed');
+    }
+  }
+
+  async function createIndex(cols: string[], unique: boolean) {
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/studio/tables/${encodeURIComponent(table)}/indexes`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ columns: cols, unique }),
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+        throw new Error(body.message ?? body.code ?? `create index failed: ${res.status}`);
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'create failed');
+    }
+  }
+
+  async function dropIndexByName(name: string) {
+    if (!confirm(`drop index "${name}"?`)) return;
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/studio/tables/${encodeURIComponent(
+          table,
+        )}/indexes/${encodeURIComponent(name)}`,
+        { method: 'DELETE' },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+        throw new Error(body.message ?? body.code ?? `drop index failed: ${res.status}`);
       }
       router.refresh();
     } catch (err) {
@@ -236,6 +285,13 @@ export function SchemaPanel({ projectId, table, columns }: Props) {
         ))}
       </ul>
 
+      <IndexesSection
+        columns={columns.map((c) => c.name)}
+        indexes={indexes}
+        onCreate={createIndex}
+        onDrop={dropIndexByName}
+      />
+
       {error ? (
         <p className="rounded-md bg-red-400/10 px-3 py-2 font-mono text-xs text-red-400">{error}</p>
       ) : null}
@@ -254,5 +310,142 @@ export function SchemaPanel({ projectId, table, columns }: Props) {
         </p>
       </div>
     </section>
+  );
+}
+
+function IndexesSection({
+  columns,
+  indexes,
+  onCreate,
+  onDrop,
+}: {
+  columns: string[];
+  indexes: IndexInfo[];
+  onCreate: (cols: string[], unique: boolean) => Promise<void>;
+  onDrop: (name: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [unique, setUnique] = useState(false);
+  const [pending, setPending] = useState(false);
+
+  function toggleCol(col: string) {
+    setSelected((prev) => (prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]));
+  }
+
+  async function submit() {
+    if (selected.length === 0) return;
+    setPending(true);
+    try {
+      await onCreate(selected, unique);
+      setSelected([]);
+      setUnique(false);
+      setOpen(false);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-3">
+      <div className="flex items-center justify-between">
+        <h4 className="font-mono text-xs text-[var(--color-text-muted)]">indexes</h4>
+        {!open ? (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="rounded-md border border-[var(--color-border)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          >
+            + new index
+          </button>
+        ) : null}
+      </div>
+
+      {open ? (
+        <div className="flex flex-col gap-2 rounded-md bg-[var(--color-bg)] p-3">
+          <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
+            pick the columns the index covers. order matters for multi-column indexes.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {columns.map((c) => {
+              const idx = selected.indexOf(c);
+              const isSelected = idx !== -1;
+              return (
+                <button
+                  type="button"
+                  key={c}
+                  onClick={() => toggleCol(c)}
+                  className={`rounded-md border px-2 py-0.5 font-mono text-[10px] ${
+                    isSelected
+                      ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  }`}
+                >
+                  {isSelected ? `${idx + 1}. ${c}` : c}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+            <input
+              type="checkbox"
+              checked={unique}
+              onChange={(e) => setUnique(e.target.checked)}
+            />
+            unique
+          </label>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setSelected([]);
+                setUnique(false);
+              }}
+              className="font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              cancel
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={pending || selected.length === 0}
+              className="rounded-md bg-[var(--color-primary)] px-3 py-1 font-mono text-[10px] text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+            >
+              {pending ? 'creating…' : 'create index'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <ul className="flex flex-col gap-1">
+        {indexes.map((idx) => (
+          <li
+            key={idx.name}
+            className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg)] px-3 py-1.5 font-mono text-[10px]"
+          >
+            <div>
+              <span className={idx.isPrimary ? 'text-[var(--color-primary)]' : ''}>
+                {idx.name}
+              </span>
+              <span className="ml-2 text-[var(--color-text-subtle)]">
+                ({idx.columns.join(', ')})
+                {idx.unique ? ' · unique' : ''}
+                {idx.isPrimary ? ' · primary' : ''}
+              </span>
+            </div>
+            {idx.isPrimary ? null : (
+              <button
+                type="button"
+                onClick={() => onDrop(idx.name)}
+                className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)]"
+              >
+                drop
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -60,9 +60,21 @@ export default async function TablePage({
     ...filterPairs,
   ]).toString();
 
-  const data = await apiJson<TableRows>(
-    `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/rows?${queryString}`,
-  );
+  const [data, indexesResult] = await Promise.all([
+    apiJson<TableRows>(
+      `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/rows?${queryString}`,
+    ),
+    apiJson<{
+      indexes: Array<{ name: string; columns: string[]; unique: boolean; isPrimary: boolean }>;
+    }>(`/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/indexes`).catch(() => ({
+      indexes: [] as Array<{
+        name: string;
+        columns: string[];
+        unique: boolean;
+        isPrimary: boolean;
+      }>,
+    })),
+  ]);
 
   const prevOffset = Math.max(0, offset - PAGE_SIZE);
   const nextOffset = offset + PAGE_SIZE;
@@ -318,7 +330,12 @@ export default async function TablePage({
         </Link>
       </nav>
 
-      <SchemaPanel projectId={id} table={table} columns={data.columns} />
+      <SchemaPanel
+        projectId={id}
+        table={table}
+        columns={data.columns}
+        indexes={indexesResult.indexes}
+      />
     </section>
   );
 }
