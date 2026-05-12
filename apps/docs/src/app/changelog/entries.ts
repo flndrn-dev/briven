@@ -10,6 +10,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['docs'],
+    title: 'per-source migration sub-pages — drizzle + prisma',
+    body: 'two new pages on docs.briven.tech: /migration/drizzle and /migration/prisma. each covers schema-column mapping, indexes, data export (pg_dump + pg_restore), the functions-port rewrite (drizzle\'s db.select chains and prisma\'s findMany calls both become ctx.db chains), auth hand-off to the nextauth guide, and reactivity as a new capability. the /migration overview separates them out of the lumped "raw postgres / drizzle / prisma" entry now that each has its own page.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['feat'],
     title: 'ai function generator — companion to ai schema',
     body: 'natural-language → draft briven/functions/<name>.ts. /v1/projects/:id/ai/generate-function takes { prompt, schemaContext? } and forwards to ollama with a system prompt baking in the @briven/cli/server DSL (query / mutation / action wrappers, ctx.db chains, brivenError shape, ulid prefixing). dashboard surface at /dashboard/projects/:id/ai-function ssrs the current schema snapshot into a compact "table { col: type PK NOT NULL -> fk }" summary the model reads as context. the same not_configured 503 + privacy stance as the schema generator: prompts and responses are not logged.',

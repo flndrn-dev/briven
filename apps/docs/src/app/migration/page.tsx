@@ -119,10 +119,22 @@ export default function MigrationPage() {
           summary="row-level-security policies don't carry over — express them as guards in function code. edge functions port 1:1; storage cps to MinIO."
         />
         <SourceItem
-          name="raw postgres / drizzle / prisma"
+          name="raw postgres"
           status="documented · straightest path"
           href="/migration/postgres"
           summary="schema.sql → briven/schema.ts via the dsl, pg_dump | pg_restore against the briven dsn, port handlers into briven/functions/."
+        />
+        <SourceItem
+          name="drizzle"
+          status="documented"
+          href="/migration/drizzle"
+          summary="schema.ts ports almost 1:1 (drizzle and briven both target postgres with TS-first schema definitions). swap the imports + adapt the column-builder calls; data carries via pg_dump."
+        />
+        <SourceItem
+          name="prisma"
+          status="documented"
+          href="/migration/prisma"
+          summary="schema.prisma → briven/schema.ts via the dsl (we map the field decorators to briven helpers); pg_dump | pg_restore for data; PrismaClient calls become ctx.db chains."
         />
         <SourceItem
           name="firebase / firestore"
