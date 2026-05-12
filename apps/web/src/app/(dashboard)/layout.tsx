@@ -70,9 +70,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
             built with <span className="text-[#e8344a]">♥</span> in Flanders
             <span className="ml-3">flndrn Limited, Limassol, Cyprus</span>
           </span>
-          {info ? (
-            <span title={`built ${info.buildAt}`}>build {info.buildSha.slice(0, 7)}</span>
-          ) : null}
+          <div className="flex items-center gap-3">
+            <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">
+              docs
+            </Link>
+            <Link
+              href="https://docs.briven.tech/support"
+              className="hover:text-[var(--color-text-muted)]"
+            >
+              support
+            </Link>
+            <Link
+              href="https://docs.briven.tech/status"
+              className="hover:text-[var(--color-text-muted)]"
+            >
+              status
+            </Link>
+            {info ? (
+              <span title={`built ${info.buildAt}`}>build {info.buildSha.slice(0, 7)}</span>
+            ) : null}
+          </div>
         </div>
       </footer>
     </div>
