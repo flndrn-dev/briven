@@ -1,0 +1,51 @@
+# briven alertmanager config — routes prometheus alerts to discord.
+#
+# we use the benjojo/alertmanager-discord bridge as a sidecar because
+# alertmanager's webhook_configs posts a prometheus-shaped JSON that
+# discord doesn't understand. the bridge translates one format into the
+# other and posts to the discord webhook URL — see compose.yml.
+#
+# two routes:
+#   severity=critical|warning  →  #briven-alerts (pageable)
+#   everything else (info)     →  #briven-deploys (info stream)
+#
+# both bridge instances run as separate services so each can hold a
+# different DISCORD_WEBHOOK env. alertmanager itself only knows about
+# the two http://… endpoints inside the docker network.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  # Re-fire every 4h while still firing — avoids alert fatigue but keeps
+  # the page warm if someone missed the first ping.
+  repeat_interval: 4h
+  receiver: deploys
+  routes:
+    - matchers:
+        - severity =~ "critical|warning"
+      receiver: alerts
+      continue: false
+
+receivers:
+  - name: alerts
+    webhook_configs:
+      - url: 'http://alertmanager-discord-alerts:9094/'
+        send_resolved: true
+
+  - name: deploys
+    webhook_configs:
+      - url: 'http://alertmanager-discord-deploys:9094/'
+        send_resolved: false
+
+inhibit_rules:
+  # If a critical fires for a service, suppress redundant warnings on
+  # the same service for the same alertname.
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: ['alertname', 'service']

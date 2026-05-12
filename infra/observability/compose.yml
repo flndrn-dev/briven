@@ -20,6 +20,43 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
+    depends_on:
+      - alertmanager
+    networks:
+      - dokploy-network
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - dokploy-network
+
+  # Translator sidecar — alertmanager webhook → discord webhook payload.
+  # Two instances, one per channel, each holding a different webhook url.
+  # The url is held inside the container's env so it never lands in the
+  # repo. j sets DISCORD_WEBHOOK_ALERTS + DISCORD_WEBHOOK_DEPLOYS in the
+  # dokploy project's environment.
+  alertmanager-discord-alerts:
+    image: benjojo/alertmanager-discord:latest
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_ALERTS}
+      LISTEN_ADDRESS: ':9094'
+    networks:
+      - dokploy-network
+
+  alertmanager-discord-deploys:
+    image: benjojo/alertmanager-discord:latest
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_DEPLOYS}
+      LISTEN_ADDRESS: ':9094'
     networks:
       - dokploy-network
 
@@ -79,6 +116,7 @@ services:
 
 volumes:
   prometheus_data:
+  alertmanager_data:
   loki_data:
   grafana_data:
 

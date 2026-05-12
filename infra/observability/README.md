@@ -70,7 +70,28 @@ the dashboards and scrape configs don't change.
 
 ## alerting
 
-`prometheus/rules/services.yml` defines `ServiceDown`, `HighErrorRate`, `PostgresConnectionsHigh`. they trigger inside grafana's "alerts" view today. routing alerts to discord (the phase 0 channel `#briven-alerts`) is gated on the discord webhook url j is providing; add an alertmanager service to the compose when that lands.
+`prometheus/rules/services.yml` defines `ServiceDown`, `HighErrorRate`, `PostgresConnectionsHigh`. they route through alertmanager → `benjojo/alertmanager-discord` bridge → discord:
+
+- `severity=critical|warning` → `#briven-alerts` (page-worthy)
+- everything else (info) → `#briven-deploys`
+
+operator env on the dokploy project:
+
+```
+DISCORD_WEBHOOK_ALERTS=https://discord.com/api/webhooks/…
+DISCORD_WEBHOOK_DEPLOYS=https://discord.com/api/webhooks/…
+```
+
+create the channels in your discord server, generate webhook URLs, paste into the dokploy env. each bridge instance holds one URL; rotation = update env + restart that one service. existing alert state lives in the `alertmanager_data` volume — keep it across redeploys so silences carry through.
+
+smoke test (drop a rule's `for:` to 0s temporarily, observe a message land, revert):
+
+```
+docker compose exec prometheus promtool query instant 'up'
+docker compose restart prometheus
+# … wait for the rule to fire …
+# then revert the rule edit and `docker compose restart prometheus` again.
+```
 
 ## the four dashboards
 
