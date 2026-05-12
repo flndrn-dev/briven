@@ -97,6 +97,51 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
     }
   }
 
+  async function alterColumn(col: ColumnInfo) {
+    const wantNotNullStr = prompt(
+      `nullable for "${col.name}"? type "yes" to allow null, "no" to disallow. blank = leave as-is.`,
+      col.nullable ? 'yes' : 'no',
+    );
+    if (wantNotNullStr === null) return;
+    let notNull: boolean | undefined;
+    if (wantNotNullStr.trim() === 'yes') notNull = false;
+    else if (wantNotNullStr.trim() === 'no') notNull = true;
+    else if (wantNotNullStr.trim() !== '') {
+      setError('expected "yes" or "no" for nullable.');
+      return;
+    }
+    const defaultInput = prompt(
+      `default expression for "${col.name}"? type "DROP" to remove, blank to leave as-is.`,
+      col.defaultExpr ?? '',
+    );
+    if (defaultInput === null) return;
+    let defaultExpr: string | null | undefined;
+    if (defaultInput.trim() === 'DROP') defaultExpr = null;
+    else if (defaultInput.trim() === '') defaultExpr = undefined;
+    else defaultExpr = defaultInput;
+    if (notNull === undefined && defaultExpr === undefined) return;
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/studio/tables/${encodeURIComponent(
+          table,
+        )}/columns/${encodeURIComponent(col.name)}`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ notNull, defaultExpr }),
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+        throw new Error(body.message ?? body.code ?? `alter failed: ${res.status}`);
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'alter failed');
+    }
+  }
+
   async function renameColumn(columnName: string) {
     const next = prompt(`rename column "${columnName}" to:`, columnName);
     if (!next || next === columnName) return;
@@ -370,6 +415,14 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
               </span>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => alterColumn(c)}
+                className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                aria-label={`alter column ${c.name}`}
+              >
+                alter
+              </button>
               <button
                 type="button"
                 onClick={() => renameColumn(c.name)}
