@@ -71,6 +71,12 @@ apps/**/data/
 /docs/**
 !/docs/MIGRATION.md
 !/docs/AI.md
+!/docs/LICENSE-COMMERCIAL.md
+!/docs/launch/
+!/docs/launch/**
+!/docs/runbooks/
+!/docs/runbooks/discord-setup.md
+!/docs/runbooks/polar-metering-setup.md
 
 # Local git worktrees for parallel branch work — never commit their contents
 .worktrees/
