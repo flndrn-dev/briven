@@ -33,6 +33,7 @@ import { rootRouter } from './routes/root.js';
 import { studioRouter } from './routes/studio.js';
 import { usageRouter } from './routes/usage.js';
 import { recordDeploy } from './services/deploy-history.js';
+import { startAccountDeletionGc } from './workers/account-deletion-gc.js';
 import {
   startAuditRetentionCron,
   startLogFanoutWorker,
@@ -104,6 +105,7 @@ startLogRetentionCron();
 startAuditRetentionCron();
 startUsageAggregator();
 startPolarMeterPush();
+startAccountDeletionGc();
 
 // Audit-trail behind /info — one row per boot. recordDeploy itself
 // short-circuits when buildSha is the "dev" sentinel and never throws,

@@ -201,6 +201,22 @@ export async function sendPasswordReset(to: string, url: string): Promise<void> 
 }
 
 /**
+ * Confirmation that an account-deletion request was received. Sent
+ * *before* the cascade runs so the user has a paper trail even if the
+ * mailbox attached to the account is the one they're closing. Includes
+ * the 30-day reversal window — operator support can revert within that
+ * window before the hard-delete cron runs.
+ */
+export async function sendAccountDeletionConfirmation(to: string): Promise<void> {
+  await send('account_deletion', {
+    to,
+    subject: 'your briven account is being deleted',
+    html: accountDeletionHtml(),
+    text: accountDeletionText(),
+  });
+}
+
+/**
  * Verify a `X-mittera-Signature: v1=<hex>` header against the raw
  * request body using the shared webhook secret. The timestamp lives
  * in a separate `X-mittera-Timestamp` header (unix milliseconds) and
@@ -304,6 +320,45 @@ function resetPasswordHtml(url: string): string {
 
 function resetPasswordText(url: string): string {
   return `reset your briven password\n\n${url}\n\nthis link expires in 1 hour. if you didn't request a reset, ignore this email.`;
+}
+
+function accountDeletionHtml(): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    'your briven account is being deleted',
+    `
+    <p>we received your account deletion request and started the process.</p>
+    <ul style="color:#9ba3af;font-size:15px;padding-left:18px">
+      <li>your personal data has been cleared from our control plane (legal name, address, vat id, display name, profile picture).</li>
+      <li>projects owned only by you have been soft-deleted and stop accepting traffic immediately.</li>
+      <li>team orgs where you're not the only owner stay live; you've been removed from membership.</li>
+      <li>api keys you owned are revoked.</li>
+    </ul>
+    <p>if you have a paid subscription, manage cancellation on polar via your billing portal — we don't auto-cancel.</p>
+    <p>you have <strong>30 days</strong> to change your mind: email support@${domain} from this address and we can revert. after that the soft-delete becomes a hard-delete and we can't get the data back.</p>
+    <p class="muted">if you did not request this, contact support@${domain} immediately.</p>
+  `,
+  );
+}
+
+function accountDeletionText(): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    'your briven account is being deleted',
+    '',
+    'we received your account deletion request and started the process.',
+    '',
+    '- personal data cleared from our control plane.',
+    '- projects owned only by you soft-deleted, traffic stopped.',
+    '- team orgs where you are not the sole owner stay live.',
+    '- api keys revoked.',
+    '',
+    'if you have a paid subscription, cancel via polar billing portal — we do not auto-cancel.',
+    '',
+    `you have 30 days to revert: email support@${domain} from this address. after that the delete is permanent.`,
+    '',
+    `if you did not request this, contact support@${domain} immediately.`,
+  ].join('\n');
 }
 
 function cta(label: string, href: string): string {

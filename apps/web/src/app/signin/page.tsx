@@ -25,11 +25,12 @@ function describeError(code: string | undefined): string | null {
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; deleted?: string }>;
 }) {
   const params = await searchParams;
   const next = params.next ?? '/dashboard';
   const errorMessage = describeError(params.error);
+  const justDeleted = params.deleted === '1';
 
   // Public api origin — surfaced via NEXT_PUBLIC_BRIVEN_API_ORIGIN so the
   // signin form posts directly to it instead of going through Next.js's
@@ -60,6 +61,19 @@ export default async function SignInPage({
             className="mt-6 rounded-md border border-[var(--color-text-error)] bg-red-500/5 p-4 font-mono text-xs text-red-300"
           >
             {errorMessage}
+          </div>
+        ) : null}
+
+        {justDeleted ? (
+          <div
+            role="status"
+            className="mt-6 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]"
+          >
+            <p className="text-[var(--color-text)]">your account was deleted.</p>
+            <p className="mt-1">
+              we&apos;ve sent a confirmation to your inbox. you have 30 days to revert via
+              support before the data is hard-deleted.
+            </p>
           </div>
         ) : null}
 
