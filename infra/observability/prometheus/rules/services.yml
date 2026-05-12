@@ -1,6 +1,7 @@
-# Phase 0 alert rules. Wired to alertmanager (not in this stack yet —
-# Phase 0 ships pagable signals via Discord webhooks per BUILD_PLAN). For
-# now these surface as red panels in Grafana when triggered.
+# Alert rules. Routed via alertmanager → alertmanager-discord bridge →
+# #briven-alerts (severity=critical|warning) or #briven-deploys (info).
+# Severity labels MUST match the route matchers in
+# infra/observability/alertmanager/alertmanager.yml.
 
 groups:
   - name: briven-services

@@ -177,6 +177,34 @@ docker compose up -d api`}</Snippet>
         </ul>
       </Section>
 
+      <Section title="discord alerts stopped firing">
+        <p>
+          alerts route through alertmanager →{' '}
+          <code>benjojo/alertmanager-discord</code> bridge → discord webhook. when the
+          channel goes quiet either prometheus stopped firing (rule drift, scrape down) or
+          the discord webhook url is invalid.
+        </p>
+        <ol className="list-decimal pl-5">
+          <li>
+            confirm prometheus thinks rules are alerting:{' '}
+            <code>docker compose exec prometheus promtool query instant 'ALERTS'</code>.
+          </li>
+          <li>
+            confirm alertmanager received them:{' '}
+            <code>docker compose logs alertmanager --tail 100</code> — look for{' '}
+            <code>msg="Notify success"</code>.
+          </li>
+          <li>
+            confirm the bridge fired:{' '}
+            <code>docker compose logs alertmanager-discord-alerts --tail 100</code>. a 401
+            here means the discord webhook url has been revoked — regenerate it in the
+            discord channel and update <code>DISCORD_WEBHOOK_ALERTS</code> /{' '}
+            <code>DISCORD_WEBHOOK_DEPLOYS</code> in the dokploy env, then restart the two
+            bridge services.
+          </li>
+        </ol>
+      </Section>
+
       <Section title="backup off-site upload failed">
         <p>
           systemd journal: <code>journalctl -u briven-backup.service -n 200</code>. the most
