@@ -11,6 +11,12 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
     tags: ['feat'],
+    title: 'ai function generator — companion to ai schema',
+    body: 'natural-language → draft briven/functions/<name>.ts. /v1/projects/:id/ai/generate-function takes { prompt, schemaContext? } and forwards to ollama with a system prompt baking in the @briven/cli/server DSL (query / mutation / action wrappers, ctx.db chains, brivenError shape, ulid prefixing). dashboard surface at /dashboard/projects/:id/ai-function ssrs the current schema snapshot into a compact "table { col: type PK NOT NULL -> fk }" summary the model reads as context. the same not_configured 503 + privacy stance as the schema generator: prompts and responses are not logged.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
     title: 'tier-aware realtime subscription cap + project cap-warning banner',
     body: 'TIERS.concurrentSubscriptions (free=100 / pro=1000 / team=10000) is now enforced by the realtime service, replacing the platform-wide env ceiling. realtime resolves the cap from a new internal endpoint /v1/internal/projects/:id/limits on first subscribe per project (5-min cache, shared-secret gated). project overview page grows a yellow/red banner at 75%/90% of the cap so the user can upgrade before subscribes start getting rejected; banner sources from a new /v1/projects/:id/realtime-stats endpoint scoped to the caller\'s own project. admin · realtime page auto-refreshes every 10s via meta refresh so an operator can keep it open while watching a noisy project.',
   },
