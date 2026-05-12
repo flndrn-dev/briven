@@ -75,12 +75,52 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
   }>(`/v1/projects/${id}/hourly-invocations`).catch(() => ({
     hours: [] as Array<{ hour: string; count: number; errCount: number }>,
   }));
+  // Realtime stats — surfaces a cap-warning banner. Catches the 503 the
+  // api returns when realtime is unconfigured/unreachable so the rest of
+  // the page still renders.
+  const rtStats = await apiJson<{ subscriptions: number; limit: number; fillRatio: number }>(
+    `/v1/projects/${id}/realtime-stats`,
+  ).catch(() => null);
 
   const endpoint = `${project.slug}.apps.briven.tech`;
   const latest = deployments[0];
 
+  // Banner copy + colour driven by fill ratio. 75% = yellow (heads-up),
+  // 90% = red (act now). Below 75% we render nothing so the page stays
+  // quiet during normal operation.
+  const rtBanner =
+    rtStats && rtStats.fillRatio >= 0.75
+      ? {
+          severity: rtStats.fillRatio >= 0.9 ? 'red' : 'yellow',
+          message: `using ${rtStats.subscriptions.toLocaleString()} of ${rtStats.limit.toLocaleString()} concurrent realtime subscriptions (${Math.round(rtStats.fillRatio * 100)}% of your tier cap)`,
+        }
+      : null;
+
   return (
     <div className="flex flex-col gap-6">
+      {rtBanner ? (
+        <div
+          className={`rounded-md border px-4 py-3 font-mono text-xs ${
+            rtBanner.severity === 'red'
+              ? 'border-red-400/40 bg-red-400/10 text-red-200'
+              : 'border-yellow-400/40 bg-yellow-400/10 text-yellow-200'
+          }`}
+        >
+          <span className="mr-2 font-semibold uppercase tracking-wide">
+            {rtBanner.severity === 'red' ? 'limit' : 'heads up'}
+          </span>
+          {rtBanner.message}. once you hit the cap new subscribes are rejected
+          with{' '}
+          <code className="rounded bg-black/20 px-1">subscription_limit_project</code>.{' '}
+          <a
+            href="/dashboard/billing"
+            className="underline decoration-dotted underline-offset-2"
+          >
+            upgrade your tier
+          </a>{' '}
+          to raise it.
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-4">
         <Card label="endpoint" value={endpoint} mono />
         <Card label="project id" value={project.id} mono />

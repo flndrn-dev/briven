@@ -41,3 +41,33 @@ export async function fetchRealtimeStats(): Promise<RealtimeStats | null> {
     return null;
   }
 }
+
+export interface ProjectRealtimeStats {
+  /** Live concurrent subscriptions for the project. Zero when no entry. */
+  readonly subscriptions: number;
+  /** The hard cap the realtime service is enforcing right now. */
+  readonly limit: number;
+  /** subscriptions / limit, 0-1. Convenience for severity coloring. */
+  readonly fillRatio: number;
+}
+
+/**
+ * Per-project realtime usage. Reuses fetchRealtimeStats() under the hood
+ * but scopes the result to a single project so the dashboard surface
+ * doesn't accidentally enumerate other projects. Returns null when the
+ * realtime service is unconfigured/unreachable; callers render a "—".
+ */
+export async function fetchProjectRealtimeStats(
+  projectId: string,
+): Promise<ProjectRealtimeStats | null> {
+  const stats = await fetchRealtimeStats();
+  if (!stats) return null;
+  const hit = stats.byProject.find((p) => p.projectId === projectId);
+  const subscriptions = hit?.subscriptions ?? 0;
+  const limit = stats.limits.perProject;
+  return {
+    subscriptions,
+    limit,
+    fillRatio: limit > 0 ? subscriptions / limit : 0,
+  };
+}

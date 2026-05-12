@@ -92,6 +92,52 @@ const subsByProject = new Map<string, number>();
 // restart); a durable rollup is the natural follow-up.
 const closedSubSecondsByProject = new Map<string, number>();
 
+/**
+ * Tier-aware per-project subscription cap. Resolved from the api's internal
+ * /v1/internal/projects/:id/limits endpoint on first subscribe per project,
+ * cached for 5 min so tier changes propagate within one window. Returns
+ * null when the project doesn't exist OR the api is unreachable — caller
+ * falls back to the env ceiling so a metadata outage doesn't lock out
+ * legitimate subscriptions.
+ */
+const TIER_CAP_CACHE_TTL_MS = 5 * 60_000;
+interface CapCacheEntry {
+  cap: number | null;
+  expiresAt: number;
+}
+const capByProject = new Map<string, CapCacheEntry>();
+
+async function resolveProjectCap(projectId: string): Promise<number | null> {
+  const now = Date.now();
+  const hit = capByProject.get(projectId);
+  if (hit && hit.expiresAt > now) return hit.cap;
+  if (!env.BRIVEN_RUNTIME_SHARED_SECRET) return null;
+  try {
+    const url = `${env.BRIVEN_API_INTERNAL_URL}/v1/internal/projects/${encodeURIComponent(
+      projectId,
+    )}/limits`;
+    const res = await fetch(url, {
+      headers: { authorization: `Bearer ${env.BRIVEN_RUNTIME_SHARED_SECRET}` },
+    });
+    if (!res.ok) {
+      capByProject.set(projectId, { cap: null, expiresAt: now + TIER_CAP_CACHE_TTL_MS });
+      return null;
+    }
+    const body = (await res.json()) as {
+      limits: { concurrentSubscriptions?: number } | null;
+    };
+    const cap = body.limits?.concurrentSubscriptions ?? null;
+    capByProject.set(projectId, { cap, expiresAt: now + TIER_CAP_CACHE_TTL_MS });
+    return cap;
+  } catch (err) {
+    log.warn('realtime_resolve_cap_failed', {
+      projectId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 function schemaNameFor(projectId: string): string {
   return `proj_${projectId.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
 }
@@ -363,7 +409,12 @@ export default {
           perWs: env.BRIVEN_REALTIME_MAX_SUBS_PER_WS,
           perProject: env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT,
         },
-        byProject: byProject.slice(0, 50),
+        // byProject returns every active project — at year-one scale
+        // (~25 projects) the response stays under a kilobyte; we rely on
+        // sort-descending so dashboards can render top-N client-side.
+        // byChannel keeps its top-50 clamp since channel cardinality can
+        // explode with many tables × many subscribers.
+        byProject,
         byChannel: byChannel.slice(0, 50),
       });
     }
@@ -417,14 +468,19 @@ export default {
         return;
       }
       const projectCount = subsByProject.get(parsed.projectId) ?? 0;
-      if (projectCount >= env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT) {
+      // Tier-aware cap when the api answers; env ceiling as the floor so
+      // a metadata outage doesn't lock out legitimate Team customers.
+      const tierCap = await resolveProjectCap(parsed.projectId);
+      const projectLimit = tierCap ?? env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT;
+      if (projectCount >= projectLimit) {
         incCounter('briven_realtime_subscribe_rejected_total', { reason: 'project_limit' });
         ws.send(
           JSON.stringify({
             type: 'error',
             code: 'subscription_limit_project',
             subscriptionId: parsed.subscriptionId,
-            limit: env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT,
+            limit: projectLimit,
+            source: tierCap !== null ? 'tier' : 'env',
           }),
         );
         return;

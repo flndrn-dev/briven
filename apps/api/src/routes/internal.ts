@@ -5,6 +5,7 @@ import { env } from '../env.js';
 import { getDeployment, getDeploymentBundle } from '../services/deployments.js';
 import { invoke } from '../services/invoke.js';
 import { getPlainEnvForProject } from '../services/project-env.js';
+import { getProjectTier, TIERS } from '../services/tiers.js';
 
 /**
  * Internal endpoints — only the runtime host calls these, authenticated via
@@ -87,4 +88,30 @@ internalRouter.post('/v1/internal/projects/:projectId/functions/:functionName', 
   });
   const status = result.ok ? 200 : 500;
   return c.json(result, status);
+});
+
+/**
+ * Resolve a project's tier-aware limits. Used by the realtime service on
+ * first subscribe per project to enforce TIERS.concurrentSubscriptions
+ * instead of the platform-wide BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT ceiling.
+ * Returns `tier: null` when the project doesn't exist; callers treat null
+ * as "deny by default" rather than falling back to the platform cap.
+ */
+internalRouter.get('/v1/internal/projects/:projectId/limits', async (c) => {
+  const projectId = c.req.param('projectId');
+  const tier = await getProjectTier(projectId);
+  if (!tier) {
+    return c.json({ projectId, tier: null, limits: null });
+  }
+  const limits = TIERS[tier];
+  return c.json({
+    projectId,
+    tier,
+    limits: {
+      concurrentSubscriptions: limits.concurrentSubscriptions,
+      invokesPerMonth: limits.invokesPerMonth,
+      storageBytes: limits.storageBytes,
+      connectionSecondsPerMonth: limits.connectionSecondsPerMonth,
+    },
+  });
 });
