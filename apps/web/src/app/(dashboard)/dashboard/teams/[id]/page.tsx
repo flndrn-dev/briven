@@ -17,6 +17,7 @@ interface Project {
   name: string;
   region: string;
   tier: 'free' | 'pro' | 'team';
+  orgId: string;
   orgName: string | null;
 }
 
@@ -37,7 +38,7 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
   }
   // Soft cast — redirect throws but TS doesn't model it.
   const team = org as Org;
-  const teamProjects = projects.filter((p) => p.orgName === team.name);
+  const teamProjects = projects.filter((p) => p.orgId === team.id);
 
   async function rename(formData: FormData) {
     'use server';
