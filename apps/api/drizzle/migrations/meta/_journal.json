@@ -113,6 +113,13 @@
       "when": 1778600000000,
       "tag": "0015_usage_events",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778650000000,
+      "tag": "0016_org_invitations",
+      "breakpoints": true
     }
   ]
 }

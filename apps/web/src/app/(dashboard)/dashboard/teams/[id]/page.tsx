@@ -122,15 +122,120 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">members</h2>
-        <p className="rounded-md border border-dashed border-[var(--color-border)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
-          org-level member management is a phase 3 follow-up. for now, share projects with
-          collaborators by adding them as <strong>project members</strong> via{' '}
-          <em>/dashboard/projects/&lt;id&gt;/members</em> — each project has its own
-          owner/admin/developer/viewer role assignment.
+      {!team.personal ? <TeamInvites teamId={id} /> : null}
+    </section>
+  );
+}
+
+async function TeamInvites({ teamId }: { teamId: string }) {
+  const { invitations } = await apiJson<{
+    invitations: Array<{
+      id: string;
+      email: string;
+      role: 'owner' | 'admin' | 'developer' | 'viewer';
+      expiresAt: string;
+      acceptedAt: string | null;
+      revokedAt: string | null;
+    }>;
+  }>(`/v1/orgs/${teamId}/invitations`);
+
+  const pending = invitations.filter((i) => !i.acceptedAt && !i.revokedAt);
+
+  async function invite(formData: FormData) {
+    'use server';
+    const email = String(formData.get('email') ?? '').trim();
+    const role = String(formData.get('role') ?? 'developer');
+    if (!email) throw new Error('email is required');
+    const res = await apiFetch(`/v1/orgs/${teamId}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        role,
+        callbackURL: `https://briven.tech/dashboard/invitations`,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`invite failed (${res.status}): ${body}`);
+    }
+    redirect(`/dashboard/teams/${teamId}`);
+  }
+
+  async function revoke(invId: string) {
+    'use server';
+    const res = await apiFetch(`/v1/orgs/${teamId}/invitations/${invId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`revoke failed: ${res.status}`);
+    redirect(`/dashboard/teams/${teamId}`);
+  }
+
+  return (
+    <section>
+      <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">members</h2>
+
+      <form action={invite} className="mb-4 flex flex-wrap items-end gap-3">
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="font-mono text-xs text-[var(--color-text-muted)]">email</span>
+          <input
+            name="email"
+            type="email"
+            required
+            placeholder="teammate@example.com"
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-mono text-xs text-[var(--color-text-muted)]">role</span>
+          <select
+            name="role"
+            defaultValue="developer"
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+          >
+            <option value="admin">admin</option>
+            <option value="developer">developer</option>
+            <option value="viewer">viewer</option>
+          </select>
+        </label>
+        <button
+          type="submit"
+          className="rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
+        >
+          send invite
+        </button>
+      </form>
+
+      {pending.length === 0 ? (
+        <p className="font-mono text-xs text-[var(--color-text-subtle)]">
+          no pending invites. the invitee gets an email with a one-time accept link; the link
+          expires in 7 days.
         </p>
-      </section>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {pending.map((inv) => (
+            <li
+              key={inv.id}
+              className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3"
+            >
+              <div className="min-w-0">
+                <p className="font-mono text-xs text-[var(--color-text)]">{inv.email}</p>
+                <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">
+                  {inv.role} · expires {new Date(inv.expiresAt).toISOString().slice(0, 10)}
+                </p>
+              </div>
+              <form action={revoke.bind(null, inv.id)}>
+                <button
+                  type="submit"
+                  className="rounded-md border border-[var(--color-border)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)]"
+                >
+                  revoke
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
