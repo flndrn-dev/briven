@@ -3,6 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+// Three AI surfaces collapse under one `/ai` tab — `/ai` itself
+// redirects to ai-schema, and ai-schema/function/explain pages
+// render a sub-nav. Activity folds into logs. Connect stays separate
+// because new users land there first.
 const TABS = [
   { href: '', label: 'overview' },
   { href: '/functions', label: 'functions' },
@@ -13,10 +17,7 @@ const TABS = [
   { href: '/env', label: 'env' },
   { href: '/keys', label: 'api keys' },
   { href: '/members', label: 'members' },
-  { href: '/ai-schema', label: 'ai schema' },
-  { href: '/ai-function', label: 'ai function' },
-  { href: '/ai-explain', label: 'ai explain' },
-  { href: '/activity', label: 'activity' },
+  { href: '/ai-schema', label: 'ai', match: '/ai-' },
   { href: '/settings', label: 'settings' },
 ] as const;
 
@@ -35,7 +36,11 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
     >
       {TABS.map((tab) => {
         const href = `${base}${tab.href}`;
-        const active = tab.href === '' ? pathname === base : pathname.startsWith(href);
+        // `match` lets a tab activate on a broader path prefix than its
+        // own href (e.g. the ai tab points at /ai-schema but should be
+        // active for /ai-function and /ai-explain too).
+        const matchPrefix = 'match' in tab && tab.match ? `${base}${tab.match}` : href;
+        const active = tab.href === '' ? pathname === base : pathname.startsWith(matchPrefix);
         return (
           <Link
             key={tab.href}

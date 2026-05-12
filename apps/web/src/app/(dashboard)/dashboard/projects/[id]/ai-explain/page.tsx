@@ -1,4 +1,5 @@
 import { AiExplainForm } from './ai-explain-form';
+import { AiSubnav } from '../ai-subnav';
 
 export const metadata = { title: 'ai explain' };
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,7 @@ export default async function AiExplainPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   return (
     <section className="flex flex-col gap-6">
+      <AiSubnav projectId={id} />
       <header>
         <h1 className="font-mono text-xl tracking-tight">ai explain</h1>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
