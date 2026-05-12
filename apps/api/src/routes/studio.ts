@@ -23,6 +23,7 @@ import {
   listRelationships,
   renameColumn,
   renameTable,
+  truncateTable,
   STUDIO_COLUMN_TYPES,
   updateCell,
   type StudioColumnReference,
@@ -485,6 +486,31 @@ studioRouter.patch(
       },
       400,
     );
+  },
+);
+
+studioRouter.post(
+  '/v1/projects/:id/studio/tables/:table/truncate',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const body = (await c.req.json().catch(() => null)) as { cascade?: boolean } | null;
+    await truncateTable(projectId, tableName, Boolean(body?.cascade));
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.table.truncate',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: tableName, cascade: Boolean(body?.cascade) },
+    });
+    return c.json({ truncated: tableName });
   },
 );
 

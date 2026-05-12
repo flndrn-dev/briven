@@ -234,6 +234,34 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
     }
   }
 
+  async function truncateTable() {
+    const confirmation = prompt(
+      `truncate "${table}"? this wipes every row and resets serial sequences. type the table name to confirm.`,
+    );
+    if (confirmation !== table) return;
+    const cascadeAns = confirm(
+      'cascade? press OK to wipe rows from tables that FK into this one too, cancel to abort if any FKs would block.',
+    );
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/studio/tables/${encodeURIComponent(table)}/truncate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ cascade: cascadeAns }),
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+        throw new Error(body.message ?? body.code ?? `truncate failed: ${res.status}`);
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'truncate failed');
+    }
+  }
+
   async function renameTable() {
     const next = prompt(`rename table "${table}" to:`, table);
     if (!next || next === table) return;
@@ -457,13 +485,20 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
         <p className="rounded-md bg-red-400/10 px-3 py-2 font-mono text-xs text-red-400">{error}</p>
       ) : null}
 
-      <div className="flex items-center gap-2 border-t border-[var(--color-border-subtle)] pt-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border-subtle)] pt-3">
         <button
           type="button"
           onClick={renameTable}
           className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] transition hover:text-[var(--color-text)]"
         >
           rename table
+        </button>
+        <button
+          type="button"
+          onClick={truncateTable}
+          className="rounded-md border border-amber-500/40 px-3 py-1.5 font-mono text-xs text-amber-400 transition hover:bg-amber-500/10"
+        >
+          truncate (wipe rows)
         </button>
         <button
           type="button"
