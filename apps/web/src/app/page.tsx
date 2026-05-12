@@ -157,62 +157,118 @@ export default async function HomePage() {
 
       <PricingSection />
 
-      <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 border-t border-[var(--color-border-subtle)] px-6 py-6 font-mono text-[10px] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-          <div className="flex items-center gap-1">
-            <Image src="/icon.svg" alt="" width={22} height={22} className="opacity-70" />
-            <span>
-              © {new Date().getFullYear()} flndrn Limited · agpl-3.0 core · mit cli
-            </span>
+      <SiteFooter />
+    </main>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer className="relative z-10 mt-24 border-t border-[var(--color-border-subtle)]">
+      {/* Top — multi-column nav. Brand column on the left, four link
+          columns on the right. Stacks to single column below sm. */}
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-10 px-6 py-12 sm:grid-cols-3 md:grid-cols-5">
+        <div className="col-span-2 flex flex-col gap-4 md:col-span-2">
+          <div className="flex items-center gap-2">
+            <Image src="/icon.svg" alt="" width={22} height={22} />
+            <span className="font-mono text-sm text-[var(--color-text)]">briven</span>
+            <span className="font-mono text-xs text-[var(--color-text-subtle)]">· tech</span>
           </div>
-          <span className="hidden sm:inline">·</span>
+          <p className="max-w-sm font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+            open-core reactive postgres backend for typescript. self-host the engine, or use the
+            hosted control plane on briven.tech.
+          </p>
+          <div className="flex items-center gap-3 font-mono text-[10px] text-[var(--color-text-subtle)]">
+            <Link
+              href="https://code.konnos.org/flndrn/briven"
+              className="hover:text-[var(--color-text-muted)]"
+            >
+              source
+            </Link>
+            <span aria-hidden>·</span>
+            <Link
+              href="https://docs.briven.tech/status"
+              className="hover:text-[var(--color-text-muted)]"
+            >
+              status
+            </Link>
+            <span aria-hidden>·</span>
+            <Link
+              href="https://docs.briven.tech/changelog/feed.xml"
+              className="hover:text-[var(--color-text-muted)]"
+            >
+              rss
+            </Link>
+          </div>
+        </div>
+
+        <FooterColumn title="product">
+          <FooterLink href="https://docs.briven.tech/quickstart">quickstart</FooterLink>
+          <FooterLink href="https://docs.briven.tech/cli">cli</FooterLink>
+          <FooterLink href="https://docs.briven.tech/sdks">sdks</FooterLink>
+          <FooterLink href="https://docs.briven.tech/self-host">self-host</FooterLink>
+          <FooterLink href="/dashboard">dashboard</FooterLink>
+        </FooterColumn>
+
+        <FooterColumn title="docs">
+          <FooterLink href="https://docs.briven.tech">overview</FooterLink>
+          <FooterLink href="https://docs.briven.tech/schema">schema dsl</FooterLink>
+          <FooterLink href="https://docs.briven.tech/functions">functions</FooterLink>
+          <FooterLink href="https://docs.briven.tech/realtime">realtime</FooterLink>
+          <FooterLink href="https://docs.briven.tech/api">http api</FooterLink>
+          <FooterLink href="https://docs.briven.tech/migration">migration</FooterLink>
+        </FooterColumn>
+
+        <FooterColumn title="legal">
+          <FooterLink href="/terms">terms</FooterLink>
+          <FooterLink href="/privacy">privacy</FooterLink>
+          <FooterLink href="/subprocessors">subprocessors</FooterLink>
+          <FooterLink href="/trust">trust</FooterLink>
+          <FooterLink href="https://docs.briven.tech/support">support</FooterLink>
+        </FooterColumn>
+      </div>
+
+      {/* Bottom strip — thin row with copyright + heart-in-flanders +
+          flndrn limited. Lives below a divider so it reads as separate
+          from the nav grid. */}
+      <div className="border-t border-[var(--color-border-subtle)]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-2 px-6 py-4 font-mono text-[10px] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <span>© {new Date().getFullYear()} flndrn Limited, Limassol, Cyprus</span>
+            <span className="hidden sm:inline" aria-hidden>
+              ·
+            </span>
+            <span>agpl-3.0 core · mit cli + sdks</span>
+          </div>
           <span>
             built with <span className="text-[#e8344a]">♥</span> in Flanders
           </span>
         </div>
-        <div className="flex items-center gap-4">
-          <Link href="/trust" className="hover:text-[var(--color-text-muted)]">
-            trust
-          </Link>
-          <Link href="/privacy" className="hover:text-[var(--color-text-muted)]">
-            privacy
-          </Link>
-          <Link href="/terms" className="hover:text-[var(--color-text-muted)]">
-            terms
-          </Link>
-          <Link href="/subprocessors" className="hover:text-[var(--color-text-muted)]">
-            subprocessors
-          </Link>
-          <Link
-            href="https://docs.briven.tech/quickstart"
-            className="hover:text-[var(--color-text-muted)]"
-          >
-            quickstart
-          </Link>
-          <Link
-            href="https://docs.briven.tech/examples"
-            className="hover:text-[var(--color-text-muted)]"
-          >
-            examples
-          </Link>
-          <Link
-            href="https://docs.briven.tech/api"
-            className="hover:text-[var(--color-text-muted)]"
-          >
-            api
-          </Link>
-          <Link
-            href="https://docs.briven.tech/changelog"
-            className="hover:text-[var(--color-text-muted)]"
-          >
-            changelog
-          </Link>
-          <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">
-            docs
-          </Link>
-        </div>
-      </footer>
-    </main>
+      </div>
+    </footer>
+  );
+}
+
+function FooterColumn({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+        {title}
+      </p>
+      <ul className="flex flex-col gap-2 font-mono text-xs text-[var(--color-text-muted)]">
+        {children}
+      </ul>
+    </div>
+  );
+}
+
+function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <li>
+      <Link href={href} className="hover:text-[var(--color-text)]">
+        {children}
+      </Link>
+    </li>
   );
 }
 

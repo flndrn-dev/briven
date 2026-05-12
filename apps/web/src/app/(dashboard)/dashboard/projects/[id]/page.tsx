@@ -121,7 +121,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           to raise it.
         </div>
       ) : null}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card label="endpoint" value={endpoint} mono />
         <Card label="project id" value={project.id} mono />
         <Card

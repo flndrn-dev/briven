@@ -91,7 +91,8 @@ export default function SubprocessorsPage() {
         what we send to each processor).
       </p>
 
-      <table className="mt-10 w-full border-collapse font-mono text-xs">
+      <div className="mt-10 overflow-x-auto">
+      <table className="w-full min-w-[640px] border-collapse font-mono text-xs">
         <thead>
           <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-text-muted)]">
             <th className="py-2 pr-4 font-medium">subprocessor</th>
@@ -129,6 +130,7 @@ export default function SubprocessorsPage() {
           ))}
         </tbody>
       </table>
+      </div>
 
       <h2 className="mt-12 font-mono text-lg text-[var(--color-text)]">
         change-notification policy

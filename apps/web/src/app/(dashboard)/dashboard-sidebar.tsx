@@ -121,8 +121,11 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
     <aside
       aria-label="dashboard sections"
       data-collapsed={isCollapsed ? 'true' : 'false'}
-      className={`relative flex h-full shrink-0 flex-col transition-[width] duration-200 ease-out ${
-        isCollapsed ? 'w-[72px]' : 'w-[180px]'
+      // hidden on small screens — the rail eats too much of a phone
+      // viewport. mobile nav lives in the top-of-content tabs row + the
+      // user menu in the header. surfaces md (768px) and up.
+      className={`relative hidden h-full shrink-0 flex-col transition-[width] duration-200 ease-out md:flex ${
+        isCollapsed ? 'md:w-[72px]' : 'md:w-[180px]'
       }`}
     >
       <ul className="flex flex-col gap-1">
