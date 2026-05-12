@@ -315,6 +315,13 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     keywords: ['status', 'uptime', 'health', 'outage', 'incident', 'live'],
   },
   {
+    slug: '/ask',
+    title: 'ask the docs · AI assistant',
+    summary:
+      'natural-language search across the docs corpus. retrieves the top 3 matching pages, answers your question grounded in those pages, cites the slugs. powered by the same self-hosted Qwen 2.5-coder backend as the dashboard ai surfaces.',
+    keywords: ['ask', 'ai assistant', 'chat', 'question', 'help', 'search ai'],
+  },
+  {
     slug: '/changelog',
     title: 'changelog',
     summary:
