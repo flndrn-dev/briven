@@ -54,13 +54,16 @@ export async function explainCode(input: AiExplainInput): Promise<AiExplainResul
       ? `Perspective: ${input.perspective.trim()}\n\nExplain this code:\n\`\`\`ts\n${input.code}\n\`\`\``
       : `Explain this code:\n\`\`\`ts\n${input.code}\n\`\`\``;
 
+  // Per-feature model override per docs/AI.md — explain benefits most
+  // from a reasoning-tuned variant (e.g. deepseek-r1-distill-qwen-32b).
+  const model = env.BRIVEN_OLLAMA_MODEL_EXPLAIN ?? env.BRIVEN_OLLAMA_MODEL;
   const t0 = Date.now();
   const url = `${env.BRIVEN_OLLAMA_URL.replace(/\/$/, '')}/api/generate`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: env.BRIVEN_OLLAMA_MODEL,
+      model,
       system: SYSTEM_PROMPT,
       prompt: userMessage,
       // Higher than schema/function generators — explanation is prose,
@@ -90,13 +93,13 @@ export async function explainCode(input: AiExplainInput): Promise<AiExplainResul
     codeLen: input.code.length,
     perspectiveLen: input.perspective?.length ?? 0,
     explanationLen: explanation.length,
-    model: env.BRIVEN_OLLAMA_MODEL,
+    model,
     elapsedMs,
   });
 
   return {
     explanation,
-    model: env.BRIVEN_OLLAMA_MODEL,
+    model,
     elapsedMs,
   };
 }

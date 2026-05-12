@@ -10,6 +10,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['feat', 'docs'],
+    title: 'AI.md operator setup guide + per-feature model overrides',
+    body: 'docs/AI.md (tracked in repo alongside docs/MIGRATION.md) documents which ollama model to run, why qwen2.5-coder:32b is the default, how to differentiate models per feature, hardware sizing reference, what NOT to pick. four new env vars — BRIVEN_OLLAMA_MODEL_SCHEMA / _FUNCTION / _EXPLAIN / _DOCS — each falls back to BRIVEN_OLLAMA_MODEL when unset so single-model operators don\'t need to set them. logs now record the actual model used per request (not the global default).',
+  },
+  {
+    date: '2026-05-12',
     tags: ['fix'],
     title: 'mobile responsive pass — dashboard nav, project tabs, marketing footer',
     body: 'project tabs row (14 secondary tabs inside a project — overview / functions / logs / etc.) now horizontally scrolls on mobile instead of overflowing; sidebar hides below md and a horizontal nav strip appears at the top of the dashboard so projects / teams / billing / settings stay one tap away on phones. admin stats grid + project overview cards + invoke-panel grid all gain responsive col counts. subprocessors table wraps in overflow-x. marketing footer rewritten as a proper five-column nav (brand + product + docs + legal) on top of a thin bottom strip with copyright + flndrn limited + heart-in-flanders. fixed dashboard body padding so phones get the full viewport width.',
