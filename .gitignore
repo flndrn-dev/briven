@@ -65,11 +65,12 @@ apps/**/data/
 
 # internal reference docs — never pushed to remote
 # covers /docs/ at repo root and every file + subfolder inside it
-# EXCEPTION: MIGRATION.md is tracked — it's the user-facing playbook for
-# migrating onto briven.tech and is meant to be distributed alongside
-# briven into any project that wants to migrate.
+# EXCEPTIONS:
+# - MIGRATION.md is tracked — user-facing playbook for migrating onto briven.tech
+# - AI.md is tracked — operator setup guide for the ollama backend the AI features hit
 /docs/**
 !/docs/MIGRATION.md
+!/docs/AI.md
 
 # Local git worktrees for parallel branch work — never commit their contents
 .worktrees/

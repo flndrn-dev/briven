@@ -64,13 +64,16 @@ export async function generateSchema(input: AiSchemaGenInput): Promise<AiSchemaG
   if (!env.BRIVEN_OLLAMA_URL) {
     throw new AiNotConfiguredError();
   }
+  // Per-feature model override per docs/AI.md — falls back to the
+  // default model when the feature-specific var is unset.
+  const model = env.BRIVEN_OLLAMA_MODEL_SCHEMA ?? env.BRIVEN_OLLAMA_MODEL;
   const t0 = Date.now();
   const url = `${env.BRIVEN_OLLAMA_URL.replace(/\/$/, '')}/api/generate`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: env.BRIVEN_OLLAMA_MODEL,
+      model,
       system: SYSTEM_PROMPT,
       prompt: input.prompt,
       // Deterministic-ish output. Schema generation is structural and
@@ -100,13 +103,13 @@ export async function generateSchema(input: AiSchemaGenInput): Promise<AiSchemaG
   log.info('ai_schema_gen_ok', {
     promptLen: input.prompt.length,
     schemaLen: schemaText.length,
-    model: env.BRIVEN_OLLAMA_MODEL,
+    model,
     elapsedMs,
   });
 
   return {
     schema: schemaText,
-    model: env.BRIVEN_OLLAMA_MODEL,
+    model,
     elapsedMs,
   };
 }

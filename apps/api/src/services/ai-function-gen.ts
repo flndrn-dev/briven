@@ -112,13 +112,15 @@ export async function generateFunction(input: AiFunctionGenInput): Promise<AiFun
       `Write a function that: ${input.prompt}`;
   }
 
+  // Per-feature model override per docs/AI.md.
+  const model = env.BRIVEN_OLLAMA_MODEL_FUNCTION ?? env.BRIVEN_OLLAMA_MODEL;
   const t0 = Date.now();
   const url = `${env.BRIVEN_OLLAMA_URL.replace(/\/$/, '')}/api/generate`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: env.BRIVEN_OLLAMA_MODEL,
+      model,
       system: SYSTEM_PROMPT,
       prompt: userMessage,
       // Slightly higher than the schema generator — functions have more
@@ -148,13 +150,13 @@ export async function generateFunction(input: AiFunctionGenInput): Promise<AiFun
     promptLen: input.prompt.length,
     schemaCtxLen: input.schemaContext?.length ?? 0,
     fnLen: fnText.length,
-    model: env.BRIVEN_OLLAMA_MODEL,
+    model,
     elapsedMs,
   });
 
   return {
     function: fnText,
-    model: env.BRIVEN_OLLAMA_MODEL,
+    model,
     elapsedMs,
   };
 }

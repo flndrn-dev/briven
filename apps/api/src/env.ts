@@ -132,9 +132,16 @@ const envSchema = z.object({
   // Points at the DGX VPS in production. When unset, /v1/ai/* endpoints
   // return 503 not_configured and the dashboard hides the AI affordances.
   BRIVEN_OLLAMA_URL: z.string().url().optional(),
-  // Model id — must match what Ollama has pulled. Default targets Qwen
-  // 2.5-coder 32B per the build plan's recommendation.
+  // Default model id — must match what Ollama has pulled. Targets Qwen
+  // 2.5-coder 32B per the build plan's recommendation. Each AI feature
+  // can override via BRIVEN_OLLAMA_MODEL_<FEATURE> below; unset means
+  // "fall back to this default". See docs/AI.md for the recommended
+  // per-feature matrix.
   BRIVEN_OLLAMA_MODEL: z.string().default('qwen2.5-coder:32b'),
+  BRIVEN_OLLAMA_MODEL_SCHEMA: z.string().optional(),
+  BRIVEN_OLLAMA_MODEL_FUNCTION: z.string().optional(),
+  BRIVEN_OLLAMA_MODEL_EXPLAIN: z.string().optional(),
+  BRIVEN_OLLAMA_MODEL_DOCS: z.string().optional(),
 
   // Public-signups gate. Default false — invite-only beta. Flip to `true`
   // when public open-signups land per BUILD_PLAN Phase 4. Affects every
