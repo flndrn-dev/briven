@@ -173,6 +173,12 @@ projectsRouter.delete('/v1/projects/:id', async (c) => {
 projectsRouter.get('/v1/projects/:id/activity', async (c) => {
   const user = c.get('user')!;
   const project = await getProjectForUser(c.req.param('id'), user.id);
-  const rows = await listAuditForProject(project.id, 100);
+  // Optional ?prefix=studio. filters audit rows by action prefix so the
+  // activity page can drill into a single subsystem (studio, deploy, key).
+  const prefix = c.req.query('prefix');
+  const rows = await listAuditForProject(project.id, {
+    limit: 100,
+    actionPrefix: prefix && /^[a-z._]{1,32}$/.test(prefix) ? prefix : undefined,
+  });
   return c.json({ activity: rows });
 });
