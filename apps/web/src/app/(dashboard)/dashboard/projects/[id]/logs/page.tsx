@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
+import { ExportLogsLink } from './export-link';
 
 interface FunctionLog {
   id: string;
@@ -59,12 +60,15 @@ export default async function LogsPage({
 
   return (
     <section className="flex flex-col gap-4">
-      <header>
-        <h2 className="font-mono text-sm text-[var(--color-text)]">function logs</h2>
-        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          every invocation — name, duration, touched tables, user logs, errors. retention
-          depends on your tier (free: 7 days). populated by the runtime log-fanout worker.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-mono text-sm text-[var(--color-text)]">function logs</h2>
+          <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+            every invocation — name, duration, touched tables, user logs, errors. retention
+            depends on your tier (free: 7 days). populated by the runtime log-fanout worker.
+          </p>
+        </div>
+        <ExportLogsLink projectId={id} query={qs.toString()} />
       </header>
 
       <nav className="flex flex-wrap items-center gap-2 font-mono text-[10px]">
