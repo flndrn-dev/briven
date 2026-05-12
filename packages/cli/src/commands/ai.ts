@@ -1,0 +1,298 @@
+import { writeFile } from 'node:fs/promises';
+
+import { apiCall, ApiCallError } from '../api-client.js';
+import { readCredentials } from '../config.js';
+import { readProjectConfig } from '../project-config.js';
+import { banner, blankLine, error as printError, step, success } from '../output.js';
+
+/**
+ * `briven ai <subcommand>` — schema | function | explain.
+ *
+ * Proxies to the same three api endpoints the dashboard hits. Same
+ * not_configured semantics: when the api host hasn't wired
+ * BRIVEN_OLLAMA_URL the cli prints a clear "AI assistant offline"
+ * message instead of an opaque http error.
+ *
+ * usage:
+ *   briven ai schema "a blog with users, posts, comments"
+ *   briven ai schema "a blog…" --out briven/schema.ts
+ *   briven ai function "list posts from the last 24h" --with-schema
+ *   briven ai explain --file briven/functions/listPosts.ts
+ *
+ * shared flags:
+ *   --out <path>        write the result to <path> instead of stdout
+ *   --raw               emit raw response (no banner / meta footer)
+ */
+
+const SUBCOMMANDS = ['schema', 'function', 'explain'] as const;
+type Subcommand = (typeof SUBCOMMANDS)[number];
+
+export async function runAi(argv: readonly string[]): Promise<number> {
+  const [sub, ...rest] = argv;
+
+  if (!sub || sub === '--help' || sub === '-h' || sub === 'help') {
+    printHelp();
+    return 0;
+  }
+
+  if (!SUBCOMMANDS.includes(sub as Subcommand)) {
+    printError(`unknown ai subcommand '${sub}'`);
+    printHelp();
+    return 1;
+  }
+
+  const subcommand = sub as Subcommand;
+  const flags = parseFlags(rest);
+  if (flags.help) {
+    printHelp(subcommand);
+    return 0;
+  }
+
+  // Resolve the project + api credentials. Same shape as `briven invoke`:
+  // briven.json gives the projectId, ~/.config/briven/credentials.json
+  // gives the api origin + per-project key.
+  const local = await readProjectConfig();
+  if (!local?.projectId) {
+    printError('not linked to a project. run `briven link` first.');
+    return 1;
+  }
+  const creds = await readCredentials();
+  const cred = creds.projects[local.projectId];
+  if (!cred) {
+    printError(
+      `no api key on this machine for ${local.projectId}. run \`briven login\` or paste a brk_ key.`,
+    );
+    return 1;
+  }
+
+  // Read the prompt. For schema/function the prompt is positional; for
+  // explain the input is a code file (--file <path>) or a positional
+  // path. --perspective is explain-only.
+  let body: Record<string, unknown> = {};
+  let routeSuffix: string;
+  if (subcommand === 'schema') {
+    if (!flags.positional) {
+      printError('briven ai schema requires a prompt argument');
+      return 1;
+    }
+    routeSuffix = 'generate-schema';
+    body = { prompt: flags.positional };
+  } else if (subcommand === 'function') {
+    if (!flags.positional) {
+      printError('briven ai function requires a prompt argument');
+      return 1;
+    }
+    routeSuffix = 'generate-function';
+    body = { prompt: flags.positional };
+    if (flags.withSchema) {
+      const schemaCtx = await fetchSchemaContext(cred.apiOrigin, cred.apiKey, local.projectId);
+      if (schemaCtx) body.schemaContext = schemaCtx;
+    }
+  } else {
+    // explain
+    const code = flags.file ? await readFileOrFail(flags.file) : flags.positional;
+    if (!code) {
+      printError('briven ai explain requires --file <path> or an inline snippet');
+      return 1;
+    }
+    routeSuffix = 'explain-code';
+    body = { code };
+    if (flags.perspective) body.perspective = flags.perspective;
+  }
+
+  if (!flags.raw) {
+    banner(`ai ${subcommand}`);
+    blankLine();
+    step(`forwarding to ${cred.apiOrigin}`);
+  }
+
+  let response: unknown;
+  try {
+    response = await apiCall<unknown>(
+      `/v1/projects/${local.projectId}/ai/${routeSuffix}`,
+      {
+        apiOrigin: cred.apiOrigin,
+        apiKey: cred.apiKey,
+        method: 'POST',
+        body,
+      },
+    );
+  } catch (err) {
+    if (err instanceof ApiCallError) {
+      if (err.code === 'not_configured') {
+        printError(
+          `AI assistant offline on this deployment (operator: set BRIVEN_OLLAMA_URL on the api host).`,
+        );
+        return 2;
+      }
+      if (err.code === 'validation_failed') {
+        printError(`validation failed: ${err.message}`);
+        return 1;
+      }
+      printError(`api error (${err.status} ${err.code}): ${err.message}`);
+      return 1;
+    }
+    printError(err instanceof Error ? err.message : 'request failed');
+    return 1;
+  }
+
+  // Each subcommand returns a different content field — collapse them.
+  const result = response as {
+    schema?: string;
+    function?: string;
+    explanation?: string;
+    model?: string;
+    elapsedMs?: number;
+  };
+  const content =
+    result.schema ?? result.function ?? result.explanation ?? '';
+
+  if (flags.out) {
+    await writeFile(flags.out, content + '\n', 'utf8');
+    if (!flags.raw) {
+      success(`wrote ${content.length} chars to ${flags.out}`);
+      if (result.model) {
+        step(`generated by ${result.model} in ${result.elapsedMs ?? 0}ms`);
+      }
+    }
+    return 0;
+  }
+
+  process.stdout.write(content + '\n');
+  if (!flags.raw && result.model) {
+    blankLine();
+    step(`generated by ${result.model} in ${result.elapsedMs ?? 0}ms`);
+  }
+  return 0;
+}
+
+interface Flags {
+  positional: string | null;
+  out: string | null;
+  file: string | null;
+  perspective: string | null;
+  withSchema: boolean;
+  raw: boolean;
+  help: boolean;
+}
+
+function parseFlags(argv: readonly string[]): Flags {
+  const out: Flags = {
+    positional: null,
+    out: null,
+    file: null,
+    perspective: null,
+    withSchema: false,
+    raw: false,
+    help: false,
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === '--out' && argv[i + 1]) {
+      out.out = argv[++i]!;
+    } else if (arg === '--file' && argv[i + 1]) {
+      out.file = argv[++i]!;
+    } else if (arg === '--perspective' && argv[i + 1]) {
+      out.perspective = argv[++i]!;
+    } else if (arg === '--with-schema') {
+      out.withSchema = true;
+    } else if (arg === '--raw') {
+      out.raw = true;
+    } else if (arg === '--help' || arg === '-h') {
+      out.help = true;
+    } else if (!arg.startsWith('--') && out.positional === null) {
+      out.positional = arg;
+    }
+  }
+  return out;
+}
+
+async function readFileOrFail(path: string): Promise<string | null> {
+  try {
+    const { readFile } = await import('node:fs/promises');
+    return await readFile(path, 'utf8');
+  } catch {
+    printError(`could not read ${path}`);
+    return null;
+  }
+}
+
+interface SchemaCurrentResponse {
+  deploymentId: string | null;
+  snapshot: {
+    tables: Record<
+      string,
+      {
+        columns: Record<
+          string,
+          {
+            sqlType: string;
+            nullable: boolean;
+            primaryKey: boolean;
+            unique: boolean;
+            references?: { table: string; column: string };
+          }
+        >;
+      }
+    >;
+  } | null;
+}
+
+async function fetchSchemaContext(
+  apiOrigin: string,
+  apiKey: string,
+  projectId: string,
+): Promise<string | null> {
+  try {
+    const res = await apiCall<SchemaCurrentResponse>(
+      `/v1/projects/${projectId}/schema/current`,
+      { apiOrigin, apiKey },
+    );
+    if (!res.snapshot) return null;
+    const lines: string[] = [];
+    for (const [tableName, table] of Object.entries(res.snapshot.tables)) {
+      const cols = Object.entries(table.columns)
+        .map(([name, col]) => {
+          const parts = [`${name}: ${col.sqlType}`];
+          if (col.primaryKey) parts.push('PK');
+          if (col.unique) parts.push('UNIQUE');
+          if (!col.nullable) parts.push('NOT NULL');
+          if (col.references) parts.push(`-> ${col.references.table}.${col.references.column}`);
+          return `  ${parts.join(' ')}`;
+        })
+        .join('\n');
+      lines.push(`table ${tableName} {\n${cols}\n}`);
+    }
+    return lines.join('\n\n');
+  } catch {
+    // The api couldn't resolve a current schema (project never deployed,
+    // or fetch failed). Returning null tells the caller to skip context;
+    // the model still answers, just without table/column hints.
+    return null;
+  }
+}
+
+function printHelp(sub?: Subcommand): void {
+  banner('ai');
+  blankLine();
+  if (!sub || sub === 'schema') {
+    step('briven ai schema "<prompt>"           generate a draft schema.ts');
+    step('  --out <path>                       write to file instead of stdout');
+  }
+  if (!sub || sub === 'function') {
+    step('briven ai function "<prompt>"         generate a draft function file');
+    step('  --with-schema                      include current project schema as context');
+    step('  --out <path>                       write to file instead of stdout');
+  }
+  if (!sub || sub === 'explain') {
+    step('briven ai explain --file <path>       explain a briven code file');
+    step('briven ai explain "<inline snippet>"');
+    step('  --perspective "<note>"             shape the explanation (e.g. "i\'m new")');
+    step('  --out <path>                       write to file instead of stdout');
+  }
+  if (!sub) {
+    blankLine();
+    step('all subcommands accept --raw (skip banners + meta footer)');
+    step('AI is gated by ollama on the api host. exit code 2 means not_configured.');
+  }
+}

@@ -1,4 +1,5 @@
 import { printHelp } from './commands/help.js';
+import { runAi } from './commands/ai.js';
 import { runDb } from './commands/db.js';
 import { runDeploy } from './commands/deploy.js';
 import { runDev } from './commands/dev.js';
@@ -60,6 +61,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runImport(rest);
     case 'doctor':
       return runDoctor(rest);
+    case 'ai':
+      return runAi(rest);
   }
 
   process.stderr.write(`briven: unknown command '${first}'\n`);
