@@ -11,6 +11,12 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
     tags: ['feat'],
+    title: 'tier-aware realtime subscription cap + project cap-warning banner',
+    body: 'TIERS.concurrentSubscriptions (free=100 / pro=1000 / team=10000) is now enforced by the realtime service, replacing the platform-wide env ceiling. realtime resolves the cap from a new internal endpoint /v1/internal/projects/:id/limits on first subscribe per project (5-min cache, shared-secret gated). project overview page grows a yellow/red banner at 75%/90% of the cap so the user can upgrade before subscribes start getting rejected; banner sources from a new /v1/projects/:id/realtime-stats endpoint scoped to the caller\'s own project. admin · realtime page auto-refreshes every 10s via meta refresh so an operator can keep it open while watching a noisy project.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
     title: 'admin · usage — retry skipped polar pushes',
     body: 'when polar push rows land in `skipped` (missing meter id, bad customer mapping, durable 4xx), the operator had to UPDATE usage_events directly in psql to re-enable them. now /dashboard/admin/usage grows a "retry → pending" button (window: 1/7/30/90 days) that flips skipped rows back to pending in one click. window is bounded server-side so a runaway click can\'t re-push years of stale data. action is audit-logged with the row count.',
   },

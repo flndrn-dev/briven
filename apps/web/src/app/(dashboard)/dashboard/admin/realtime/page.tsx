@@ -9,7 +9,14 @@ interface RealtimeStats {
 }
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'admin · realtime' };
+// Auto-refresh every 10s — operators keep this page open while watching a
+// noisy project hit its cap; meta refresh avoids needing a client polling
+// component and survives the next.js cache (the page itself is
+// force-dynamic so each refresh re-fetches /v1/admin/realtime fresh).
+export const metadata = {
+  title: 'admin · realtime',
+  other: { refresh: '10' },
+};
 
 function severityClass(pct: number): string {
   if (pct >= 0.9)

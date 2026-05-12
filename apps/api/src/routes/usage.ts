@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { requireProjectAuth } from '../middleware/project-auth.js';
+import { fetchProjectRealtimeStats } from '../services/realtime-stats.js';
 import {
   getConnectionSecondsUsage,
   getCurrentMonthConnectionSecondsUsage,
@@ -14,6 +15,7 @@ import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 export const usageRouter = new Hono<AppEnv>();
 
 usageRouter.use('/v1/projects/:id/usage', requireProjectAuth());
+usageRouter.use('/v1/projects/:id/realtime-stats', requireProjectAuth());
 
 /**
  * Current-period usage for a project. Default period = current calendar
@@ -104,4 +106,18 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
       concurrentSubscriptions: limits.concurrentSubscriptions,
     },
   });
+});
+
+/**
+ * Live realtime usage for the requested project — scoped to the caller's
+ * own project so a non-admin owner can see their own concurrent-sub
+ * count vs cap without enumerating other projects. Returns 503 when the
+ * realtime service is unconfigured/unreachable; the dashboard treats that
+ * as "—" rather than rendering a stale or zeroed banner.
+ */
+usageRouter.get('/v1/projects/:id/realtime-stats', async (c) => {
+  const projectId = c.req.param('id');
+  const stats = await fetchProjectRealtimeStats(projectId);
+  if (!stats) return c.json({ code: 'realtime_unavailable' }, 503);
+  return c.json({ projectId, ...stats });
 });
