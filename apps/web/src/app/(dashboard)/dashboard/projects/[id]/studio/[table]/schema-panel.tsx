@@ -15,6 +15,9 @@ const TYPES = [
 ] as const;
 type ColType = (typeof TYPES)[number];
 
+const FK_ON_DELETE = ['noAction', 'cascade', 'setNull', 'restrict'] as const;
+type FkOnDelete = (typeof FK_ON_DELETE)[number];
+
 interface ColumnInfo {
   name: string;
   dataType: string;
@@ -35,15 +38,18 @@ interface Props {
   table: string;
   columns: ColumnInfo[];
   indexes: IndexInfo[];
+  otherTables: string[];
 }
 
-export function SchemaPanel({ projectId, table, columns, indexes }: Props) {
+export function SchemaPanel({ projectId, table, columns, indexes, otherTables }: Props) {
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<ColType>('text');
   const [notNull, setNotNull] = useState(false);
   const [defaultExpr, setDefaultExpr] = useState('');
+  const [references, setReferences] = useState('');
+  const [onDelete, setOnDelete] = useState<FkOnDelete>('noAction');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,12 +58,15 @@ export function SchemaPanel({ projectId, table, columns, indexes }: Props) {
     setError(null);
     setPending(true);
     try {
+      const [refTable, refCol] = references.split('.');
       const payload = {
         column: {
           name,
           type,
           notNull,
           defaultExpr: defaultExpr.trim() === '' ? null : defaultExpr,
+          references:
+            refTable && refCol ? { table: refTable, column: refCol, onDelete } : null,
         },
       };
       const res = await fetch(
@@ -76,6 +85,8 @@ export function SchemaPanel({ projectId, table, columns, indexes }: Props) {
       setType('text');
       setNotNull(false);
       setDefaultExpr('');
+      setReferences('');
+      setOnDelete('noAction');
       setAddOpen(false);
       router.refresh();
     } catch (err) {
@@ -243,6 +254,41 @@ export function SchemaPanel({ projectId, table, columns, indexes }: Props) {
                 cancel
               </button>
             </div>
+          </div>
+          <div className="grid grid-cols-[auto_1.5fr_1fr] items-center gap-2 pl-2">
+            <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+              references
+            </span>
+            <input
+              type="text"
+              value={references}
+              onChange={(e) => setReferences(e.target.value)}
+              placeholder={
+                otherTables.length > 0
+                  ? `e.g. ${otherTables[0]}.id (optional FK)`
+                  : 'tableName.columnName (optional FK)'
+              }
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[10px] outline-none focus:border-[var(--color-primary)]"
+              list="schema-panel-other-tables"
+            />
+            <select
+              value={onDelete}
+              disabled={!references}
+              onChange={(e) => setOnDelete(e.target.value as FkOnDelete)}
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[10px] outline-none focus:border-[var(--color-primary)] disabled:opacity-30"
+              aria-label="on delete"
+            >
+              {FK_ON_DELETE.map((d) => (
+                <option key={d} value={d}>
+                  on delete {d}
+                </option>
+              ))}
+            </select>
+            <datalist id="schema-panel-other-tables">
+              {otherTables.map((t) => (
+                <option key={t} value={`${t}.id`} />
+              ))}
+            </datalist>
           </div>
           {notNull && defaultExpr.trim() === '' && columns.length > 0 ? (
             <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">

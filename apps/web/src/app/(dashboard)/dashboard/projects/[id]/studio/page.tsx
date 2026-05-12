@@ -33,7 +33,7 @@ export default async function StudioPage({
             both paths write to the same schema.
           </p>
         </div>
-        {tables.length > 0 ? <NewTableForm projectId={id} /> : null}
+        {tables.length > 0 ? <NewTableForm projectId={id} existingTables={tables.map((t) => t.name)} /> : null}
       </header>
 
       {tables.length === 0 ? (
@@ -48,7 +48,7 @@ export default async function StudioPage({
               postgres schema for this project.
             </p>
           </div>
-          <NewTableForm projectId={id} />
+          <NewTableForm projectId={id} existingTables={tables.map((t) => t.name)} />
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border border-[var(--color-border-subtle)]">

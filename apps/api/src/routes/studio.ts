@@ -18,9 +18,12 @@ import {
   listProjectTables,
   STUDIO_COLUMN_TYPES,
   updateCell,
+  type StudioColumnReference,
   type StudioColumnSpec,
   type StudioColumnType,
 } from '../services/studio.js';
+
+const FK_ON_DELETE = ['cascade', 'restrict', 'setNull', 'noAction'] as const;
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
 /**
@@ -211,6 +214,20 @@ function parseColumnSpec(input: unknown): StudioColumnSpec | null {
   if (typeof c.name !== 'string') return null;
   if (typeof c.type !== 'string') return null;
   if (!(STUDIO_COLUMN_TYPES as readonly string[]).includes(c.type)) return null;
+
+  let references: StudioColumnReference | null | undefined;
+  if (c.references === null) {
+    references = null;
+  } else if (c.references && typeof c.references === 'object') {
+    const r = c.references as Record<string, unknown>;
+    if (typeof r.table !== 'string' || typeof r.column !== 'string') return null;
+    const onDelete =
+      typeof r.onDelete === 'string' && (FK_ON_DELETE as readonly string[]).includes(r.onDelete)
+        ? (r.onDelete as StudioColumnReference['onDelete'])
+        : 'noAction';
+    references = { table: r.table, column: r.column, onDelete };
+  }
+
   return {
     name: c.name,
     type: c.type as StudioColumnType,
@@ -220,6 +237,7 @@ function parseColumnSpec(input: unknown): StudioColumnSpec | null {
       typeof c.defaultExpr === 'string' || c.defaultExpr === null
         ? (c.defaultExpr as string | null)
         : undefined,
+    references,
   };
 }
 

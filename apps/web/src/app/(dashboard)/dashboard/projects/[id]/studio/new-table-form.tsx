@@ -15,6 +15,9 @@ const TYPES = [
 ] as const;
 type ColType = (typeof TYPES)[number];
 
+const FK_ON_DELETE = ['noAction', 'cascade', 'setNull', 'restrict'] as const;
+type FkOnDelete = (typeof FK_ON_DELETE)[number];
+
 interface ColumnDraft {
   id: string;
   name: string;
@@ -22,6 +25,9 @@ interface ColumnDraft {
   notNull: boolean;
   primaryKey: boolean;
   defaultExpr: string;
+  /** "table.column" or empty. */
+  references: string;
+  onDelete: FkOnDelete;
 }
 
 function newDraft(name = '', primaryKey = false): ColumnDraft {
@@ -32,10 +38,18 @@ function newDraft(name = '', primaryKey = false): ColumnDraft {
     notNull: primaryKey,
     primaryKey,
     defaultExpr: '',
+    references: '',
+    onDelete: 'noAction',
   };
 }
 
-export function NewTableForm({ projectId }: { projectId: string }) {
+export function NewTableForm({
+  projectId,
+  existingTables = [],
+}: {
+  projectId: string;
+  existingTables?: string[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [tableName, setTableName] = useState('');
@@ -57,13 +71,20 @@ export function NewTableForm({ projectId }: { projectId: string }) {
     try {
       const payload = {
         tableName,
-        columns: columns.map((c) => ({
-          name: c.name,
-          type: c.type,
-          notNull: c.notNull,
-          primaryKey: c.primaryKey,
-          defaultExpr: c.defaultExpr.trim() === '' ? null : c.defaultExpr,
-        })),
+        columns: columns.map((c) => {
+          const [refTable, refCol] = c.references.split('.');
+          return {
+            name: c.name,
+            type: c.type,
+            notNull: c.notNull,
+            primaryKey: c.primaryKey,
+            defaultExpr: c.defaultExpr.trim() === '' ? null : c.defaultExpr,
+            references:
+              refTable && refCol
+                ? { table: refTable, column: refCol, onDelete: c.onDelete }
+                : null,
+          };
+        }),
       };
       const res = await fetch(`/api/v1/projects/${projectId}/studio/tables`, {
         method: 'POST',
@@ -133,69 +154,103 @@ export function NewTableForm({ projectId }: { projectId: string }) {
       <div className="flex flex-col gap-2">
         <span className="font-mono text-xs text-[var(--color-text-muted)]">columns</span>
         {columns.map((c) => (
-          <div
-            key={c.id}
-            className="grid grid-cols-[1.5fr_1fr_auto_auto_1.2fr_auto] items-center gap-2"
-          >
-            <input
-              type="text"
-              required
-              pattern="[A-Za-z_][A-Za-z0-9_]*"
-              maxLength={63}
-              value={c.name}
-              onChange={(e) => setCol(c.id, { name: e.target.value })}
-              placeholder="column"
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-xs outline-none focus:border-[var(--color-primary)]"
-            />
-            <select
-              value={c.type}
-              onChange={(e) => setCol(c.id, { type: e.target.value as ColType })}
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-xs outline-none focus:border-[var(--color-primary)]"
-            >
-              {TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <label className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+          <div key={c.id} className="flex flex-col gap-1 rounded-md bg-[var(--color-bg)] p-2">
+            <div className="grid grid-cols-[1.5fr_1fr_auto_auto_1.2fr_auto] items-center gap-2">
               <input
-                type="checkbox"
-                checked={c.primaryKey}
-                onChange={(e) =>
-                  setCol(c.id, {
-                    primaryKey: e.target.checked,
-                    notNull: e.target.checked ? true : c.notNull,
-                  })
+                type="text"
+                required
+                pattern="[A-Za-z_][A-Za-z0-9_]*"
+                maxLength={63}
+                value={c.name}
+                onChange={(e) => setCol(c.id, { name: e.target.value })}
+                placeholder="column"
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-xs outline-none focus:border-[var(--color-primary)]"
+              />
+              <select
+                value={c.type}
+                onChange={(e) => setCol(c.id, { type: e.target.value as ColType })}
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-xs outline-none focus:border-[var(--color-primary)]"
+              >
+                {TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+                <input
+                  type="checkbox"
+                  checked={c.primaryKey}
+                  onChange={(e) =>
+                    setCol(c.id, {
+                      primaryKey: e.target.checked,
+                      notNull: e.target.checked ? true : c.notNull,
+                    })
+                  }
+                />
+                pk
+              </label>
+              <label className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+                <input
+                  type="checkbox"
+                  checked={c.notNull}
+                  disabled={c.primaryKey}
+                  onChange={(e) => setCol(c.id, { notNull: e.target.checked })}
+                />
+                not null
+              </label>
+              <input
+                type="text"
+                value={c.defaultExpr}
+                onChange={(e) => setCol(c.id, { defaultExpr: e.target.value })}
+                placeholder="default (e.g. now())"
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-xs outline-none focus:border-[var(--color-primary)]"
+              />
+              <button
+                type="button"
+                onClick={() => setColumns((prev) => prev.filter((x) => x.id !== c.id))}
+                disabled={columns.length === 1}
+                className="rounded-md border border-[var(--color-border)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)] disabled:opacity-30"
+                aria-label={`remove ${c.name}`}
+              >
+                ×
+              </button>
+            </div>
+            <div className="grid grid-cols-[auto_1.5fr_1fr] items-center gap-2 pl-2">
+              <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+                references
+              </span>
+              <input
+                type="text"
+                value={c.references}
+                onChange={(e) => setCol(c.id, { references: e.target.value })}
+                placeholder={
+                  existingTables.length > 0
+                    ? `e.g. ${existingTables[0]}.id (optional FK)`
+                    : 'tableName.columnName (optional FK)'
                 }
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[10px] outline-none focus:border-[var(--color-primary)]"
+                list={`existing-tables-${c.id}`}
               />
-              pk
-            </label>
-            <label className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]">
-              <input
-                type="checkbox"
-                checked={c.notNull}
-                disabled={c.primaryKey}
-                onChange={(e) => setCol(c.id, { notNull: e.target.checked })}
-              />
-              not null
-            </label>
-            <input
-              type="text"
-              value={c.defaultExpr}
-              onChange={(e) => setCol(c.id, { defaultExpr: e.target.value })}
-              placeholder="default (e.g. now())"
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-xs outline-none focus:border-[var(--color-primary)]"
-            />
-            <button
-              type="button"
-              onClick={() => setColumns((prev) => prev.filter((x) => x.id !== c.id))}
-              disabled={columns.length === 1}
-              className="rounded-md border border-[var(--color-border)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)] disabled:opacity-30"
-              aria-label={`remove ${c.name}`}
-            >
-              ×
-            </button>
+              <select
+                value={c.onDelete}
+                disabled={!c.references}
+                onChange={(e) => setCol(c.id, { onDelete: e.target.value as FkOnDelete })}
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[10px] outline-none focus:border-[var(--color-primary)] disabled:opacity-30"
+                aria-label="on delete"
+              >
+                {FK_ON_DELETE.map((d) => (
+                  <option key={d} value={d}>
+                    on delete {d}
+                  </option>
+                ))}
+              </select>
+              <datalist id={`existing-tables-${c.id}`}>
+                {existingTables.map((t) => (
+                  <option key={t} value={`${t}.id`} />
+                ))}
+              </datalist>
+            </div>
           </div>
         ))}
         <button
