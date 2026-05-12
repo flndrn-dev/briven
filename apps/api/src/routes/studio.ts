@@ -5,13 +5,16 @@ import { requireProjectAuth, requireProjectRole } from '../middleware/project-au
 import { audit, hashIp } from '../services/audit.js';
 import {
   addColumn,
+  createIndex,
   createTable,
   deleteRow,
   dropColumn,
+  dropIndex,
   dropTable,
   getTableColumns,
   getTableRows,
   insertRow,
+  listIndexes,
   listProjectTables,
   STUDIO_COLUMN_TYPES,
   updateCell,
@@ -339,6 +342,96 @@ studioRouter.delete(
       metadata: { table: tableName, column },
     });
     return c.json({ dropped: column });
+  },
+);
+
+/**
+ * List, create, and drop indexes on a table.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/tables/:table/indexes',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const indexes = await listIndexes(projectId, tableName);
+    return c.json({ indexes });
+  },
+);
+
+studioRouter.post(
+  '/v1/projects/:id/studio/tables/:table/indexes',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const body = (await c.req.json().catch(() => null)) as {
+      columns?: string[];
+      unique?: boolean;
+      name?: string | null;
+    } | null;
+    if (!body || !Array.isArray(body.columns) || body.columns.length === 0) {
+      return c.json(
+        { code: 'validation_failed', message: 'expected { columns: [...], unique?, name? }' },
+        400,
+      );
+    }
+    const cols = body.columns.filter((c) => typeof c === 'string');
+    const result = await createIndex({
+      projectId,
+      tableName,
+      columns: cols,
+      unique: Boolean(body.unique),
+      name: typeof body.name === 'string' ? body.name : null,
+    });
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.index.create',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        table: tableName,
+        index: result.name,
+        columns: cols,
+        unique: Boolean(body.unique),
+      },
+    });
+    return c.json(result, 201);
+  },
+);
+
+studioRouter.delete(
+  '/v1/projects/:id/studio/tables/:table/indexes/:name',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    const indexName = c.req.param('name');
+    if (!projectId || !tableName || !indexName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    await dropIndex(projectId, tableName, indexName);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.index.drop',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: tableName, index: indexName },
+    });
+    return c.json({ dropped: indexName });
   },
 );
 

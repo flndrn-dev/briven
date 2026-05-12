@@ -514,6 +514,147 @@ export async function addColumn(input: {
   );
 }
 
+export interface IndexSummary {
+  /** Index name as it lives in pg_class. */
+  readonly name: string;
+  /** Ordered list of column names participating in the index. */
+  readonly columns: readonly string[];
+  /** True if the index was created with UNIQUE. */
+  readonly unique: boolean;
+  /** True if this is the table's primary-key index — never droppable from studio. */
+  readonly isPrimary: boolean;
+}
+
+const INDEX_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
+
+/**
+ * Every index on a table — primary, unique, and plain. Used by the schema
+ * panel so the user can see what's already indexed before adding more.
+ */
+export async function listIndexes(
+  projectId: string,
+  tableName: string,
+): Promise<readonly IndexSummary[]> {
+  await assertTableExists(projectId, tableName);
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  const rows = (await sql<
+    Array<{
+      index_name: string;
+      columns: string[];
+      is_unique: boolean;
+      is_primary: boolean;
+    }>
+  >`
+    SELECT
+      ic.relname AS index_name,
+      ARRAY(
+        SELECT a.attname
+        FROM pg_attribute a
+        WHERE a.attrelid = c.oid
+          AND a.attnum = ANY(i.indkey)
+        ORDER BY array_position(i.indkey, a.attnum)
+      ) AS columns,
+      i.indisunique AS is_unique,
+      i.indisprimary AS is_primary
+    FROM pg_index i
+    JOIN pg_class c ON c.oid = i.indrelid
+    JOIN pg_class ic ON ic.oid = i.indexrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = ${schema}
+      AND c.relname = ${tableName}
+    ORDER BY i.indisprimary DESC, ic.relname
+  `) as Array<{
+    index_name: string;
+    columns: string[];
+    is_unique: boolean;
+    is_primary: boolean;
+  }>;
+  return rows.map((r) => ({
+    name: r.index_name,
+    columns: r.columns,
+    unique: Boolean(r.is_unique),
+    isPrimary: Boolean(r.is_primary),
+  }));
+}
+
+export interface CreateIndexInput {
+  readonly projectId: string;
+  readonly tableName: string;
+  readonly columns: readonly string[];
+  readonly unique?: boolean;
+  /** Optional explicit index name. Defaults to `<table>_<cols>_idx`. */
+  readonly name?: string | null;
+}
+
+/**
+ * Create an index on one or more columns. Refuses platform-owned tables
+ * (via assertTableExists) and validates every column identifier against
+ * the actual column set.
+ */
+export async function createIndex(input: CreateIndexInput): Promise<{ name: string }> {
+  await assertTableExists(input.projectId, input.tableName);
+  if (input.columns.length === 0) {
+    throw new ValidationError('an index needs at least one column', {});
+  }
+  const cols = await getTableColumns(input.projectId, input.tableName);
+  const colNames = new Set(cols.map((c) => c.name));
+  for (const col of input.columns) {
+    if (!COLUMN_NAME_RE.test(col)) {
+      throw new ValidationError('invalid column name', { column: col });
+    }
+    if (!colNames.has(col)) {
+      throw new ValidationError('column not found on table', {
+        table: input.tableName,
+        column: col,
+      });
+    }
+  }
+
+  const indexName =
+    input.name ??
+    `${input.tableName}_${input.columns.join('_')}_idx`.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 63);
+  if (!INDEX_NAME_RE.test(indexName)) {
+    throw new ValidationError('invalid index name', { name: indexName });
+  }
+
+  const schema = schemaNameFor(input.projectId);
+  const sql = dataPlaneClient();
+  const uniqueClause = input.unique ? 'UNIQUE' : '';
+  const colsList = input.columns.map((c) => `"${c}"`).join(', ');
+  await sql.unsafe(
+    `CREATE ${uniqueClause} INDEX "${indexName}" ON "${schema}"."${input.tableName}" (${colsList})`,
+  );
+  return { name: indexName };
+}
+
+/**
+ * Drop an index by name. Refuses the primary-key index (which would
+ * invalidate row-level operations) — that has to go via dropping the
+ * column or the table.
+ */
+export async function dropIndex(
+  projectId: string,
+  tableName: string,
+  indexName: string,
+): Promise<void> {
+  await assertTableExists(projectId, tableName);
+  if (!INDEX_NAME_RE.test(indexName)) {
+    throw new ValidationError('invalid index name', { name: indexName });
+  }
+  const all = await listIndexes(projectId, tableName);
+  const target = all.find((i) => i.name === indexName);
+  if (!target) {
+    throw new ValidationError('index not found on table', { table: tableName, index: indexName });
+  }
+  if (target.isPrimary) {
+    throw new ValidationError('cannot drop the primary-key index', { index: indexName });
+  }
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  await sql.unsafe(`DROP INDEX "${schema}"."${indexName}"`);
+}
+
 /**
  * Drop a column. Refuses to drop a PK column — that would invalidate every
  * row-level operation in studio and is almost always a mistake.
