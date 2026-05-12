@@ -113,6 +113,80 @@ await ctx.db('notes').delete().where({ id });
 await ctx.db.execute('select count(*) from notes where created_at > $1', [cutoff]);`}</Snippet>
       </Section>
 
+      <Section title="common patterns">
+        <p>
+          recipes for the things you&apos;ll write five times a week. all of them stay inside
+          the supported builder surface above — drop to <code>ctx.db.execute</code> only when
+          the case truly is one-off.
+        </p>
+
+        <h3 className="mt-4 font-mono text-sm text-[var(--color-text)]">cursor pagination</h3>
+        <p>
+          offset pagination breaks for fast-changing feeds (rows shift between pages). cursor
+          off the indexed sort column instead — typically <code>createdAt</code>:
+        </p>
+        <Snippet>{`interface Args { cursor?: string; limit?: number }
+
+export default query(async (ctx, args: Args = {}) => {
+  const limit = Math.min(args.limit ?? 50, 200);
+  let q = ctx.db('posts').select(['id', 'body', 'createdAt']);
+  if (args.cursor) q = q.where('createdAt', '<', new Date(args.cursor));
+  const rows = await q.orderBy('createdAt', 'desc').limit(limit + 1);
+  const next = rows.length > limit ? rows[limit - 1].createdAt.toISOString() : null;
+  return { rows: rows.slice(0, limit), nextCursor: next };
+});`}</Snippet>
+
+        <h3 className="mt-4 font-mono text-sm text-[var(--color-text)]">case-insensitive search</h3>
+        <p>
+          for prefix / fuzzy match across a small column use <code>ilike</code>; for full-text
+          search at scale, add a generated <code>tsvector</code> column and an index.
+        </p>
+        <Snippet>{`interface Args { q: string }
+
+export default query(async (ctx, args: Args) => {
+  const needle = '%' + args.q.replace(/[%_]/g, '') + '%';
+  return ctx.db('posts')
+    .select(['id', 'title'])
+    .where('title', 'ilike', needle)
+    .orderBy('createdAt', 'desc')
+    .limit(50);
+});`}</Snippet>
+
+        <h3 className="mt-4 font-mono text-sm text-[var(--color-text)]">transactional mutation</h3>
+        <p>
+          every mutation already runs inside a transaction — the runtime wraps your handler.
+          throws roll back the whole thing. if you need to fail explicitly, throw a{' '}
+          <code>brivenError</code> (see <em>errors</em> below).
+        </p>
+        <Snippet>{`export default mutation(async (ctx, args: { fromId: string; toId: string; amount: number }) => {
+  await ctx.db('accounts').decrement('balance', args.amount).where({ id: args.fromId });
+  await ctx.db('accounts').increment('balance', args.amount).where({ id: args.toId });
+  // both updates commit together. if the second throws, the first is rolled back.
+});`}</Snippet>
+
+        <h3 className="mt-4 font-mono text-sm text-[var(--color-text)]">user logs</h3>
+        <p>
+          <code>ctx.log(msg, fields?)</code> writes a structured entry to{' '}
+          <code>function_logs.user_logs_json</code>. it&apos;s the only thing surfaced in the
+          dashboard&apos;s logs tab, so use it instead of <code>console.log</code>:
+        </p>
+        <Snippet>{`export default mutation(async (ctx, args: { orderId: string }) => {
+  const order = await ctx.db('orders').select(['*']).where({ id: args.orderId }).first();
+  ctx.log('processing order', { orderId: order.id, total: order.totalCents });
+  // the dashboard logs tab will show this entry.
+});`}</Snippet>
+
+        <h3 className="mt-4 font-mono text-sm text-[var(--color-text)]">caller identity</h3>
+        <p>
+          <code>ctx.auth</code> is populated from the bearer key / session. use it as the
+          identity input to your authorization checks; never trust args for who the caller is.
+        </p>
+        <Snippet>{`export default query(async (ctx) => {
+  if (!ctx.auth) throw new brivenError('unauthorized', 'sign in to view', { status: 401 });
+  return ctx.db('notes').select(['id', 'body']).where({ ownerId: ctx.auth.userId });
+});`}</Snippet>
+      </Section>
+
       <Section title="env vars">
         <p>
           set with <code>briven env put KEY value</code>. read inside a function as{' '}
