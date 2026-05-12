@@ -758,6 +758,26 @@ export async function dropTable(projectId: string, tableName: string): Promise<v
 }
 
 /**
+ * TRUNCATE a table — wipes every row but keeps the schema. RESTART
+ * IDENTITY resets serial sequences. Default ON cascade is off; the
+ * caller can pass cascade=true to also wipe rows from tables that FK
+ * into this one (otherwise the truncate fails with a clear error).
+ */
+export async function truncateTable(
+  projectId: string,
+  tableName: string,
+  cascade = false,
+): Promise<void> {
+  await assertTableExists(projectId, tableName);
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  const cascadeClause = cascade ? 'CASCADE' : '';
+  await sql.unsafe(
+    `TRUNCATE TABLE "${schema}"."${tableName}" RESTART IDENTITY ${cascadeClause}`,
+  );
+}
+
+/**
  * Add a column to an existing table. Same type whitelist + default-expr
  * regex as createTable.
  */
