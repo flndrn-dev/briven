@@ -56,6 +56,16 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
     redirect(`/dashboard/teams/${id}`);
   }
 
+  async function deleteTeam() {
+    'use server';
+    const res = await apiFetch(`/v1/orgs/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(body.message ?? `delete failed: ${res.status}`);
+    }
+    redirect('/dashboard/teams');
+  }
+
   return (
     <section className="flex flex-col gap-8">
       <header>
@@ -124,6 +134,25 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       {!team.personal ? <TeamInvites teamId={id} /> : null}
+
+      {!team.personal ? (
+        <section className="max-w-lg border-t border-[var(--color-border-subtle)] pt-6">
+          <h2 className="mb-2 font-mono text-sm text-red-400">danger zone</h2>
+          <p className="mb-3 font-mono text-xs text-[var(--color-text-muted)]">
+            deleting a team is soft — members lose access and billing rolls back to each
+            user&apos;s personal tier. you can&apos;t delete a team that still owns projects;
+            delete or move them first.
+          </p>
+          <form action={deleteTeam}>
+            <button
+              type="submit"
+              className="rounded-md border border-red-500/40 px-3 py-1.5 font-mono text-xs text-red-400 transition hover:bg-red-500/10"
+            >
+              delete this team
+            </button>
+          </form>
+        </section>
+      ) : null}
     </section>
   );
 }

@@ -10,6 +10,7 @@ import {
   canUserCreateAnotherOrg,
   changeOrgMemberRole,
   createOrg,
+  deleteOrg,
   getDefaultOrgForUser,
   isOrgMember,
   listOrgMembers,
@@ -177,6 +178,24 @@ orgsRouter.patch('/v1/orgs/:id', async (c) => {
       personal: updated.personal,
     },
   });
+});
+
+orgsRouter.delete('/v1/orgs/:id', async (c) => {
+  const user = c.get('user')!;
+  const orgId = c.req.param('id');
+  const result = await deleteOrg({ orgId, userId: user.id });
+  if (!result.ok) {
+    return c.json({ code: 'cannot_delete_org', message: result.reason }, 400);
+  }
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'org.deleted',
+    ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { orgId },
+  });
+  return c.json({ deleted: orgId });
 });
 
 /* ─── org members ─────────────────────────────────────────────────── */
