@@ -14,6 +14,7 @@ const PATHS: readonly string[] = [
   '/schema',
   '/examples',
   '/functions',
+  '/realtime',
   '/sdks',
   '/api',
   '/migration',
