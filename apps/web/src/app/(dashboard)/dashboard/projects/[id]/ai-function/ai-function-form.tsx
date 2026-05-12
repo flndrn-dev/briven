@@ -1,0 +1,168 @@
+'use client';
+
+import { useState, type FormEvent } from 'react';
+
+interface Props {
+  projectId: string;
+  /** Optional — schema.ts contents from the project's current deploy, when
+   * the api was able to load them. The dashboard SSRs the page and passes
+   * this through so the model gets table/column names without a second
+   * round-trip from the client. */
+  schemaContext?: string | null;
+}
+
+interface GenerateResponse {
+  function: string;
+  model: string;
+  elapsedMs: number;
+}
+
+interface NotConfiguredResponse {
+  code: 'not_configured';
+  message: string;
+}
+
+export function AiFunctionForm({ projectId, schemaContext }: Props) {
+  const [prompt, setPrompt] = useState('');
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [useSchemaContext, setUseSchemaContext] = useState(Boolean(schemaContext));
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+    setPending(true);
+    setError(null);
+    setResult(null);
+    setNotConfigured(false);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/ai/generate-function`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          ...(useSchemaContext && schemaContext ? { schemaContext } : {}),
+        }),
+      });
+      if (res.status === 503) {
+        const body = (await res.json().catch(() => null)) as NotConfiguredResponse | null;
+        setNotConfigured(true);
+        setError(body?.message ?? 'AI features are disabled on this deployment');
+        return;
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `request failed (${res.status})`);
+      }
+      const data = (await res.json()) as GenerateResponse;
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'request failed');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function copy() {
+    if (!result?.function) return;
+    await navigator.clipboard.writeText(result.function);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <label className="flex flex-col gap-2">
+          <span className="font-mono text-xs text-[var(--color-text-muted)]">
+            describe what the function should do
+          </span>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.currentTarget.value)}
+            rows={5}
+            maxLength={4000}
+            required
+            disabled={pending}
+            placeholder="list all posts from the last 24 hours, newest first, max 50 rows"
+            className="resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)] disabled:opacity-60"
+          />
+          <span className="text-right font-mono text-[10px] text-[var(--color-text-subtle)]">
+            {prompt.length} / 4000
+          </span>
+        </label>
+
+        {schemaContext ? (
+          <label className="flex items-center gap-2 font-mono text-xs text-[var(--color-text-muted)]">
+            <input
+              type="checkbox"
+              checked={useSchemaContext}
+              onChange={(e) => setUseSchemaContext(e.currentTarget.checked)}
+              disabled={pending}
+            />
+            include current schema as context ({schemaContext.length} chars)
+          </label>
+        ) : (
+          <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+            no current schema found — the model will guess at table/column names. deploy a schema
+            first for better results.
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={pending || !prompt.trim()}
+          className="inline-flex w-fit items-center justify-center rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)] disabled:opacity-60"
+        >
+          {pending ? 'generating…' : 'generate function'}
+        </button>
+      </form>
+
+      {error ? (
+        <div
+          className={`rounded-md border p-4 font-mono text-xs ${
+            notConfigured
+              ? 'border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)]'
+              : 'border-red-400/40 bg-red-500/5 text-red-300'
+          }`}
+        >
+          {notConfigured ? (
+            <>
+              <p className="text-[var(--color-text)]">AI assistant offline</p>
+              <p className="mt-1">{error}</p>
+              <p className="mt-2 text-[var(--color-text-subtle)]">
+                operator: set <code>BRIVEN_OLLAMA_URL</code> on the api container to enable.
+              </p>
+            </>
+          ) : (
+            error
+          )}
+        </div>
+      ) : null}
+
+      {result ? (
+        <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-mono text-xs text-[var(--color-text-subtle)]">
+              generated by {result.model} in {result.elapsedMs}ms
+            </p>
+            <button
+              type="button"
+              onClick={copy}
+              className="rounded-md border border-[var(--color-border)] px-3 py-1 font-mono text-xs hover:bg-[var(--color-surface-raised)]"
+            >
+              {copied ? 'copied!' : 'copy'}
+            </button>
+          </div>
+          <pre className="overflow-x-auto font-mono text-xs">
+            <code>{result.function}</code>
+          </pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}

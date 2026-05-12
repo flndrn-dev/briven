@@ -14,6 +14,7 @@ const TABS = [
   { href: '/keys', label: 'api keys' },
   { href: '/members', label: 'members' },
   { href: '/ai-schema', label: 'ai schema' },
+  { href: '/ai-function', label: 'ai function' },
   { href: '/activity', label: 'activity' },
   { href: '/settings', label: 'settings' },
 ] as const;
