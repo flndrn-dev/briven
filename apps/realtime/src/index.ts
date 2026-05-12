@@ -339,6 +339,34 @@ export default {
         headers: { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' },
       });
     }
+    if (url.pathname === '/v1/realtime/stats') {
+      // Operator-facing live snapshot. Shared-secret gated — same gate
+      // as /v1/subscribe so an unauth scrape can't enumerate project
+      // ids. Numbers are O(subscriptions.size), fine for the year-one
+      // 10k target; if it ever needs to scale further the natural
+      // aggregation is a periodic write to a stats endpoint on the api.
+      if (!authorise(req)) return Response.json({ code: 'unauthorized' }, { status: 401 });
+      const byProject: { projectId: string; subscriptions: number }[] = [];
+      for (const [projectId, count] of subsByProject) {
+        byProject.push({ projectId, subscriptions: count });
+      }
+      byProject.sort((a, b) => b.subscriptions - a.subscriptions);
+      const byChannel: { channel: string; subscriptions: number }[] = [];
+      for (const [channel, subs] of channelToSubs) {
+        byChannel.push({ channel, subscriptions: subs.size });
+      }
+      byChannel.sort((a, b) => b.subscriptions - a.subscriptions);
+      return Response.json({
+        totalSubscriptions: subscriptions.size,
+        totalChannels: channelToSubs.size,
+        limits: {
+          perWs: env.BRIVEN_REALTIME_MAX_SUBS_PER_WS,
+          perProject: env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT,
+        },
+        byProject: byProject.slice(0, 50),
+        byChannel: byChannel.slice(0, 50),
+      });
+    }
     if (url.pathname === '/v1/subscribe') {
       if (!authorise(req)) return Response.json({ code: 'unauthorized' }, { status: 401 });
       if (server.upgrade(req)) return undefined;

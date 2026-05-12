@@ -10,6 +10,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['feat'],
+    title: 'admin · realtime — live subscription snapshot',
+    body: 'new admin page at /dashboard/admin/realtime shows per-project subscription counts + per-channel refcounts + the current cap values, with severity coloring at 60% and 90% of the per-project cap so an operator can spot a noisy project before it gets clamped. backed by a shared-secret-gated /v1/realtime/stats on the realtime service (no PII leaked — only project ids and channel names). 503 with a clear "not configured" state when the realtime URL or shared secret is unset.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['security'],
     title: 'subscription caps on realtime — per-ws + per-project',
     body: 'realtime now refuses subscribe frames past BRIVEN_REALTIME_MAX_SUBS_PER_WS (default 200) and BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT (default 10,000 — the year-one platform ceiling). counter briven_realtime_subscribe_rejected_total{reason="ws_limit"|"project_limit"} lights up on /metrics so an operator can spot a runaway client. error frames carry the offending subscriptionId so the client can correlate. closes the "single bad ws can exhaust 10k concurrent subs" surface noted in BUILD_PLAN §7.4.',
