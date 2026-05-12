@@ -162,8 +162,7 @@ export default function PrivacyPage() {
           in the Settings page;
         </li>
         <li>
-          <strong>erase</strong> your data — closing your account triggers erasure on the timeline
-          described in section 5;
+          <strong>erase</strong> your data — open <a className="text-[var(--color-text-link)]" href="/dashboard/settings">Settings → Danger zone</a> and click <em>delete account</em>. We send a confirmation email the moment the request lands, soft-delete your projects and sole-owner orgs, revoke your API keys, and clear your PII (legal name, address, VAT id, display name, profile image) from our control plane. After the 30-day reversal window the row is hard-deleted and the data is unrecoverable. Multi-owner team orgs survive (you&apos;re removed from membership instead).
         </li>
         <li>
           <strong>port</strong> your data — <code>briven export --with-data</code> produces a

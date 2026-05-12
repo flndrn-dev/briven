@@ -10,6 +10,18 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['feat', 'security'],
+    title: 'account deletion (gdpr article 17) — 30-day soft-delete cascade',
+    body: "settings · danger zone now ships a real account-deletion flow. typed-email confirmation gates the click; the api revokes every session, every api key on sole-ownership projects, and every pending invitation the user sent. sole-owner orgs (personal + any team where the user is the only owner) and the projects under them soft-delete. multi-owner team orgs survive — the user is just removed from membership. PII clears in the same transaction (legal name, address, VAT, company, display name, image); id + email + createdAt stay so audit-log FKs survive. confirmation email lands before the cascade runs. a daily 03:30 UTC worker hard-deletes rows past the 30-day grace window; FK CASCADE handles the rest. polar subscriptions are NOT auto-cancelled — manage via the polar portal during the grace window.",
+  },
+  {
+    date: '2026-05-12',
+    tags: ['infra'],
+    title: 'alertmanager + discord bridges in the observability stack',
+    body: 'prometheus alerts now route through alertmanager → benjojo/alertmanager-discord bridges → two discord channels. severity=critical|warning lands in #briven-alerts (page-worthy); info lands in #briven-deploys. operator pastes DISCORD_WEBHOOK_ALERTS + DISCORD_WEBHOOK_DEPLOYS into the dokploy env; the bridges hold them inside the docker network so urls never leave the host. group_wait 30s, group_interval 5m, repeat_interval 4h, plus an inhibit rule so a critical for (service, alertname) suppresses redundant warnings.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['docs'],
     title: 'http api reference at /docs/api',
     body: 'every public endpoint grouped by area (invoke, realtime, projects, deployments, studio, logs + stats, usage, api keys, project members, orgs, billing) with method, path, and a one-line summary. linked from the docs sidebar.',
