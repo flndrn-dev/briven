@@ -15,6 +15,19 @@ export const metadata: Metadata = {
     shortcut: '/favicon.svg',
   },
   metadataBase: new URL('https://docs.briven.tech'),
+  openGraph: {
+    title: 'briven docs',
+    description: 'reactive postgres, worldwide, fully portable — developer docs.',
+    url: 'https://docs.briven.tech',
+    siteName: 'briven docs',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'briven docs',
+    description: 'reactive postgres, worldwide, fully portable — developer docs.',
+  },
   alternates: {
     types: {
       'application/rss+xml': '/changelog/feed.xml',
