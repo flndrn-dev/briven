@@ -128,15 +128,22 @@ const envSchema = z.object({
   // Refresh the DB monthly via the free MaxMind account download portal.
   BRIVEN_GEOIP_DB_PATH: z.string().optional(),
 
-  // Ollama base URL for the AI schema generator (Phase 3 differentiator).
-  // Points at the DGX VPS in production. When unset, /v1/ai/* endpoints
-  // return 503 not_configured and the dashboard hides the AI affordances.
+  // Ollama base URL for the AI features (schema gen / function gen /
+  // explain / docs assistant). Points at the production proxy at
+  // ai.flndrn.com today; switches to a local DGX hostname once the
+  // hardware lands. When unset, /v1/projects/:id/ai/* endpoints return
+  // 503 not_configured and the dashboard hides the AI affordances.
   BRIVEN_OLLAMA_URL: z.string().url().optional(),
-  // Default model id — must match what Ollama has pulled. Targets Qwen
-  // 2.5-coder 32B per the build plan's recommendation. Each AI feature
-  // can override via BRIVEN_OLLAMA_MODEL_<FEATURE> below; unset means
-  // "fall back to this default". See docs/AI.md for the recommended
-  // per-feature matrix.
+  // Optional bearer token for the Ollama backend. The production
+  // proxy at ai.flndrn.com is gated by API-key auth; a local Ollama
+  // on the DGX over a private network doesn't need this (leave unset).
+  // When set we send `Authorization: Bearer <key>` on every /api/generate
+  // request. NEVER log this value.
+  BRIVEN_OLLAMA_API_KEY: z.string().optional(),
+  // Default model id — must match what Ollama has pulled / what the
+  // proxy exposes. Each AI feature can override via
+  // BRIVEN_OLLAMA_MODEL_<FEATURE> below; unset means "fall back to this
+  // default". See docs/AI.md for the recommended per-feature matrix.
   BRIVEN_OLLAMA_MODEL: z.string().default('qwen2.5-coder:32b'),
   BRIVEN_OLLAMA_MODEL_SCHEMA: z.string().optional(),
   BRIVEN_OLLAMA_MODEL_FUNCTION: z.string().optional(),

@@ -5,6 +5,15 @@
 
 The AI features (`/dashboard/projects/:id/ai-schema`, `/ai-function`, `/ai-explain`, and `briven ai …` from the CLI) are gated by a single env var on the api host: `BRIVEN_OLLAMA_URL`. When it's unset every AI endpoint returns `503 not_configured` and the dashboard renders a clear "AI assistant offline" state. When it's set, the api forwards prompts to Ollama's `POST /api/generate` and surfaces the response. Prompts and responses are **not logged** (CLAUDE.md §5.1 — operator might paste real business names into a prompt). Only prompt length + elapsed ms + status code go to the log stream.
 
+**Two backend shapes** are supported with the same env contract:
+
+| Setup | URL shape | Auth |
+|---|---|---|
+| **Production proxy** (current) | `https://ai.flndrn.com` | Bearer token via `BRIVEN_OLLAMA_API_KEY` |
+| **Local DGX** (coming soon) | `http://<dgx-host>:11434` | No auth — relies on private-network reachability |
+
+The code branches on `BRIVEN_OLLAMA_API_KEY` — sends the `Authorization: Bearer <key>` header when set, omits it when unset. Switching from the proxy to the local DGX is a config change, not a code change.
+
 ---
 
 ## What briven's AI features actually do
@@ -34,24 +43,37 @@ Why specifically that:
 
 That's what `BRIVEN_OLLAMA_MODEL` defaults to in `apps/api/src/env.ts`. You don't need to override it unless you want a different model.
 
-### Setup
+### Setup — production proxy (current)
 
-On the DGX:
+The hosted proxy at `ai.flndrn.com` exposes a standard Ollama-compatible `/api/generate` endpoint behind a bearer token. On the briven api host (Dokploy env or `.env`):
+
+```bash
+BRIVEN_OLLAMA_URL=https://ai.flndrn.com
+BRIVEN_OLLAMA_API_KEY=<your bearer token>
+BRIVEN_OLLAMA_MODEL=Qwen2.5-coder:latest
+```
+
+Restart the api container. Hit `https://briven.tech/dashboard/projects/<your-project-id>/ai-schema` — the 503 disappears and a prompt returns a draft schema.
+
+**Key handling:** treat `BRIVEN_OLLAMA_API_KEY` exactly like a Polar / Stripe API key — Dokploy stores it encrypted, never check it into git, rotate quarterly. The api never logs the key (CLAUDE.md §5.1).
+
+### Setup — local DGX (planned)
+
+When the DGX hardware lands the env flips to point at a private-network hostname and the API-key var drops out:
+
+```bash
+BRIVEN_OLLAMA_URL=http://<dgx-host>:11434
+# BRIVEN_OLLAMA_API_KEY=  <-- unset
+BRIVEN_OLLAMA_MODEL=qwen2.5-coder:32b-instruct-q5_K_M
+```
+
+On the DGX side:
 
 ```bash
 ollama pull qwen2.5-coder:32b-instruct-q5_K_M
 ```
 
-On the briven api host (env file or Dokploy env):
-
-```bash
-BRIVEN_OLLAMA_URL=http://<dgx-host>:11434
-BRIVEN_OLLAMA_MODEL=qwen2.5-coder:32b-instruct-q5_K_M
-```
-
-Restart the api container. Hit `https://briven.tech/dashboard/projects/<your-project-id>/ai-schema` — the 503 disappears and a prompt returns a draft schema.
-
-The api expects Ollama's standard `/api/generate` endpoint. No auth header is sent — Ollama is expected to be reachable only on the internal network. If you expose it past your VPC, put a reverse proxy with shared-secret auth in front of it; briven's pattern with the runtime + realtime services (BRIVEN_RUNTIME_SHARED_SECRET) is the same idea.
+The DGX must be reachable from the api's docker network but not from the public internet. briven's pattern with the runtime + realtime services (`BRIVEN_RUNTIME_SHARED_SECRET` on a private docker network) is the same idea — defense by network topology rather than per-request auth.
 
 ---
 
@@ -138,10 +160,15 @@ Watch the api logs for:
 There's no dedicated "is the AI backend up?" probe today. The simplest check from the operator side:
 
 ```bash
+# production proxy
+curl -sS -H "Authorization: Bearer $BRIVEN_OLLAMA_API_KEY" \
+  https://ai.flndrn.com/api/tags | jq -r '.models[].name'
+
+# local DGX
 curl -sS http://<dgx-host>:11434/api/tags | jq -r '.models[].name'
 ```
 
-Should list the models you've pulled. If it doesn't respond, Ollama is down — restart on the DGX side. The briven api gracefully returns `503 not_configured` for the duration of the outage; no other surface is affected.
+Should list the models the backend has. If it doesn't respond, Ollama is down (or the proxy is). The briven api gracefully returns `503 not_configured` for the duration of the outage; no other surface is affected.
 
 ---
 
