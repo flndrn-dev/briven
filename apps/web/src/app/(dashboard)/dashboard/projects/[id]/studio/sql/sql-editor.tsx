@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 
 interface QueryResult {
   columns: Array<{ name: string; dataType: string }>;
@@ -17,11 +17,43 @@ const STARTER_SQL = `-- examples
 
 `;
 
+const HISTORY_MAX = 10;
+
+function historyKey(projectId: string): string {
+  return `briven.sql.history.${projectId}`;
+}
+
+function loadHistory(projectId: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(historyKey(projectId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(projectId: string, history: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(historyKey(projectId), JSON.stringify(history));
+  } catch {
+    // storage quota — drop silently
+  }
+}
+
 export function SqlEditor({ projectId }: { projectId: string }) {
   const [sql, setSql] = useState(STARTER_SQL);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [history, setHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    setHistory(loadHistory(projectId));
+  }, [projectId]);
 
   async function run() {
     setPending(true);
@@ -38,6 +70,15 @@ export function SqlEditor({ projectId }: { projectId: string }) {
       }
       const data = (await res.json()) as QueryResult;
       setResult(data);
+      // Push the successfully-run sql onto the history. De-dupe consecutive
+      // duplicates so users hitting "run" 5x doesn't fill the slate.
+      setHistory((prev) => {
+        const trimmed = sql.trim();
+        if (!trimmed || prev[0] === trimmed) return prev;
+        const next = [trimmed, ...prev.filter((q) => q !== trimmed)].slice(0, HISTORY_MAX);
+        saveHistory(projectId, next);
+        return next;
+      });
     } catch (err) {
       setResult(null);
       setError(err instanceof Error ? err.message : 'query failed');
@@ -77,6 +118,42 @@ export function SqlEditor({ projectId }: { projectId: string }) {
           {pending ? 'running…' : 'run query'}
         </button>
       </div>
+
+      {history.length > 0 ? (
+        <details className="rounded-md border border-[var(--color-border-subtle)]">
+          <summary className="cursor-pointer px-3 py-2 font-mono text-[10px] text-[var(--color-text-muted)]">
+            history ({history.length})
+          </summary>
+          <ul className="flex flex-col gap-1 border-t border-[var(--color-border-subtle)] p-2">
+            {history.map((q, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSql(q)}
+                  className="flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-left font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                  title={q}
+                >
+                  {q.replace(/\s+/g, ' ').slice(0, 100)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistory((prev) => {
+                      const next = prev.filter((x) => x !== q);
+                      saveHistory(projectId, next);
+                      return next;
+                    });
+                  }}
+                  className="font-mono text-[10px] text-[var(--color-text-subtle)] hover:text-[var(--color-text-error)]"
+                  aria-label="forget this query"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       {error ? (
         <pre className="overflow-x-auto rounded-md bg-red-400/10 p-3 font-mono text-xs text-red-400">
