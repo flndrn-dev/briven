@@ -164,6 +164,22 @@ async function TeamInvites({ teamId }: { teamId: string }) {
     redirect(`/dashboard/teams/${teamId}`);
   }
 
+  async function changeRole(userId: string, formData: FormData) {
+    'use server';
+    const role = String(formData.get('role') ?? '').trim();
+    if (!role) throw new Error('role is required');
+    const res = await apiFetch(`/v1/orgs/${teamId}/members/${userId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(body.message ?? `role change failed: ${res.status}`);
+    }
+    redirect(`/dashboard/teams/${teamId}`);
+  }
+
   async function invite(formData: FormData) {
     'use server';
     const email = String(formData.get('email') ?? '').trim();
@@ -212,16 +228,37 @@ async function TeamInvites({ teamId }: { teamId: string }) {
                 {m.role} · joined {new Date(m.joinedAt).toISOString().slice(0, 10)}
               </p>
             </div>
-            {m.role !== 'owner' ? (
-              <form action={removeMember.bind(null, m.userId)}>
+            <div className="flex items-center gap-2">
+              <form action={changeRole.bind(null, m.userId)} className="flex items-center gap-1">
+                <select
+                  name="role"
+                  defaultValue={m.role}
+                  aria-label={`role for ${m.email}`}
+                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-[10px] outline-none focus:border-[var(--color-primary)]"
+                >
+                  <option value="owner">owner</option>
+                  <option value="admin">admin</option>
+                  <option value="developer">developer</option>
+                  <option value="viewer">viewer</option>
+                </select>
                 <button
                   type="submit"
-                  className="rounded-md border border-[var(--color-border)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)]"
+                  className="rounded-md border border-[var(--color-border)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                 >
-                  remove
+                  save
                 </button>
               </form>
-            ) : null}
+              {m.role !== 'owner' ? (
+                <form action={removeMember.bind(null, m.userId)}>
+                  <button
+                    type="submit"
+                    className="rounded-md border border-[var(--color-border)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)]"
+                  >
+                    remove
+                  </button>
+                </form>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>

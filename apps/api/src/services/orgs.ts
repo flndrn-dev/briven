@@ -316,6 +316,50 @@ export async function listOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
 }
 
 /**
+ * Change a member's role inside an org. Same last-owner protection as
+ * removeOrgMember: if the only owner is being demoted, the request is
+ * rejected and the caller is told to promote another member first.
+ */
+export async function changeOrgMemberRole(args: {
+  orgId: string;
+  userId: string;
+  newRole: OrgRole;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const db = getDb();
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, args.orgId))
+    .limit(1);
+  if (!org) return { ok: false, reason: 'org not found' };
+  if (org.personal) return { ok: false, reason: 'cannot change roles in a personal org' };
+
+  const [target] = await db
+    .select()
+    .from(orgMembers)
+    .where(and(eq(orgMembers.orgId, args.orgId), eq(orgMembers.userId, args.userId)))
+    .limit(1);
+  if (!target) return { ok: false, reason: 'user is not a member of this org' };
+  if (target.role === args.newRole) return { ok: true };
+
+  if (target.role === 'owner' && args.newRole !== 'owner') {
+    const owners = await db
+      .select({ userId: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, args.orgId), eq(orgMembers.role, 'owner')));
+    if (owners.length <= 1) {
+      return { ok: false, reason: 'cannot demote the last owner — promote another member first' };
+    }
+  }
+
+  await db
+    .update(orgMembers)
+    .set({ role: args.newRole })
+    .where(and(eq(orgMembers.orgId, args.orgId), eq(orgMembers.userId, args.userId)));
+  return { ok: true };
+}
+
+/**
  * Remove a member from an org. Refuses to remove the last owner — every
  * team must always have at least one owner so billing/admin actions remain
  * possible. Personal orgs reject removal entirely.

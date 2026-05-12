@@ -8,6 +8,7 @@ import type { AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   canUserCreateAnotherOrg,
+  changeOrgMemberRole,
   createOrg,
   getDefaultOrgForUser,
   isOrgMember,
@@ -191,6 +192,41 @@ orgsRouter.get('/v1/orgs/:id/members', async (c) => {
   }
   const members = await listOrgMembers(orgId);
   return c.json({ members });
+});
+
+const changeRoleSchema = z.object({
+  role: z.enum(orgRole),
+});
+
+orgsRouter.patch('/v1/orgs/:id/members/:userId', async (c) => {
+  const actor = c.get('user')!;
+  const orgId = c.req.param('id');
+  const targetUserId = c.req.param('userId');
+  if (!(await isOrgMember(actor.id, orgId))) {
+    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  }
+  const body = await c.req.json().catch(() => null);
+  const parsed = changeRoleSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const result = await changeOrgMemberRole({
+    orgId,
+    userId: targetUserId,
+    newRole: parsed.data.role,
+  });
+  if (!result.ok) {
+    return c.json({ code: 'cannot_change_role', message: result.reason }, 400);
+  }
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'org.member.role_changed',
+    ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { orgId, userId: targetUserId, newRole: parsed.data.role },
+  });
+  return c.json({ ok: true, role: parsed.data.role });
 });
 
 orgsRouter.delete('/v1/orgs/:id/members/:userId', async (c) => {
