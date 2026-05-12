@@ -197,7 +197,7 @@ export default async function BillingPage({
         <div className="flex items-baseline justify-between">
           <h2 className="font-mono text-sm text-[var(--color-text)]">included this month</h2>
           <span className="font-mono text-xs text-[var(--color-text-subtle)]">
-            usage metering arrives in phase 4
+            current month so far · live
           </span>
         </div>
         <dl className="grid grid-cols-[200px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm">
@@ -206,8 +206,9 @@ export default async function BillingPage({
           ))}
         </dl>
         <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-          phase 2/3 enforces hard caps at these limits. the meter + overage billing turn on for
-          public beta (phase 4).
+          today these are soft caps — the meter records every invocation but billing only
+          tracks the included bucket. overage billing arrives with the public beta. your
+          per-project page shows live usage against each cap.
         </p>
       </section>
 
