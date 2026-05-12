@@ -15,6 +15,7 @@ interface ColumnInfo {
   defaultExpr: string | null;
   ordinalPosition: number;
   isPrimaryKey: boolean;
+  references?: { table: string; column: string } | null;
 }
 
 interface TableRows {
@@ -237,6 +238,9 @@ export default async function TablePage({
                     <span className="text-[10px] text-[var(--color-text-subtle)]">
                       {col.dataType}
                       {col.nullable ? '' : ' · not null'}
+                      {col.references
+                        ? ` · → ${col.references.table}.${col.references.column}`
+                        : ''}
                     </span>
                   </Link>
                 </th>
@@ -272,20 +276,40 @@ export default async function TablePage({
                   >
                     {data.columns.map((col) => {
                       const isPk = col.isPrimaryKey;
+                      const cellValue = row[col.name];
+                      const fkLink =
+                        col.references && cellValue != null
+                          ? `/dashboard/projects/${id}/studio/${encodeURIComponent(
+                              col.references.table,
+                            )}?${col.references.column}__eq=${encodeURIComponent(String(cellValue))}`
+                          : null;
                       return (
                         <td key={col.name} className="max-w-xs truncate px-3 py-2 align-top">
-                          {canEdit ? (
-                            <EditableCell
-                              action={updateRow}
-                              primaryKeyColumn={pkColumn}
-                              primaryKeyValue={pkValue as string | number}
-                              column={col.name}
-                              initialValue={row[col.name]}
-                              readOnly={isPk}
-                            />
-                          ) : (
-                            renderCell(row[col.name])
-                          )}
+                          <div className="flex items-center gap-1">
+                            <div className="min-w-0 flex-1 truncate">
+                              {canEdit ? (
+                                <EditableCell
+                                  action={updateRow}
+                                  primaryKeyColumn={pkColumn}
+                                  primaryKeyValue={pkValue as string | number}
+                                  column={col.name}
+                                  initialValue={cellValue}
+                                  readOnly={isPk}
+                                />
+                              ) : (
+                                renderCell(cellValue)
+                              )}
+                            </div>
+                            {fkLink ? (
+                              <Link
+                                href={fkLink}
+                                className="shrink-0 text-[var(--color-text-subtle)] hover:text-[var(--color-primary)]"
+                                title={`open ${col.references!.table}.${col.references!.column} = ${String(cellValue)}`}
+                              >
+                                ↗
+                              </Link>
+                            ) : null}
+                          </div>
                         </td>
                       );
                     })}
