@@ -1,6 +1,6 @@
 import { brivenError, ValidationError } from '@briven/shared';
 
-import { dataPlaneClient, schemaNameFor } from '../db/data-plane.js';
+import { dataPlaneClient, roleNameFor, schemaNameFor } from '../db/data-plane.js';
 
 /**
  * Studio read-mode services. Phase 2 first slice — table listing only.
@@ -399,6 +399,81 @@ export interface DeleteRowInput {
 
 export interface DeleteRowResult {
   readonly affected: number;
+}
+
+export interface QueryResult {
+  readonly columns: ReadonlyArray<{ name: string; dataType: string }>;
+  readonly rows: ReadonlyArray<Record<string, unknown>>;
+  readonly rowCount: number;
+  readonly command: string;
+  readonly elapsedMs: number;
+}
+
+/**
+ * Run an arbitrary SQL statement against the project's schema. Scoped via
+ * `SET LOCAL ROLE` to the per-project owner role so the user can only touch
+ * their own tables — same isolation the shell-token DSN already enforces.
+ *
+ *  - 5s statement_timeout
+ *  - search_path pinned to the project schema + public
+ *  - transactional: rolls back if the statement errors
+ *  - audit-logged by the route handler (sql text + elapsed)
+ *
+ * NB: trusting the user with their own data is fine; this lets them DROP
+ * their own tables if they want to. Platform-owned `_briven_*` tables are
+ * REVOKEd at provision time so the project role can't touch them.
+ */
+export async function executeQuery(projectId: string, sqlText: string): Promise<QueryResult> {
+  if (typeof sqlText !== 'string' || sqlText.trim() === '') {
+    throw new ValidationError('sql is required', {});
+  }
+  if (sqlText.length > 16 * 1024) {
+    throw new ValidationError('sql payload too large', { max: 16 * 1024 });
+  }
+  const role = roleNameFor(projectId);
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  const t0 = Date.now();
+
+  // postgres.js exposes `.begin()` which gives a tagged template + .unsafe
+  // bound to the same physical connection. Everything inside runs in one
+  // tx; throwing rolls it back.
+  const out = (await sql.begin(async (tx) => {
+    await tx.unsafe(`SET LOCAL ROLE "${role}"`);
+    await tx.unsafe(`SET LOCAL search_path TO "${schema}", public`);
+    await tx.unsafe(`SET LOCAL statement_timeout = '5s'`);
+    const result = (await tx.unsafe(sqlText)) as Array<Record<string, unknown>> & {
+      count?: number;
+      command?: string;
+      columns?: Array<{ name: string; type?: number; parser?: unknown }>;
+    };
+    return {
+      rows: Array.isArray(result) ? [...result] : [],
+      count: typeof result.count === 'number' ? result.count : result.length ?? 0,
+      command: result.command ?? 'UNKNOWN',
+      columns: Array.isArray(result.columns) ? result.columns : [],
+    };
+  })) as {
+    rows: Array<Record<string, unknown>>;
+    count: number;
+    command: string;
+    columns: Array<{ name: string; type?: number }>;
+  };
+
+  const elapsedMs = Date.now() - t0;
+
+  // postgres.js gives us column oids; we don't have the type-name lookup
+  // cheap here. Surface the column name and leave dataType as 'unknown' so
+  // the UI can still render a table. Future slice: join against pg_type.
+  const columns = out.columns.map((c) => ({ name: c.name, dataType: 'unknown' }));
+
+  return {
+    columns,
+    rows: out.rows,
+    rowCount: out.count,
+    command: out.command,
+    elapsedMs,
+  };
 }
 
 /**
