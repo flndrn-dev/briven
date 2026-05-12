@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { functionLogs, type FunctionLog } from '../db/schema.js';
@@ -47,6 +47,56 @@ export async function listFunctionLogs(
     .where(filters.length === 1 ? filters[0] : and(...filters))
     .orderBy(desc(functionLogs.createdAt))
     .limit(limit);
+}
+
+export interface FunctionStats {
+  readonly count: number;
+  readonly errCount: number;
+  readonly p50Ms: number;
+  readonly p99Ms: number;
+}
+
+/**
+ * Per-function aggregates over the last N hours. Drives the per-function
+ * stats badge on the functions tab. Uses percentile_cont — postgres-only
+ * but the function_logs table is always in postgres so that's fine.
+ *
+ * durationMs is stored as varchar (legacy choice from the runtime payload
+ * shape) — CAST to numeric for the aggregation.
+ */
+export async function getFunctionStats(
+  projectId: string,
+  functionName: string,
+  sinceHours = 24,
+): Promise<FunctionStats> {
+  const db = getDb();
+  const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+  const rows = (await db.execute(sql`
+    SELECT
+      count(*)::int AS count,
+      count(*) FILTER (WHERE status = 'err')::int AS err_count,
+      coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY (duration_ms::numeric)), 0) AS p50,
+      coalesce(percentile_cont(0.99) WITHIN GROUP (ORDER BY (duration_ms::numeric)), 0) AS p99
+    FROM function_logs
+    WHERE project_id = ${projectId}
+      AND function_name = ${functionName}
+      AND created_at >= ${since}
+  `)) as Array<{
+    count: number | string;
+    err_count: number | string;
+    p50: number | string;
+    p99: number | string;
+  }>;
+  const row = rows[0];
+  if (!row) {
+    return { count: 0, errCount: 0, p50Ms: 0, p99Ms: 0 };
+  }
+  return {
+    count: Number(row.count) || 0,
+    errCount: Number(row.err_count) || 0,
+    p50Ms: Math.round(Number(row.p50) || 0),
+    p99Ms: Math.round(Number(row.p99) || 0),
+  };
 }
 
 /**

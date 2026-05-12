@@ -6,7 +6,11 @@ import { requireAuth } from '../middleware/session.js';
 import type { AppEnv } from '../types/app-env.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
-import { listFunctionLogs, listFunctionNames } from '../services/function-logs.js';
+import {
+  getFunctionStats,
+  listFunctionLogs,
+  listFunctionNames,
+} from '../services/function-logs.js';
 import { getDefaultOrgForUser, isOrgMember, listOrgsForUser } from '../services/orgs.js';
 import {
   createProject,
@@ -203,6 +207,19 @@ projectsRouter.get('/v1/projects/:id/function-names', async (c) => {
   const project = await getProjectForUser(c.req.param('id'), user.id);
   const names = await listFunctionNames(project.id);
   return c.json({ names });
+});
+
+projectsRouter.get('/v1/projects/:id/function-stats', async (c) => {
+  const user = c.get('user')!;
+  const project = await getProjectForUser(c.req.param('id'), user.id);
+  const fn = c.req.query('function');
+  if (!fn || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(fn)) {
+    return c.json({ code: 'validation_failed', message: 'expected ?function=name' }, 400);
+  }
+  const hoursParam = Number(c.req.query('hours') ?? '24');
+  const hours = Number.isFinite(hoursParam) ? Math.min(Math.max(hoursParam, 1), 24 * 30) : 24;
+  const stats = await getFunctionStats(project.id, fn, hours);
+  return c.json({ ...stats, sinceHours: hours });
 });
 
 projectsRouter.get('/v1/projects/:id/activity', async (c) => {
