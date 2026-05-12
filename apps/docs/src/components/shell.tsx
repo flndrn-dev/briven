@@ -13,6 +13,7 @@ const NAV: readonly NavItem[] = [
   { href: '/schema', label: 'schema dsl' },
   { href: '/examples', label: 'examples' },
   { href: '/functions', label: 'functions' },
+  { href: '/realtime', label: 'realtime' },
   { href: '/sdks', label: 'client sdks' },
   { href: '/api', label: 'http api' },
   { href: '/migration', label: 'migration' },
