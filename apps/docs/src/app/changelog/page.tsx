@@ -16,6 +16,18 @@ type Tag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'chore';
 const ENTRIES: readonly Entry[] = [
   {
     date: '2026-05-12',
+    tags: ['docs'],
+    title: 'http api reference at /docs/api',
+    body: 'every public endpoint grouped by area (invoke, realtime, projects, deployments, studio, logs + stats, usage, api keys, project members, orgs, billing) with method, path, and a one-line summary. linked from the docs sidebar.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
+    title: 'studio polish: ALTER COLUMN, TRUNCATE, schema overview, project move, invocation sparkline',
+    body: 'ALTER COLUMN endpoint toggles nullability and changes/drops default expressions with a 2-mode PATCH (rename OR alter). TRUNCATE TABLE button (RESTART IDENTITY, opt-in CASCADE) for wiping rows without dropping the schema. New /studio/schema page renders every table in one canvas with FK arrows + inbound references. Project settings grows "move to another team" — re-parents a project across orgs after verifying target-org membership. Project overview gains a 24-hour invocation sparkline (server-rendered SVG, no client JS) with red overlay for errors.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['feat'],
     title: 'function logs + per-function stats in the dashboard',
     body: "new /logs tab on every project surfaces function_logs (already populated by the runtime log-fanout worker) with chip filters per function and ok/err status, cursor-based pagination, and a JSON export that walks the cursor for up to 1000 rows honoring the active filter. Per-function stats badge on the functions tab shows last-24h count + error rate + p50/p99 duration via a single percentile_cont query. Project overview surfaces last 5 errors in a red-tinted card with a deep-link to the filtered logs view.",
