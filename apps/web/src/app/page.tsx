@@ -97,7 +97,7 @@ export default async function HomePage() {
       <section className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 gap-px border-t border-[var(--color-border-subtle)] bg-[var(--color-border-subtle)] sm:grid-cols-2 lg:grid-cols-4">
         <Pillar
           title="convex ergonomics"
-          body="one cli, one config, typescript end-to-end. aha moment in under 60 seconds."
+          body="cli or dashboard — build your schema by clicking through forms or by deploying schema.ts. typescript end-to-end, aha moment in under 60 seconds."
         />
         <Pillar
           title="postgres underneath"
