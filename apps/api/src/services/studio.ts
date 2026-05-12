@@ -799,6 +799,35 @@ export interface RelationshipEdge {
  * overview's "relationships" panel so users can see the shape of their
  * data model at a glance.
  */
+export interface FullSchemaTable {
+  readonly name: string;
+  readonly columns: readonly ColumnInfo[];
+}
+
+export interface FullSchema {
+  readonly tables: readonly FullSchemaTable[];
+  readonly relationships: readonly RelationshipEdge[];
+}
+
+/**
+ * One-shot read of every table + its columns + every FK edge. Drives the
+ * "schema overview" page so users see the entire data model in one place
+ * without paginating through each table individually.
+ *
+ * Single information_schema sweep — no per-table round-trip.
+ */
+export async function getFullSchema(projectId: string): Promise<FullSchema> {
+  const tables = await listProjectTables(projectId);
+  const perTable = await Promise.all(
+    tables.map(async (t) => ({
+      name: t.name,
+      columns: await getTableColumns(projectId, t.name),
+    })),
+  );
+  const relationships = await listRelationships(projectId);
+  return { tables: perTable, relationships };
+}
+
 export async function listRelationships(projectId: string): Promise<readonly RelationshipEdge[]> {
   const schema = schemaNameFor(projectId);
   const sql = dataPlaneClient();
