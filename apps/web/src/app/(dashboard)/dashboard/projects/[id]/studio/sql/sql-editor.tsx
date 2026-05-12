@@ -166,6 +166,26 @@ export function SqlEditor({ projectId }: { projectId: string }) {
           <div className="flex items-center justify-between font-mono text-[10px] text-[var(--color-text-muted)]">
             <span>
               {result.command} · {result.rowCount} row{result.rowCount === 1 ? '' : 's'}
+              {result.rows.length > 0 ? (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    onClick={() => downloadCsv(result)}
+                    className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
+                  >
+                    csv
+                  </button>
+                  {' · '}
+                  <button
+                    type="button"
+                    onClick={() => downloadJson(result)}
+                    className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
+                  >
+                    json
+                  </button>
+                </>
+              ) : null}
             </span>
             <span>{result.elapsedMs.toLocaleString()}ms</span>
           </div>
@@ -211,6 +231,50 @@ export function SqlEditor({ projectId }: { projectId: string }) {
       ) : null}
     </div>
   );
+}
+
+function downloadJson(result: QueryResult): void {
+  const blob = new Blob([JSON.stringify(result.rows, null, 2)], { type: 'application/json' });
+  triggerDownload(blob, `query-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+}
+
+function downloadCsv(result: QueryResult): void {
+  const cols = result.columns.map((c) => c.name);
+  const head = cols.map(escapeCsv).join(',');
+  const lines = result.rows.map((row) =>
+    cols.map((c) => escapeCsv(stringifyForCsv(row[c]))).join(','),
+  );
+  const text = [head, ...lines].join('\n');
+  const blob = new Blob([text], { type: 'text/csv' });
+  triggerDownload(blob, `query-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`);
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function stringifyForCsv(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (v instanceof Date) return v.toISOString();
+  return JSON.stringify(v);
+}
+
+function escapeCsv(s: string): string {
+  // RFC 4180: quote when value contains comma / newline / quote. Double up
+  // existing quotes inside.
+  if (/[",\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
 }
 
 function renderValue(v: unknown): string {
