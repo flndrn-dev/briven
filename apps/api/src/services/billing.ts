@@ -6,6 +6,7 @@ import { projects, subscriptions, type SubscriptionStatus } from '../db/schema.j
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import type { ProjectTier } from '../db/schema.js';
+import { invalidatePolarCustomerCache } from '../workers/polar-meter-push.js';
 import { invalidateTierCache } from './tiers.js';
 
 /**
@@ -172,7 +173,13 @@ export async function upsertSubscriptionFromPolar(input: {
     .set({ tier: effectiveTier, updatedAt: new Date() })
     .where(and(eq(projects.orgId, input.orgId), isNull(projects.deletedAt)))
     .returning({ id: projects.id });
-  for (const row of updated) invalidateTierCache(row.id);
+  for (const row of updated) {
+    invalidateTierCache(row.id);
+    // The polar customer id may have flipped on this checkout — drop the
+    // cached lookup so the next meter push picks up the fresh id without
+    // waiting on the 5-min TTL.
+    invalidatePolarCustomerCache(row.id);
+  }
 
   log.info('subscription_synced', {
     polarSubscriptionId: input.polarSubscriptionId,

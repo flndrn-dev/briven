@@ -19,7 +19,7 @@ interface UsageResponse {
   tier: 'free' | 'pro' | 'team';
   invocations: { count: number; totalDurationMs: number };
   storage: { bytes: number; tableCount: number };
-  limits: { invokesPerMonth: number };
+  limits: { invokesPerMonth: number; storageBytes: number };
 }
 
 interface FunctionLog {
@@ -106,7 +106,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
             />
             <Card
               label="storage"
-              value={formatBytes(usage.storage.bytes)}
+              value={`${formatBytes(usage.storage.bytes)} / ${formatBytes(usage.limits.storageBytes)}`}
               hint={`${usage.storage.tableCount} table${usage.storage.tableCount === 1 ? '' : 's'}`}
             />
             <Card

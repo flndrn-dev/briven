@@ -14,12 +14,34 @@ export interface TierLimits {
   readonly functionsPerProject: number;
   /** Soft cap — surfaced in dashboard; no hard enforcement per month yet. */
   readonly invokesPerMonth: number;
+  /**
+   * Total bytes on disk for the project's schema (user tables + indexes
+   * + toast, excluding `_briven_*` bookkeeping). Soft cap — surfaced in
+   * the dashboard usage widget; deploy-time enforcement is a Phase 3
+   * follow-up that lands once the Polar metering push goes live.
+   */
+  readonly storageBytes: number;
 }
 
 export const TIERS: Record<ProjectTier, TierLimits> = {
-  free: { projectsPerOrg: 3, functionsPerProject: 20, invokesPerMonth: 100_000 },
-  pro: { projectsPerOrg: 20, functionsPerProject: 200, invokesPerMonth: 1_000_000 },
-  team: { projectsPerOrg: 100, functionsPerProject: 2_000, invokesPerMonth: 10_000_000 },
+  free: {
+    projectsPerOrg: 3,
+    functionsPerProject: 20,
+    invokesPerMonth: 100_000,
+    storageBytes: 1_073_741_824, // 1 GiB
+  },
+  pro: {
+    projectsPerOrg: 20,
+    functionsPerProject: 200,
+    invokesPerMonth: 1_000_000,
+    storageBytes: 10_737_418_240, // 10 GiB
+  },
+  team: {
+    projectsPerOrg: 100,
+    functionsPerProject: 2_000,
+    invokesPerMonth: 10_000_000,
+    storageBytes: 107_374_182_400, // 100 GiB
+  },
 };
 
 /**
