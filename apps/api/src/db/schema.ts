@@ -72,6 +72,10 @@ export const users = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
+    // Optional free-text reason the user supplied at deletion time.
+    // Surfaced only in audit_logs / admin tools — never replayed back
+    // to the user, never used in cross-user analytics.
+    deletionReason: text('deletion_reason'),
   },
   (t) => ({
     emailIdx: uniqueIndex('users_email_idx').on(t.email),

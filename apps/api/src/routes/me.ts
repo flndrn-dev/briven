@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { requireAuth } from '../middleware/session.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types/app-env.js';
+import { softDeleteAccount } from '../services/account-deletion.js';
 import { audit, hashIp } from '../services/audit.js';
 import { checkVatWithVies } from '../services/billing.js';
 import {
@@ -151,3 +153,60 @@ meRouter.delete('/v1/me/avatar', requireAuth(), async (c) => {
   const profile = await getProfile(user.id);
   return c.json(profile);
 });
+
+const deleteAccountSchema = z.object({
+  // Typed-email confirmation prevents an accidental click — the route
+  // refuses unless this matches the signed-in user's address.
+  confirmation: z.string().email(),
+  // Optional short justification surfaced only in audit_logs for the
+  // operator. Capped to a sane length so a user can't dump an essay.
+  reason: z.string().min(1).max(2000).optional(),
+});
+
+meRouter.post(
+  '/v1/me/delete-account',
+  requireAuth(),
+  // Tight rate-limit so a hijacked session can't grief: 3 attempts per
+  // hour per session ip. Real deletes are once-in-a-lifetime; the limit
+  // is mostly to absorb double-clicks + the typed-email retry path.
+  rateLimit({
+    scope: 'me-delete-account',
+    limit: 3,
+    windowMs: 60 * 60_000,
+    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+  }),
+  async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+    const body = await c.req.json().catch(() => null);
+    const parsed = deleteAccountSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+    }
+    if (parsed.data.confirmation.toLowerCase() !== user.email.toLowerCase()) {
+      return c.json(
+        {
+          code: 'confirmation_mismatch',
+          message: 'type your email exactly as registered to confirm deletion',
+        },
+        400,
+      );
+    }
+    const counts = await softDeleteAccount({
+      userId: user.id,
+      reason: parsed.data.reason,
+    });
+    // Audit-side IP hash so an operator can correlate the request with a
+    // specific session if it ever needs to be reverted within the grace
+    // window. The cascade summary is already on account-deletion.audit.
+    await audit({
+      actorId: user.id,
+      projectId: null,
+      action: 'account.delete_requested',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { counts },
+    });
+    return c.json({ deleted: true });
+  },
+);

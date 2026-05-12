@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { AvatarUploader } from '../../../../components/avatar-uploader';
 import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
+import { DeleteAccountForm } from './delete-account-form';
 import { ProfileForm } from './profile-form';
 
 interface PendingInvitation {
@@ -189,11 +190,7 @@ export default async function SettingsPage() {
 
       <section>
         <h2 className="font-mono text-sm text-red-400">danger zone</h2>
-        <div className="mt-3 rounded-md border border-red-400/30 bg-red-400/5 p-5 font-mono text-sm">
-          <p>
-            account deletion arrives in phase 3. use <code>briven cli export</code> first.
-          </p>
-        </div>
+        <DeleteAccountForm email={user.email} />
       </section>
     </div>
   );
