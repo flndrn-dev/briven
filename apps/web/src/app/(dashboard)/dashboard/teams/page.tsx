@@ -10,6 +10,10 @@ interface Org {
   createdAt: string | Date;
 }
 
+interface SubscriptionSummary {
+  tier: 'free' | 'pro' | 'team';
+}
+
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'teams' };
 
@@ -20,9 +24,15 @@ function formatDate(t: string | Date): string {
 }
 
 export default async function TeamsPage() {
-  const { orgs } = await apiJson<{ orgs: Org[] }>('/v1/me/orgs');
+  const [{ orgs }, subscription] = await Promise.all([
+    apiJson<{ orgs: Org[] }>('/v1/me/orgs'),
+    apiJson<SubscriptionSummary>('/v1/billing/subscription').catch(() => ({
+      tier: 'free' as const,
+    })),
+  ]);
   const personal = orgs.find((o) => o.personal);
   const teams = orgs.filter((o) => !o.personal);
+  const canCreateTeam = subscription.tier !== 'free';
 
   return (
     <section className="flex flex-col gap-6">
@@ -34,12 +44,21 @@ export default async function TeamsPage() {
             create teams to share projects with collaborators.
           </p>
         </div>
-        <Link
-          href="/dashboard/teams/new"
-          className="rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
-        >
-          new team
-        </Link>
+        {canCreateTeam ? (
+          <Link
+            href="/dashboard/teams/new"
+            className="rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
+          >
+            new team
+          </Link>
+        ) : (
+          <Link
+            href="/dashboard/billing/upgrade"
+            className="rounded-md border border-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-primary)] transition hover:bg-[var(--color-surface)]"
+          >
+            upgrade to create teams
+          </Link>
+        )}
       </header>
 
       {personal ? (
@@ -57,8 +76,17 @@ export default async function TeamsPage() {
         <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">teams</h2>
         {teams.length === 0 ? (
           <div className="rounded-md border border-dashed border-[var(--color-border)] p-6 font-mono text-sm text-[var(--color-text-muted)]">
-            no teams yet. create one to share projects, billing, and audit logs with
-            collaborators.
+            {canCreateTeam ? (
+              <>
+                no teams yet. create one to share projects, billing, and audit logs with
+                collaborators.
+              </>
+            ) : (
+              <>
+                team workspaces are a paid feature. on the free tier you get one personal org;
+                upgrade to pro or team to spin up unlimited shared workspaces.
+              </>
+            )}
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
