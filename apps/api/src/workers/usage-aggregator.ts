@@ -6,6 +6,7 @@ import { getDb } from '../db/client.js';
 import { projects, usageEvents, type UsageMetric } from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
+import { collectConnectionSecondsDeltas } from '../services/connection-seconds.js';
 import { getInvocationUsage, getStorageUsage } from '../services/usage.js';
 
 /**
@@ -50,10 +51,21 @@ export async function aggregateUsageForCompletedHour(now: Date = new Date()): Pr
     .from(projects)
     .where(isNull(projects.deletedAt));
 
+  // Scrape the realtime /metrics counter once for the whole batch — the
+  // diff returned is the per-project delta since the previous hourly
+  // scrape. Projects not in the map had no realtime activity this hour;
+  // we don't write a zero row for them (saves index churn).
+  const connectionSeconds = await collectConnectionSecondsDeltas();
+
   let rowsWritten = 0;
   for (const { id: projectId } of activeProjects) {
     try {
-      const written = await rollUpProject(projectId, periodStart, periodEnd);
+      const written = await rollUpProject(
+        projectId,
+        periodStart,
+        periodEnd,
+        connectionSeconds.get(projectId) ?? null,
+      );
       rowsWritten += written;
     } catch (err) {
       log.error('usage_rollup_project_failed', {
@@ -77,6 +89,7 @@ async function rollUpProject(
   projectId: string,
   periodStart: Date,
   periodEnd: Date,
+  connectionSecondsDelta: number | null,
 ): Promise<number> {
   const [invocations, storage] = await Promise.all([
     getInvocationUsage(projectId, periodStart, periodEnd),
@@ -86,16 +99,24 @@ async function rollUpProject(
     getStorageUsage(projectId),
   ]);
 
-  const rows = [
-    { metric: 'invocations' as UsageMetric, value: String(invocations.count) },
-    { metric: 'storage_bytes' as UsageMetric, value: String(storage.bytes) },
-    // connection_seconds intentionally NOT written here — the realtime
-    // /metrics scrape lands via a separate path (Prometheus → Loki).
-    // Wiring it would require an HTTP scrape from the api to realtime,
-    // which adds a failure mode we don't need on the hot path. Phase 4
-    // follow-up: persist realtime /metrics output through a dedicated
-    // scraper that backfills usage_events post-hoc.
+  const rows: { metric: UsageMetric; value: string }[] = [
+    { metric: 'invocations', value: String(invocations.count) },
+    { metric: 'storage_bytes', value: String(storage.bytes) },
   ];
+  // Only write a connection_seconds row when realtime had activity for
+  // this project this hour. The collectConnectionSecondsDeltas() helper
+  // returns no entry on a cold scrape (api just booted) and we don't
+  // want to over-count by writing zero rows that the Polar push then
+  // tries to deliver.
+  if (connectionSecondsDelta !== null && connectionSecondsDelta > 0) {
+    rows.push({
+      metric: 'connection_seconds',
+      // Round to integer seconds — Polar meters reject non-finite and
+      // some operators configure their meter as integer-typed. Sub-
+      // second precision wouldn't survive Polar's aggregation anyway.
+      value: String(Math.round(connectionSecondsDelta)),
+    });
+  }
 
   const db = getDb();
   for (const row of rows) {

@@ -2,7 +2,7 @@ import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { dataPlaneClient, schemaNameFor } from '../db/data-plane.js';
-import { functionLogs } from '../db/schema.js';
+import { functionLogs, usageEvents } from '../db/schema.js';
 import { log } from '../lib/logger.js';
 
 /**
@@ -104,6 +104,64 @@ export interface StorageUsage {
   readonly schema: string;
   /** Timestamp at which the size was sampled. */
   readonly sampledAt: string;
+}
+
+export interface ConnectionSecondsUsage {
+  /**
+   * Sum of realtime connection-seconds across the period. Source is
+   * `usage_events` rows (metric='connection_seconds') populated hourly
+   * by the aggregator's /metrics scrape — durable across api/realtime
+   * restarts, unlike the in-memory `briven_realtime_connection_seconds_total`
+   * gauge.
+   */
+  readonly seconds: number;
+  readonly periodStart: string;
+  readonly periodEnd: string;
+}
+
+/**
+ * Sum connection_seconds rows in [periodStart, periodEnd) for one project.
+ * Returns 0 when the aggregator hasn't yet written a row — the dashboard
+ * renders that as "—" naturally.
+ */
+export async function getConnectionSecondsUsage(
+  projectId: string,
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<ConnectionSecondsUsage> {
+  if (periodEnd <= periodStart) {
+    throw new Error('periodEnd must be after periodStart');
+  }
+  const db = getDb();
+  const [row] = await db
+    .select({
+      seconds: sql<number>`coalesce(sum(${usageEvents.value}::bigint), 0)::bigint`,
+    })
+    .from(usageEvents)
+    .where(
+      and(
+        eq(usageEvents.projectId, projectId),
+        eq(usageEvents.metric, 'connection_seconds'),
+        gte(usageEvents.periodStart, periodStart),
+        lt(usageEvents.periodStart, periodEnd),
+      ),
+    );
+  // drizzle returns bigint as string in some setups — coerce to number.
+  const raw = row?.seconds;
+  const seconds = typeof raw === 'string' ? Number.parseInt(raw, 10) : (raw ?? 0);
+  return {
+    seconds: Number.isFinite(seconds) ? seconds : 0,
+    periodStart: periodStart.toISOString(),
+    periodEnd: periodEnd.toISOString(),
+  };
+}
+
+export async function getCurrentMonthConnectionSecondsUsage(
+  projectId: string,
+  now: Date = new Date(),
+): Promise<ConnectionSecondsUsage> {
+  const { periodStart, periodEnd } = currentMonthBounds(now);
+  return getConnectionSecondsUsage(projectId, periodStart, periodEnd);
 }
 
 /**

@@ -19,6 +19,19 @@ const envSchema = z.object({
   // issues `LISTEN briven_<schema>_<table>` per active subscription. When a
   // NOTIFY arrives it re-invokes any subscriptions touching that table.
   BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
+
+  // Per-WebSocket subscription cap. A single client opening more than
+  // this many concurrent subs gets `error: subscription_limit_ws`. Sized
+  // so a normal app (one page, ~dozens of useQuery hooks) is well under,
+  // but a bug or malicious loop is bounded before it OOMs realtime.
+  BRIVEN_REALTIME_MAX_SUBS_PER_WS: z.coerce.number().int().positive().default(200),
+
+  // Per-project hard cap on concurrent subs across all WS connections.
+  // Defaults to the team-tier cap from services/tiers.ts so a misconfig
+  // doesn't accidentally clamp Team customers. Tier-aware enforcement
+  // (free=100/pro=1000/team=10000) waits for the realtime → api tier
+  // RPC; this single ceiling is the Phase 1 backstop.
+  BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT: z.coerce.number().int().positive().default(10_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

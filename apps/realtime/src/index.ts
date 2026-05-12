@@ -82,6 +82,9 @@ interface Subscription {
 const subscriptions = new Map<string, Subscription>(); // subscriptionId → sub
 const channelToSubs = new Map<string, Set<string>>(); // channel → set of subscriptionIds
 const sockets = new WeakMap<object, Set<string>>(); // ws → set of subscriptionIds it owns
+// projectId → live sub count. Maintained inline with the subscriptions
+// map so the per-project cap can be enforced in O(1) without scanning.
+const subsByProject = new Map<string, number>();
 
 // Cumulative connection-seconds, per project, from subs that have
 // already closed. Phase 3 usage-metering pillar #3 — Polar metering
@@ -234,6 +237,11 @@ async function dropSubscription(subId: string): Promise<void> {
     sub.projectId,
     (closedSubSecondsByProject.get(sub.projectId) ?? 0) + seconds,
   );
+  // Decrement the per-project counter. Map entry deleted at 0 so the
+  // map doesn't grow unbounded with dormant projects.
+  const next = (subsByProject.get(sub.projectId) ?? 0) - 1;
+  if (next <= 0) subsByProject.delete(sub.projectId);
+  else subsByProject.set(sub.projectId, next);
   subscriptions.delete(subId);
 }
 
@@ -363,6 +371,37 @@ export default {
         return;
       }
 
+      if (owned.size >= env.BRIVEN_REALTIME_MAX_SUBS_PER_WS) {
+        // Defensive cap so a single client (bug or malicious) can't open
+        // unbounded subscriptions and degrade the service for everyone.
+        // The client sees an error frame referencing the offending sub
+        // id so it can correlate; the server-side counter has already
+        // ignored this sub, so unsubscribe isn't required.
+        incCounter('briven_realtime_subscribe_rejected_total', { reason: 'ws_limit' });
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            code: 'subscription_limit_ws',
+            subscriptionId: parsed.subscriptionId,
+            limit: env.BRIVEN_REALTIME_MAX_SUBS_PER_WS,
+          }),
+        );
+        return;
+      }
+      const projectCount = subsByProject.get(parsed.projectId) ?? 0;
+      if (projectCount >= env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT) {
+        incCounter('briven_realtime_subscribe_rejected_total', { reason: 'project_limit' });
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            code: 'subscription_limit_project',
+            subscriptionId: parsed.subscriptionId,
+            limit: env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT,
+          }),
+        );
+        return;
+      }
+
       const sub: Subscription = {
         subscriptionId: parsed.subscriptionId,
         projectId: parsed.projectId,
@@ -374,6 +413,7 @@ export default {
       };
       subscriptions.set(sub.subscriptionId, sub);
       owned.add(sub.subscriptionId);
+      subsByProject.set(sub.projectId, projectCount + 1);
       const result = await invokeOnce(sub);
       ws.send(JSON.stringify({ type: 'data', subscriptionId: sub.subscriptionId, ...result }));
     },
