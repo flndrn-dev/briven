@@ -5,6 +5,7 @@ import { requireProjectAuth, requireProjectRole } from '../middleware/project-au
 import { audit, hashIp } from '../services/audit.js';
 import {
   addColumn,
+  alterColumn,
   createIndex,
   createTable,
   deleteRow,
@@ -415,26 +416,75 @@ studioRouter.patch(
     if (!projectId || !tableName || !column) {
       return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
     }
-    const body = (await c.req.json().catch(() => null)) as { newName?: string } | null;
-    if (!body || typeof body.newName !== 'string') {
-      return c.json({ code: 'validation_failed', message: 'expected { newName: string }' }, 400);
+    const body = (await c.req.json().catch(() => null)) as {
+      newName?: string;
+      notNull?: boolean;
+      defaultExpr?: string | null;
+    } | null;
+    if (!body) {
+      return c.json({ code: 'validation_failed', message: 'body required' }, 400);
     }
-    await renameColumn({
-      projectId,
-      tableName,
-      oldName: column,
-      newName: body.newName,
-    });
-    const user = c.get('user');
-    await audit({
-      actorId: user?.id ?? null,
-      projectId,
-      action: 'studio.column.rename',
-      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
-      userAgent: c.req.header('user-agent') ?? null,
-      metadata: { table: tableName, oldName: column, newName: body.newName },
-    });
-    return c.json({ renamed: body.newName });
+    // Two-mode patch: rename (newName) OR alter (notNull, defaultExpr).
+    // Mutually exclusive so audit metadata stays clean.
+    if (typeof body.newName === 'string') {
+      await renameColumn({
+        projectId,
+        tableName,
+        oldName: column,
+        newName: body.newName,
+      });
+      const user = c.get('user');
+      await audit({
+        actorId: user?.id ?? null,
+        projectId,
+        action: 'studio.column.rename',
+        ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { table: tableName, oldName: column, newName: body.newName },
+      });
+      return c.json({ renamed: body.newName });
+    }
+    if (typeof body.notNull === 'boolean' || body.defaultExpr !== undefined) {
+      await alterColumn({
+        projectId,
+        tableName,
+        column,
+        notNull: typeof body.notNull === 'boolean' ? body.notNull : undefined,
+        defaultExpr:
+          body.defaultExpr === null
+            ? null
+            : typeof body.defaultExpr === 'string'
+              ? body.defaultExpr
+              : undefined,
+      });
+      const user = c.get('user');
+      await audit({
+        actorId: user?.id ?? null,
+        projectId,
+        action: 'studio.column.alter',
+        ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: {
+          table: tableName,
+          column,
+          notNull: typeof body.notNull === 'boolean' ? body.notNull : null,
+          defaultExpr:
+            body.defaultExpr === null
+              ? '(dropped)'
+              : typeof body.defaultExpr === 'string'
+                ? body.defaultExpr
+                : null,
+        },
+      });
+      return c.json({ altered: column });
+    }
+    return c.json(
+      {
+        code: 'validation_failed',
+        message: 'expected { newName } or { notNull?, defaultExpr? }',
+      },
+      400,
+    );
   },
 );
 

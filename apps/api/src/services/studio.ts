@@ -1072,6 +1072,71 @@ export async function renameColumn(args: {
   );
 }
 
+export interface AlterColumnInput {
+  readonly projectId: string;
+  readonly tableName: string;
+  readonly column: string;
+  /** Set to true to make NOT NULL; false to drop NOT NULL. */
+  readonly notNull?: boolean;
+  /**
+   * Default expression. Pass `null` to drop the default. Pass a string to
+   * set it. Omit to leave alone.
+   */
+  readonly defaultExpr?: string | null;
+}
+
+/**
+ * Change a column's nullability + default. Refuses to alter a PK column's
+ * nullability (PKs are implicitly NOT NULL) and validates the default
+ * expression against the same regex as create-column.
+ */
+export async function alterColumn(input: AlterColumnInput): Promise<void> {
+  await assertTableExists(input.projectId, input.tableName);
+  if (!COLUMN_NAME_RE.test(input.column)) {
+    throw new ValidationError('invalid column name', { column: input.column });
+  }
+  const cols = await getTableColumns(input.projectId, input.tableName);
+  const target = cols.find((c) => c.name === input.column);
+  if (!target) {
+    throw new ValidationError('column not found on table', {
+      table: input.tableName,
+      column: input.column,
+    });
+  }
+  if (target.isPrimaryKey && typeof input.notNull === 'boolean') {
+    throw new ValidationError('cannot change nullability of a primary-key column', {
+      column: input.column,
+    });
+  }
+  if (
+    input.defaultExpr !== undefined
+    && input.defaultExpr !== null
+    && !DEFAULT_EXPR_RE.test(input.defaultExpr)
+  ) {
+    throw new ValidationError('default expression contains disallowed characters', {
+      column: input.column,
+    });
+  }
+
+  const schema = schemaNameFor(input.projectId);
+  const sql = dataPlaneClient();
+  if (typeof input.notNull === 'boolean' && input.notNull !== !target.nullable) {
+    const clause = input.notNull ? 'SET NOT NULL' : 'DROP NOT NULL';
+    await sql.unsafe(
+      `ALTER TABLE "${schema}"."${input.tableName}" ALTER COLUMN "${input.column}" ${clause}`,
+    );
+  }
+  if (input.defaultExpr === null && target.defaultExpr !== null) {
+    await sql.unsafe(
+      `ALTER TABLE "${schema}"."${input.tableName}" ALTER COLUMN "${input.column}" DROP DEFAULT`,
+    );
+  } else if (typeof input.defaultExpr === 'string' && input.defaultExpr !== '') {
+    await sql.unsafe(
+      `ALTER TABLE "${schema}"."${input.tableName}" ALTER COLUMN "${input.column}" SET DEFAULT ${input.defaultExpr}`,
+    );
+  }
+}
+
 /**
  * Drop a column. Refuses to drop a PK column — that would invalidate every
  * row-level operation in studio and is almost always a mistake.
