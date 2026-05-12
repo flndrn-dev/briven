@@ -13,6 +13,7 @@ import {
   dropTable,
   executeQuery,
   exportSchemaAsDsl,
+  getFullSchema,
   getTableColumns,
   getTableRows,
   insertRow,
@@ -87,6 +88,21 @@ studioRouter.post(
       const message = err instanceof Error ? err.message : 'query failed';
       return c.json({ code: 'query_failed', message }, 400);
     }
+  },
+);
+
+/**
+ * Full one-shot schema: every table with its columns + every FK edge.
+ * Drives the studio schema overview page.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/schema',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const schema = await getFullSchema(projectId);
+    return c.json(schema);
   },
 );
 
