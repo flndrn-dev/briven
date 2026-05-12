@@ -21,6 +21,7 @@ const NAV: readonly NavItem[] = [
   { href: '/roadmap', label: 'roadmap' },
   { href: '/changelog', label: 'changelog' },
   { href: '/status', label: 'status' },
+  { href: '/support', label: 'support' },
 ];
 
 export function DocsShell({ children }: { children: React.ReactNode }) {

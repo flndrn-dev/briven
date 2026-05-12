@@ -28,6 +28,7 @@ const PATHS: readonly string[] = [
   '/roadmap',
   '/changelog',
   '/status',
+  '/support',
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
