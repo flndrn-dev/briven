@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
+import { CopySchemaButton } from './copy-schema-button';
 import { NewTableForm } from './new-table-form';
 
 interface TableSummary {
@@ -33,7 +34,12 @@ export default async function StudioPage({
             both paths write to the same schema.
           </p>
         </div>
-        {tables.length > 0 ? <NewTableForm projectId={id} existingTables={tables.map((t) => t.name)} /> : null}
+        {tables.length > 0 ? (
+          <div className="flex items-start gap-2">
+            <CopySchemaButton projectId={id} />
+            <NewTableForm projectId={id} existingTables={tables.map((t) => t.name)} />
+          </div>
+        ) : null}
       </header>
 
       {tables.length === 0 ? (
