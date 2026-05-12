@@ -97,6 +97,31 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
     }
   }
 
+  async function renameColumn(columnName: string) {
+    const next = prompt(`rename column "${columnName}" to:`, columnName);
+    if (!next || next === columnName) return;
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/studio/tables/${encodeURIComponent(
+          table,
+        )}/columns/${encodeURIComponent(columnName)}`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ newName: next }),
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+        throw new Error(body.message ?? body.code ?? `rename failed: ${res.status}`);
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'rename failed');
+    }
+  }
+
   async function dropColumn(columnName: string) {
     if (
       !confirm(
@@ -161,6 +186,29 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'drop failed');
+    }
+  }
+
+  async function renameTable() {
+    const next = prompt(`rename table "${table}" to:`, table);
+    if (!next || next === table) return;
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/studio/tables/${encodeURIComponent(table)}`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ newName: next }),
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+        throw new Error(body.message ?? body.code ?? `rename failed: ${res.status}`);
+      }
+      router.push(`/dashboard/projects/${projectId}/studio/${encodeURIComponent(next)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'rename failed');
     }
   }
 
@@ -321,16 +369,26 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
                 {c.defaultExpr ? ` · default ${c.defaultExpr}` : ''}
               </span>
             </div>
-            {c.isPrimaryKey ? null : (
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => dropColumn(c.name)}
-                className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)]"
-                aria-label={`drop column ${c.name}`}
+                onClick={() => renameColumn(c.name)}
+                className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                aria-label={`rename column ${c.name}`}
               >
-                drop
+                rename
               </button>
-            )}
+              {c.isPrimaryKey ? null : (
+                <button
+                  type="button"
+                  onClick={() => dropColumn(c.name)}
+                  className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)]"
+                  aria-label={`drop column ${c.name}`}
+                >
+                  drop
+                </button>
+              )}
+            </div>
           </li>
         ))}
       </ul>
@@ -346,7 +404,14 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
         <p className="rounded-md bg-red-400/10 px-3 py-2 font-mono text-xs text-red-400">{error}</p>
       ) : null}
 
-      <div className="border-t border-[var(--color-border-subtle)] pt-3">
+      <div className="flex items-center gap-2 border-t border-[var(--color-border-subtle)] pt-3">
+        <button
+          type="button"
+          onClick={renameTable}
+          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] transition hover:text-[var(--color-text)]"
+        >
+          rename table
+        </button>
         <button
           type="button"
           onClick={dropTable}
@@ -354,11 +419,11 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
         >
           drop this table
         </button>
-        <p className="mt-1 font-mono text-[10px] text-[var(--color-text-subtle)]">
-          drops the table including every row. fails if another table references this one
-          via foreign key.
-        </p>
       </div>
+      <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+        drop fails if another table references this one via foreign key. rename preserves
+        PKs, FKs, and indexes — postgres rewrites them by oid.
+      </p>
     </section>
   );
 }

@@ -18,6 +18,8 @@ import {
   insertRow,
   listIndexes,
   listProjectTables,
+  renameColumn,
+  renameTable,
   STUDIO_COLUMN_TYPES,
   updateCell,
   type StudioColumnReference,
@@ -339,6 +341,68 @@ studioRouter.post(
       metadata: { table: result.name, columnCount: cols.length },
     });
     return c.json(result, 201);
+  },
+);
+
+studioRouter.patch(
+  '/v1/projects/:id/studio/tables/:table',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const body = (await c.req.json().catch(() => null)) as { newName?: string } | null;
+    if (!body || typeof body.newName !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'expected { newName: string }' }, 400);
+    }
+    await renameTable({ projectId, oldName: tableName, newName: body.newName });
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.table.rename',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { oldName: tableName, newName: body.newName },
+    });
+    return c.json({ renamed: body.newName });
+  },
+);
+
+studioRouter.patch(
+  '/v1/projects/:id/studio/tables/:table/columns/:column',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    const column = c.req.param('column');
+    if (!projectId || !tableName || !column) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const body = (await c.req.json().catch(() => null)) as { newName?: string } | null;
+    if (!body || typeof body.newName !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'expected { newName: string }' }, 400);
+    }
+    await renameColumn({
+      projectId,
+      tableName,
+      oldName: column,
+      newName: body.newName,
+    });
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.column.rename',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: tableName, oldName: column, newName: body.newName },
+    });
+    return c.json({ renamed: body.newName });
   },
 );
 
