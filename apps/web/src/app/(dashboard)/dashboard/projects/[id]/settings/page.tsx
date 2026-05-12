@@ -8,13 +8,24 @@ interface Project {
   id: string;
   name: string;
   slug: string;
+  orgId: string;
+}
+
+interface Org {
+  id: string;
+  name: string;
+  personal: boolean;
 }
 
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { project } = await apiJson<{ project: Project }>(`/v1/projects/${id}`);
+  const [{ project }, { orgs }] = await Promise.all([
+    apiJson<{ project: Project }>(`/v1/projects/${id}`),
+    apiJson<{ orgs: Org[] }>('/v1/me/orgs').catch(() => ({ orgs: [] as Org[] })),
+  ]);
+  const otherOrgs = orgs.filter((o) => o.id !== project.orgId);
 
   async function update(formData: FormData) {
     'use server';
@@ -33,6 +44,23 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(body || `update failed: ${res.status}`);
+    }
+    revalidatePath(`/dashboard/projects/${id}`);
+  }
+
+  async function move(formData: FormData) {
+    'use server';
+    const { id } = await params;
+    const orgId = String(formData.get('orgId') ?? '').trim();
+    if (!orgId) throw new Error('orgId is required');
+    const res = await apiFetch(`/v1/projects/${id}/move`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ orgId }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(body || `move failed: ${res.status}`);
     }
     revalidatePath(`/dashboard/projects/${id}`);
   }
@@ -82,6 +110,41 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
           </button>
         </form>
       </section>
+
+      {otherOrgs.length > 0 ? (
+        <section>
+          <h2 className="font-mono text-sm text-[var(--color-text)]">move to another team</h2>
+          <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+            re-parents the project — billing rolls up to the new org from the next
+            subscription event onward. data, deployments, keys, and members stay attached.
+          </p>
+          <form
+            action={move}
+            className="mt-4 flex max-w-md items-end gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5"
+          >
+            <label className="flex flex-1 flex-col gap-2">
+              <span className="font-mono text-xs text-[var(--color-text-muted)]">target org</span>
+              <select
+                name="orgId"
+                defaultValue={otherOrgs[0]?.id}
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+              >
+                {otherOrgs.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name} {o.personal ? '· personal' : '· team'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              className="rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)]"
+            >
+              move
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       <section>
         <h2 className="font-mono text-sm text-red-400">danger zone</h2>

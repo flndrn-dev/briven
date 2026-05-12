@@ -208,3 +208,27 @@ export async function softDeleteProjectForUser(
   if (!deleted) throw new Error('project delete returned no row');
   return deleted;
 }
+
+/**
+ * Re-parent a project to a different org. Caller must be a member of both
+ * the source org (already checked via getProjectForUser) AND the target
+ * org. Billing and tier roll up to the new org from the next subscription
+ * event onward — the existing projects.tier cache flips immediately so
+ * rate-limit middleware sees the new tier on the next request.
+ */
+export async function moveProjectToOrg(args: {
+  projectId: string;
+  userId: string;
+  targetOrgId: string;
+}): Promise<Project> {
+  const project = await getProjectForUser(args.projectId, args.userId);
+  if (project.orgId === args.targetOrgId) return project;
+  const db = getDb();
+  const [updated] = await db
+    .update(projects)
+    .set({ orgId: args.targetOrgId, updatedAt: new Date() })
+    .where(eq(projects.id, args.projectId))
+    .returning();
+  if (!updated) throw new Error('project move returned no row');
+  return updated;
+}

@@ -17,6 +17,7 @@ import {
   getProjectForUser,
   getProjectInfo,
   listProjectsForUser,
+  moveProjectToOrg,
   softDeleteProjectForUser,
   updateProjectForUser,
 } from '../services/projects.js';
@@ -157,6 +158,42 @@ projectsRouter.patch('/v1/projects/:id', async (c) => {
     ipHash: getIpHash(c),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: parsed.data as Record<string, unknown>,
+  });
+  return c.json({ project });
+});
+
+const moveSchema = z.object({
+  orgId: z.string().min(1),
+});
+
+projectsRouter.post('/v1/projects/:id/move', async (c) => {
+  const user = c.get('user')!;
+  await assertProjectRole(c.req.param('id'), user.id, 'admin');
+  const body = await c.req.json().catch(() => null);
+  const parsed = moveSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  // The user must also belong to the target org — otherwise they could
+  // "park" a project inside a team they have no business in.
+  if (!(await isOrgMember(user.id, parsed.data.orgId))) {
+    return c.json(
+      { code: 'forbidden', message: 'you are not a member of the target org' },
+      403,
+    );
+  }
+  const project = await moveProjectToOrg({
+    projectId: c.req.param('id'),
+    userId: user.id,
+    targetOrgId: parsed.data.orgId,
+  });
+  await audit({
+    actorId: user.id,
+    projectId: project.id,
+    action: 'project.move',
+    ipHash: getIpHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { newOrgId: parsed.data.orgId },
   });
   return c.json({ project });
 });
