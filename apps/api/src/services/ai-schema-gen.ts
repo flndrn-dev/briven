@@ -69,9 +69,16 @@ export async function generateSchema(input: AiSchemaGenInput): Promise<AiSchemaG
   const model = env.BRIVEN_OLLAMA_MODEL_SCHEMA ?? env.BRIVEN_OLLAMA_MODEL;
   const t0 = Date.now();
   const url = `${env.BRIVEN_OLLAMA_URL.replace(/\/$/, '')}/api/generate`;
+  // why: the production ollama proxy at ai.flndrn.com gates requests
+  // behind a bearer token; a local DGX on a private net doesn't need
+  // one. Send the header only when configured so both shapes work.
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (env.BRIVEN_OLLAMA_API_KEY) {
+    headers['authorization'] = `Bearer ${env.BRIVEN_OLLAMA_API_KEY}`;
+  }
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model,
       system: SYSTEM_PROMPT,
