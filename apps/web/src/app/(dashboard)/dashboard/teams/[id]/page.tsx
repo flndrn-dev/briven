@@ -128,18 +128,41 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
 }
 
 async function TeamInvites({ teamId }: { teamId: string }) {
-  const { invitations } = await apiJson<{
-    invitations: Array<{
-      id: string;
-      email: string;
-      role: 'owner' | 'admin' | 'developer' | 'viewer';
-      expiresAt: string;
-      acceptedAt: string | null;
-      revokedAt: string | null;
-    }>;
-  }>(`/v1/orgs/${teamId}/invitations`);
+  const [{ invitations }, { members }] = await Promise.all([
+    apiJson<{
+      invitations: Array<{
+        id: string;
+        email: string;
+        role: 'owner' | 'admin' | 'developer' | 'viewer';
+        expiresAt: string;
+        acceptedAt: string | null;
+        revokedAt: string | null;
+      }>;
+    }>(`/v1/orgs/${teamId}/invitations`),
+    apiJson<{
+      members: Array<{
+        userId: string;
+        email: string;
+        name: string | null;
+        role: 'owner' | 'admin' | 'developer' | 'viewer';
+        joinedAt: string;
+      }>;
+    }>(`/v1/orgs/${teamId}/members`),
+  ]);
 
   const pending = invitations.filter((i) => !i.acceptedAt && !i.revokedAt);
+
+  async function removeMember(userId: string) {
+    'use server';
+    const res = await apiFetch(`/v1/orgs/${teamId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(body.message ?? `remove failed: ${res.status}`);
+    }
+    redirect(`/dashboard/teams/${teamId}`);
+  }
 
   async function invite(formData: FormData) {
     'use server';
@@ -174,6 +197,34 @@ async function TeamInvites({ teamId }: { teamId: string }) {
   return (
     <section>
       <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">members</h2>
+
+      <ul className="mb-4 flex flex-col gap-2">
+        {members.map((m) => (
+          <li
+            key={m.userId}
+            className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3"
+          >
+            <div className="min-w-0">
+              <p className="font-mono text-xs text-[var(--color-text)]">
+                {m.name ?? m.email}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">
+                {m.role} · joined {new Date(m.joinedAt).toISOString().slice(0, 10)}
+              </p>
+            </div>
+            {m.role !== 'owner' ? (
+              <form action={removeMember.bind(null, m.userId)}>
+                <button
+                  type="submit"
+                  className="rounded-md border border-[var(--color-border)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-error)]"
+                >
+                  remove
+                </button>
+              </form>
+            ) : null}
+          </li>
+        ))}
+      </ul>
 
       <form action={invite} className="mb-4 flex flex-wrap items-end gap-3">
         <label className="flex flex-1 flex-col gap-1">

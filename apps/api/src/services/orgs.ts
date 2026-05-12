@@ -281,6 +281,81 @@ export async function isOrgMember(userId: string, orgId: string): Promise<boolea
   return Boolean(row);
 }
 
+export interface OrgMemberRow {
+  userId: string;
+  email: string;
+  name: string | null;
+  role: OrgRole;
+  joinedAt: Date;
+}
+
+/**
+ * List every member of an org with their profile basics. Used by the
+ * team-detail page to render the members section above pending invites.
+ * Caller is expected to have already checked membership.
+ */
+export async function listOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      userId: orgMembers.userId,
+      email: users.email,
+      name: users.name,
+      role: orgMembers.role,
+      joinedAt: orgMembers.createdAt,
+    })
+    .from(orgMembers)
+    .innerJoin(users, eq(users.id, orgMembers.userId))
+    .where(eq(orgMembers.orgId, orgId));
+  // Owner first, then alphabetical by email. Matches what GitHub / Vercel do.
+  const roleRank: Record<OrgRole, number> = { owner: 0, admin: 1, developer: 2, viewer: 3 };
+  return rows.sort((a, b) => {
+    if (a.role !== b.role) return roleRank[a.role] - roleRank[b.role];
+    return a.email.localeCompare(b.email);
+  });
+}
+
+/**
+ * Remove a member from an org. Refuses to remove the last owner — every
+ * team must always have at least one owner so billing/admin actions remain
+ * possible. Personal orgs reject removal entirely.
+ */
+export async function removeOrgMember(args: {
+  orgId: string;
+  userId: string;
+}): Promise<{ removed: true } | { removed: false; reason: string }> {
+  const db = getDb();
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, args.orgId))
+    .limit(1);
+  if (!org) return { removed: false, reason: 'org not found' };
+  if (org.personal) return { removed: false, reason: 'cannot remove members from a personal org' };
+
+  const [target] = await db
+    .select()
+    .from(orgMembers)
+    .where(and(eq(orgMembers.orgId, args.orgId), eq(orgMembers.userId, args.userId)))
+    .limit(1);
+  if (!target) return { removed: false, reason: 'user is not a member of this org' };
+
+  if (target.role === 'owner') {
+    const owners = await db
+      .select({ userId: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, args.orgId), eq(orgMembers.role, 'owner')));
+    if (owners.length <= 1) {
+      return { removed: false, reason: 'cannot remove the last owner — promote another member first' };
+    }
+  }
+
+  await db
+    .delete(orgMembers)
+    .where(and(eq(orgMembers.orgId, args.orgId), eq(orgMembers.userId, args.userId)));
+  return { removed: true };
+}
+
 export async function createOrg(input: CreateOrgInput): Promise<Organization> {
   const db = getDb();
   const id = newId('org');
