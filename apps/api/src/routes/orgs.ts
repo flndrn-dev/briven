@@ -11,7 +11,9 @@ import {
   createOrg,
   getDefaultOrgForUser,
   isOrgMember,
+  listOrgMembers,
   listOrgsForUser,
+  removeOrgMember,
   renameOrg,
 } from '../services/orgs.js';
 import {
@@ -174,6 +176,43 @@ orgsRouter.patch('/v1/orgs/:id', async (c) => {
       personal: updated.personal,
     },
   });
+});
+
+/* ─── org members ─────────────────────────────────────────────────── */
+
+orgsRouter.use('/v1/orgs/:id/members', requireAuth());
+orgsRouter.use('/v1/orgs/:id/members/*', requireAuth());
+
+orgsRouter.get('/v1/orgs/:id/members', async (c) => {
+  const user = c.get('user')!;
+  const orgId = c.req.param('id');
+  if (!(await isOrgMember(user.id, orgId))) {
+    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  }
+  const members = await listOrgMembers(orgId);
+  return c.json({ members });
+});
+
+orgsRouter.delete('/v1/orgs/:id/members/:userId', async (c) => {
+  const actor = c.get('user')!;
+  const orgId = c.req.param('id');
+  const targetUserId = c.req.param('userId');
+  if (!(await isOrgMember(actor.id, orgId))) {
+    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  }
+  const result = await removeOrgMember({ orgId, userId: targetUserId });
+  if (!result.removed) {
+    return c.json({ code: 'cannot_remove_member', message: result.reason }, 400);
+  }
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'org.member.removed',
+    ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { orgId, removedUserId: targetUserId },
+  });
+  return c.json({ removed: targetUserId });
 });
 
 /* ─── org invitations ─────────────────────────────────────────────── */
