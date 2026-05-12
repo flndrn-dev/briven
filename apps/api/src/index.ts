@@ -7,6 +7,7 @@ import { accessLog } from './middleware/access-log.js';
 import { csrfOriginCheck } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error.js';
 import { metricsMiddleware } from './middleware/metrics.js';
+import { blockIfProjectSuspended } from './middleware/project-suspended.js';
 import { requestId } from './middleware/request-id.js';
 import { attachSession, type Session, type User } from './middleware/session.js';
 import { abuseRouter } from './routes/abuse.js';
@@ -68,6 +69,14 @@ app.use('*', accessLog());
 app.use('*', metricsMiddleware());
 app.use('*', attachSession());
 app.use('*', csrfOriginCheck());
+
+// Block state-changing routes on a suspended project at the app level
+// instead of per-router — keeps the abuse-suspension gate from drifting
+// when a new mutating route lands without picking up the middleware. The
+// middleware short-circuits on GET/HEAD/OPTIONS so dashboards stay
+// readable, and on missing :id so the unmounted segments pass through.
+app.use('/v1/projects/:id', blockIfProjectSuspended());
+app.use('/v1/projects/:id/*', blockIfProjectSuspended());
 
 app.route('/', rootRouter);
 app.route('/', healthRouter);

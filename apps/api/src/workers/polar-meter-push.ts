@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { usageEvents, type UsageEvent, type UsageMetric } from '../db/schema.js';
+import { projects, subscriptions, usageEvents, type UsageEvent, type UsageMetric } from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 
@@ -29,14 +29,47 @@ const BATCH_SIZE = 50;
 const INTERVAL_MS = 60_000;
 
 /**
- * Polar customer id required for the meter payload. Phase 1 we don't
- * yet store a per-project polar customer id — when that wires we add
- * a projects.polar_customer_id column and read it here. Until then this
- * helper is a stub that returns null and the worker marks the row
- * pending → skipped with reason='no_customer'.
+ * Polar customer id required for the meter payload. Resolved through
+ * the project's org's subscription row — subscriptions are org-level
+ * (CLAUDE.md §3.3) and Polar tracks billing per customer at the same
+ * grain. Returns null when the org has no subscription yet, in which
+ * case the worker marks the row pending → skipped with reason
+ * 'no_customer' so it doesn't pile up forever; the next checkout
+ * stamps the customer id and a follow-up cron can re-enable skipped
+ * rows by resetting status='pending'.
+ *
+ * In-process cache with a 5-minute TTL — every pending row hits this
+ * during a drain and we don't want to hammer the meta-DB. Subscription
+ * upserts on the Polar webhook path invalidate the entry so a fresh
+ * customer id takes effect on the next tick, not after the TTL.
  */
-function polarCustomerForProject(_projectId: string): string | null {
-  return null;
+interface CustomerCacheEntry {
+  customerId: string | null;
+  expiresAt: number;
+}
+const CUSTOMER_CACHE_TTL_MS = 5 * 60_000;
+const customerCache = new Map<string, CustomerCacheEntry>();
+
+export function invalidatePolarCustomerCache(projectId: string): void {
+  customerCache.delete(projectId);
+}
+
+async function polarCustomerForProject(projectId: string): Promise<string | null> {
+  const now = Date.now();
+  const hit = customerCache.get(projectId);
+  if (hit && hit.expiresAt > now) {
+    return hit.customerId;
+  }
+  const db = getDb();
+  const [row] = await db
+    .select({ polarCustomerId: subscriptions.polarCustomerId })
+    .from(projects)
+    .innerJoin(subscriptions, eq(subscriptions.orgId, projects.orgId))
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const customerId = row?.polarCustomerId ?? null;
+  customerCache.set(projectId, { customerId, expiresAt: now + CUSTOMER_CACHE_TTL_MS });
+  return customerId;
 }
 
 function meterIdFor(metric: UsageMetric): string | null {
@@ -54,9 +87,16 @@ function meterIdFor(metric: UsageMetric): string | null {
 
 /**
  * Push one row. Returns the new status — caller writes it back.
- * Phase 3 gate: without an access token + meter id + customer id we
- * mark 'skipped' and log the intent. Operators verify what we WOULD
- * have pushed via the admin usage page.
+ *
+ * Without an access token + meter id + customer id the row is marked
+ * 'skipped'. With all three present we POST to Polar's Meters API.
+ * Network or 5xx → 'pending' (retried on the next tick); 4xx → 'skipped'
+ * (operator must intervene — a 400 from Polar is durable, not transient).
+ *
+ * Operator-visible logs:
+ *   polar_push_pushed      — 2xx response, row → 'pushed'
+ *   polar_push_skipped_*   — see reason field; row → 'skipped'
+ *   polar_push_retry       — transient failure; row stays 'pending'
  */
 async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending'> {
   if (!env.BRIVEN_POLAR_ACCESS_TOKEN) {
@@ -76,7 +116,7 @@ async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending
     });
     return 'skipped';
   }
-  const customerId = polarCustomerForProject(row.projectId);
+  const customerId = await polarCustomerForProject(row.projectId);
   if (!customerId) {
     log.info('polar_push_skipped_no_customer', {
       eventId: row.id,
@@ -85,22 +125,70 @@ async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending
     });
     return 'skipped';
   }
-  // Polar Meters API: POST {base}/v1/meters/{meter_id}/events
+
+  // Polar Meters API — POST {base}/v1/meters/{meter_id}/events
   //   { customer_id, value: number, timestamp: ISO8601 }
-  // Wired but not yet invoked — leaving the payload assembled here so
-  // the operator can see exactly what we'd send by greping for
-  // polar_push_intent in the logs. Switch to a real fetch() once the
-  // sandbox setup is complete + we've verified one end-to-end push.
-  log.info('polar_push_intent', {
+  const value = Number.parseFloat(row.value);
+  if (!Number.isFinite(value)) {
+    log.warn('polar_push_skipped_bad_value', {
+      eventId: row.id,
+      projectId: row.projectId,
+      metric: row.metric,
+      raw: row.value,
+    });
+    return 'skipped';
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.BRIVEN_POLAR_API_BASE}/v1/meters/${meterId}/events`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${env.BRIVEN_POLAR_ACCESS_TOKEN}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        customer_id: customerId,
+        value,
+        timestamp: row.periodStart.toISOString(),
+      }),
+    });
+  } catch (err) {
+    log.warn('polar_push_retry', {
+      eventId: row.id,
+      projectId: row.projectId,
+      metric: row.metric,
+      reason: 'network',
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return 'pending';
+  }
+
+  if (res.ok) {
+    log.info('polar_push_pushed', {
+      eventId: row.id,
+      projectId: row.projectId,
+      metric: row.metric,
+      meterId,
+      value,
+    });
+    return 'pushed';
+  }
+
+  // 5xx is transient (Polar restarted, rate-limited, etc.) — leave the
+  // row pending and let the next tick retry. 4xx is durable (bad meter
+  // id, customer mismatch, validation) — mark skipped so we don't loop
+  // forever; an operator can re-enable after fixing the underlying issue.
+  const transient = res.status >= 500 || res.status === 429;
+  const body = await res.text().catch(() => '');
+  log.warn(transient ? 'polar_push_retry' : 'polar_push_skipped_4xx', {
     eventId: row.id,
     projectId: row.projectId,
     metric: row.metric,
-    meterId,
-    customerId,
-    value: Number.parseFloat(row.value),
-    timestamp: row.periodStart.toISOString(),
+    status: res.status,
+    body: body.slice(0, 256),
   });
-  return 'pending';
+  return transient ? 'pending' : 'skipped';
 }
 
 export async function drainPendingPolarPushes(): Promise<{

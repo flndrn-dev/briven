@@ -5,7 +5,6 @@ import { schemaSnapshotSchema } from '@briven/schema';
 
 import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
-import { blockIfProjectSuspended } from '../middleware/project-suspended.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 import {
   cancelPendingDeployment,
@@ -100,9 +99,9 @@ deploymentsRouter.post(
   // why: tier-aware burst cap on the deploy path. Free tier = 5/min;
   // a developer iterating locally never hits that, but it stops a
   // leaked key from spamming schema-apply (which runs DDL inside a
-  // transaction on the shared data plane).
+  // transaction on the shared data plane). Suspension gating happens
+  // once at app level (apps/api/src/index.ts).
   projectRateLimit('deploy'),
-  blockIfProjectSuspended(),
   requireProjectRole('developer'),
   async (c) => {
     const body = await c.req.json().catch(() => ({}));

@@ -13,6 +13,13 @@ function shouldBlock(suspension: { suspendedAt: Date; reason: string | null } | 
   return suspension !== null;
 }
 
+// Mirrors the GET/HEAD/OPTIONS short-circuit at the top of the middleware
+// — read methods always pass through regardless of suspension state, so
+// the dashboard stays usable while a project is being investigated.
+function isReadMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+}
+
 describe('shouldBlock', () => {
   test('null suspension → pass through', () => {
     expect(shouldBlock(null)).toBe(false);
@@ -43,5 +50,20 @@ describe('error code shape', () => {
   test('the documented HTTP status is 403', () => {
     const SUSPENSION_HTTP_STATUS = 403;
     expect(SUSPENSION_HTTP_STATUS).toBe(403);
+  });
+});
+
+describe('method-aware short-circuit', () => {
+  test('read methods bypass the suspension lookup entirely', () => {
+    expect(isReadMethod('GET')).toBe(true);
+    expect(isReadMethod('HEAD')).toBe(true);
+    expect(isReadMethod('OPTIONS')).toBe(true);
+  });
+
+  test('mutating methods fall through to the DB check', () => {
+    expect(isReadMethod('POST')).toBe(false);
+    expect(isReadMethod('PUT')).toBe(false);
+    expect(isReadMethod('PATCH')).toBe(false);
+    expect(isReadMethod('DELETE')).toBe(false);
   });
 });

@@ -67,7 +67,7 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
   // doesn't block invokes today; rate-limit middleware enforces the
   // per-request floor (services/tiers.ts: RATE_LIMITS_BY_TIER).
   const tier = (await getProjectTier(projectId)) ?? 'free';
-  const monthlyCap = TIERS[tier].invokesPerMonth;
+  const limits = TIERS[tier];
 
   // Storage is sampled live (single round-trip to the data plane) — at
   // 25-customer scale the cost is negligible. If it ever becomes a hot
@@ -90,7 +90,8 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
       sampledAt: storage.sampledAt,
     },
     limits: {
-      invokesPerMonth: monthlyCap,
+      invokesPerMonth: limits.invokesPerMonth,
+      storageBytes: limits.storageBytes,
     },
   });
 });

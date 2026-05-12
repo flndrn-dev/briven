@@ -10,6 +10,24 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['feat'],
+    title: 'polar meter push: real fetch + org→customer resolution',
+    body: 'the metering worker no longer logs intent — it actually posts to polar. customer ids resolve through project → org → subscriptions.polar_customer_id (5-min in-process cache, invalidated on the polar webhook so a fresh checkout takes effect on the next tick). 5xx + network errors leave the row pending for the next minute; 4xx marks the row skipped so it doesn\'t loop forever. invocations + storage_bytes flow today; connection_seconds queued for the realtime /metrics scraper.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
+    title: 'storage caps on every tier, surfaced through usage',
+    body: 'TIERS now ships storageBytes alongside projectsPerOrg / functionsPerProject / invokesPerMonth: 1 GiB on free, 10 GiB on pro, 100 GiB on team. dashboard usage card shows "used / cap" — pg_total_relation_size sampled live against the project schema, excluding the platform\'s _briven_* bookkeeping.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['security'],
+    title: 'project-suspension gate mounted globally',
+    body: 'blockIfProjectSuspended is now mounted once at /v1/projects/:id/* instead of sprinkled per-router. read methods (GET/HEAD/OPTIONS) skip the check so dashboards stay readable while a project is being investigated; every mutation route (env writes, member moves, studio writes, db shell, deploys, invokes) inherits the gate without per-route wiring. closes the drift risk where a new route lands without picking up the suspension check.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['feat', 'security'],
     title: 'account deletion (gdpr article 17) — 30-day soft-delete cascade',
     body: "settings · danger zone now ships a real account-deletion flow. typed-email confirmation gates the click; the api revokes every session, every api key on sole-ownership projects, and every pending invitation the user sent. sole-owner orgs (personal + any team where the user is the only owner) and the projects under them soft-delete. multi-owner team orgs survive — the user is just removed from membership. PII clears in the same transaction (legal name, address, VAT, company, display name, image); id + email + createdAt stay so audit-log FKs survive. confirmation email lands before the cascade runs. a daily 03:30 UTC worker hard-deletes rows past the 30-day grace window; FK CASCADE handles the rest. polar subscriptions are NOT auto-cancelled — manage via the polar portal during the grace window.",

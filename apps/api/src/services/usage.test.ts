@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+import { TIERS } from './tiers.js';
 import { currentMonthBounds } from './usage.js';
 
 describe('currentMonthBounds', () => {
@@ -51,5 +52,28 @@ describe('currentMonthBounds', () => {
     const now = new Date('2026-05-31T23:00:00.000+02:00');
     const { periodStart } = currentMonthBounds(now);
     expect(periodStart.toISOString()).toBe('2026-05-01T00:00:00.000Z');
+  });
+});
+
+describe('TIERS.storageBytes', () => {
+  // The storage caps are surfaced as both a hard ceiling for future
+  // deploy-time enforcement and a soft cap rendered on the dashboard
+  // usage widget. The ordering invariant matters — a paid tier must
+  // never offer less storage than a free one.
+  test('storage caps are strictly increasing free < pro < team', () => {
+    expect(TIERS.free.storageBytes).toBeLessThan(TIERS.pro.storageBytes);
+    expect(TIERS.pro.storageBytes).toBeLessThan(TIERS.team.storageBytes);
+  });
+
+  test('free tier ships at exactly 1 GiB', () => {
+    expect(TIERS.free.storageBytes).toBe(1024 * 1024 * 1024);
+  });
+
+  test('pro tier ships at exactly 10 GiB', () => {
+    expect(TIERS.pro.storageBytes).toBe(10 * 1024 * 1024 * 1024);
+  });
+
+  test('team tier ships at exactly 100 GiB', () => {
+    expect(TIERS.team.storageBytes).toBe(100 * 1024 * 1024 * 1024);
   });
 });

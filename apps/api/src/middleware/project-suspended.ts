@@ -8,9 +8,11 @@ import { getProjectSuspension } from '../services/abuse.js';
  * this AFTER `requireProjectAuth` so the project id is already resolved
  * from the path param. Suspended projects 403 with code=project_suspended.
  *
- * Reads (GET) are intentionally not gated here — the operator + owner
+ * Reads (GET/HEAD) are intentionally not gated — the operator + owner
  * still need to inspect the project's state via the dashboard while a
- * suspension is being investigated.
+ * suspension is being investigated. The middleware short-circuits on
+ * GET/HEAD so it can be mounted globally at `/v1/projects/:id/*` without
+ * locking the dashboard out.
  *
  * Cache: not added in this version. At Phase 3 scale (~25 projects)
  * the extra round-trip is in the single-digit ms and avoids a stale-
@@ -18,7 +20,12 @@ import { getProjectSuspension } from '../services/abuse.js';
  * justifies it.
  */
 export const blockIfProjectSuspended = (): MiddlewareHandler => async (c, next) => {
-  const projectId = c.req.param('id');
+  const method = c.req.method;
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    await next();
+    return;
+  }
+  const projectId = c.req.param('id') ?? c.req.param('projectId');
   if (!projectId) {
     await next();
     return;
