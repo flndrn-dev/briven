@@ -1,5 +1,5 @@
 import { NotFoundError, brivenError, newId } from '@briven/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import {
@@ -313,6 +313,56 @@ export async function listOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
     if (a.role !== b.role) return roleRank[a.role] - roleRank[b.role];
     return a.email.localeCompare(b.email);
   });
+}
+
+/**
+ * Soft-delete a team org. Refuses on personal orgs and on team orgs that
+ * still own non-deleted projects — those would otherwise be orphaned. The
+ * caller is told to delete (or move) the projects first.
+ */
+export async function deleteOrg(args: {
+  orgId: string;
+  userId: string;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const db = getDb();
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(and(eq(organizations.id, args.orgId), isNull(organizations.deletedAt)))
+    .limit(1);
+  if (!org) return { ok: false, reason: 'org not found' };
+  if (org.personal) return { ok: false, reason: 'cannot delete a personal org' };
+
+  const member = await isOrgMember(args.userId, args.orgId);
+  if (!member) return { ok: false, reason: 'not a member of this org' };
+
+  // Only owners can delete a team org.
+  const [memberRow] = await db
+    .select({ role: orgMembers.role })
+    .from(orgMembers)
+    .where(and(eq(orgMembers.userId, args.userId), eq(orgMembers.orgId, args.orgId)))
+    .limit(1);
+  if (memberRow?.role !== 'owner') {
+    return { ok: false, reason: 'only an owner can delete a team' };
+  }
+
+  // Bounce if there are live projects in the org. The dashboard surfaces
+  // this with a friendly "delete or move projects first" message.
+  const liveProjects = await db.execute(sql`
+    select 1 from projects
+    where org_id = ${args.orgId}
+      and deleted_at is null
+    limit 1
+  `);
+  if (liveProjects.length > 0) {
+    return { ok: false, reason: 'team still has projects — delete or move them first' };
+  }
+
+  await db
+    .update(organizations)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(eq(organizations.id, args.orgId));
+  return { ok: true };
 }
 
 /**
