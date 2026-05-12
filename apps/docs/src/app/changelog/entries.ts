@@ -10,6 +10,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['feat'],
+    title: 'briven ai cli — schema / function / explain from the terminal',
+    body: '`briven ai schema "..."`, `briven ai function "..."`, `briven ai explain --file <path>` proxy to the same three api endpoints the dashboard hits. takes a prompt as a positional arg, writes to stdout (or `--out path`). `briven ai function --with-schema` pulls the project\'s current schema snapshot in as model context. exit code 2 means the api host hasn\'t wired BRIVEN_OLLAMA_URL — a clear "AI assistant offline" message instead of an opaque http error. completes the AI surface: api + dashboard + cli all wire to the same self-hosted Qwen 2.5-coder backend.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['feat', 'docs'],
     title: 'docs search + corpus index (AI assistant pre-staged)',
     body: 'new endpoint at /api/search?q=… returns the top N docs pages by word-overlap against a hand-curated corpus (27 entries covering every published page). /search renders the same results as a browseable page with a search box. when the ollama backend lands the AI docs assistant wraps this same ranking — the search picks the top 3 pages, the assistant forwards them to the model as system-prompt context.',
