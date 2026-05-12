@@ -10,6 +10,7 @@ const PATHS: readonly string[] = [
   '/',
   '/quickstart',
   '/cli',
+  '/templates',
   '/schema',
   '/examples',
   '/functions',

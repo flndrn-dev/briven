@@ -9,6 +9,7 @@ const NAV: readonly NavItem[] = [
   { href: '/', label: 'overview' },
   { href: '/quickstart', label: 'quickstart' },
   { href: '/cli', label: 'cli' },
+  { href: '/templates', label: 'templates' },
   { href: '/schema', label: 'schema dsl' },
   { href: '/examples', label: 'examples' },
   { href: '/functions', label: 'functions' },
