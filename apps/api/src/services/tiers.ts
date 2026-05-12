@@ -21,6 +21,21 @@ export interface TierLimits {
    * follow-up that lands once the Polar metering push goes live.
    */
   readonly storageBytes: number;
+  /**
+   * Sum of realtime WebSocket connection-seconds across the calendar
+   * month. Sampled hourly from the realtime /metrics gauge and pushed
+   * to Polar's connection_seconds meter for overage billing. Soft cap
+   * — surfaced on the dashboard usage widget; per-request rate limits
+   * (RATE_LIMITS_BY_TIER) already throttle the connect path.
+   */
+  readonly connectionSecondsPerMonth: number;
+  /**
+   * Maximum concurrent subscriptions a single project can have open
+   * across all of its WebSocket connections. Hard cap, enforced at
+   * subscribe time by the realtime service. Stops one bad project
+   * from exhausting the year-one 10,000 concurrent-subs target.
+   */
+  readonly concurrentSubscriptions: number;
 }
 
 export const TIERS: Record<ProjectTier, TierLimits> = {
@@ -29,18 +44,24 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     functionsPerProject: 20,
     invokesPerMonth: 100_000,
     storageBytes: 1_073_741_824, // 1 GiB
+    connectionSecondsPerMonth: 1_000_000, // ~12 days of one continuous connection
+    concurrentSubscriptions: 100,
   },
   pro: {
     projectsPerOrg: 20,
     functionsPerProject: 200,
     invokesPerMonth: 1_000_000,
     storageBytes: 10_737_418_240, // 10 GiB
+    connectionSecondsPerMonth: 10_000_000, // ~115 days = roughly 4 always-on subs
+    concurrentSubscriptions: 1_000,
   },
   team: {
     projectsPerOrg: 100,
     functionsPerProject: 2_000,
     invokesPerMonth: 10_000_000,
     storageBytes: 107_374_182_400, // 100 GiB
+    connectionSecondsPerMonth: 100_000_000, // ~1158 days = roughly 38 always-on
+    concurrentSubscriptions: 10_000,
   },
 };
 

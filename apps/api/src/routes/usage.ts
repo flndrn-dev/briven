@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 
 import { requireProjectAuth } from '../middleware/project-auth.js';
 import {
+  getConnectionSecondsUsage,
+  getCurrentMonthConnectionSecondsUsage,
   getCurrentMonthInvocationUsage,
   getInvocationUsage,
   getStorageUsage,
@@ -30,6 +32,7 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
   const untilParam = c.req.query('until');
 
   let invocations;
+  let connection;
   let periodStart: string;
   let periodEnd: string;
   if (fromParam || untilParam) {
@@ -54,10 +57,12 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
       );
     }
     invocations = await getInvocationUsage(projectId, from, until);
+    connection = await getConnectionSecondsUsage(projectId, from, until);
     periodStart = from.toISOString();
     periodEnd = until.toISOString();
   } else {
     invocations = await getCurrentMonthInvocationUsage(projectId);
+    connection = await getCurrentMonthConnectionSecondsUsage(projectId);
     periodStart = invocations.periodStart;
     periodEnd = invocations.periodEnd;
   }
@@ -89,9 +94,14 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
       tableCount: storage.tableCount,
       sampledAt: storage.sampledAt,
     },
+    connection: {
+      seconds: connection.seconds,
+    },
     limits: {
       invokesPerMonth: limits.invokesPerMonth,
       storageBytes: limits.storageBytes,
+      connectionSecondsPerMonth: limits.connectionSecondsPerMonth,
+      concurrentSubscriptions: limits.concurrentSubscriptions,
     },
   });
 });

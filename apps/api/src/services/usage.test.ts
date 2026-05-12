@@ -77,3 +77,33 @@ describe('TIERS.storageBytes', () => {
     expect(TIERS.team.storageBytes).toBe(100 * 1024 * 1024 * 1024);
   });
 });
+
+describe('TIERS.connectionSecondsPerMonth', () => {
+  test('caps are strictly increasing free < pro < team', () => {
+    expect(TIERS.free.connectionSecondsPerMonth).toBeLessThan(
+      TIERS.pro.connectionSecondsPerMonth,
+    );
+    expect(TIERS.pro.connectionSecondsPerMonth).toBeLessThan(
+      TIERS.team.connectionSecondsPerMonth,
+    );
+  });
+
+  test('pro is 10x free, team is 100x free (matches the other scaling pattern)', () => {
+    expect(TIERS.pro.connectionSecondsPerMonth).toBe(TIERS.free.connectionSecondsPerMonth * 10);
+    expect(TIERS.team.connectionSecondsPerMonth).toBe(TIERS.free.connectionSecondsPerMonth * 100);
+  });
+});
+
+describe('TIERS.concurrentSubscriptions', () => {
+  // Sized so the year-one 10k-concurrent target is reached at the team
+  // tier's hard cap, not by stacking many smaller projects. A bad
+  // free-tier project can't take down the platform.
+  test('caps are strictly increasing free < pro < team', () => {
+    expect(TIERS.free.concurrentSubscriptions).toBeLessThan(TIERS.pro.concurrentSubscriptions);
+    expect(TIERS.pro.concurrentSubscriptions).toBeLessThan(TIERS.team.concurrentSubscriptions);
+  });
+
+  test('free tier hard-caps at 100 (single bad project cant exhaust the platform)', () => {
+    expect(TIERS.free.concurrentSubscriptions).toBe(100);
+  });
+});

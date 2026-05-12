@@ -19,7 +19,13 @@ interface UsageResponse {
   tier: 'free' | 'pro' | 'team';
   invocations: { count: number; totalDurationMs: number };
   storage: { bytes: number; tableCount: number };
-  limits: { invokesPerMonth: number; storageBytes: number };
+  connection: { seconds: number };
+  limits: {
+    invokesPerMonth: number;
+    storageBytes: number;
+    connectionSecondsPerMonth: number;
+    concurrentSubscriptions: number;
+  };
 }
 
 interface FunctionLog {
@@ -45,6 +51,13 @@ function formatCount(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
   return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+function formatSeconds(s: number): string {
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${(s / 60).toFixed(1)}m`;
+  if (s < 86_400) return `${(s / 3600).toFixed(1)}h`;
+  return `${(s / 86_400).toFixed(1)}d`;
 }
 
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -98,7 +111,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">
             this month so far
           </h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <Card
               label="invocations"
               value={`${formatCount(usage.invocations.count)} / ${formatCount(usage.limits.invokesPerMonth)}`}
@@ -108,6 +121,11 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
               label="storage"
               value={`${formatBytes(usage.storage.bytes)} / ${formatBytes(usage.limits.storageBytes)}`}
               hint={`${usage.storage.tableCount} table${usage.storage.tableCount === 1 ? '' : 's'}`}
+            />
+            <Card
+              label="realtime"
+              value={`${formatSeconds(usage.connection.seconds)} / ${formatSeconds(usage.limits.connectionSecondsPerMonth)}`}
+              hint="ws connection-seconds"
             />
             <Card
               label="compute"

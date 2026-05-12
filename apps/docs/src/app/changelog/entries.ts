@@ -10,6 +10,18 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['security'],
+    title: 'subscription caps on realtime — per-ws + per-project',
+    body: 'realtime now refuses subscribe frames past BRIVEN_REALTIME_MAX_SUBS_PER_WS (default 200) and BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT (default 10,000 — the year-one platform ceiling). counter briven_realtime_subscribe_rejected_total{reason="ws_limit"|"project_limit"} lights up on /metrics so an operator can spot a runaway client. error frames carry the offending subscriptionId so the client can correlate. closes the "single bad ws can exhaust 10k concurrent subs" surface noted in BUILD_PLAN §7.4.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
+    title: 'connection-seconds in usage + tier caps',
+    body: 'TIERS now ships connectionSecondsPerMonth (1M / 10M / 100M for free / pro / team) and concurrentSubscriptions (100 / 1000 / 10000). hourly aggregator scrapes briven_realtime_connection_seconds_total from the realtime /metrics endpoint, diffs per project, writes connection_seconds rows to usage_events (the polar push worker already drains them). dashboard usage card now shows realtime usage alongside invocations + storage + compute, formatted as s/m/h/d so a Team plan reads as "115d / 1158d" instead of an unreadable 100 million seconds.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['feat'],
     title: 'polar meter push: real fetch + org→customer resolution',
     body: 'the metering worker no longer logs intent — it actually posts to polar. customer ids resolve through project → org → subscriptions.polar_customer_id (5-min in-process cache, invalidated on the polar webhook so a fresh checkout takes effect on the next tick). 5xx + network errors leave the row pending for the next minute; 4xx marks the row skipped so it doesn\'t loop forever. invocations + storage_bytes flow today; connection_seconds queued for the realtime /metrics scraper.',

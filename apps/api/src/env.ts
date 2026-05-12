@@ -116,6 +116,13 @@ const envSchema = z.object({
   BRIVEN_RUNTIME_URL: z.string().url().default('http://localhost:3003'),
   BRIVEN_RUNTIME_SHARED_SECRET: z.string().min(32).optional(),
 
+  // Realtime — apps/realtime's /metrics endpoint. The hourly usage
+  // aggregator scrapes briven_realtime_connection_seconds_total{project}
+  // from here to compute per-project per-hour connection-second deltas.
+  // Optional — when unset the aggregator skips connection_seconds and
+  // only writes invocations + storage_bytes.
+  BRIVEN_REALTIME_URL: z.string().url().default('http://localhost:3004'),
+
   // GeoIP — optional path to a MaxMind GeoLite2-City.mmdb file. When unset
   // or unreadable, IP → city lookups return null and callers show a dash.
   // Refresh the DB monthly via the free MaxMind account download portal.
