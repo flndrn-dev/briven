@@ -36,6 +36,12 @@ export default async function StudioPage({
         </div>
         {tables.length > 0 ? (
           <div className="flex items-start gap-2">
+            <Link
+              href={`/dashboard/projects/${id}/studio/sql`}
+              className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              sql editor →
+            </Link>
             <CopySchemaButton projectId={id} />
             <NewTableForm projectId={id} existingTables={tables.map((t) => t.name)} />
           </div>

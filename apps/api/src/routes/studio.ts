@@ -11,6 +11,7 @@ import {
   dropColumn,
   dropIndex,
   dropTable,
+  executeQuery,
   exportSchemaAsDsl,
   getTableColumns,
   getTableRows,
@@ -43,6 +44,46 @@ studioRouter.get(
   async (c) => {
     const tables = await listProjectTables(c.req.param('id'));
     return c.json({ tables });
+  },
+);
+
+/**
+ * Run arbitrary SQL against the project's schema, scoped via SET LOCAL ROLE
+ * to the project-owner role so cross-schema access is impossible. Audit-
+ * logged so an admin can later replay what was run. Sql text is truncated
+ * to 1KB in the audit to keep the table size bounded.
+ */
+studioRouter.post(
+  '/v1/projects/:id/studio/query',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const body = (await c.req.json().catch(() => null)) as { sql?: string } | null;
+    if (!body || typeof body.sql !== 'string' || body.sql.trim() === '') {
+      return c.json({ code: 'validation_failed', message: 'expected { sql: string }' }, 400);
+    }
+    try {
+      const result = await executeQuery(projectId, body.sql);
+      const user = c.get('user');
+      await audit({
+        actorId: user?.id ?? null,
+        projectId,
+        action: 'studio.query.run',
+        ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: {
+          sqlPreview: body.sql.slice(0, 1024),
+          command: result.command,
+          rowCount: result.rowCount,
+          elapsedMs: result.elapsedMs,
+        },
+      });
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'query failed';
+      return c.json({ code: 'query_failed', message }, 400);
+    }
   },
 );
 
