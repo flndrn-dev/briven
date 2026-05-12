@@ -11,6 +11,7 @@ const NAV: readonly NavItem[] = [
   { href: '/cli', label: 'cli' },
   { href: '/schema', label: 'schema dsl' },
   { href: '/functions', label: 'functions' },
+  { href: '/api', label: 'http api' },
   { href: '/migration', label: 'migration' },
   { href: '/ai', label: 'ai schema' },
   { href: '/self-host', label: 'self-host' },
