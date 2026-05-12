@@ -141,6 +141,30 @@ export default async function HomePage() {
           <Link href="/subprocessors" className="hover:text-[var(--color-text-muted)]">
             subprocessors
           </Link>
+          <Link
+            href="https://docs.briven.tech/quickstart"
+            className="hover:text-[var(--color-text-muted)]"
+          >
+            quickstart
+          </Link>
+          <Link
+            href="https://docs.briven.tech/examples"
+            className="hover:text-[var(--color-text-muted)]"
+          >
+            examples
+          </Link>
+          <Link
+            href="https://docs.briven.tech/api"
+            className="hover:text-[var(--color-text-muted)]"
+          >
+            api
+          </Link>
+          <Link
+            href="https://docs.briven.tech/changelog"
+            className="hover:text-[var(--color-text-muted)]"
+          >
+            changelog
+          </Link>
           <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">
             docs
           </Link>
