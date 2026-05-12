@@ -152,7 +152,7 @@ async function TeamInvites({ teamId }: { teamId: string }) {
       body: JSON.stringify({
         email,
         role,
-        callbackURL: `https://briven.tech/dashboard/invitations`,
+        callbackURL: `https://briven.tech/dashboard/org-invitations/accept`,
       }),
     });
     if (!res.ok) {

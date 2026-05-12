@@ -18,20 +18,30 @@ interface PendingInvitation {
   projectName: string;
 }
 
+interface PendingOrgInvitation {
+  id: string;
+  orgId: string;
+  orgName: string;
+}
+
 export const dynamic = 'force-dynamic';
 
 export default async function ProjectsPage() {
   // Fetch projects + pending invites in parallel. Invites failure is
   // non-fatal — the banner just doesn't render — so we swallow the error
   // here rather than blocking the projects view.
-  const [data, invitesResult] = await Promise.all([
+  const [data, invitesResult, orgInvitesResult] = await Promise.all([
     apiJson<{ projects: Project[] }>('/v1/projects'),
     apiJson<{ invitations: PendingInvitation[] }>('/v1/me/invitations').catch(() => ({
       invitations: [] as PendingInvitation[],
     })),
+    apiJson<{ invitations: PendingOrgInvitation[] }>('/v1/me/org-invitations').catch(() => ({
+      invitations: [] as PendingOrgInvitation[],
+    })),
   ]);
   const projects = data.projects;
   const invitations = invitesResult.invitations;
+  const orgInvitations = orgInvitesResult.invitations;
 
   return (
     <section>
@@ -48,6 +58,25 @@ export default async function ProjectsPage() {
             </p>
             <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
               click to review and accept.
+            </p>
+          </div>
+          <span className="font-mono text-sm text-[var(--color-primary)]">→</span>
+        </Link>
+      ) : null}
+
+      {orgInvitations.length > 0 ? (
+        <Link
+          href="/dashboard/teams"
+          className="mb-6 flex items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
+        >
+          <div>
+            <p className="font-mono text-sm text-[var(--color-text)]">
+              {orgInvitations.length === 1
+                ? `you have a pending invitation to join ${orgInvitations[0]?.orgName ?? 'a team'}.`
+                : `you have ${orgInvitations.length} pending team invitations.`}
+            </p>
+            <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
+              open the link in the email to accept.
             </p>
           </div>
           <span className="font-mono text-sm text-[var(--color-primary)]">→</span>
