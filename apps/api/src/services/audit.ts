@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { newId } from '@briven/shared';
-import { desc, eq, like } from 'drizzle-orm';
+import { and, desc, eq, like } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { auditLogs, type NewAuditLog } from '../db/schema.js';
@@ -70,8 +70,14 @@ export interface AuditRow {
  * "activity" tab. The IP hash stays opaque; CLAUDE.md §5.1 forbids surfacing
  * raw IPs to the dashboard.
  */
-export async function listAuditForProject(projectId: string, limit = 100): Promise<AuditRow[]> {
+export async function listAuditForProject(
+  projectId: string,
+  opts: { limit?: number; actionPrefix?: string } = {},
+): Promise<AuditRow[]> {
   const db = getDb();
+  const where = opts.actionPrefix
+    ? and(eq(auditLogs.projectId, projectId), like(auditLogs.action, `${opts.actionPrefix}%`))
+    : eq(auditLogs.projectId, projectId);
   const rows = await db
     .select({
       id: auditLogs.id,
@@ -82,9 +88,9 @@ export async function listAuditForProject(projectId: string, limit = 100): Promi
       createdAt: auditLogs.createdAt,
     })
     .from(auditLogs)
-    .where(eq(auditLogs.projectId, projectId))
+    .where(where)
     .orderBy(desc(auditLogs.createdAt))
-    .limit(limit);
+    .limit(opts.limit ?? 100);
   return rows.map((r) => ({
     ...r,
     metadata: (r.metadata as Record<string, unknown> | null) ?? null,
