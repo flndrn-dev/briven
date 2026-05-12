@@ -27,6 +27,20 @@ const DB = pmExec('briven db shell');
 const DEV = pmExec('briven dev');
 const LOGS = pmExec('briven logs', 'briven logs --follow');
 const LOGOUT = pmExec('briven logout', 'briven logout --project p_xxx');
+const PROJECTS = pmExec(
+  'briven projects list',
+  'briven projects set-default p_xxx',
+);
+const EXPORT = pmExec(
+  'briven export',
+  'briven export --out backup.json',
+  'briven export --with-data',
+);
+const IMPORT = pmExec(
+  'briven import backup.json',
+  'briven import backup.json --restore-data',
+);
+const DOCTOR = pmExec('briven doctor', 'briven doctor --origin https://api.example.com');
 
 export default function CliPage() {
   return (
@@ -134,6 +148,38 @@ export default function CliPage() {
 
       <Section title="logout">
         <PmTabs commands={LOGOUT} />
+      </Section>
+
+      <Section title="projects">
+        <p>
+          List every project authenticated on this machine (read straight from{' '}
+          <code>~/.config/briven/credentials.json</code> — no server round-trip) and switch
+          the default. The default project is what every other command picks up when{' '}
+          <code>briven.json</code> isn&apos;t around.
+        </p>
+        <PmTabs commands={PROJECTS} />
+      </Section>
+
+      <Section title="export / import">
+        <p>
+          Move a project&apos;s schema + functions (and optionally its data) between
+          projects or to disk. <code>--with-data</code> shells out to{' '}
+          <code>pg_dump --format=custom --compress=6</code> against a short-lived dsn;{' '}
+          <code>--restore-data</code> on the import side looks for the sibling data dump
+          and pipes it into <code>pg_restore</code>. No new cli deps, but assumes{' '}
+          <code>pg_dump</code> + <code>pg_restore</code> on your PATH.
+        </p>
+        <PmTabs commands={EXPORT} />
+        <PmTabs commands={IMPORT} />
+      </Section>
+
+      <Section title="doctor">
+        <p>
+          End-to-end health check against the linked api. Prints pass/fail for: api
+          reachable, session valid, project reachable, runtime ready, an example function
+          invoke (if any). Useful first-line triage when something feels off.
+        </p>
+        <PmTabs commands={DOCTOR} />
       </Section>
 
       <Section title="environment">
