@@ -143,6 +143,12 @@ export default function MigrationPage() {
           summary="document model → relational model is a manual remap. plan for an extended parallel-run window (2+ weeks) to catch shape mismatches."
         />
         <SourceItem
+          name="mongodb"
+          status="documented"
+          href="/migration/mongodb"
+          summary="collection → table with deliberate jsonb vs flatten decisions per embedded doc; ObjectId → text + ulid for new ids; mongoexport → custom transform → COPY for the data move."
+        />
+        <SourceItem
           name="hasura"
           status="documented"
           href="/migration/hasura"

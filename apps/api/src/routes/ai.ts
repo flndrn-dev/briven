@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import { projectRateLimit } from '../middleware/rate-limit.js';
+import { explainCode } from '../services/ai-explain.js';
 import { generateFunction } from '../services/ai-function-gen.js';
 import { AiNotConfiguredError, generateSchema } from '../services/ai-schema-gen.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
@@ -21,6 +22,15 @@ const generateFunctionSchema = z.object({
   // 8 KB before forwarding to Ollama (the service cap is the binding
   // one; the wire cap is a defense-in-depth backstop).
   schemaContext: z.string().max(16_384).optional(),
+});
+
+const explainCodeSchema = z.object({
+  // The code to explain. 8 KB matches the schema-context cap so we
+  // don't blow the model's context with a single long file.
+  code: z.string().min(1).max(8_192),
+  // Optional perspective shaper — "I'm new to briven", "I migrated from
+  // prisma", "explain like a senior engineer". Empty is fine.
+  perspective: z.string().max(512).optional(),
 });
 
 aiRouter.use('/v1/projects/:id/ai/*', projectRateLimit('mutate'));
@@ -80,6 +90,42 @@ aiRouter.post('/v1/projects/:id/ai/generate-function', async (c) => {
     });
     return c.json({
       function: result.function,
+      model: result.model,
+      elapsedMs: result.elapsedMs,
+    });
+  } catch (err) {
+    if (err instanceof AiNotConfiguredError) {
+      return c.json(
+        {
+          code: 'not_configured',
+          message: 'AI features are disabled on this deployment (BRIVEN_OLLAMA_URL unset)',
+        },
+        503,
+      );
+    }
+    throw err;
+  }
+});
+
+/**
+ * Phase 3 AI explain code. Third member of the AI trifecta — same
+ * Ollama-backed pattern as schema + function gen. Returns 503 when
+ * BRIVEN_OLLAMA_URL is unset so the dashboard can render an "AI
+ * offline" state without throwing.
+ */
+aiRouter.post('/v1/projects/:id/ai/explain-code', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = explainCodeSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const result = await explainCode({
+      code: parsed.data.code,
+      perspective: parsed.data.perspective,
+    });
+    return c.json({
+      explanation: result.explanation,
       model: result.model,
       elapsedMs: result.elapsedMs,
     });

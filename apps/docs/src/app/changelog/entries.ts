@@ -10,6 +10,24 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['feat', 'docs'],
+    title: 'docs search + corpus index (AI assistant pre-staged)',
+    body: 'new endpoint at /api/search?q=… returns the top N docs pages by word-overlap against a hand-curated corpus (27 entries covering every published page). /search renders the same results as a browseable page with a search box. when the ollama backend lands the AI docs assistant wraps this same ranking — the search picks the top 3 pages, the assistant forwards them to the model as system-prompt context.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['docs'],
+    title: 'migration · mongodb → briven',
+    body: 'new page at /migration/mongodb. covers the decision matrix for keeping embedded docs as jsonb vs flattening into separate tables, ObjectId → text + ulid for new ids, the mongoexport → transform-script → COPY data move, find/aggregate → ctx.db chain rewrites, and the 2+ week parallel-run window mongo → relational migrations need to catch shape mismatches.',
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
+    title: 'ai explain code — third feature in the AI trifecta',
+    body: 'paste any briven schema or function snippet, get a plain-english walkthrough in briven idioms (what the wrapper means, which db calls happen, where reactivity hooks in, sharp edges). same self-hosted Qwen 2.5-coder backend + same not-logged privacy posture as schema/function gen. dashboard surface at /dashboard/projects/:id/ai-explain. third tab in the AI section.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['docs'],
     title: 'per-source migration sub-pages — drizzle + prisma',
     body: 'two new pages on docs.briven.tech: /migration/drizzle and /migration/prisma. each covers schema-column mapping, indexes, data export (pg_dump + pg_restore), the functions-port rewrite (drizzle\'s db.select chains and prisma\'s findMany calls both become ctx.db chains), auth hand-off to the nextauth guide, and reactivity as a new capability. the /migration overview separates them out of the lumped "raw postgres / drizzle / prisma" entry now that each has its own page.',
