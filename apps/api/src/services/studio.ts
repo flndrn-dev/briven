@@ -927,6 +927,69 @@ export async function dropIndex(
 }
 
 /**
+ * Rename a table. Refuses platform-owned `_briven_*` tables (source name)
+ * and refuses to rename into the platform-owned prefix (target name).
+ */
+export async function renameTable(args: {
+  projectId: string;
+  oldName: string;
+  newName: string;
+}): Promise<void> {
+  await assertTableExists(args.projectId, args.oldName);
+  if (!TABLE_NAME_RE.test(args.newName)) {
+    throw new ValidationError('invalid new table name', { newName: args.newName });
+  }
+  if (args.newName.startsWith('_briven_')) {
+    throw new ValidationError('platform-owned table prefix is reserved', {
+      newName: args.newName,
+    });
+  }
+  if (args.oldName === args.newName) return;
+  const schema = schemaNameFor(args.projectId);
+  const sql = dataPlaneClient();
+  await sql.unsafe(
+    `ALTER TABLE "${schema}"."${args.oldName}" RENAME TO "${args.newName}"`,
+  );
+}
+
+/**
+ * Rename a column on a table. PK / FK / index references survive
+ * automatically — Postgres rewrites them by oid.
+ */
+export async function renameColumn(args: {
+  projectId: string;
+  tableName: string;
+  oldName: string;
+  newName: string;
+}): Promise<void> {
+  await assertTableExists(args.projectId, args.tableName);
+  if (!COLUMN_NAME_RE.test(args.oldName)) {
+    throw new ValidationError('invalid old column name', { oldName: args.oldName });
+  }
+  if (!COLUMN_NAME_RE.test(args.newName)) {
+    throw new ValidationError('invalid new column name', { newName: args.newName });
+  }
+  if (args.oldName === args.newName) return;
+  const cols = await getTableColumns(args.projectId, args.tableName);
+  if (!cols.find((c) => c.name === args.oldName)) {
+    throw new ValidationError('column not found on table', {
+      table: args.tableName,
+      column: args.oldName,
+    });
+  }
+  if (cols.find((c) => c.name === args.newName)) {
+    throw new ValidationError('a column with the new name already exists', {
+      newName: args.newName,
+    });
+  }
+  const schema = schemaNameFor(args.projectId);
+  const sql = dataPlaneClient();
+  await sql.unsafe(
+    `ALTER TABLE "${schema}"."${args.tableName}" RENAME COLUMN "${args.oldName}" TO "${args.newName}"`,
+  );
+}
+
+/**
  * Drop a column. Refuses to drop a PK column — that would invalidate every
  * row-level operation in studio and is almost always a mistake.
  */
