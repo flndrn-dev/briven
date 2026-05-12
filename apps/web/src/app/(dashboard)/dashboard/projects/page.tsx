@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../lib/api';
+import { ProjectsList } from './projects-list';
 
 interface Project {
   id: string;
@@ -183,35 +184,7 @@ briven deploy`}
           </div>
         </div>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {projects.map((p) => (
-            <li key={p.id}>
-              <Link
-                href={`/dashboard/projects/${p.id}`}
-                className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 transition hover:border-[var(--color-border)]"
-              >
-                <div>
-                  <p className="font-mono text-sm">{p.name}</p>
-                  <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-                    {p.slug} · {p.region} · {p.tier}
-                    {p.orgName ? (
-                      <span>
-                        {' · '}
-                        <span className="text-[var(--color-text-muted)]">
-                          {p.orgName}
-                          {p.orgPersonal ? '' : ' (team)'}
-                        </span>
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-                <span className="font-mono text-xs text-[var(--color-text-subtle)]">
-                  {new Date(p.createdAt).toISOString().slice(0, 10)}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <ProjectsList projects={projects} />
       )}
     </section>
   );
