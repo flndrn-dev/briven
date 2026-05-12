@@ -15,6 +15,18 @@ type Tag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'chore';
 
 const ENTRIES: readonly Entry[] = [
   {
+    date: '2026-05-12',
+    tags: ['feat'],
+    title: 'dashboard-managed schemas — convex-style manual database creation',
+    body: "studio gains the full DDL surface: + new table with typed columns (text/integer/bigint/boolean/timestamptz/jsonb/uuid/numeric), primary keys, foreign keys with ON DELETE behavior, defaults; add/drop column on a live table; create/drop indexes (multi-column + unique). Schema panel renders relationships as “→ users.id”. FK values in the data view become “↗” links to the referenced row. Copy-as-schema.ts generates the equivalent briven/schema.ts so anything you click can graduate to git. SQL editor at /studio/sql runs arbitrary statements scoped via SET LOCAL ROLE to the project owner role, 5s statement_timeout, every query audit-logged. New connect tab shows project endpoints + a button to issue a 15-minute shell DSN for psql / pgcli / external tools. CLI path unchanged; both write to the same schema.",
+  },
+  {
+    date: '2026-05-12',
+    tags: ['feat'],
+    title: 'team org admin — invitations, members, role change, delete',
+    body: 'team owners can now invite collaborators by email (mirrors project_invitations: 7-day hashed-token email link, accept page at /dashboard/org-invitations/accept), list current members, change roles inline (with last-owner protection), remove non-owners, and soft-delete a team org (refused while live projects still exist). Tier-aware: free tier = 1 personal org, no team creation; pro/team = unlimited. Dashboard surfaces pending team invites in the projects banner alongside project invites.',
+  },
+  {
     date: '2026-05-11',
     tags: ['feat'],
     title: 'AI schema generator — Phase 3 differentiator',

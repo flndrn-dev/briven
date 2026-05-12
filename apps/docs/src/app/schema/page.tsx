@@ -12,6 +12,27 @@ export default function SchemaPage() {
         transactionally on the data plane.
       </p>
 
+      <Section title="two paths">
+        <p>
+          briven gives you two ways to build your database — they hit the same postgres schema
+          and you can mix them freely:
+        </p>
+        <ul className="list-disc pl-5">
+          <li>
+            <strong>cli + git</strong> — the canonical path. write <code>briven/schema.ts</code>{' '}
+            below, commit it, <code>briven deploy</code>. migrations are diff-based and
+            transactional. best for production work and code review.
+          </li>
+          <li>
+            <strong>dashboard / studio</strong> — open <code>/dashboard/projects/&lt;p&gt;/studio</code>,
+            click <em>+ new table</em>, pick column types, set primary keys / foreign keys /
+            indexes. best for prototyping and one-off changes. studio has a{' '}
+            <em>copy as schema.ts</em> button that emits the equivalent of this file from a
+            live database, so anything you build by clicking can graduate to git later.
+          </li>
+        </ul>
+      </Section>
+
       <Section title="hello world">
         <p>
           A schema lives at <code>briven/schema.ts</code> and exports a default value built with
