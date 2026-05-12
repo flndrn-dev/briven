@@ -18,6 +18,7 @@ import {
   insertRow,
   listIndexes,
   listProjectTables,
+  listRelationships,
   renameColumn,
   renameTable,
   STUDIO_COLUMN_TYPES,
@@ -86,6 +87,21 @@ studioRouter.post(
       const message = err instanceof Error ? err.message : 'query failed';
       return c.json({ code: 'query_failed', message }, 400);
     }
+  },
+);
+
+/**
+ * Every FK edge in the schema. Drives the relationships panel on the
+ * studio overview.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/relationships',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const edges = await listRelationships(projectId);
+    return c.json({ edges });
   },
 );
 
