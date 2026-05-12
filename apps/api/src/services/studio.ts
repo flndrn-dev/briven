@@ -402,6 +402,105 @@ export interface DeleteRowResult {
 }
 
 /**
+ * Map a postgres `data_type` (information_schema flavour) onto the briven
+ * schema-DSL helper name. Best-effort — anything outside the known list
+ * is emitted as a TODO comment so the user can fix it by hand.
+ */
+function pgTypeToDslHelper(pgType: string): { helper: string; comment?: string } {
+  switch (pgType) {
+    case 'text':
+    case 'character varying':
+    case 'varchar':
+      return { helper: 'text()' };
+    case 'integer':
+    case 'int4':
+      return { helper: 'integer()' };
+    case 'bigint':
+    case 'int8':
+      return { helper: 'bigint()' };
+    case 'boolean':
+      return { helper: 'boolean()' };
+    case 'timestamp with time zone':
+    case 'timestamp without time zone':
+    case 'timestamp':
+    case 'timestamptz':
+      return { helper: 'timestamp()' };
+    case 'jsonb':
+      return { helper: 'jsonb()' };
+    case 'uuid':
+      return { helper: 'uuid()' };
+    case 'numeric':
+    case 'decimal':
+      return { helper: 'numeric()' };
+    default:
+      return { helper: 'text()', comment: `TODO: original type ${pgType} — adjust DSL helper` };
+  }
+}
+
+/**
+ * Generate an equivalent `briven/schema.ts` for the entire project. Used by
+ * the dashboard's "copy as schema.ts" affordance so a database the user
+ * built by clicking around in studio can be committed to git and managed
+ * via the CLI from then on.
+ */
+export async function exportSchemaAsDsl(projectId: string): Promise<string> {
+  const tables = await listProjectTables(projectId);
+  if (tables.length === 0) {
+    return [
+      "import { schema, table } from '@briven/cli/schema';",
+      '',
+      '// no tables yet — create one from the dashboard or define it here.',
+      'export default schema({});',
+      '',
+    ].join('\n');
+  }
+  const tableNames = tables.map((t) => t.name);
+  const perTable = await Promise.all(
+    tableNames.map(async (t) => ({ table: t, columns: await getTableColumns(projectId, t) })),
+  );
+
+  // Collect every helper actually used so the import line stays minimal.
+  const helpersUsed = new Set<string>();
+  helpersUsed.add('schema');
+  helpersUsed.add('table');
+
+  const lines: string[] = [];
+  for (const { table: tName, columns } of perTable) {
+    lines.push(`  ${tName}: table({`);
+    for (const col of columns) {
+      const { helper, comment } = pgTypeToDslHelper(col.dataType);
+      const helperName = helper.replace(/\(\)$/, '');
+      helpersUsed.add(helperName);
+      const modifiers: string[] = [];
+      if (col.isPrimaryKey) modifiers.push('.primaryKey()');
+      if (!col.nullable && !col.isPrimaryKey) modifiers.push('.notNull()');
+      if (col.defaultExpr) {
+        // Single-quote the default for the DSL — it accepts a raw expression.
+        modifiers.push(`.default(${JSON.stringify(col.defaultExpr)})`);
+      }
+      if (col.references) {
+        modifiers.push(`.references('${col.references.table}', '${col.references.column}')`);
+      }
+      const commentSuffix = comment ? ` // ${comment}` : '';
+      lines.push(`    ${col.name}: ${helper}${modifiers.join('')},${commentSuffix}`);
+    }
+    lines.push('  }),');
+  }
+
+  const helpersList = Array.from(helpersUsed).sort();
+  return [
+    `import { ${helpersList.join(', ')} } from '@briven/cli/schema';`,
+    '',
+    '// generated from the live database by briven studio.',
+    "// commit this file and run `briven deploy` to keep the schema in git.",
+    'export default schema({',
+    ...lines,
+    '});',
+    '',
+  ].join('\n');
+}
+
+/**
  * Studio-supported column type vocabulary. Keep this list short — exotic
  * types (arrays, enums, ranges) still work via the CLI schema.ts path. The
  * names map 1:1 onto the actual postgres type a CREATE/ALTER statement uses.

@@ -11,6 +11,7 @@ import {
   dropColumn,
   dropIndex,
   dropTable,
+  exportSchemaAsDsl,
   getTableColumns,
   getTableRows,
   insertRow,
@@ -42,6 +43,24 @@ studioRouter.get(
   async (c) => {
     const tables = await listProjectTables(c.req.param('id'));
     return c.json({ tables });
+  },
+);
+
+/**
+ * Generate an equivalent `briven/schema.ts` for the project — for users
+ * who started in studio and want to graduate to git-tracked CLI deploys.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/schema.ts',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const body = await exportSchemaAsDsl(projectId);
+    return new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    });
   },
 );
 
