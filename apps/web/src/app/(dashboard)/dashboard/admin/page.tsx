@@ -12,7 +12,7 @@ export default async function AdminStatsPage() {
   const stats = await apiJson<Stats>('/v1/admin/stats');
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <StatCard label="users" value={stats.users} />
       <StatCard label="projects" value={stats.projects} />
       <StatCard label="deployments" value={stats.deployments} />

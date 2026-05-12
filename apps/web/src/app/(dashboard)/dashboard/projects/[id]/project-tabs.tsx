@@ -27,7 +27,11 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
   return (
     <nav
       aria-label="project sections"
-      className="flex gap-1 border-b border-[var(--color-border-subtle)]"
+      // 14 tabs at full width — at 640px the row overflows. Horizontal
+      // scroll (with the scrollbar hidden on iOS/macOS native) keeps the
+      // row appearance on desktop and gives mobile a thumb-swipe pattern
+      // that doesn't require collapsing to a drawer.
+      className="flex gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {TABS.map((tab) => {
         const href = `${base}${tab.href}`;
@@ -36,7 +40,7 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
           <Link
             key={tab.href}
             href={href}
-            className={`relative px-3 py-2 font-mono text-sm transition ${
+            className={`relative shrink-0 whitespace-nowrap px-3 py-2 font-mono text-sm transition ${
               active
                 ? 'text-[var(--color-text)]'
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'

@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { DashboardMobileNav } from './dashboard-mobile-nav';
 import { DashboardSidebar } from './dashboard-sidebar';
 import { SignOutButton } from './sign-out-button';
 import { apiJson } from '../../lib/api';
@@ -48,10 +49,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </header>
 
+      {/* Mobile-only nav row. Hidden md+ where the sidebar takes over. */}
+      <DashboardMobileNav isAdmin={user.isAdmin} />
+
       {/* Body area fills the remaining viewport height. Sidebar spans the
           full body height; main scrolls independently so the sidebar's
-          bottom-anchored toggle stays put. */}
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 gap-8 px-6 py-8">
+          bottom-anchored toggle stays put. Padding tightens on mobile so
+          the main content gets the full viewport width. */}
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 gap-4 px-4 py-4 md:gap-8 md:px-6 md:py-8">
         <DashboardSidebar
           isAdmin={user.isAdmin}
           user={{

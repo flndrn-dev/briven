@@ -10,6 +10,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-12',
+    tags: ['fix'],
+    title: 'mobile responsive pass — dashboard nav, project tabs, marketing footer',
+    body: 'project tabs row (14 secondary tabs inside a project — overview / functions / logs / etc.) now horizontally scrolls on mobile instead of overflowing; sidebar hides below md and a horizontal nav strip appears at the top of the dashboard so projects / teams / billing / settings stay one tap away on phones. admin stats grid + project overview cards + invoke-panel grid all gain responsive col counts. subprocessors table wraps in overflow-x. marketing footer rewritten as a proper five-column nav (brand + product + docs + legal) on top of a thin bottom strip with copyright + flndrn limited + heart-in-flanders. fixed dashboard body padding so phones get the full viewport width.',
+  },
+  {
+    date: '2026-05-12',
     tags: ['feat'],
     title: 'briven ai cli — schema / function / explain from the terminal',
     body: '`briven ai schema "..."`, `briven ai function "..."`, `briven ai explain --file <path>` proxy to the same three api endpoints the dashboard hits. takes a prompt as a positional arg, writes to stdout (or `--out path`). `briven ai function --with-schema` pulls the project\'s current schema snapshot in as model context. exit code 2 means the api host hasn\'t wired BRIVEN_OLLAMA_URL — a clear "AI assistant offline" message instead of an opaque http error. completes the AI surface: api + dashboard + cli all wire to the same self-hosted Qwen 2.5-coder backend.',

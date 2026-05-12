@@ -63,7 +63,7 @@ export function InvokePanel({ projectId, functionName }: Props) {
         </button>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <label className="flex flex-col gap-2">
           <span className="font-mono text-xs text-[var(--color-text-muted)]">args (json)</span>
           <textarea
