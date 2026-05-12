@@ -118,7 +118,7 @@ export async function generateFunction(input: AiFunctionGenInput): Promise<AiFun
   const url = `${env.BRIVEN_OLLAMA_URL.replace(/\/$/, '')}/api/generate`;
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (env.BRIVEN_OLLAMA_API_KEY) {
-    headers['authorization'] = `Bearer ${env.BRIVEN_OLLAMA_API_KEY}`;
+    headers['x-api-key'] = env.BRIVEN_OLLAMA_API_KEY;
   }
   const res = await fetch(url, {
     method: 'POST',

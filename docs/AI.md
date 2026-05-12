@@ -9,10 +9,12 @@ The AI features (`/dashboard/projects/:id/ai-schema`, `/ai-function`, `/ai-expla
 
 | Setup | URL shape | Auth |
 |---|---|---|
-| **Production proxy** (current) | `https://ai.flndrn.com` | Bearer token via `BRIVEN_OLLAMA_API_KEY` |
+| **Production proxy** (current) | `https://ai.flndrn.com` | `X-API-Key: <key>` via `BRIVEN_OLLAMA_API_KEY` |
 | **Local DGX** (coming soon) | `http://<dgx-host>:11434` | No auth — relies on private-network reachability |
 
-The code branches on `BRIVEN_OLLAMA_API_KEY` — sends the `Authorization: Bearer <key>` header when set, omits it when unset. Switching from the proxy to the local DGX is a config change, not a code change.
+The code branches on `BRIVEN_OLLAMA_API_KEY` — sends the `X-API-Key` header when set, omits it when unset. Switching from the proxy to the local DGX is a config change, not a code change.
+
+> **Why X-API-Key, not Authorization: Bearer:** the Ollama Console proxy at `ai.flndrn.com` rejects Bearer with `401 Unauthorized - Invalid API key`. `X-API-Key` is the proxy's only accepted scheme today. Bearer support is the industry default (OpenAI, Anthropic, Polar, Stripe all use it) so the proxy ought to grow it too — when it does, briven can add a `BRIVEN_OLLAMA_AUTH_HEADER` env toggle. Until then, X-API-Key is hard-wired.
 
 ---
 
