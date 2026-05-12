@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../lib/api';
+import { InvocationsSparkline } from './invocations-sparkline';
 
 interface Project {
   id: string;
@@ -56,6 +57,11 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
   const { logs: recentErrors } = await apiJson<{ logs: FunctionLog[] }>(
     `/v1/projects/${id}/function-logs?status=err&limit=5`,
   ).catch(() => ({ logs: [] as FunctionLog[] }));
+  const { hours } = await apiJson<{
+    hours: Array<{ hour: string; count: number; errCount: number }>;
+  }>(`/v1/projects/${id}/hourly-invocations`).catch(() => ({
+    hours: [] as Array<{ hour: string; count: number; errCount: number }>,
+  }));
 
   const endpoint = `${project.slug}.apps.briven.tech`;
   const latest = deployments[0];
@@ -75,6 +81,17 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         />
         <Card label="functions (last deploy)" value={latest?.functionCount ?? '—'} />
       </div>
+
+      {hours.length > 0 ? (
+        <div>
+          <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">
+            invocations · last 24 hours
+          </h2>
+          <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+            <InvocationsSparkline hours={hours} />
+          </div>
+        </div>
+      ) : null}
 
       {usage ? (
         <div>

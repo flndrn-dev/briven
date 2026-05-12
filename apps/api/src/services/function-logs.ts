@@ -49,6 +49,57 @@ export async function listFunctionLogs(
     .limit(limit);
 }
 
+export interface HourlyInvocations {
+  /** ISO timestamp at the top of the hour (UTC). */
+  readonly hour: string;
+  readonly count: number;
+  readonly errCount: number;
+}
+
+/**
+ * 24-hour invocation timeseries bucketed by hour. Drives the project
+ * overview's sparkline. Fills missing hours with zeros so the chart
+ * always has 24 points regardless of how sparse the traffic is.
+ */
+export async function getHourlyInvocations(
+  projectId: string,
+): Promise<readonly HourlyInvocations[]> {
+  const db = getDb();
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // generate_series fills missing hours so the chart is a stable 24 points.
+  const rows = (await db.execute(sql`
+    WITH hours AS (
+      SELECT generate_series(
+        date_trunc('hour', ${since}),
+        date_trunc('hour', now()),
+        interval '1 hour'
+      ) AS hour
+    ),
+    logs AS (
+      SELECT
+        date_trunc('hour', created_at) AS hour,
+        count(*)::int AS count,
+        count(*) FILTER (WHERE status = 'err')::int AS err_count
+      FROM function_logs
+      WHERE project_id = ${projectId}
+        AND created_at >= ${since}
+      GROUP BY 1
+    )
+    SELECT
+      hours.hour AS hour,
+      coalesce(logs.count, 0) AS count,
+      coalesce(logs.err_count, 0) AS err_count
+    FROM hours
+    LEFT JOIN logs ON logs.hour = hours.hour
+    ORDER BY hours.hour
+  `)) as Array<{ hour: string | Date; count: number | string; err_count: number | string }>;
+  return rows.map((r) => ({
+    hour: (r.hour instanceof Date ? r.hour : new Date(r.hour)).toISOString(),
+    count: Number(r.count) || 0,
+    errCount: Number(r.err_count) || 0,
+  }));
+}
+
 export interface FunctionStats {
   readonly count: number;
   readonly errCount: number;
