@@ -180,10 +180,25 @@ docker compose up -d api`}</Snippet>
       <Section title="backup off-site upload failed">
         <p>
           systemd journal: <code>journalctl -u briven-backup.service -n 200</code>. the most
-          common failure is the <code>BRIVEN_BACKUP_REMOTE_*</code> credentials being revoked
-          server-side — easy fix is to re-issue and update <code>.env</code>, then{' '}
-          <code>systemctl start briven-backup.service</code> to retry without waiting for the
-          timer.
+          common failure is the b2 application key being revoked server-side. easy fix:
+          re-issue at backblaze, update the env, then{' '}
+          <code>systemctl start briven-backup.service</code> to retry without waiting for
+          the timer.
+        </p>
+        <p className="mt-2">
+          required env on the kvm running pg-dump.sh + restore-drill.sh:
+        </p>
+        <ul className="list-disc pl-5">
+          <li><code>BRIVEN_BACKUP_B2_KEY_ID</code> — Backblaze B2 application key id.</li>
+          <li><code>BRIVEN_BACKUP_B2_APP_KEY</code> — secret half of the application key. write-only scope is enough.</li>
+          <li><code>BRIVEN_BACKUP_B2_BUCKET</code> — bucket name (e.g. <code>briven-prod-backups-eu-central</code>).</li>
+          <li><code>BRIVEN_BACKUP_PREFIX</code> — key prefix inside the bucket. defaults to <code>prod</code>.</li>
+          <li><code>BRIVEN_BACKUP_CONTROL_URL</code> + <code>BRIVEN_BACKUP_DATA_URL</code> — postgres dsns for the meta-db + the data plane.</li>
+        </ul>
+        <p className="mt-2">
+          set a bucket lifecycle rule directly in the b2 UI: keep daily snapshots 30 days,
+          monthly snapshots 12 months. the scripts don't manage retention — they assume
+          the bucket does.
         </p>
       </Section>
 
