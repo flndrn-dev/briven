@@ -24,7 +24,7 @@ async function createTeam(formData: FormData) {
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     if (res.status === 402) {
-      redirect('/dashboard/billing/upgrade?reason=team_limit');
+      redirect('/dashboard/billing');
     }
     throw new Error(`team create failed (${res.status}): ${body}`);
   }
@@ -46,7 +46,7 @@ export default async function NewTeamPage() {
           </p>
         </header>
         <a
-          href="/dashboard/billing/upgrade"
+          href="/dashboard/billing"
           className="inline-block rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
         >
           see upgrade options
