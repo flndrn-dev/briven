@@ -62,6 +62,8 @@ export interface ColumnInfo {
   readonly ordinalPosition: number;
   /** True if this column participates in the table's primary key. */
   readonly isPrimaryKey: boolean;
+  /** If this column is a foreign key, the target table.column. Null otherwise. */
+  readonly references: { table: string; column: string } | null;
 }
 
 export interface TableRows {
@@ -113,8 +115,9 @@ export async function getTableColumns(
   const schema = schemaNameFor(projectId);
   const sql = dataPlaneClient();
   // Single query: information_schema.columns LEFT JOINed against the
-  // table's PK column set sourced from pg_index. The LATERAL join
-  // produces one row per column with a boolean for PK membership.
+  // table's PK column set sourced from pg_index, plus a LEFT JOIN against
+  // information_schema's FK metadata so each column row can carry its
+  // (table.column) reference if there is one.
   const rows = (await sql<
     Array<{
       column_name: string;
@@ -123,6 +126,8 @@ export async function getTableColumns(
       column_default: string | null;
       ordinal_position: number;
       is_primary_key: boolean;
+      fk_table: string | null;
+      fk_column: string | null;
     }>
   >`
     WITH pk_cols AS (
@@ -134,6 +139,22 @@ export async function getTableColumns(
       WHERE i.indisprimary
         AND n.nspname = ${schema}
         AND c.relname = ${tableName}
+    ),
+    fk_cols AS (
+      SELECT
+        kcu.column_name,
+        ccu.table_name AS fk_table,
+        ccu.column_name AS fk_column
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON kcu.constraint_name = tc.constraint_name
+       AND kcu.table_schema = tc.table_schema
+      JOIN information_schema.constraint_column_usage ccu
+        ON ccu.constraint_name = tc.constraint_name
+       AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = ${schema}
+        AND tc.table_name = ${tableName}
     )
     SELECT
       c.column_name,
@@ -141,9 +162,12 @@ export async function getTableColumns(
       c.is_nullable,
       c.column_default,
       c.ordinal_position,
-      (pk.column_name IS NOT NULL) AS is_primary_key
+      (pk.column_name IS NOT NULL) AS is_primary_key,
+      fk.fk_table,
+      fk.fk_column
     FROM information_schema.columns c
     LEFT JOIN pk_cols pk ON pk.column_name = c.column_name
+    LEFT JOIN fk_cols fk ON fk.column_name = c.column_name
     WHERE c.table_schema = ${schema} AND c.table_name = ${tableName}
     ORDER BY c.ordinal_position
   `) as Array<{
@@ -153,6 +177,8 @@ export async function getTableColumns(
     column_default: string | null;
     ordinal_position: number;
     is_primary_key: boolean;
+    fk_table: string | null;
+    fk_column: string | null;
   }>;
   return rows.map((row) => ({
     name: row.column_name,
@@ -161,6 +187,8 @@ export async function getTableColumns(
     defaultExpr: row.column_default,
     ordinalPosition: row.ordinal_position,
     isPrimaryKey: Boolean(row.is_primary_key),
+    references:
+      row.fk_table && row.fk_column ? { table: row.fk_table, column: row.fk_column } : null,
   }));
 }
 

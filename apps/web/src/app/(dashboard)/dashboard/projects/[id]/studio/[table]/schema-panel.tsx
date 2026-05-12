@@ -24,6 +24,7 @@ interface ColumnInfo {
   nullable: boolean;
   defaultExpr: string | null;
   isPrimaryKey: boolean;
+  references?: { table: string; column: string } | null;
 }
 
 interface IndexInfo {
@@ -314,6 +315,9 @@ export function SchemaPanel({ projectId, table, columns, indexes, otherTables }:
                 {c.dataType}
                 {c.nullable ? '' : ' · not null'}
                 {c.isPrimaryKey ? ' · pk' : ''}
+                {c.references
+                  ? ` · → ${c.references.table}.${c.references.column}`
+                  : ''}
                 {c.defaultExpr ? ` · default ${c.defaultExpr}` : ''}
               </span>
             </div>
