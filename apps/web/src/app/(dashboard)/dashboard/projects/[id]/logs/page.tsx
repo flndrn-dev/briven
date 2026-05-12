@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
 import { ExportLogsLink } from './export-link';
+import { LiveTailToggle } from './live-tail-toggle';
 
 interface FunctionLog {
   id: string;
@@ -68,7 +69,10 @@ export default async function LogsPage({
             depends on your tier (free: 7 days). populated by the runtime log-fanout worker.
           </p>
         </div>
-        <ExportLogsLink projectId={id} query={qs.toString()} />
+        <div className="flex items-center gap-3">
+          <LiveTailToggle />
+          <ExportLogsLink projectId={id} query={qs.toString()} />
+        </div>
       </header>
 
       <nav className="flex flex-wrap items-center gap-2 font-mono text-[10px]">
