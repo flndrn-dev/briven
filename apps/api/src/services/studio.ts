@@ -785,6 +785,60 @@ export async function addColumn(input: {
   );
 }
 
+export interface RelationshipEdge {
+  /** Table holding the FK column. */
+  readonly fromTable: string;
+  readonly fromColumn: string;
+  /** Table the FK points at. */
+  readonly toTable: string;
+  readonly toColumn: string;
+}
+
+/**
+ * Every foreign-key edge in the project's schema. Drives the studio
+ * overview's "relationships" panel so users can see the shape of their
+ * data model at a glance.
+ */
+export async function listRelationships(projectId: string): Promise<readonly RelationshipEdge[]> {
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  const rows = (await sql<
+    Array<{
+      from_table: string;
+      from_column: string;
+      to_table: string;
+      to_column: string;
+    }>
+  >`
+    SELECT
+      tc.table_name AS from_table,
+      kcu.column_name AS from_column,
+      ccu.table_name AS to_table,
+      ccu.column_name AS to_column
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+      ON kcu.constraint_name = tc.constraint_name
+     AND kcu.table_schema = tc.table_schema
+    JOIN information_schema.constraint_column_usage ccu
+      ON ccu.constraint_name = tc.constraint_name
+     AND ccu.table_schema = tc.table_schema
+    WHERE tc.constraint_type = 'FOREIGN KEY'
+      AND tc.table_schema = ${schema}
+    ORDER BY tc.table_name, kcu.column_name
+  `) as Array<{
+    from_table: string;
+    from_column: string;
+    to_table: string;
+    to_column: string;
+  }>;
+  return rows.map((r) => ({
+    fromTable: r.from_table,
+    fromColumn: r.from_column,
+    toTable: r.to_table,
+    toColumn: r.to_column,
+  }));
+}
+
 export interface IndexSummary {
   /** Index name as it lives in pg_class. */
   readonly name: string;

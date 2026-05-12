@@ -10,6 +10,13 @@ interface TableSummary {
   bytes: number;
 }
 
+interface RelationshipEdge {
+  fromTable: string;
+  fromColumn: string;
+  toTable: string;
+  toColumn: string;
+}
+
 export const metadata = { title: 'studio' };
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +26,13 @@ export default async function StudioPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { tables } = await apiJson<{ tables: TableSummary[] }>(
-    `/v1/projects/${id}/studio/tables`,
-  );
+  const [{ tables }, relResult] = await Promise.all([
+    apiJson<{ tables: TableSummary[] }>(`/v1/projects/${id}/studio/tables`),
+    apiJson<{ edges: RelationshipEdge[] }>(`/v1/projects/${id}/studio/relationships`).catch(
+      () => ({ edges: [] as RelationshipEdge[] }),
+    ),
+  ]);
+  const edges = relResult.edges;
 
   return (
     <section className="flex flex-col gap-6">
@@ -63,38 +74,69 @@ export default async function StudioPage({
           <NewTableForm projectId={id} existingTables={tables.map((t) => t.name)} />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-md border border-[var(--color-border-subtle)]">
-          <table className="w-full font-mono text-sm">
-            <thead className="bg-[var(--color-surface)]">
-              <tr className="text-left text-[var(--color-text-muted)]">
-                <th className="px-4 py-2 font-normal">table</th>
-                <th className="px-4 py-2 font-normal">approx rows</th>
-                <th className="px-4 py-2 font-normal">size</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tables.map((t) => (
-                <tr
-                  key={t.name}
-                  className="border-t border-[var(--color-border-subtle)] hover:bg-[var(--color-surface)]"
-                >
-                  <td className="px-4 py-2">
-                    <Link
-                      href={`/dashboard/projects/${id}/studio/${encodeURIComponent(t.name)}`}
-                      className="text-[var(--color-text-link)] hover:underline"
-                    >
-                      {t.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-[var(--color-text-muted)]">
-                    {t.approxRowCount.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-2 text-[var(--color-text-muted)]">{formatBytes(t.bytes)}</td>
+        <>
+          <div className="overflow-hidden rounded-md border border-[var(--color-border-subtle)]">
+            <table className="w-full font-mono text-sm">
+              <thead className="bg-[var(--color-surface)]">
+                <tr className="text-left text-[var(--color-text-muted)]">
+                  <th className="px-4 py-2 font-normal">table</th>
+                  <th className="px-4 py-2 font-normal">approx rows</th>
+                  <th className="px-4 py-2 font-normal">size</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {tables.map((t) => (
+                  <tr
+                    key={t.name}
+                    className="border-t border-[var(--color-border-subtle)] hover:bg-[var(--color-surface)]"
+                  >
+                    <td className="px-4 py-2">
+                      <Link
+                        href={`/dashboard/projects/${id}/studio/${encodeURIComponent(t.name)}`}
+                        className="text-[var(--color-text-link)] hover:underline"
+                      >
+                        {t.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-[var(--color-text-muted)]">
+                      {t.approxRowCount.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2 text-[var(--color-text-muted)]">
+                      {formatBytes(t.bytes)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {edges.length > 0 ? (
+            <section className="flex flex-col gap-2">
+              <h3 className="font-mono text-sm text-[var(--color-text-muted)]">relationships</h3>
+              <ul className="flex flex-col gap-1 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 font-mono text-xs">
+                {edges.map((e, i) => (
+                  <li key={i} className="text-[var(--color-text-muted)]">
+                    <Link
+                      href={`/dashboard/projects/${id}/studio/${encodeURIComponent(e.fromTable)}`}
+                      className="text-[var(--color-text)] hover:underline"
+                    >
+                      {e.fromTable}
+                    </Link>
+                    .{e.fromColumn}
+                    <span className="mx-1 text-[var(--color-primary)]">→</span>
+                    <Link
+                      href={`/dashboard/projects/${id}/studio/${encodeURIComponent(e.toTable)}`}
+                      className="text-[var(--color-text)] hover:underline"
+                    >
+                      {e.toTable}
+                    </Link>
+                    .{e.toColumn}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
       )}
     </section>
   );
