@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { apiJson } from '../../../../../lib/api';
 
 interface Project {
@@ -17,6 +19,16 @@ interface UsageResponse {
   invocations: { count: number; totalDurationMs: number };
   storage: { bytes: number; tableCount: number };
   limits: { invokesPerMonth: number };
+}
+
+interface FunctionLog {
+  id: string;
+  functionName: string;
+  status: 'ok' | 'err';
+  durationMs: string;
+  errCode: string | null;
+  errMessage: string | null;
+  createdAt: string;
 }
 
 export const dynamic = 'force-dynamic';
@@ -41,6 +53,9 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     `/v1/projects/${id}/deployments?limit=5`,
   ).catch(() => ({ deployments: [] as Deployment[] }));
   const usage = await apiJson<UsageResponse>(`/v1/projects/${id}/usage`).catch(() => null);
+  const { logs: recentErrors } = await apiJson<{ logs: FunctionLog[] }>(
+    `/v1/projects/${id}/function-logs?status=err&limit=5`,
+  ).catch(() => ({ logs: [] as FunctionLog[] }));
 
   const endpoint = `${project.slug}.apps.briven.tech`;
   const latest = deployments[0];
@@ -83,6 +98,48 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
               hint="aggregated runtime"
             />
           </div>
+        </div>
+      ) : null}
+
+      {recentErrors.length > 0 ? (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-mono text-sm text-[var(--color-text-muted)]">recent errors</h2>
+            <Link
+              href={`/dashboard/projects/${id}/logs?status=err`}
+              className="font-mono text-[10px] text-[var(--color-text-link)] hover:underline"
+            >
+              all logs →
+            </Link>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {recentErrors.map((log) => (
+              <li
+                key={log.id}
+                className="rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2 font-mono text-xs"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[var(--color-text)]">
+                      <span className="text-red-400">err</span> · {log.functionName}
+                      <span className="ml-2 text-[var(--color-text-subtle)]">
+                        {log.durationMs}ms
+                      </span>
+                    </p>
+                    {log.errMessage ? (
+                      <p className="mt-0.5 truncate text-red-400">
+                        {log.errCode ? `[${log.errCode}] ` : ''}
+                        {log.errMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                  <time className="shrink-0 text-[10px] text-[var(--color-text-subtle)]">
+                    {new Date(log.createdAt).toISOString().replace('T', ' ').slice(11, 19)}
+                  </time>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
