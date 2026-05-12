@@ -122,7 +122,16 @@ export default async function ProjectsPage() {
                 </p>
               </li>
               <li>
-                <p className="text-[var(--color-text)]">2 · scaffold a local copy</p>
+                <p className="text-[var(--color-text)]">2 · build the schema · two paths</p>
+                <p className="mt-1 text-[var(--color-text-muted)]">
+                  <strong>dashboard</strong> — open the new project&apos;s <em>studio</em> tab,
+                  click <em>+ new table</em>, define columns, set PKs/FKs/indexes. ideal for
+                  prototyping and small one-off changes.
+                </p>
+                <p className="mt-2 text-[var(--color-text-muted)]">
+                  <strong>cli + git</strong> — scaffold a local copy and commit your{' '}
+                  <code>schema.ts</code>:
+                </p>
                 <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
                   <code>
                     {`pnpm dlx @briven/cli init my-app --template todo-app
@@ -134,7 +143,9 @@ briven deploy`}
                 </pre>
                 <p className="mt-1 text-[var(--color-text-muted)]">
                   <code>--template todo-app</code> ships a working schema + 4 mutations + 1
-                  reactive query. swap for <code>chat</code> or <code>blank</code>.
+                  reactive query. swap for <code>chat</code> or <code>blank</code>. you can
+                  mix the two paths — anything you build in studio has a{' '}
+                  <em>copy as schema.ts</em> button to graduate to git.
                 </p>
               </li>
               <li>
