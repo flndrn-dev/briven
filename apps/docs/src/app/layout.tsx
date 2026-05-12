@@ -15,6 +15,11 @@ export const metadata: Metadata = {
     shortcut: '/favicon.svg',
   },
   metadataBase: new URL('https://docs.briven.tech'),
+  alternates: {
+    types: {
+      'application/rss+xml': '/changelog/feed.xml',
+    },
+  },
 };
 
 export const viewport: Viewport = {
