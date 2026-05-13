@@ -103,7 +103,23 @@ export async function runAi(argv: readonly string[]): Promise<number> {
   if (!flags.raw) {
     banner(`ai ${subcommand}`);
     blankLine();
-    step(`forwarding to ${cred.apiOrigin}`);
+    step(`forwarding to ${cred.apiOrigin}${flags.stream ? ' (streaming)' : ''}`);
+  }
+
+  // Streaming path — write tokens to stdout as they arrive. Caller can
+  // pipe this into a file with `> briven/schema.ts`. `--out` is still
+  // honoured: we accumulate the stream and write at the end so the
+  // file isn't half-written if the stream errors.
+  if (flags.stream) {
+    return runStreaming({
+      apiOrigin: cred.apiOrigin,
+      apiKey: cred.apiKey,
+      projectId: local.projectId,
+      routeSuffix,
+      body,
+      flags,
+      isRaw: flags.raw,
+    });
   }
 
   let response: unknown;
@@ -173,6 +189,7 @@ interface Flags {
   perspective: string | null;
   withSchema: boolean;
   raw: boolean;
+  stream: boolean;
   help: boolean;
 }
 
@@ -184,6 +201,7 @@ function parseFlags(argv: readonly string[]): Flags {
     perspective: null,
     withSchema: false,
     raw: false,
+    stream: false,
     help: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -198,6 +216,8 @@ function parseFlags(argv: readonly string[]): Flags {
       out.withSchema = true;
     } else if (arg === '--raw') {
       out.raw = true;
+    } else if (arg === '--stream') {
+      out.stream = true;
     } else if (arg === '--help' || arg === '-h') {
       out.help = true;
     } else if (!arg.startsWith('--') && out.positional === null) {
@@ -205,6 +225,115 @@ function parseFlags(argv: readonly string[]): Flags {
     }
   }
   return out;
+}
+
+/**
+ * Stream-mode path. POSTs to the /stream variant of the route, reads
+ * the response body as a UTF-8 stream, parses SSE frames, writes each
+ * token chunk to stdout in real time. Honors --out by accumulating the
+ * stream and writing the file at the end (so a stream error doesn't
+ * leave a half-written file on disk).
+ */
+async function runStreaming(args: {
+  apiOrigin: string;
+  apiKey: string;
+  projectId: string;
+  routeSuffix: string;
+  body: Record<string, unknown>;
+  flags: Flags;
+  isRaw: boolean;
+}): Promise<number> {
+  const url = `${args.apiOrigin}/v1/projects/${args.projectId}/ai/${args.routeSuffix}/stream`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${args.apiKey}`,
+        accept: 'text/event-stream',
+      },
+      body: JSON.stringify(args.body),
+    });
+  } catch (err) {
+    printError(err instanceof Error ? err.message : 'network error');
+    return 1;
+  }
+
+  if (res.status === 503) {
+    printError('AI assistant offline on this deployment (operator: set BRIVEN_OLLAMA_URL).');
+    return 2;
+  }
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '');
+    printError(`api error (${res.status}): ${text}`);
+    return 1;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let accumulated = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const parsed = parseSseFrame(frame);
+      if (parsed.event === 'token' && parsed.data) {
+        const chunk = unescapeJsonChunk(parsed.data);
+        accumulated += chunk;
+        // Stream to stdout when there's no --out target so the user
+        // sees tokens land in their terminal as the model produces them.
+        if (!args.flags.out) process.stdout.write(chunk);
+      } else if (parsed.event === 'error') {
+        if (!args.flags.out) process.stdout.write('\n');
+        printError(parsed.data || 'stream error');
+        return 1;
+      }
+      // 'done' just ends the stream — the reader will see EOF next.
+    }
+  }
+
+  if (args.flags.out) {
+    await writeFile(args.flags.out, accumulated + '\n', 'utf8');
+    if (!args.isRaw) {
+      success(`wrote ${accumulated.length} chars to ${args.flags.out}`);
+    }
+  } else if (!args.isRaw) {
+    process.stdout.write('\n');
+    blankLine();
+    step(`streamed ${accumulated.length} chars`);
+  }
+  return 0;
+}
+
+interface SseFrame {
+  event: string;
+  data: string;
+}
+
+function parseSseFrame(frame: string): SseFrame {
+  let event = 'message';
+  const dataLines: string[] = [];
+  for (const line of frame.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice('data:'.length).trim());
+  }
+  return { event, data: dataLines.join('\n') };
+}
+
+/** Reverses JSON.stringify(s).slice(1,-1) from the api's SSE writer. */
+function unescapeJsonChunk(s: string): string {
+  try {
+    return JSON.parse(`"${s}"`) as string;
+  } catch {
+    return s;
+  }
 }
 
 async function readFileOrFail(path: string): Promise<string | null> {
@@ -292,7 +421,9 @@ function printHelp(sub?: Subcommand): void {
   }
   if (!sub) {
     blankLine();
-    step('all subcommands accept --raw (skip banners + meta footer)');
+    step('shared flags:');
+    step('  --raw                              skip banners + meta footer');
+    step('  --stream                           render tokens as they arrive (SSE)');
     step('AI is gated by ollama on the api host. exit code 2 means not_configured.');
   }
 }

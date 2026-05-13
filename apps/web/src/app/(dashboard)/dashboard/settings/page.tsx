@@ -66,7 +66,7 @@ export default async function SettingsPage() {
     <div className="flex max-w-3xl flex-col gap-8 pb-12">
       <section>
         <h2 className="font-mono text-sm text-[var(--color-text)]">account</h2>
-        <dl className="mt-3 grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
+        <dl className="mt-3 grid grid-cols-1 gap-x-3 sm:grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
           <dt className="text-[var(--color-text-subtle)]">email</dt>
           <dd>
             {user.email}
@@ -142,7 +142,7 @@ export default async function SettingsPage() {
           under EU GDPR you have the right to see the metadata we store about your sign-in activity.
           visible only to you.
         </p>
-        <dl className="mt-3 grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
+        <dl className="mt-3 grid grid-cols-1 gap-x-3 sm:grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
           <dt className="text-[var(--color-text-subtle)]">at</dt>
           <dd>
             {user.lastSignIn

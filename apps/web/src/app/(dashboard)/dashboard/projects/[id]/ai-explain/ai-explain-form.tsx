@@ -2,64 +2,28 @@
 
 import { useState, type FormEvent } from 'react';
 
+import { useAiStream } from '../../../../../../lib/use-ai-stream';
+
 interface Props {
   projectId: string;
-}
-
-interface ExplainResponse {
-  explanation: string;
-  model: string;
-  elapsedMs: number;
-}
-
-interface NotConfiguredResponse {
-  code: 'not_configured';
-  message: string;
 }
 
 export function AiExplainForm({ projectId }: Props) {
   const [code, setCode] = useState('');
   const [perspective, setPerspective] = useState('');
-  const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<ExplainResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notConfigured, setNotConfigured] = useState(false);
+  const { text, status, error, start } = useAiStream();
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!code.trim()) return;
-    setPending(true);
-    setError(null);
-    setResult(null);
-    setNotConfigured(false);
-    try {
-      const res = await fetch(`/api/v1/projects/${projectId}/ai/explain-code`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          code: code.trim(),
-          ...(perspective.trim() ? { perspective: perspective.trim() } : {}),
-        }),
-      });
-      if (res.status === 503) {
-        const body = (await res.json().catch(() => null)) as NotConfiguredResponse | null;
-        setNotConfigured(true);
-        setError(body?.message ?? 'AI features are disabled on this deployment');
-        return;
-      }
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || `request failed (${res.status})`);
-      }
-      const data = (await res.json()) as ExplainResponse;
-      setResult(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'request failed');
-    } finally {
-      setPending(false);
-    }
+    await start(`/api/v1/projects/${projectId}/ai/explain-code/stream`, {
+      code: code.trim(),
+      ...(perspective.trim() ? { perspective: perspective.trim() } : {}),
+    });
   }
+
+  const pending = status === 'streaming';
+  const notConfigured = status === 'not_configured';
 
   return (
     <div className="flex flex-col gap-4">
@@ -133,13 +97,16 @@ export default query(async (ctx: Ctx, args: { userId: string }) => {
         </div>
       ) : null}
 
-      {result ? (
+      {text || pending ? (
         <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
           <p className="mb-3 font-mono text-xs text-[var(--color-text-subtle)]">
-            explained by {result.model} in {result.elapsedMs}ms
+            {pending ? 'streaming…' : `${text.length} chars`}
           </p>
           <div className="whitespace-pre-wrap font-mono text-xs text-[var(--color-text)]">
-            {result.explanation}
+            {text}
+            {pending ? (
+              <span className="ml-0.5 inline-block h-3 w-2 animate-pulse bg-[var(--color-primary)] align-middle" />
+            ) : null}
           </div>
         </div>
       ) : null}
