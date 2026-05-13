@@ -18,7 +18,7 @@ import { AiNotConfiguredError } from './ai-schema-gen.js';
  * prompt length + elapsed-ms + status code are recorded.
  */
 
-const SYSTEM_PROMPT = `You are a briven function author. Given a short description of an operation and the project's current schema, output a single TypeScript file that defines exactly one briven function (query, mutation, or action).
+export const FUNCTION_SYSTEM_PROMPT = `You are a briven function author. Given a short description of an operation and the project's current schema, output a single TypeScript file that defines exactly one briven function (query, mutation, or action).
 
 Rules:
 - Import the wrapper + Ctx + brivenError from '@briven/cli/server'.
@@ -125,7 +125,7 @@ export async function generateFunction(input: AiFunctionGenInput): Promise<AiFun
     headers,
     body: JSON.stringify({
       model,
-      system: SYSTEM_PROMPT,
+      system: FUNCTION_SYSTEM_PROMPT,
       prompt: userMessage,
       // Slightly higher than the schema generator — functions have more
       // surface area where small variation reads as natural rather than

@@ -24,7 +24,10 @@ export type IdPrefix =
   | 'iso' // isolate — per-process id used by the runtime pool
   | 'sup' // email suppression entry
   | 'dh' // deploy history entry
-  | 'au'; // usage event (aggregator row)
+  | 'au' // usage event (aggregator row)
+  | 'br' // project branch (preview environment)
+  | 'wf' // workflow definition
+  | 'wfr'; // workflow run
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

@@ -315,6 +315,23 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     keywords: ['status', 'uptime', 'health', 'outage', 'incident', 'live'],
   },
   {
+    slug: '/vector-search',
+    title: 'vector search · pgvector + ctx.db.vectorSearch',
+    summary:
+      'first-class pgvector support. declare vector(N) on a column, call ctx.db(...).vectorSearch({column, vector, distance, limit}) for nearest-neighbour queries. supports L2 / cosine / inner-product distance. embedding generation is your call (briven proxies nomic-embed-text via the ollama backend).',
+    keywords: [
+      'vector',
+      'pgvector',
+      'embeddings',
+      'semantic search',
+      'nearest neighbor',
+      'similarity',
+      'hnsw',
+      'cosine',
+      'nomic',
+    ],
+  },
+  {
     slug: '/ask',
     title: 'ask the docs · AI assistant',
     summary:

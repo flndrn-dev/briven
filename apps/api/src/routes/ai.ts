@@ -1,11 +1,17 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
+import { env } from '../env.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import { projectRateLimit } from '../middleware/rate-limit.js';
-import { explainCode } from '../services/ai-explain.js';
-import { generateFunction } from '../services/ai-function-gen.js';
-import { AiNotConfiguredError, generateSchema } from '../services/ai-schema-gen.js';
+import { explainCode, EXPLAIN_SYSTEM_PROMPT } from '../services/ai-explain.js';
+import { FUNCTION_SYSTEM_PROMPT, generateFunction } from '../services/ai-function-gen.js';
+import {
+  AiNotConfiguredError,
+  generateSchema,
+  SCHEMA_SYSTEM_PROMPT,
+} from '../services/ai-schema-gen.js';
+import { streamAiResponse } from '../services/ai-stream.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
 export const aiRouter = new Hono<AppEnv>();
@@ -142,3 +148,89 @@ aiRouter.post('/v1/projects/:id/ai/explain-code', async (c) => {
     throw err;
   }
 });
+
+/**
+ * SSE streaming variants of the three AI features. Same input shape +
+ * same auth + same not_configured semantics as the non-streaming
+ * endpoints — just emit `event: token` / `event: done` over text/event-
+ * stream instead of waiting for the full response. Dashboard consumers
+ * use EventSource; the CLI uses --stream.
+ */
+aiRouter.post('/v1/projects/:id/ai/generate-schema/stream', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = generateSchemaSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const res = await streamAiResponse({
+      system: SCHEMA_SYSTEM_PROMPT,
+      prompt: parsed.data.prompt,
+      model: env.BRIVEN_OLLAMA_MODEL_SCHEMA ?? env.BRIVEN_OLLAMA_MODEL,
+      temperature: 0.2,
+    });
+    return res;
+  } catch (err) {
+    if (err instanceof AiNotConfiguredError) {
+      return c.json({ code: 'not_configured', message: 'BRIVEN_OLLAMA_URL unset' }, 503);
+    }
+    throw err;
+  }
+});
+
+aiRouter.post('/v1/projects/:id/ai/generate-function/stream', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = generateFunctionSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const userMessage = parsed.data.schemaContext
+    ? `Current schema:\n\`\`\`ts\n${parsed.data.schemaContext.slice(0, 8192)}\n\`\`\`\n\nWrite a function that: ${parsed.data.prompt}`
+    : parsed.data.prompt;
+  try {
+    const res = await streamAiResponse({
+      system: FUNCTION_SYSTEM_PROMPT,
+      prompt: userMessage,
+      model: env.BRIVEN_OLLAMA_MODEL_FUNCTION ?? env.BRIVEN_OLLAMA_MODEL,
+      temperature: 0.3,
+    });
+    return res;
+  } catch (err) {
+    if (err instanceof AiNotConfiguredError) {
+      return c.json({ code: 'not_configured', message: 'BRIVEN_OLLAMA_URL unset' }, 503);
+    }
+    throw err;
+  }
+});
+
+aiRouter.post('/v1/projects/:id/ai/explain-code/stream', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = explainCodeSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const userMessage =
+    parsed.data.perspective && parsed.data.perspective.trim().length > 0
+      ? `Perspective: ${parsed.data.perspective.trim()}\n\nExplain this code:\n\`\`\`ts\n${parsed.data.code}\n\`\`\``
+      : `Explain this code:\n\`\`\`ts\n${parsed.data.code}\n\`\`\``;
+  try {
+    const res = await streamAiResponse({
+      system: EXPLAIN_SYSTEM_PROMPT,
+      prompt: userMessage,
+      model: env.BRIVEN_OLLAMA_MODEL_EXPLAIN ?? env.BRIVEN_OLLAMA_MODEL,
+      temperature: 0.4,
+    });
+    return res;
+  } catch (err) {
+    if (err instanceof AiNotConfiguredError) {
+      return c.json({ code: 'not_configured', message: 'BRIVEN_OLLAMA_URL unset' }, 503);
+    }
+    throw err;
+  }
+});
+
+// Suppress no-unused-vars for the imports above — they're used by the
+// three stream routes appended at the end of this file.
+void explainCode;
+void generateFunction;
+void generateSchema;
