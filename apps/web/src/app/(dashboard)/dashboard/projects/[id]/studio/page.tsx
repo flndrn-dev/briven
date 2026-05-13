@@ -81,8 +81,8 @@ export default async function StudioPage({
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-md border border-[var(--color-border-subtle)]">
-            <table className="w-full font-mono text-sm">
+          <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
+            <table className="w-full min-w-[480px] font-mono text-sm">
               <thead className="bg-[var(--color-surface)]">
                 <tr className="text-left text-[var(--color-text-muted)]">
                   <th className="px-4 py-2 font-normal">table</th>

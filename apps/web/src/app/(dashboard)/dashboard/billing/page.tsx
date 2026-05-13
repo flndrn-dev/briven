@@ -200,7 +200,7 @@ export default async function BillingPage({
             current month so far · live
           </span>
         </div>
-        <dl className="grid grid-cols-[200px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm">
+        <dl className="grid grid-cols-1 gap-x-3 sm:grid-cols-[200px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm">
           {TIER_INCLUDED[tier].map((row) => (
             <FragmentRow key={row.label} label={row.label} value={row.value} />
           ))}
@@ -218,7 +218,7 @@ export default async function BillingPage({
           <h2 className="font-mono text-sm text-[var(--color-text)]">service-level commitment</h2>
           <span className="font-mono text-xs text-[var(--color-text-subtle)]">{tier} tier</span>
         </div>
-        <dl className="grid grid-cols-[200px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm">
+        <dl className="grid grid-cols-1 gap-x-3 sm:grid-cols-[200px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm">
           <FragmentRow label="uptime" value={TIER_SLA[tier].uptime} />
           <FragmentRow label="response target" value={TIER_SLA[tier].responseTarget} />
           <FragmentRow label="support" value={TIER_SLA[tier].supportResponse} />

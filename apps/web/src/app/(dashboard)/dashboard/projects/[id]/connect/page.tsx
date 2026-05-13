@@ -34,7 +34,7 @@ export default async function ConnectPage({
 
       <section className="flex flex-col gap-3">
         <h3 className="font-mono text-sm text-[var(--color-text)]">api endpoints</h3>
-        <dl className="grid grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs">
+        <dl className="grid grid-cols-1 gap-x-3 sm:grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs">
           <dt className="text-[var(--color-text-subtle)]">control plane</dt>
           <dd>
             <code>{apiOrigin}</code>

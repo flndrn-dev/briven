@@ -61,7 +61,7 @@ export default async function LogsPage({
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
         <div>
           <h2 className="font-mono text-sm text-[var(--color-text)]">function logs</h2>
           <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
@@ -69,7 +69,7 @@ export default async function LogsPage({
             depends on your tier (free: 7 days). populated by the runtime log-fanout worker.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <LiveTailToggle />
           <ExportLogsLink projectId={id} query={qs.toString()} />
         </div>
