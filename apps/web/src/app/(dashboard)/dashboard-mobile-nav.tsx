@@ -11,6 +11,7 @@ import { usePathname } from 'next/navigation';
  * sidebar doesn't need to grow a responsive branch.
  */
 const NAV = [
+  { href: '/dashboard', label: 'overview' },
   { href: '/dashboard/projects', label: 'projects' },
   { href: '/dashboard/teams', label: 'teams' },
   { href: '/dashboard/billing', label: 'billing' },
@@ -26,7 +27,9 @@ export function DashboardMobileNav({ isAdmin }: { isAdmin: boolean }) {
       className="flex gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] px-4 py-2 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {items.map((item) => {
-        const active = pathname.startsWith(item.href);
+        // overview matches exactly — every other tab matches by prefix.
+        const active =
+          item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}

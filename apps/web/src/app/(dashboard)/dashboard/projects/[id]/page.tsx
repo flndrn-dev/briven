@@ -152,10 +152,12 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
             this month so far
           </h2>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Card
+            <QuotaCard
               label="invocations"
-              value={`${formatCount(usage.invocations.count)} / ${formatCount(usage.limits.invokesPerMonth)}`}
+              current={usage.invocations.count}
+              limit={usage.limits.invokesPerMonth}
               hint={`${usage.tier} tier`}
+              formatter={formatCount}
             />
             <Card
               label="storage"
@@ -245,6 +247,58 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+function QuotaCard({
+  label,
+  current,
+  limit,
+  hint,
+  formatter,
+}: {
+  label: string;
+  current: number;
+  limit: number;
+  hint?: string;
+  formatter: (n: number) => string;
+}) {
+  const pct = limit > 0 ? Math.min(100, (current / limit) * 100) : 0;
+  // Three bands: under 80% is fine (green), 80-99% is warning (amber),
+  // 100%+ is over quota — invokes will start returning 429 within the
+  // tier-enforcement cache TTL.
+  const over = current >= limit;
+  const warn = !over && pct >= 80;
+  const barColor = over
+    ? 'bg-[var(--color-error)]'
+    : warn
+      ? 'bg-[var(--color-warning)]'
+      : 'bg-[var(--color-primary)]';
+  return (
+    <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+      <p className="font-mono text-xs text-[var(--color-text-subtle)]">{label}</p>
+      <p className="mt-1 font-mono text-sm">
+        {formatter(current)} / {formatter(limit)}
+      </p>
+      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[var(--color-surface-raised)]">
+        <div className={`h-full transition-[width] ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p
+        className={`mt-1 font-mono text-[10px] ${
+          over
+            ? 'text-[var(--color-error)]'
+            : warn
+              ? 'text-[var(--color-warning)]'
+              : 'text-[var(--color-text-subtle)]'
+        }`}
+      >
+        {over
+          ? `quota exceeded · new invokes return 429${hint ? ` · ${hint}` : ''}`
+          : warn
+            ? `${Math.round(pct)}% used${hint ? ` · ${hint}` : ''}`
+            : (hint ?? `${Math.round(pct)}% used`)}
+      </p>
     </div>
   );
 }

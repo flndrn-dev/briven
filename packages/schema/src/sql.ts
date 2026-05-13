@@ -21,9 +21,22 @@ export function generateSql(def: SchemaDef): string {
 }
 
 export function renderCreateTable(name: string, table: TableDef): string {
+  const pkColumns = Object.entries(table.columns)
+    .filter(([, def]) => def.primaryKey)
+    .map(([colName]) => colName);
+  // 2+ PK columns → composite key rendered as a table-level constraint.
+  // Single PK stays inline on the column for the simpler/expected SQL
+  // shape (every existing migration uses the inline form).
+  const composite = pkColumns.length > 1;
+
   const lines: string[] = [];
   for (const [colName, colDef] of Object.entries(table.columns)) {
-    lines.push(`  "${colName}" ${renderColumn(colDef)}`);
+    lines.push(`  "${colName}" ${renderColumn(colDef, composite)}`);
+  }
+
+  if (composite) {
+    const colList = pkColumns.map((c) => `"${c}"`).join(', ');
+    lines.push(`  PRIMARY KEY (${colList})`);
   }
 
   const fkLines: string[] = [];
@@ -40,9 +53,14 @@ export function renderCreateTable(name: string, table: TableDef): string {
   return `CREATE TABLE IF NOT EXISTS "${name}" (\n${lines.join(',\n')}\n);`;
 }
 
-function renderColumn(def: ColumnDef): string {
+function renderColumn(def: ColumnDef, inCompositeKey: boolean): string {
   const parts: string[] = [def.sqlType];
-  if (def.primaryKey) parts.push('PRIMARY KEY');
+  // Inline PRIMARY KEY only when the table has exactly one PK column;
+  // composite keys are emitted as a single constraint at the table level.
+  if (def.primaryKey && !inCompositeKey) parts.push('PRIMARY KEY');
+  // PK columns are implicitly NOT NULL in Postgres regardless of how
+  // the key is declared — keep the existing "skip explicit NOT NULL on
+  // PK" behaviour so composite keys produce the same minimal output.
   if (!def.nullable && !def.primaryKey) parts.push('NOT NULL');
   if (def.unique && !def.primaryKey) parts.push('UNIQUE');
   if (def.default !== undefined) parts.push(`DEFAULT ${def.default}`);

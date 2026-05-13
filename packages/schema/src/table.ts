@@ -38,13 +38,12 @@ export function table(input: TableInput | Record<string, ColumnBuilder>): TableD
     columns[name] = builder.def;
   }
 
-  // Exactly one primary key per table.
+  // At least one primary key per table. 2+ marked columns produce a
+  // composite key — rendered as a single PRIMARY KEY (col, col) constraint
+  // in sql.ts so Postgres treats them as one key.
   const primaryKeys = Object.values(columns).filter((c) => c.primaryKey);
   if (primaryKeys.length === 0) {
-    throw new Error('table requires exactly one primaryKey() column');
-  }
-  if (primaryKeys.length > 1) {
-    throw new Error('table has more than one primary key; composite keys are not yet supported');
+    throw new Error('table requires at least one primaryKey() column');
   }
 
   const indexes: IndexDef[] = (normalised.indexes ?? []).map((idx) => {

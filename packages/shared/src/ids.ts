@@ -27,7 +27,12 @@ export type IdPrefix =
   | 'au' // usage event (aggregator row)
   | 'br' // project branch (preview environment)
   | 'wf' // workflow definition
-  | 'wfr'; // workflow run
+  | 'wfr' // workflow run
+  | 'sch' // schedule (cron-triggered function invocation)
+  | 'sr' // schedule run (per-fire audit record)
+  | 'f' // file (project storage object)
+  | 'whe' // webhook endpoint (customer-defined inbound webhook)
+  | 'whd'; // webhook delivery (per-incoming-request log row)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

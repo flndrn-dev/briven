@@ -70,9 +70,16 @@ const envSchema = z.object({
   BRIVEN_MITTERA_WEBHOOK_SECRET: z.string().optional(),
 
   // MinIO — object storage.
+  //   _ENDPOINT          server-side (internal docker network OK).
+  //   _PUBLIC_ENDPOINT   what the browser sees in presigned URLs. HTTPS
+  //                      in prod. Falls back to _ENDPOINT if unset (dev).
+  //   _BUCKET / _REGION  defaults: "briven" / "us-east-1".
   BRIVEN_MINIO_ENDPOINT: z.string().url().optional(),
+  BRIVEN_MINIO_PUBLIC_ENDPOINT: z.string().url().optional(),
   BRIVEN_MINIO_ACCESS_KEY: z.string().optional(),
   BRIVEN_MINIO_SECRET_KEY: z.string().optional(),
+  BRIVEN_MINIO_BUCKET: z.string().optional(),
+  BRIVEN_MINIO_REGION: z.string().optional(),
 
   // Dokploy — infra provisioning (Phase 2+).
   BRIVEN_DOKPLOY_API_URL: z.string().url().optional(),

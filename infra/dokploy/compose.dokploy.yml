@@ -57,6 +57,35 @@ services:
       - minio_data:/data
     networks:
       - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      # Public S3 endpoint — browsers PUT/GET against this host using the
+      # sigv4-presigned URLs minted by the api. The api also speaks to
+      # MinIO on the internal docker network via `http://minio:9000`.
+      - traefik.http.routers.briven-s3.rule=Host(`s3.${BRIVEN_DOMAIN}`)
+      - traefik.http.routers.briven-s3.entrypoints=websecure
+      - traefik.http.routers.briven-s3.tls.certresolver=letsencrypt
+      - traefik.http.routers.briven-s3.service=briven-s3
+      - traefik.http.services.briven-s3.loadbalancer.server.port=9000
+
+  # One-shot bucket creator. mc accepts repeated `mb` against an existing
+  # bucket without erroring (with the --ignore-existing flag), so this is
+  # idempotent — runs every deploy, no-ops after the first.
+  minio-init:
+    image: minio/mc:latest
+    depends_on: [minio]
+    networks:
+      - dokploy-network
+    entrypoint: >
+      /bin/sh -c "
+        until /usr/bin/mc alias set minio http://minio:9000 briven ${BRIVEN_POSTGRES_PASSWORD} >/dev/null 2>&1; do
+          echo 'waiting for minio...'; sleep 2;
+        done;
+        /usr/bin/mc mb --ignore-existing minio/${BRIVEN_MINIO_BUCKET:-briven};
+        echo 'minio bucket ready: ${BRIVEN_MINIO_BUCKET:-briven}';
+      "
+    restart: 'no'
 
   api:
     build:
@@ -98,8 +127,11 @@ services:
       BRIVEN_DOMAIN: ${BRIVEN_DOMAIN}
       BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
       BRIVEN_MINIO_ENDPOINT: http://minio:9000
+      BRIVEN_MINIO_PUBLIC_ENDPOINT: https://s3.${BRIVEN_DOMAIN}
       BRIVEN_MINIO_ACCESS_KEY: briven
       BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_POSTGRES_PASSWORD}
+      BRIVEN_MINIO_BUCKET: ${BRIVEN_MINIO_BUCKET:-briven}
+      BRIVEN_MINIO_REGION: ${BRIVEN_MINIO_REGION:-us-east-1}
     networks:
       - dokploy-network
     labels:

@@ -597,6 +597,153 @@ export const deployHistory = pgTable(
   }),
 );
 
+/* ─── project_schedules (cron-triggered function invocations) ─────── */
+export const scheduleRunStatus = ['pending', 'ok', 'error', 'skipped'] as const;
+export type ScheduleRunStatus = (typeof scheduleRunStatus)[number];
+
+export const projectSchedules = pgTable(
+  'project_schedules',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    functionName: text('function_name').notNull(),
+    // 5-field UTC cron expression (minute hour day month dow). The
+    // service validates on write so we don't store anything the
+    // dispatcher can't parse.
+    cronExpression: text('cron_expression').notNull(),
+    args: jsonb('args').$type<Record<string, unknown>>().notNull().default({}),
+    enabled: boolean('enabled').notNull().default(true),
+    // Dispatcher claims rows by checking next_run_at <= now() and
+    // bumping it forward in the same transaction. Indexing the partial
+    // (enabled = true) subset keeps the claim query cheap as the table
+    // grows.
+    nextRunAt: ts('next_run_at').notNull(),
+    lastRunAt: ts('last_run_at'),
+    lastRunStatus: text('last_run_status').$type<ScheduleRunStatus>(),
+    lastRunError: text('last_run_error'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => ({
+    projectNameIdx: uniqueIndex('project_schedules_project_name_idx')
+      .on(t.projectId, t.name)
+      .where(sql`deleted_at is null`),
+    dueIdx: index('project_schedules_due_idx')
+      .on(t.nextRunAt)
+      .where(sql`enabled = true and deleted_at is null`),
+  }),
+);
+
+/* ─── webhook_endpoints (customer-defined inbound webhooks) ───────── */
+export const webhookDeliveryStatus = ['ok', 'rejected_signature', 'rejected_replay', 'invoke_error', 'disabled'] as const;
+export type WebhookDeliveryStatus = (typeof webhookDeliveryStatus)[number];
+
+export const webhookEndpoints = pgTable(
+  'webhook_endpoints',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    // The function this endpoint dispatches to. Validated on write
+    // against the project's deployed function list; can be edited later
+    // without breaking — invocations to a missing function record an
+    // `invoke_error` delivery and return 502 to the source.
+    functionName: text('function_name').notNull(),
+    // AES-256-GCM ciphertext (same KEK + format as project-env). The
+    // plaintext is HMAC-SHA256'd over `${timestamp}.${rawBody}` to verify
+    // X-Briven-Signature on every inbound request. Rotated by minting a
+    // fresh secret + setting it here in a single UPDATE.
+    signingSecretEncrypted: text('signing_secret_encrypted').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    lastDeliveryAt: ts('last_delivery_at'),
+    lastDeliveryStatus: text('last_delivery_status').$type<WebhookDeliveryStatus>(),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => ({
+    projectNameIdx: uniqueIndex('webhook_endpoints_project_name_idx')
+      .on(t.projectId, t.name)
+      .where(sql`deleted_at is null`),
+    projectIdx: index('webhook_endpoints_project_idx')
+      .on(t.projectId)
+      .where(sql`deleted_at is null`),
+  }),
+);
+
+/* ─── webhook_deliveries (per-request audit log) ──────────────────── */
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
+  {
+    id: id(),
+    endpointId: text('endpoint_id')
+      .notNull()
+      .references(() => webhookEndpoints.id, { onDelete: 'cascade' }),
+    // Denormalised — saves a join when the dashboard's per-project
+    // "recent deliveries" view loads, and lets the per-project retention
+    // cron prune rows without walking the endpoints table.
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    status: text('status').$type<WebhookDeliveryStatus>().notNull(),
+    // HMAC-SHA256 of the source IP with the audit pepper, same scheme as
+    // audit_logs.ip_hash. Per CLAUDE.md §5.1 we never store raw IPs.
+    sourceIpHash: text('source_ip_hash'),
+    // The function the dispatcher tried to call (snapshot from the
+    // endpoint at delivery time — useful when the endpoint config has
+    // since changed).
+    functionName: text('function_name'),
+    // Inner invoke duration in ms (excludes signature verification time).
+    // Null for deliveries that never reached the runtime (signature reject).
+    durationMs: text('duration_ms'),
+    errorMessage: text('error_message'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    endpointIdx: index('webhook_deliveries_endpoint_idx').on(t.endpointId, t.createdAt),
+    projectIdx: index('webhook_deliveries_project_idx').on(t.projectId, t.createdAt),
+  }),
+);
+
+/* ─── project_files (S3-compatible object storage metadata) ──────── */
+export const projectFiles = pgTable(
+  'project_files',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // Human-facing name (the original filename when known). Not unique
+    // — same name twice is fine, identity is the id + object key.
+    name: text('name').notNull(),
+    // Storage object key — `projects/<projectId>/<fileId>`. Set once on
+    // create; never edited. The id alone is enough to derive this but
+    // we persist it so future-us doesn't depend on the derivation rule.
+    objectKey: text('object_key').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: text('size_bytes').notNull(),
+    // sha256 of the object body, populated on confirm. Null while the
+    // upload is mid-flight. Stays null when we don't compute it.
+    checksumSha256: text('checksum_sha256'),
+    uploadedBy: text('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => ({
+    projectIdx: index('project_files_project_idx').on(t.projectId).where(sql`deleted_at is null`),
+    objectKeyIdx: uniqueIndex('project_files_object_key_idx').on(t.objectKey),
+  }),
+);
+
 /* ─── type exports ────────────────────────────────────────────────── */
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -616,3 +763,11 @@ export type DeployHistoryEntry = typeof deployHistory.$inferSelect;
 export type NewDeployHistoryEntry = typeof deployHistory.$inferInsert;
 export type UsageEvent = typeof usageEvents.$inferSelect;
 export type NewUsageEvent = typeof usageEvents.$inferInsert;
+export type ProjectSchedule = typeof projectSchedules.$inferSelect;
+export type NewProjectSchedule = typeof projectSchedules.$inferInsert;
+export type ProjectFile = typeof projectFiles.$inferSelect;
+export type NewProjectFile = typeof projectFiles.$inferInsert;
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
+export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;

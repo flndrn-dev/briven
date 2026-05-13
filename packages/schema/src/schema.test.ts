@@ -11,14 +11,27 @@ test('schema rejects reserved _briven_ prefix', () => {
   );
 });
 
-test('table requires exactly one primary key', () => {
+test('table requires at least one primary key', () => {
   assert.throws(() => table({ body: text() }));
-  assert.throws(() =>
-    table({
-      a: text().primaryKey(),
-      b: text().primaryKey(),
+});
+
+test('composite primary key emits a single table-level constraint', () => {
+  // M2M-style table where neither column alone identifies a row.
+  const s = schema({
+    project_members: table({
+      projectId: text().primaryKey(),
+      userId: text().primaryKey(),
+      role: text().notNull(),
     }),
-  );
+  });
+  const sql = generateSql(s);
+  // PRIMARY KEY appears once at the table level, never on individual columns.
+  assert.match(sql, /PRIMARY KEY \("projectId", "userId"\)/);
+  // The per-column inline form must NOT be present for either PK column.
+  assert.equal(/"projectId" text PRIMARY KEY/.test(sql), false);
+  assert.equal(/"userId" text PRIMARY KEY/.test(sql), false);
+  // Non-PK columns keep their NOT NULL.
+  assert.match(sql, /"role" text NOT NULL/);
 });
 
 test('generateSql emits CREATE TABLE IF NOT EXISTS', () => {

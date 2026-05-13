@@ -10,6 +10,9 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { href: '', label: 'overview' },
   { href: '/functions', label: 'functions' },
+  { href: '/cron', label: 'cron' },
+  { href: '/storage', label: 'storage' },
+  { href: '/webhooks', label: 'webhooks' },
   { href: '/logs', label: 'logs' },
   { href: '/deployments', label: 'deployments' },
   { href: '/studio', label: 'studio' },
