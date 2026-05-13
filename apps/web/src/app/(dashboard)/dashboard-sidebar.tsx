@@ -9,6 +9,7 @@ import { ChevronRightIcon, type ChevronRightIconHandle } from '../../components/
 import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
 import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/credit-card';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
+import { LayoutGridIcon, type LayoutGridIconHandle } from '../../components/ui/layout-grid';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
 import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
@@ -29,6 +30,14 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
+  {
+    href: '/dashboard',
+    label: 'overview',
+    Icon: LayoutGridIcon as never,
+    // Exact match — broader prefix would steal the active state from
+    // every nested dashboard route.
+    match: (p) => p === '/dashboard',
+  },
   {
     href: '/dashboard/projects',
     label: 'projects',
@@ -67,7 +76,8 @@ type IconHandle =
   | CogIconHandle
   | ShieldCheckIconHandle
   | CreditCardIconHandle
-  | UsersIconHandle;
+  | UsersIconHandle
+  | LayoutGridIconHandle;
 
 interface SidebarUser {
   name: string | null;

@@ -6,6 +6,7 @@ import {
   auditLogs,
   functionLogs,
   projects,
+  webhookDeliveries,
   type NewFunctionLog,
   type ProjectTier,
 } from '../db/schema.js';
@@ -314,6 +315,98 @@ export function startAuditRetentionCron(): void {
   // fresh boot doesn't fire both simultaneously), then daily.
   setTimeout(run, 60_000);
   setInterval(run, AUDIT_RETENTION_TICK_MS);
+}
+
+/* ─── webhook-delivery retention ────────────────────────────────────── */
+// webhook_deliveries grows one row per inbound POST. A leaked endpoint
+// can amplify that into a real cost without bounded retention. We reuse
+// RETENTION_DAYS_BY_TIER (same scheme as function_logs) — short enough
+// to keep the table small, long enough for operators to debug yesterday's
+// failed signatures.
+
+export async function pruneOldWebhookDeliveries(): Promise<number> {
+  const db = getDb();
+  let total = 0;
+  const now = Date.now();
+
+  for (const [tier, days] of Object.entries(RETENTION_DAYS_BY_TIER) as Array<
+    [ProjectTier, number]
+  >) {
+    const cutoff = new Date(now - days * 86_400_000);
+    const tierProjects = db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.tier, tier), isNull(projects.deletedAt)));
+
+    const res = await db
+      .delete(webhookDeliveries)
+      .where(
+        and(
+          lt(webhookDeliveries.createdAt, cutoff),
+          sql`${webhookDeliveries.projectId} IN ${tierProjects}`,
+        ),
+      )
+      .returning({ id: webhookDeliveries.id });
+    total += res.length;
+    if (res.length > 0) {
+      log.info('webhook_deliveries_pruned', {
+        tier,
+        days,
+        count: res.length,
+        cutoff: cutoff.toISOString(),
+      });
+    }
+  }
+
+  // Catch-all for soft-deleted / unknown-tier projects. Same shortest-
+  // retention treatment as function_logs.
+  const freeCutoff = new Date(now - RETENTION_DAYS_BY_TIER.free * 86_400_000);
+  const knownTiers = sql.raw(
+    Object.keys(RETENTION_DAYS_BY_TIER)
+      .map((t) => `'${t}'`)
+      .join(','),
+  );
+  const orphans = db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(sql`${projects.deletedAt} IS NOT NULL OR ${projects.tier} NOT IN (${knownTiers})`);
+  const orphanRes = await db
+    .delete(webhookDeliveries)
+    .where(
+      and(
+        lt(webhookDeliveries.createdAt, freeCutoff),
+        sql`${webhookDeliveries.projectId} IN ${orphans}`,
+      ),
+    )
+    .returning({ id: webhookDeliveries.id });
+  total += orphanRes.length;
+  if (orphanRes.length > 0) {
+    log.info('webhook_deliveries_pruned', {
+      tier: 'orphan',
+      days: RETENTION_DAYS_BY_TIER.free,
+      count: orphanRes.length,
+      cutoff: freeCutoff.toISOString(),
+    });
+  }
+
+  return total;
+}
+
+const WEBHOOK_DELIVERIES_RETENTION_TICK_MS = 6 * 60 * 60 * 1000;
+
+export function startWebhookDeliveriesRetentionCron(): void {
+  const run = (): void => {
+    void pruneOldWebhookDeliveries().catch((err: unknown) => {
+      log.warn('webhook_deliveries_prune_failed', {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
+  // 90s after boot — offset from the other retention crons so a fresh
+  // boot doesn't fire all three simultaneously and hold connection
+  // pool capacity that the api request path also needs.
+  setTimeout(run, 90_000);
+  setInterval(run, WEBHOOK_DELIVERIES_RETENTION_TICK_MS);
 }
 
 function sleep(ms: number): Promise<void> {

@@ -31,14 +31,20 @@ import { projectEnvRouter } from './routes/project-env.js';
 import { membersRouter } from './routes/project-members.js';
 import { projectsRouter } from './routes/projects.js';
 import { rootRouter } from './routes/root.js';
+import { schedulesRouter } from './routes/schedules.js';
+import { storageRouter } from './routes/storage.js';
 import { studioRouter } from './routes/studio.js';
 import { usageRouter } from './routes/usage.js';
+import { webhooksAdminRouter } from './routes/webhooks-admin.js';
+import { webhooksPublicRouter } from './routes/webhooks-public.js';
 import { recordDeploy } from './services/deploy-history.js';
 import { startAccountDeletionGc } from './workers/account-deletion-gc.js';
+import { startScheduleDispatcher } from './workers/schedule-dispatcher.js';
 import {
   startAuditRetentionCron,
   startLogFanoutWorker,
   startLogRetentionCron,
+  startWebhookDeliveriesRetentionCron,
 } from './workers/log-fanout.js';
 import { startPolarMeterPush } from './workers/polar-meter-push.js';
 import { startUsageAggregator } from './workers/usage-aggregator.js';
@@ -101,6 +107,10 @@ app.route('/', exportRouter);
 app.route('/', aiRouter);
 app.route('/', orgsRouter);
 app.route('/', mitteraWebhookRouter);
+app.route('/', schedulesRouter);
+app.route('/', storageRouter);
+app.route('/', webhooksAdminRouter);
+app.route('/', webhooksPublicRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);
@@ -115,6 +125,8 @@ startAuditRetentionCron();
 startUsageAggregator();
 startPolarMeterPush();
 startAccountDeletionGc();
+startScheduleDispatcher();
+startWebhookDeliveriesRetentionCron();
 
 // Audit-trail behind /info — one row per boot. recordDeploy itself
 // short-circuits when buildSha is the "dev" sentinel and never throws,

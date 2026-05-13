@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import { invoke } from '../services/invoke.js';
+import { getQuotaState } from '../services/tier-enforcement.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
 export const invokeRouter = new Hono<AppEnv>();
@@ -39,6 +40,22 @@ invokeRouter.post(
       } catch {
         return c.json({ code: 'invalid_json', message: 'request body is not valid json' }, 400);
       }
+    }
+
+    // Monthly cap enforcement. Cached (60s ttl in tier-enforcement),
+    // so this adds at most one DB roundtrip per minute per project.
+    const quota = await getQuotaState(projectId);
+    if (quota.exceeded) {
+      return c.json(
+        {
+          code: 'monthly_quota_exceeded',
+          message: `monthly invocation quota exceeded (${quota.current} / ${quota.limit} on ${quota.tier} tier)`,
+          current: quota.current,
+          limit: quota.limit,
+          tier: quota.tier,
+        },
+        429,
+      );
     }
 
     const result = await invoke({
