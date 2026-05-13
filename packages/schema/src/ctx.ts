@@ -48,6 +48,15 @@ export interface TableQuery {
   insert(values: Record<string, unknown> | readonly Record<string, unknown>[]): InsertQuery;
   update(patch: Record<string, unknown>): UpdateQuery;
   delete(): DeleteQuery;
+  /**
+   * Nearest-neighbour search against a pgvector column. Compiles to
+   *   SELECT … FROM <table> WHERE … ORDER BY <column> <distance-op> $1 LIMIT $2
+   * where `distance-op` is `<->` (L2, default), `<#>` (negative inner
+   * product), or `<=>` (cosine). The vector column must be declared via
+   * `vector(N)` in the project schema; ordering by a non-vector column
+   * is a runtime error.
+   */
+  vectorSearch(input: VectorSearchInput): VectorSearchQuery;
 }
 
 export interface SelectQuery extends PromiseLike<unknown[]> {
@@ -55,6 +64,25 @@ export interface SelectQuery extends PromiseLike<unknown[]> {
   orderBy(column: string, direction?: 'asc' | 'desc'): SelectQuery;
   limit(n: number): SelectQuery;
   offset(n: number): SelectQuery;
+}
+
+export interface VectorSearchInput {
+  /** Column name on the table — must be a `vector(N)` column. */
+  readonly column: string;
+  /** Query embedding. Length must match the column's declared dimensions
+   *  or the runtime throws. */
+  readonly vector: readonly number[];
+  /** Distance operator. Default 'l2'. */
+  readonly distance?: 'l2' | 'inner_product' | 'cosine';
+  /** Top-K. Default 10, hard cap 1000. */
+  readonly limit?: number;
+}
+
+export interface VectorSearchQuery extends PromiseLike<unknown[]> {
+  /** Restrict the candidate set before ranking. Same shape as SelectQuery.where. */
+  where(predicate: Record<string, unknown>): VectorSearchQuery;
+  /** Choose the columns the query returns. Default is all columns. */
+  select(columns: readonly string[]): VectorSearchQuery;
 }
 
 export interface InsertQuery extends PromiseLike<unknown[]> {

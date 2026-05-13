@@ -16,7 +16,7 @@ import { AiNotConfiguredError } from './ai-schema-gen.js';
  * collapse the 503 path.
  */
 
-const SYSTEM_PROMPT = `You are a briven code explainer. Given a snippet of typescript using briven's schema dsl or function wrappers, explain what it does in plain english.
+export const EXPLAIN_SYSTEM_PROMPT = `You are a briven code explainer. Given a snippet of typescript using briven's schema dsl or function wrappers, explain what it does in plain english.
 
 Rules:
 - Explain at the level of "a developer new to briven, comfortable with typescript". Don't restate the obvious (e.g. "this imports a function from a package").
@@ -68,7 +68,7 @@ export async function explainCode(input: AiExplainInput): Promise<AiExplainResul
     headers,
     body: JSON.stringify({
       model,
-      system: SYSTEM_PROMPT,
+      system: EXPLAIN_SYSTEM_PROMPT,
       prompt: userMessage,
       // Higher than schema/function generators — explanation is prose,
       // where a touch more variation reads as natural rather than

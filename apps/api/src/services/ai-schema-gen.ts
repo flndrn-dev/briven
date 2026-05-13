@@ -19,7 +19,7 @@ import { log } from '../lib/logger.js';
  * elapsed-ms + status code are recorded for ops monitoring.
  */
 
-const SYSTEM_PROMPT = `You are a briven schema author. Given a short description of an app's data model, output a single TypeScript file that exports a schema definition using briven's DSL.
+export const SCHEMA_SYSTEM_PROMPT = `You are a briven schema author. Given a short description of an app's data model, output a single TypeScript file that exports a schema definition using briven's DSL.
 
 Rules:
 - Import only from '@briven/cli/schema'.
@@ -84,7 +84,7 @@ export async function generateSchema(input: AiSchemaGenInput): Promise<AiSchemaG
     headers,
     body: JSON.stringify({
       model,
-      system: SYSTEM_PROMPT,
+      system: SCHEMA_SYSTEM_PROMPT,
       prompt: input.prompt,
       // Deterministic-ish output. Schema generation is structural and
       // benefits from low temperature; the model still has room to vary

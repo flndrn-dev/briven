@@ -46,6 +46,8 @@ export { schemaSnapshotSchema, validateSchemaSnapshot } from './wire.js';
 export type { SchemaSnapshotWire } from './wire.js';
 
 export type {
+  VectorSearchInput,
+  VectorSearchQuery,
   AuthContext,
   Ctx,
   DbClient,

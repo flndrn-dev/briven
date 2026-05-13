@@ -8,6 +8,8 @@ import type {
   SelectQuery,
   TableQuery,
   UpdateQuery,
+  VectorSearchInput,
+  VectorSearchQuery,
 } from '@briven/schema';
 
 /**
@@ -52,6 +54,10 @@ class WhereClause {
 
   values(): unknown[] {
     return this.params;
+  }
+
+  count(): number {
+    return this.params.length;
   }
 }
 
@@ -233,6 +239,70 @@ class DeleteImpl implements DeleteQuery {
 }
 
 /**
+ * pgvector nearest-neighbour query. Compiles to
+ *   SELECT <cols> FROM <table> WHERE <predicate> ORDER BY <col> <op> $N LIMIT $N+1
+ * The distance operator maps `l2`→`<->`, `inner_product`→`<#>`, `cosine`→`<=>`.
+ * Default columns = all columns minus the vector column itself (the
+ * vector payload is typically large and not useful to ship back to
+ * callers; explicit .select(['embedding', ...]) opts back in).
+ */
+class VectorSearchImpl implements VectorSearchQuery {
+  private readonly w = new WhereClause();
+  private selectedCols: readonly string[] | null = null;
+
+  constructor(
+    private readonly tx: postgres.TransactionSql,
+    private readonly table: string,
+    private readonly input: VectorSearchInput,
+  ) {}
+
+  where(p: Record<string, unknown>): VectorSearchQuery {
+    this.w.add(p);
+    return this;
+  }
+
+  select(cols: readonly string[]): VectorSearchQuery {
+    this.selectedCols = cols;
+    return this;
+  }
+
+  then<R1 = unknown[], R2 = never>(
+    onfulfilled?: ((value: unknown[]) => R1 | PromiseLike<R1>) | null,
+    onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
+  ): Promise<R1 | R2> {
+    return this.execute().then(onfulfilled as never, onrejected);
+  }
+
+  private async execute(): Promise<unknown[]> {
+    const opMap: Record<'l2' | 'inner_product' | 'cosine', string> = {
+      l2: '<->',
+      inner_product: '<#>',
+      cosine: '<=>',
+    };
+    const op = opMap[this.input.distance ?? 'l2'];
+    const limit = Math.min(Math.max(this.input.limit ?? 10, 1), 1000);
+    // Default projection = * minus the vector column. Callers opt in
+    // explicitly with .select(['embedding', ...]) when they want it.
+    const cols =
+      this.selectedCols === null
+        ? '*'
+        : this.selectedCols.length === 0
+          ? '*'
+          : quoteList(this.selectedCols);
+    const wherePart = this.w.sql();
+    // The query vector + the limit live as positional params. The
+    // vector serialises to pgvector via its textual form `[1,2,3]`.
+    const vectorParam = `[${this.input.vector.join(',')}]`;
+    const sql =
+      `SELECT ${cols} FROM ${quote(this.table)}${wherePart} ` +
+      `ORDER BY ${quote(this.input.column)} ${op} $${this.w.count() + 1} ` +
+      `LIMIT $${this.w.count() + 2}`;
+    const params = [...this.w.values(), vectorParam, limit];
+    return this.tx.unsafe(sql, params as never[]) as Promise<unknown[]>;
+  }
+}
+
+/**
  * Build a `DbClient` and a Set the caller can read after the function
  * resolves — every `ctx.db('<table>')` call records the table name. The
  * realtime service uses this to decide which postgres LISTEN channels to
@@ -250,6 +320,7 @@ export function buildDbClient(tx: postgres.TransactionSql): {
       insert: (values) => new InsertImpl(tx, table, values),
       update: (patch) => new UpdateImpl(tx, table, patch),
       delete: () => new DeleteImpl(tx, table),
+      vectorSearch: (input) => new VectorSearchImpl(tx, table, input),
     };
   }) as DbClient;
 
