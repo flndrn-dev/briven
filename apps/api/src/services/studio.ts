@@ -654,9 +654,18 @@ const ON_DELETE_SQL: Record<NonNullable<StudioColumnReference['onDelete']>, stri
   noAction: 'NO ACTION',
 };
 
-function columnDdl(spec: StudioColumnSpec, schemaName?: string): string {
+function columnDdl(
+  spec: StudioColumnSpec,
+  schemaName?: string,
+  opts: { suppressInlinePk?: boolean } = {},
+): string {
   const parts = [`"${spec.name}" ${spec.type}`];
-  if (spec.primaryKey) parts.push('PRIMARY KEY');
+  // For composite PKs, the inline PRIMARY KEY is suppressed — a single
+  // table-level PRIMARY KEY (col, col) constraint is emitted by the
+  // caller instead. NOT NULL is implicit on PK columns in Postgres so
+  // the existing "skip explicit NOT NULL when PK" behaviour stays right
+  // whether the key is inline or composite.
+  if (spec.primaryKey && !opts.suppressInlinePk) parts.push('PRIMARY KEY');
   if (spec.notNull && !spec.primaryKey) parts.push('NOT NULL');
   if (spec.defaultExpr != null && spec.defaultExpr !== '') {
     parts.push(`DEFAULT ${spec.defaultExpr}`);
@@ -727,11 +736,6 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
   if (pkCount === 0) {
     throw new ValidationError('one column must be marked primaryKey', {});
   }
-  if (pkCount > 1) {
-    // Composite PKs work but the studio row-edit path assumes a single-column
-    // PK today — reject until that's lifted.
-    throw new ValidationError('composite primary keys are not supported via studio yet', {});
-  }
 
   for (const col of input.columns) {
     if (col.references) {
@@ -741,8 +745,19 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
 
   const schema = schemaNameFor(input.projectId);
   const sql = dataPlaneClient();
-  const colsSql = input.columns.map((c) => columnDdl(c, schema)).join(', ');
-  await sql.unsafe(`CREATE TABLE "${schema}"."${input.tableName}" (${colsSql})`);
+  // Composite PK → table-level constraint; single PK stays inline so the
+  // SQL output is unchanged for every non-M2M shape.
+  const isComposite = pkCount > 1;
+  const colsSql = input.columns
+    .map((c) => columnDdl(c, schema, { suppressInlinePk: isComposite }))
+    .join(', ');
+  const pkClause = isComposite
+    ? `, PRIMARY KEY (${input.columns
+        .filter((c) => c.primaryKey)
+        .map((c) => `"${c.name}"`)
+        .join(', ')})`
+    : '';
+  await sql.unsafe(`CREATE TABLE "${schema}"."${input.tableName}" (${colsSql}${pkClause})`);
   return { name: input.tableName };
 }
 

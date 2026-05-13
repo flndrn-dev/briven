@@ -208,7 +208,7 @@ export default async function TablePage({
             ) : null}
             {hasCompositePk ? (
               <span className="ml-2 text-[var(--color-text-subtle)]">
-                · composite pk; edits use {pkColumn} only
+                · composite pk — use the sql editor for row edits
               </span>
             ) : null}
           </p>
@@ -260,13 +260,15 @@ export default async function TablePage({
             ) : (
               data.rows.map((row, i) => {
                 const pkValue = pkColumn ? row[pkColumn] : null;
-                // Allow edits only when the table has a real primary key —
-                // surrogate-PK-by-first-column would silently UPDATE the
-                // wrong row when two rows share the same first-column
-                // value. Better to disable editing on PK-less tables and
-                // surface the constraint in the header banner above.
+                // Allow inline edits only when the table has a real, single-
+                // column primary key. Surrogate-PK-by-first-column would
+                // silently UPDATE the wrong row when two rows share the
+                // same first-column value; composite-PK tables would lose
+                // every row sharing the first PK column. Both cases route
+                // through the SQL editor instead, surfaced in the banner.
                 const canEdit =
                   tableHasPk
+                  && !hasCompositePk
                   && pkColumn !== null
                   && (typeof pkValue === 'string' || typeof pkValue === 'number');
                 return (
