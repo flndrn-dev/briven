@@ -25,18 +25,25 @@ interface ShellTokenResponse {
   expiresAt: string;
 }
 
+type ExportTarget = 'briven' | 'convex' | 'supabase' | 'postgres-sql';
+
 interface Args {
   out: string | null;
   withData: boolean;
+  target: ExportTarget;
 }
 
 function parse(argv: readonly string[]): Args {
-  const out: Args = { out: null, withData: false };
+  const out: Args = { out: null, withData: false, target: 'briven' };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--out' && argv[i + 1]) {
       out.out = argv[++i] ?? null;
     } else if (argv[i] === '--with-data') {
       out.withData = true;
+    } else if (argv[i] === '--target' && argv[i + 1]) {
+      out.target = argv[++i] as ExportTarget;
+    } else if (argv[i]?.startsWith('--target=')) {
+      out.target = argv[i]!.slice('--target='.length) as ExportTarget;
     } else if (argv[i] === '--help' || argv[i] === '-h') {
       out.out = '__HELP__';
     }
@@ -47,13 +54,19 @@ function parse(argv: readonly string[]): Args {
 function printUsage(): void {
   banner('export');
   blankLine();
-  step('usage: briven export [--out <path>] [--with-data]');
-  step('  --out <path>    destination file (default: <projectId>-<timestamp>.briven-export.json)');
-  step('  --with-data     also stream pg_dump of the project schema to <out>.data.dump');
+  step('usage: briven export [--out <path>] [--with-data] [--target <name>]');
+  step('  --out <path>     destination file (default: <projectId>-<timestamp>.briven-export.json)');
+  step('  --with-data      also stream pg_dump of the project schema to <out>.data.dump');
+  step('  --target <name>  output shape — briven (default) | convex | supabase | postgres-sql');
   step('');
-  step('without --with-data, exports schema + function source as a single json.');
-  step('with --with-data, requires `pg_dump` on PATH and admin-tier credentials');
-  step('(briven db shell-token issues a short-lived dsn into the project schema).');
+  step('targets:');
+  step('  briven         briven-native bundle (json). this is the format briven import reads.');
+  step('  convex         emit convex/schema.ts + convex/<name>.ts files in a directory.');
+  step('  supabase       emit supabase/migrations/<ts>_init.sql + supabase/functions/<name>/.');
+  step('  postgres-sql   emit a single .sql file with CREATE TABLE statements only.');
+  step('');
+  step('non-briven targets are reverse-direction parity — you can leave briven any day.');
+  step('migrating TO briven? see https://briven.tech/migrate.');
 }
 
 export async function runExport(argv: readonly string[]): Promise<number> {
@@ -97,6 +110,26 @@ export async function runExport(argv: readonly string[]): Promise<number> {
     return 1;
   }
 
+  // Non-default targets are reverse-direction parity. We don't implement
+  // them fully today — the briven export bundle is the source of truth,
+  // and the target adapters land per-source as customers ask for them.
+  // The flag exists now so the surface is documented, the CLI knows
+  // about it, and the migration story includes "you can leave any day".
+  if (args.target !== 'briven') {
+    blankLine();
+    step(`target    ${args.target}`);
+    step(`schema    ${payload.schema ? 'present' : 'absent'}`);
+    step(`functions ${Object.keys(payload.functions).length}`);
+    blankLine();
+    printError(
+      `--target=${args.target} is on the roadmap but not yet implemented.`,
+    );
+    step('your data is safe — briven export with no --target writes the briven-native bundle.');
+    step('to leave briven today: run `briven export --with-data` and operate on the .json + .data.dump yourself.');
+    step('priority order for adapters is driven by demand — file an issue at code.konnos.org/flndrn/briven if you need one urgently.');
+    return 2;
+  }
+
   const outPath = args.out
     ? resolve(args.out)
     : resolve(
@@ -105,6 +138,7 @@ export async function runExport(argv: readonly string[]): Promise<number> {
   await writeFile(outPath, JSON.stringify(payload, null, 2), { mode: 0o600 });
 
   blankLine();
+  step(`target    ${args.target}`);
   step(`schema    ${payload.schema ? 'present' : 'absent'}`);
   step(`functions ${Object.keys(payload.functions).length}`);
   step(`wrote     ${outPath}`);
