@@ -35,6 +35,7 @@ import {
   updateIncident,
 } from '../services/incidents.js';
 import { sendMigrationStatusUpdate } from '../lib/email.js';
+import { translateConvexSchema } from '../services/convex-schema-translator.js';
 import { getMarketingFunnel } from '../services/marketing-events.js';
 import { log } from '../lib/logger.js';
 import {
@@ -858,6 +859,29 @@ adminRouter.patch('/v1/admin/migration-requests/:id', async (c) => {
 adminRouter.get('/v1/admin/marketing-funnel', async (c) => {
   const sinceDays = Math.max(1, Math.min(365, Number(c.req.query('days')) || 30));
   return c.json(await getMarketingFunnel({ sinceDays }));
+});
+
+/**
+ * Offline convex schema → briven schema DSL translator. Stateless;
+ * accepts pasted convex/schema.ts source and returns the draft briven
+ * schema for the operator to review and ship. No fetch against the
+ * customer's convex deployment — schema bytes come from the operator
+ * (typically pasted from the customer during the migration call).
+ */
+adminRouter.post('/v1/admin/translate-convex-schema', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { source?: string } | null;
+  if (!body || typeof body.source !== 'string') {
+    return c.json({ code: 'validation_failed', message: 'source string required' }, 400);
+  }
+  try {
+    const result = translateConvexSchema(body.source);
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
 });
 
 adminRouter.post('/v1/admin/migration-requests/:id/promote-to-user', async (c) => {
