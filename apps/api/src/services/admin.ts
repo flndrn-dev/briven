@@ -1,8 +1,8 @@
 import { NotFoundError } from '@briven/shared';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { projects, sessions, users } from '../db/schema.js';
+import { auditLogs, orgMembers, organizations, projects, sessions, users } from '../db/schema.js';
 
 export interface AdminUserRow {
   id: string;
@@ -102,6 +102,96 @@ export async function grantAdmin(userId: string): Promise<void> {
 export async function revokeAdmin(userId: string): Promise<void> {
   const db = getDb();
   await db.update(users).set({ isAdmin: false }).where(eq(users.id, userId));
+}
+
+export interface AdminUserDetail {
+  user: AdminUserRow;
+  orgs: Array<{ id: string; name: string; slug: string; personal: boolean; role: string }>;
+  projects: Array<{ id: string; slug: string; name: string; tier: string; orgId: string; createdAt: Date }>;
+  recentAudit: Array<{ id: string; action: string; createdAt: Date; metadata: Record<string, unknown> | null }>;
+}
+
+/**
+ * Drilldown for the admin user-detail page. Loads basics + every org
+ * the user is a member of + every project owned by those orgs + the
+ * last 50 audit rows where they're the actor. Single fan-out, parallel
+ * queries — at Phase 3 scale this is one round-trip burst.
+ */
+export async function getUserDetailForAdmin(userId: string): Promise<AdminUserDetail> {
+  const db = getDb();
+  const [userRow] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      emailVerified: users.emailVerified,
+      isAdmin: users.isAdmin,
+      suspendedAt: users.suspendedAt,
+      createdAt: users.createdAt,
+      projectCount: sql<number>`(
+        SELECT count(*)::int FROM projects p
+        INNER JOIN org_members m ON m.org_id = p.org_id
+        WHERE m.user_id = ${users.id} AND p.deleted_at IS NULL
+      )`,
+    })
+    .from(users)
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+    .limit(1);
+  if (!userRow) throw new NotFoundError('user', userId);
+
+  const [orgRows, auditRows] = await Promise.all([
+    db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        slug: organizations.slug,
+        personal: organizations.personal,
+        role: orgMembers.role,
+      })
+      .from(orgMembers)
+      .innerJoin(organizations, eq(organizations.id, orgMembers.orgId))
+      .where(and(eq(orgMembers.userId, userId), isNull(organizations.deletedAt))),
+    db
+      .select({
+        id: auditLogs.id,
+        action: auditLogs.action,
+        createdAt: auditLogs.createdAt,
+        metadata: auditLogs.metadata,
+      })
+      .from(auditLogs)
+      .where(eq(auditLogs.actorId, userId))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(50),
+  ]);
+
+  const orgIds = orgRows.map((o) => o.id);
+  const projectRows = orgIds.length === 0
+    ? []
+    : await db
+        .select({
+          id: projects.id,
+          slug: projects.slug,
+          name: projects.name,
+          tier: projects.tier,
+          orgId: projects.orgId,
+          createdAt: projects.createdAt,
+        })
+        .from(projects)
+        .where(and(inArray(projects.orgId, orgIds), isNull(projects.deletedAt)))
+        .orderBy(desc(projects.createdAt));
+
+  return {
+    user: userRow,
+    orgs: orgRows,
+    projects: projectRows,
+    // jsonb columns surface as `unknown` from drizzle; the consumer
+    // (admin user-detail page) renders metadata.action only, so cast
+    // to the documented Record<string, unknown> | null shape here.
+    recentAudit: auditRows.map((r) => ({
+      ...r,
+      metadata: r.metadata as Record<string, unknown> | null,
+    })),
+  };
 }
 
 export async function adminStats(): Promise<{
