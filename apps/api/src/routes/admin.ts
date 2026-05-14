@@ -34,6 +34,8 @@ import {
   resolveIncident,
   updateIncident,
 } from '../services/incidents.js';
+import { sendMigrationStatusUpdate } from '../lib/email.js';
+import { log } from '../lib/logger.js';
 import {
   getMigrationRequest,
   listMigrationRequestsForAdmin,
@@ -740,6 +742,12 @@ const updateMigrationRequestSchema = z.object({
     .optional(),
   assignedTo: z.string().nullable().optional(),
   operatorNotes: z.string().max(20_000).optional(),
+  // Optional message included in the customer status-update email when
+  // the status changes. Persisted-anywhere is intentionally false — once
+  // the email ships, the message lives in the audit log + the customer's
+  // inbox, not in operator_notes. Keep it under 5kB so the email body
+  // stays under most provider limits.
+  messageToCustomer: z.string().max(5_000).optional(),
 });
 
 adminRouter.get('/v1/admin/migration-requests', async (c) => {
@@ -783,15 +791,44 @@ adminRouter.patch('/v1/admin/migration-requests/:id', async (c) => {
     return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
   }
   try {
-    const request = await updateMigrationRequest(id, parsed.data);
+    // Snapshot the row pre-update so we can detect a real status change
+    // and fire the customer notification only when something actually
+    // changed. messageToCustomer is intentionally pulled out and never
+    // forwarded to updateMigrationRequest — it's email-only payload.
+    const { messageToCustomer, ...patch } = parsed.data;
+    const before = await getMigrationRequest(id);
+    const request = await updateMigrationRequest(id, patch);
     await audit({
       actorId: actor.id,
       projectId: null,
       action: 'admin.migration_request.update',
       ipHash: ipHash(c),
       userAgent: c.req.header('user-agent') ?? null,
-      metadata: { requestId: id, fields: Object.keys(parsed.data) },
+      metadata: {
+        requestId: id,
+        fields: Object.keys(patch),
+        statusChanged: before.status !== request.status,
+        messageIncluded: Boolean(messageToCustomer),
+      },
     });
+    // Status-change customer notification. Skipped on operator-notes-only
+    // edits (no status field) and on no-op status writes. Fire-and-forget
+    // so a slow mittera doesn't block the operator's PATCH response.
+    if (patch.status && before.status !== request.status) {
+      void sendMigrationStatusUpdate({
+        requestId: request.id,
+        source: request.source,
+        contactEmail: request.contactEmail,
+        oldStatus: before.status,
+        newStatus: request.status,
+        operatorMessage: messageToCustomer,
+      }).catch((err) => {
+        log.error('migration_status_email_failed', {
+          requestId: request.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
     return c.json({
       request: {
         ...request,
