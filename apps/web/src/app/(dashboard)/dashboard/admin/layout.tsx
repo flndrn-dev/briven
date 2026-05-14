@@ -2,6 +2,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { requireUser } from '../../../../lib/session';
+import { AdminStepUpStatus } from './step-up-status';
+
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+}
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -9,11 +14,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="font-mono text-xl tracking-tight">admin</h1>
-        <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          platform super-admin view. every action is audit-logged.
-        </p>
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="font-mono text-xl tracking-tight">admin</h1>
+          <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
+            platform super-admin view. every action is audit-logged. mutations require fresh
+            step-up auth (10-min window).
+          </p>
+        </div>
+        <AdminStepUpStatus apiOrigin={publicApiOrigin()} />
       </header>
       <nav className="flex gap-1 border-b border-[var(--color-border-subtle)]">
         <Link

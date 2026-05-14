@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
+import { StepUpPrompt } from '../../../../components/step-up-prompt';
+
 interface Props {
   initialOpen: boolean;
   envDefault: boolean;
@@ -23,6 +25,7 @@ export function OpenSignupsToggle({ initialOpen, envDefault, apiOrigin }: Props)
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [pendingFlip, setPendingFlip] = useState<boolean | null>(null);
 
   async function flip(next: boolean) {
     setBusy(true);
@@ -34,6 +37,15 @@ export function OpenSignupsToggle({ initialOpen, envDefault, apiOrigin }: Props)
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ openSignups: next }),
       });
+      if (res.status === 403) {
+        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (body?.code === 'step_up_required') {
+          // Stash the requested state so the post-step-up retry knows
+          // which direction to flip.
+          setPendingFlip(next);
+          return;
+        }
+      }
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         throw new Error(body || `flip failed: ${res.status}`);
@@ -114,6 +126,23 @@ export function OpenSignupsToggle({ initialOpen, envDefault, apiOrigin }: Props)
 
       {error ? (
         <p className="font-mono text-[10px] text-[var(--color-error)]">{error}</p>
+      ) : null}
+
+      {pendingFlip !== null ? (
+        <StepUpPrompt
+          apiOrigin={apiOrigin}
+          reason={
+            pendingFlip
+              ? 'flipping open-signups to true makes the platform publicly registrable. confirm with your password.'
+              : 'closing public signups reverts to the invite-only allowlist. confirm with your password.'
+          }
+          onSuccess={async () => {
+            const next = pendingFlip;
+            setPendingFlip(null);
+            if (next !== null) await flip(next);
+          }}
+          onCancel={() => setPendingFlip(null)}
+        />
       ) : null}
     </li>
   );
