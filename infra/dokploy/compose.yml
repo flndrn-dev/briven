@@ -40,12 +40,23 @@
 #   2. SSH to the postgres container and `UPDATE users SET is_admin = true WHERE id = '...'`
 #      to give yourself platform-admin (the dashboard's /admin tab unlocks)
 #   3. Create your first project via the dashboard
+#
+# Per DOCKER.md §7: every service caps its log volume to prevent any one
+# noisy container from filling the host disk. The yaml anchor below is
+# applied via `logging: *briven-logging` on each service.
+
+x-logging: &briven-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
 
 services:
   postgres:
     image: pgvector/pgvector:pg17
     container_name: briven-postgres
     restart: unless-stopped
+    logging: *briven-logging
     environment:
       POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
       POSTGRES_DB: briven_control
@@ -61,6 +72,7 @@ services:
     image: redis:7.4-alpine
     container_name: briven-redis
     restart: unless-stopped
+    logging: *briven-logging
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -73,6 +85,7 @@ services:
     image: minio/minio:latest
     container_name: briven-minio
     restart: unless-stopped
+    logging: *briven-logging
     command: server /data --console-address ':9001'
     environment:
       MINIO_ROOT_USER: briven
@@ -90,6 +103,7 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: briven-api
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [postgres, redis]
     environment:
       BRIVEN_ENV: production
@@ -141,6 +155,7 @@ services:
       dockerfile: apps/runtime/Dockerfile
     container_name: briven-runtime
     restart: unless-stopped
+    logging: *briven-logging
     environment:
       BRIVEN_ENV: production
       BRIVEN_RUNTIME_PORT: '3003'
@@ -160,6 +175,7 @@ services:
       dockerfile: apps/realtime/Dockerfile
     container_name: briven-realtime
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [postgres]
     environment:
       BRIVEN_ENV: production
@@ -183,6 +199,7 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: briven-web
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [api]
     environment:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
@@ -210,6 +227,7 @@ services:
       dockerfile: apps/docs/Dockerfile
     container_name: briven-docs
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [api]
     environment:
       # Used by the /status page + /api/status/incidents.xml RSS feed

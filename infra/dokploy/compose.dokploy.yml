@@ -23,11 +23,22 @@
 #   BRIVEN_GOOGLE_CLIENT_ID       optional — google oauth signin
 #   BRIVEN_GOOGLE_CLIENT_SECRET   optional
 #   BRIVEN_OPEN_SIGNUPS           true | false (default false)
+#
+# Per DOCKER.md §7: every service caps its log volume to prevent any one
+# noisy container from filling the host disk. Applied via the anchor
+# below.
+
+x-logging: &briven-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
 
 services:
   postgres:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
+    logging: *briven-logging
     environment:
       POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
       POSTGRES_DB: briven_control
@@ -40,6 +51,7 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
+    logging: *briven-logging
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -49,6 +61,7 @@ services:
   minio:
     image: minio/minio:latest
     restart: unless-stopped
+    logging: *briven-logging
     command: server /data --console-address ':9001'
     environment:
       MINIO_ROOT_USER: briven
@@ -92,6 +105,7 @@ services:
       context: ../..
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [postgres, redis]
     environment:
       BRIVEN_ENV: production
@@ -147,6 +161,7 @@ services:
       context: ../..
       dockerfile: apps/runtime/Dockerfile
     restart: unless-stopped
+    logging: *briven-logging
     environment:
       BRIVEN_ENV: production
       BRIVEN_RUNTIME_PORT: '3003'
@@ -163,6 +178,7 @@ services:
       context: ../..
       dockerfile: apps/realtime/Dockerfile
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [postgres]
     environment:
       BRIVEN_ENV: production
@@ -185,6 +201,7 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [api]
     environment:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
@@ -209,6 +226,7 @@ services:
       context: ../..
       dockerfile: apps/docs/Dockerfile
     restart: unless-stopped
+    logging: *briven-logging
     depends_on: [api]
     environment:
       # Used by the /status page + /api/status/incidents.xml RSS feed

@@ -37,7 +37,7 @@ prometheus scrape targets in `prometheus.yml`:
 
 dashboards reference these metric names and will show "no data" until the corresponding service starts emitting them. that's deliberate — the dashboards land first so adding a metric is a one-line change.
 
-logs are scraped via promtail's docker_sd_configs; only containers with the `briven_logs=true` label are collected (so unrelated host containers don't pollute loki). add `labels: { briven_logs: "true" }` to each briven service in its dokploy compose.
+logs are scraped by promtail using **file-based discovery** against `/var/lib/docker/containers/*/*-json.log` (read-only bind-mount). per `DOCKER.md` we never touch `/var/run/docker.sock` or `docker_sd_configs` — the daemon is shared with other projects on the host and every API call goes through internal locks. promtail reads the json log files directly, unwraps the docker envelope, then parses the `service` field from each briven service's own JSON log line (emitted by `@briven/shared/observability`). non-briven containers ship through with `service` absent and Loki queries scope by `{service=~"api|runtime|realtime|web|docs"}`.
 
 ## deploy on dokploy
 
