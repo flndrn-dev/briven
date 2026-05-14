@@ -431,6 +431,69 @@ adminRouter.get('/v1/admin/realtime', async (c) => {
   return c.json(stats);
 });
 
+/* ─── signup allowlist (invite-only beta gate) ───────────────────── */
+
+adminRouter.get('/v1/admin/signup-allowlist', async (c) => {
+  const { listAllowlist } = await import('../services/signup-allowlist.js');
+  const entries = await listAllowlist();
+  return c.json({ entries });
+});
+
+adminRouter.post('/v1/admin/signup-allowlist', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = z
+    .object({
+      email: z.string().email(),
+      notes: z.string().max(500).optional(),
+    })
+    .safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const { addToAllowlist } = await import('../services/signup-allowlist.js');
+  try {
+    const entry = await addToAllowlist({
+      email: parsed.data.email,
+      invitedBy: actor.id,
+      notes: parsed.data.notes ?? null,
+    });
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'admin.allowlist.add',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { email: entry.email },
+    });
+    return c.json({ entry }, 201);
+  } catch (err) {
+    if (err instanceof Error && /already on the allowlist/i.test(err.message)) {
+      return c.json({ code: 'duplicate', message: err.message }, 409);
+    }
+    throw err;
+  }
+});
+
+adminRouter.delete('/v1/admin/signup-allowlist/:email', async (c) => {
+  const actor = c.get('user')!;
+  const email = decodeURIComponent(c.req.param('email'));
+  const { removeFromAllowlist } = await import('../services/signup-allowlist.js');
+  const removed = await removeFromAllowlist(email);
+  if (!removed) {
+    return c.json({ code: 'not_found' }, 404);
+  }
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.allowlist.remove',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { email },
+  });
+  return c.json({ ok: true });
+});
+
 /**
  * Platform-level launch status — surfaces flags the admin needs to see
  * at a glance during the invite-only → public-beta transition. Read-only

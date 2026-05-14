@@ -198,15 +198,34 @@ export const auth = betterAuth({
       : []),
   ],
 
-  // Auto-create the personal org for every new user (email/password,
-  // magic link, Google OAuth — all paths funnel through this hook).
-  // Migration 0010 backfilled existing users; this closes the gap for
-  // signups that happen after that migration ran. Failures are logged
-  // but never re-thrown — `getDefaultOrgForUser` self-heals on first
-  // /v1/me, so a transient hook failure is recoverable.
+  // - `before`: invite-only beta gate. When BRIVEN_OPEN_SIGNUPS=false,
+  //   reject signups whose email isn't on the platform allowlist. The
+  //   environment-driven `disableSignUp` set on every provider above is
+  //   the broad "no public signups" switch; this `before` hook is the
+  //   "but THESE specific emails are allowed" carve-out so admins can
+  //   invite users one by one without flipping the global toggle.
+  // - `after`: auto-create the personal org + mark the allowlist entry
+  //   as accepted so the dashboard can show pending vs claimed invites.
   databaseHooks: {
     user: {
       create: {
+        before: async (user) => {
+          if (env.BRIVEN_OPEN_SIGNUPS) return;
+          const email = user.email?.toLowerCase().trim();
+          if (!email) {
+            throw new Error('signup_allowlist_required: email missing on user.create');
+          }
+          const { isEmailAllowed } = await import('../services/signup-allowlist.js');
+          const allowed = await isEmailAllowed(email);
+          if (!allowed) {
+            // Throwing aborts Better Auth's signup flow — the caller
+            // gets a clean error response. The string lands in
+            // logs/audit per Better Auth's own error path.
+            throw new Error(
+              'signup_not_allowlisted: this email is not on the invite-only beta allowlist',
+            );
+          }
+        },
         after: async (user) => {
           try {
             await ensurePersonalOrg({
@@ -219,6 +238,19 @@ export const auth = betterAuth({
               userId: user.id,
               error: err instanceof Error ? err.message : String(err),
             });
+          }
+          if (!env.BRIVEN_OPEN_SIGNUPS) {
+            try {
+              const { markAllowlistAccepted } = await import(
+                '../services/signup-allowlist.js'
+              );
+              await markAllowlistAccepted(user.email);
+            } catch (err) {
+              log.warn('allowlist_accepted_stamp_failed', {
+                userId: user.id,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
           }
         },
       },

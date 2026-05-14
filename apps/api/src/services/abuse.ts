@@ -1,29 +1,27 @@
-import { newId } from '@briven/shared';
-import { desc, eq, like } from 'drizzle-orm';
+import { newId, NotFoundError } from '@briven/shared';
+import { and, desc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { auditLogs, projects } from '../db/schema.js';
+import { abuseReports, projects } from '../db/schema.js';
 import { log } from '../lib/logger.js';
 import { audit } from './audit.js';
 import { publishEvent } from './outbound-webhooks.js';
 
 /**
- * Phase 3 abuse-report pipeline (slice).
+ * Phase 3 abuse-report pipeline.
  *
- * Reports are persisted as `audit_logs` rows with a reserved `action`
- * namespace — the dedicated `abuse_reports` table is gated on drizzle-kit
- * unblock (TODO §cross-cutting). Each report has its own ULID `reportId`
- * threaded through the metadata so the lifecycle (created → triaged →
- * resolved) joins on a single id even though multiple rows are written.
+ * Reports persist in the dedicated `abuse_reports` table (the §cross-
+ * cutting cleanup that was previously gated on drizzle-kit unblock has
+ * shipped — see migration 0023). audit_logs still receives one row per
+ * state transition for the security-log perspective: a single source of
+ * truth for "who did what when" across the platform, where abuse-row
+ * UPDATEs would otherwise hide intent.
  *
- * Action namespace:
- * - `abuse.report.created` — initial submission. metadata.reportId set;
- *   metadata.{targetUrl, reason, severity, reporterContact?} carry the
- *   report content. actorId is null (public endpoint, anonymous).
- * - `abuse.report.triaged` — admin acknowledged. metadata.{reportId,
- *   triagerId, notes?}.
- * - `abuse.report.resolved` — admin closed. metadata.{reportId, resolverId,
- *   resolution: 'no_action'|'warned'|'suspended'|'banned', notes?}.
+ * Lifecycle: open → triaged → resolved (resolution ∈ {no_action,
+ * warned, suspended, banned}). Suspended/banned resolutions flip
+ * projects.suspended_at on the named project_id when provided; the
+ * outbound webhook fan-out (project.suspended) follows in the
+ * suspendProject path below.
  */
 
 export const ABUSE_SEVERITY = [
@@ -71,6 +69,20 @@ export async function createAbuseReport(input: CreateAbuseReportInput): Promise<
   reportId: string;
 }> {
   const reportId = newId('ar');
+  const db = getDb();
+  await db.insert(abuseReports).values({
+    id: reportId,
+    targetUrl: input.targetUrl,
+    reason: input.reason,
+    severity: input.severity,
+    reporterContact: input.reporterContact,
+    sourceIpHash: input.ipHash,
+    sourceUserAgent: input.userAgent,
+    // status defaults to 'open' at the DB layer.
+  });
+  // Audit-trail companion. Lets a security review see the lifecycle in
+  // the same place as every other platform action — abuse_reports is
+  // the source of truth, audit_logs is the cross-system narrative.
   await audit({
     actorId: null,
     projectId: null,
@@ -88,83 +100,38 @@ export async function createAbuseReport(input: CreateAbuseReportInput): Promise<
   return { reportId };
 }
 
-interface ActionRow {
-  action: string;
-  metadata: Record<string, unknown>;
-  createdAt: Date;
-}
-
 /**
- * List abuse reports filtered by status. Pulls every `abuse.report.*`
- * row in one query, buckets by reportId in memory, and derives the
- * current status from the latest transition. At Phase 3 scale (~hundreds
- * of reports), in-memory aggregation is fine; the dedicated
- * `abuse_reports` table planned for the post-drizzle-kit-unblock cleanup
- * will collapse this into a single indexed read.
+ * List abuse reports filtered by status. Single indexed read from the
+ * dedicated table, ordered by created_at desc.
  */
 export async function listAbuseReports(
   filter: { status?: AbuseStatus; limit?: number } = {},
 ): Promise<AbuseReportSummary[]> {
   const db = getDb();
-  const queryLimit = Math.min((filter.limit ?? 100) * 4, 2000);
+  const rows = filter.status
+    ? await db
+        .select()
+        .from(abuseReports)
+        .where(eq(abuseReports.status, filter.status))
+        .orderBy(desc(abuseReports.createdAt))
+        .limit(filter.limit ?? 100)
+    : await db
+        .select()
+        .from(abuseReports)
+        .orderBy(desc(abuseReports.createdAt))
+        .limit(filter.limit ?? 100);
 
-  const rows = (await db
-    .select({
-      action: auditLogs.action,
-      metadata: auditLogs.metadata,
-      createdAt: auditLogs.createdAt,
-    })
-    .from(auditLogs)
-    .where(like(auditLogs.action, 'abuse.report.%'))
-    .orderBy(desc(auditLogs.createdAt))
-    .limit(queryLimit)) as ActionRow[];
-
-  const byReport = new Map<string, ActionRow[]>();
-  for (const r of rows) {
-    const id = String(r.metadata.reportId ?? '');
-    if (!id) continue;
-    const list = byReport.get(id) ?? [];
-    list.push(r);
-    byReport.set(id, list);
-  }
-
-  const summaries: AbuseReportSummary[] = [];
-  for (const [reportId, actions] of byReport) {
-    const created = actions.find((a) => a.action === 'abuse.report.created');
-    if (!created) continue; // orphan transitions — skip
-    summaries.push(deriveSummary(reportId, created, actions));
-  }
-  summaries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-  const filtered = filter.status ? summaries.filter((s) => s.status === filter.status) : summaries;
-  return filtered.slice(0, filter.limit ?? 100);
-}
-
-function deriveSummary(
-  reportId: string,
-  created: ActionRow,
-  actions: readonly ActionRow[],
-): AbuseReportSummary {
-  const sorted = [...actions].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  const last = sorted[sorted.length - 1] ?? created;
-  let status: AbuseStatus = 'open';
-  if (last.action === 'abuse.report.triaged') status = 'triaged';
-  else if (last.action === 'abuse.report.resolved') status = 'resolved';
-  const resolution =
-    last.action === 'abuse.report.resolved'
-      ? ((last.metadata.resolution as AbuseResolution | undefined) ?? null)
-      : null;
-  return {
-    reportId,
-    targetUrl: String(created.metadata.targetUrl ?? ''),
-    reason: String(created.metadata.reason ?? ''),
-    severity: (created.metadata.severity as AbuseSeverity) ?? 'other',
-    status,
-    reporterContact: (created.metadata.reporterContact as string | null) ?? null,
-    createdAt: created.createdAt,
-    lastActionAt: last.createdAt,
-    resolution,
-  };
+  return rows.map((r) => ({
+    reportId: r.id,
+    targetUrl: r.targetUrl,
+    reason: r.reason,
+    severity: r.severity,
+    status: r.status,
+    reporterContact: r.reporterContact,
+    createdAt: r.createdAt,
+    lastActionAt: r.updatedAt,
+    resolution: r.resolution,
+  }));
 }
 
 export interface TriageInput {
@@ -176,6 +143,24 @@ export interface TriageInput {
 }
 
 export async function triageAbuseReport(input: TriageInput): Promise<void> {
+  const db = getDb();
+  const now = new Date();
+  // Only transition `open` → `triaged`; an already-triaged or resolved
+  // report shouldn't bounce back. The WHERE guards the state machine.
+  const updated = await db
+    .update(abuseReports)
+    .set({
+      status: 'triaged',
+      triagedAt: now,
+      triagedBy: input.triagerId,
+      triageNotes: input.notes ?? null,
+      updatedAt: now,
+    })
+    .where(and(eq(abuseReports.id, input.reportId), eq(abuseReports.status, 'open')))
+    .returning({ id: abuseReports.id });
+  if (!updated[0]) {
+    throw new NotFoundError('abuse_report (open)', input.reportId);
+  }
   await audit({
     actorId: input.triagerId,
     projectId: null,
@@ -206,16 +191,17 @@ export interface ResolveInput {
 export async function resolveAbuseReport(input: ResolveInput): Promise<void> {
   const shouldSuspend = input.resolution === 'suspended' || input.resolution === 'banned';
   let suspended = false;
+  const db = getDb();
+  const now = new Date();
 
   if (shouldSuspend && input.projectId) {
     try {
-      const db = getDb();
       const result = await db
         .update(projects)
         .set({
-          suspendedAt: new Date(),
+          suspendedAt: now,
           suspendReason: `abuse_report:${input.reportId}:${input.resolution}`,
-          updatedAt: new Date(),
+          updatedAt: now,
         })
         .where(eq(projects.id, input.projectId))
         .returning({ id: projects.id });
@@ -227,14 +213,34 @@ export async function resolveAbuseReport(input: ResolveInput): Promise<void> {
         });
       }
     } catch (err) {
-      // Don't block the audit row on a DB hiccup — the operator can
-      // suspend manually from the admin UI as a recovery path.
+      // Don't block the report transition on a DB hiccup — the operator
+      // can suspend manually from the admin UI as a recovery path.
       log.error('abuse_resolve_suspend_failed', {
         reportId: input.reportId,
         projectId: input.projectId,
         message: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  // Transition the report row. Accept any prior non-resolved state so
+  // the operator can resolve directly from `open` without a separate
+  // triage click — common for quick-decision spam.
+  const updated = await db
+    .update(abuseReports)
+    .set({
+      status: 'resolved',
+      resolution: input.resolution,
+      resolvedAt: now,
+      resolvedBy: input.resolverId,
+      resolveNotes: input.notes ?? null,
+      projectId: input.projectId ?? null,
+      updatedAt: now,
+    })
+    .where(eq(abuseReports.id, input.reportId))
+    .returning({ id: abuseReports.id });
+  if (!updated[0]) {
+    throw new NotFoundError('abuse_report', input.reportId);
   }
 
   await audit({
