@@ -141,7 +141,161 @@ export function PricingSection() {
           private beta uses hard caps at the included limits
         </p>
       </div>
+
+      <SelfHostCommercialBand />
     </section>
+  );
+}
+
+interface CommercialTier {
+  name: string;
+  price: string;
+  cadence: string;
+  who: string;
+  bullets: readonly string[];
+}
+
+const COMMERCIAL_TIERS: readonly CommercialTier[] = [
+  {
+    name: 'startup',
+    price: '€400',
+    cadence: '/month',
+    who: 'early-stage companies past the agpl-acceptable threshold',
+    bullets: [
+      'commercial licence for one production deployment',
+      'up to €5M ARR',
+      'community + email support',
+    ],
+  },
+  {
+    name: 'business',
+    price: '€2,000',
+    cadence: '/month',
+    who: 'scale-ups, agencies, multi-product orgs',
+    bullets: [
+      'up to 10 production deployments',
+      'up to €25M ARR',
+      'email support, 5×8 response SLA',
+    ],
+  },
+  {
+    name: 'enterprise',
+    price: 'from €8,000',
+    cadence: '/month',
+    who: 'regulated industries, large internal IT',
+    bullets: [
+      'unlimited deployments',
+      'custom SLA + dedicated account',
+      'optional source escrow, priority security patches',
+    ],
+  },
+];
+
+function SelfHostCommercialBand() {
+  return (
+    <section
+      id="self-host-commercial"
+      className="mt-16 flex flex-col gap-6 border-t border-[var(--color-border-subtle)] pt-12"
+    >
+      <div className="flex flex-col gap-4">
+        <p className="font-mono uppercase tracking-[0.12em] text-[var(--color-primary)] text-[var(--text-xs)]">
+          self-host commercial
+        </p>
+        <h2 className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-h2)]">
+          run briven on your own hardware.
+        </h2>
+        <p className="max-w-2xl font-sans leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
+          briven-core ships under <strong>agpl-3.0</strong> and is free to run, modify, and
+          self-host forever. the commercial licence is the alternative for companies that need to
+          embed briven in a product without releasing their source, run it as a hosted service for
+          third parties, or operate it inside a legal entity over <strong>€10M ARR</strong> or{' '}
+          <strong>100 FTEs</strong>. see the{' '}
+          <Link
+            href="https://docs.briven.tech/trust"
+            className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
+          >
+            trust page
+          </Link>{' '}
+          for full terms.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-border-subtle)] lg:grid-cols-3">
+        {COMMERCIAL_TIERS.map((tier) => (
+          <CommercialTierCard key={tier.name} tier={tier} />
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-1 font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]">
+        <p>
+          all commercial tiers billed annually in advance · prices in EUR exclusive of VAT · the
+          agpl-3.0 release stays free regardless of the commercial tier table
+        </p>
+        <p>
+          source available at{' '}
+          <Link
+            href="https://code.konnos.org/flndrn/briven"
+            className="hover:text-[var(--color-text-muted)]"
+          >
+            code.konnos.org/flndrn/briven
+          </Link>{' '}
+          · sla details at{' '}
+          <Link
+            href="https://docs.briven.tech/sla"
+            className="hover:text-[var(--color-text-muted)]"
+          >
+            docs.briven.tech/sla
+          </Link>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function CommercialTierCard({ tier }: { tier: CommercialTier }) {
+  return (
+    <article className="flex flex-col gap-5 bg-[var(--color-bg)] p-8">
+      <header>
+        <h3 className="font-mono uppercase tracking-[0.12em] text-[var(--color-primary)] text-[var(--text-xs)]">
+          {tier.name}
+        </h3>
+      </header>
+
+      <div className="flex items-baseline gap-1">
+        <span className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-display-3)]">
+          {tier.price}
+        </span>
+        <span className="font-mono text-[var(--color-text-subtle)] text-[var(--text-small)]">
+          {tier.cadence}
+        </span>
+      </div>
+
+      <p className="font-sans leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
+        {tier.who}
+      </p>
+
+      <ul className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-5">
+        {tier.bullets.map((b) => (
+          <li
+            key={b}
+            className="flex items-start gap-2 font-mono text-[var(--color-text-muted)] text-[var(--text-xs)]"
+          >
+            <span
+              aria-hidden
+              className="mt-1 inline-block size-1 rounded-full bg-[var(--color-primary)]"
+            />
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+
+      <a
+        href="mailto:licensing@briven.tech?subject=commercial%20licence%20enquiry"
+        className="mt-auto inline-flex h-11 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 font-sans font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)]"
+      >
+        contact licensing
+      </a>
+    </article>
   );
 }
 
