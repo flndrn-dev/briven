@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
+import { env } from '../env.js';
 import { requireAdmin } from '../middleware/admin.js';
 import { requireAuth } from '../middleware/session.js';
 import type { AppEnv } from '../types/app-env.js';
@@ -428,4 +429,23 @@ adminRouter.get('/v1/admin/realtime', async (c) => {
   const stats = await fetchRealtimeStats();
   if (!stats) return c.json({ code: 'realtime_unavailable' }, 503);
   return c.json(stats);
+});
+
+/**
+ * Platform-level launch status — surfaces flags the admin needs to see
+ * at a glance during the invite-only → public-beta transition. Read-only
+ * for now (env-var driven); a dashboard-controllable settings table
+ * lands in a follow-up slice.
+ */
+adminRouter.get('/v1/admin/launch-status', async (c) => {
+  return c.json({
+    openSignups: env.BRIVEN_OPEN_SIGNUPS,
+    discordInviteUrl: env.BRIVEN_DISCORD_INVITE_URL ?? null,
+    domain: env.BRIVEN_DOMAIN,
+    polarConfigured: Boolean(env.BRIVEN_POLAR_ACCESS_TOKEN),
+    mitteraConfigured: Boolean(env.BRIVEN_MITTERA_API_KEY),
+    minioConfigured: Boolean(
+      env.BRIVEN_MINIO_ENDPOINT && env.BRIVEN_MINIO_ACCESS_KEY && env.BRIVEN_MINIO_SECRET_KEY,
+    ),
+  });
 });

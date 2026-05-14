@@ -97,6 +97,11 @@ const envSchema = z.object({
   // back to "not available" in the signin UI when unset.
   BRIVEN_DISCORD_CLIENT_ID: z.string().optional(),
   BRIVEN_DISCORD_CLIENT_SECRET: z.string().optional(),
+  // Public invite URL for the beta Discord server. When set, the
+  // dashboard and admin status panel surface a "join the alpha discord"
+  // link. Operator sets this once the server is created (see
+  // docs/runbooks/discord-setup.md).
+  BRIVEN_DISCORD_INVITE_URL: z.string().url().optional(),
 
   // Konnos OAuth — Forgejo at code.konnos.org. Better Auth's generic OAuth
   // plugin lets us reuse the same callback shape for any OAuth2/OIDC
