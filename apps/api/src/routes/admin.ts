@@ -34,6 +34,11 @@ import {
   resolveIncident,
   updateIncident,
 } from '../services/incidents.js';
+import {
+  getMigrationRequest,
+  listMigrationRequestsForAdmin,
+  updateMigrationRequest,
+} from '../services/migration-requests.js';
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
@@ -725,4 +730,81 @@ adminRouter.post('/v1/admin/incidents/:id/resolve', async (c) => {
     metadata: { incidentId: id },
   });
   return c.json({ incident });
+});
+
+/* ─── migration requests (customer-initiated platform imports) ───────── */
+
+const updateMigrationRequestSchema = z.object({
+  status: z
+    .enum(['new', 'contacted', 'scheduled', 'in_progress', 'completed', 'cancelled'])
+    .optional(),
+  assignedTo: z.string().nullable().optional(),
+  operatorNotes: z.string().max(20_000).optional(),
+});
+
+adminRouter.get('/v1/admin/migration-requests', async (c) => {
+  const openOnly = c.req.query('open') === 'true';
+  const limitParam = c.req.query('limit');
+  const limit = limitParam ? Number(limitParam) || 100 : 100;
+  const rows = await listMigrationRequestsForAdmin({ limit, openOnly });
+  return c.json({
+    requests: rows.map((r) => ({
+      ...r,
+      estimatedRows: r.estimatedRows == null ? null : r.estimatedRows.toString(),
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    })),
+  });
+});
+
+adminRouter.get('/v1/admin/migration-requests/:id', async (c) => {
+  const id = c.req.param('id');
+  try {
+    const row = await getMigrationRequest(id);
+    return c.json({
+      request: {
+        ...row,
+        estimatedRows: row.estimatedRows == null ? null : row.estimatedRows.toString(),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      },
+    });
+  } catch {
+    return c.json({ code: 'not_found' }, 404);
+  }
+});
+
+adminRouter.patch('/v1/admin/migration-requests/:id', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateMigrationRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const request = await updateMigrationRequest(id, parsed.data);
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'admin.migration_request.update',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { requestId: id, fields: Object.keys(parsed.data) },
+    });
+    return c.json({
+      request: {
+        ...request,
+        estimatedRows:
+          request.estimatedRows == null ? null : request.estimatedRows.toString(),
+        createdAt: request.createdAt.toISOString(),
+        updatedAt: request.updatedAt.toISOString(),
+      },
+    });
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
 });
