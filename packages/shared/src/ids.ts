@@ -37,7 +37,8 @@ export type IdPrefix =
   | 'whod' // webhook outbound delivery (per-fanout attempt log row)
   | 'wev' // webhook event (an emitted platform event, fans out to N deliveries)
   | 'al' // allowlist entry (invite-only beta signup gate)
-  | 'mig'; // migration request (customer-initiated import from convex/supabase/etc.)
+  | 'mig' // migration request (customer-initiated import from convex/supabase/etc.)
+  | 'me'; // marketing event (funnel tracking for /migrate views + leads)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

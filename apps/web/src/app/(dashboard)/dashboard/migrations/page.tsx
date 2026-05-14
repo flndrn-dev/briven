@@ -127,7 +127,7 @@ export default async function MyMigrationsPage() {
 
 function RequestCard({ request }: { request: CustomerRequest }) {
   return (
-    <article className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
+    <article className="group flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 transition hover:border-[var(--color-border-strong)]">
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusTone(request.status)}`}
@@ -140,9 +140,12 @@ function RequestCard({ request }: { request: CustomerRequest }) {
         <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
           submitted {formatTime(request.createdAt)}
         </span>
-        <span className="ml-auto font-mono text-[10px] text-[var(--color-text-subtle)]">
-          {request.id}
-        </span>
+        <Link
+          href={`/dashboard/migrations/${request.id}`}
+          className="ml-auto font-mono text-[10px] text-[var(--color-text-subtle)] hover:text-[var(--color-text)] group-hover:text-[var(--color-text-muted)]"
+        >
+          {request.id} →
+        </Link>
       </div>
 
       <p className="font-mono text-sm text-[var(--color-text)]">

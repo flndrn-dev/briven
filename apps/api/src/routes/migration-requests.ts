@@ -8,9 +8,11 @@ import {
 import { log } from '../lib/logger.js';
 import { ipKey, rateLimit } from '../middleware/rate-limit.js';
 import { requireAuth } from '../middleware/session.js';
-import { audit, hashIp } from '../services/audit.js';
+import { audit, hashIp, listAuditForMigrationRequest } from '../services/audit.js';
+import { trackMarketingEvent } from '../services/marketing-events.js';
 import {
   createMigrationRequest,
+  getMigrationRequest,
   listMigrationRequestsForUser,
 } from '../services/migration-requests.js';
 import type { AppEnv } from '../types/app-env.js';
@@ -31,6 +33,52 @@ migrationRequestsRouter.get('/v1/migration-requests', async (c) => {
   const user = c.get('user')!;
   const rows = await listMigrationRequestsForUser(user.id, { limit: 50 });
   return c.json({ requests: rows.map(serialize) });
+});
+
+/**
+ * Customer-facing timeline for a single migration request. Returns
+ * the request itself plus the chronological list of audit events
+ * scoped to that request. Auth-gated by /v1/migration-requests/* and
+ * ownership-gated below (returns 404 when the request belongs to a
+ * different user — same shape as "doesn't exist" so the endpoint
+ * doesn't leak the existence of other users' requests).
+ */
+migrationRequestsRouter.get('/v1/migration-requests/:id', async (c) => {
+  const user = c.get('user')!;
+  const id = c.req.param('id');
+  let request;
+  try {
+    request = await getMigrationRequest(id);
+  } catch {
+    return c.json({ code: 'not_found' }, 404);
+  }
+  if (request.userId !== user.id) {
+    return c.json({ code: 'not_found' }, 404);
+  }
+  const timeline = await listAuditForMigrationRequest(id, 100);
+  return c.json({
+    request: serialize(request),
+    timeline: timeline.map((t) => ({
+      id: t.id,
+      action: t.action,
+      createdAt: t.createdAt.toISOString(),
+      // Filter the metadata for what's safe to surface to the customer:
+      // never the operator's user id, never the ip hash, never internal
+      // field names. Only the high-level signal of what changed.
+      metadata: {
+        source: typeof t.metadata?.source === 'string' ? t.metadata.source : null,
+        statusChanged:
+          typeof t.metadata?.statusChanged === 'boolean'
+            ? t.metadata.statusChanged
+            : null,
+        messageIncluded:
+          typeof t.metadata?.messageIncluded === 'boolean'
+            ? t.metadata.messageIncluded
+            : null,
+        linkedUserId: typeof t.metadata?.linkedUserId === 'string',
+      },
+    })),
+  });
 });
 
 migrationRequestsRouter.post('/v1/migration-requests', async (c) => {
@@ -175,6 +223,15 @@ migrationRequestsPublicRouter.post(
           requestId: request.id,
           error: err instanceof Error ? err.message : String(err),
         });
+      });
+      // Funnel-tracking: server-side fire so a public lead-claim from
+      // a curl caller can't inflate the conversion count without
+      // actually creating a request.
+      void trackMarketingEvent({
+        eventType: 'migrate_lead_submitted',
+        source: request.source,
+        ipHash: hashIpFromReq(c.req.raw.headers.get('x-forwarded-for')),
+        userAgent: c.req.header('user-agent') ?? null,
       });
       // We deliberately return only the request id — no PII echo to a
       // public endpoint, no leak of contact-email back to a curl caller.

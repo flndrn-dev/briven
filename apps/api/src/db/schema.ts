@@ -1072,3 +1072,28 @@ export type Incident = typeof incidents.$inferSelect;
 export type NewIncident = typeof incidents.$inferInsert;
 export type MigrationRequest = typeof migrationRequests.$inferSelect;
 export type NewMigrationRequest = typeof migrationRequests.$inferInsert;
+
+/* ─── marketing_events (funnel tracking for /migrate) ────────────── */
+export const marketingEventTypes = [
+  'migrate_view',
+  'migrate_lead_submitted',
+] as const;
+export type MarketingEventType = (typeof marketingEventTypes)[number];
+
+export const marketingEvents = pgTable(
+  'marketing_events',
+  {
+    id: id(),
+    eventType: text('event_type').$type<MarketingEventType>().notNull(),
+    source: text('source').notNull(),
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    lookupIdx: index('marketing_events_lookup_idx').on(t.source, t.eventType, t.createdAt),
+  }),
+);
+
+export type MarketingEvent = typeof marketingEvents.$inferSelect;
+export type NewMarketingEvent = typeof marketingEvents.$inferInsert;

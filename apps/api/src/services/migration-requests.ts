@@ -7,6 +7,7 @@ import {
   migrationSources,
   migrationStatuses,
   migrationUrgencies,
+  users,
   type MigrationRequest,
   type MigrationSource,
   type MigrationStatus,
@@ -174,6 +175,50 @@ export interface UpdateMigrationRequestInput {
   status?: string;
   assignedTo?: string | null;
   operatorNotes?: string;
+}
+
+/**
+ * Operator-driven: link an unauth lead to an existing briven user.
+ * Used when the customer who left a /migrate lead has since (or
+ * already) signed up under the same email — the operator clicks
+ * "promote to user" in the admin row and the request's user_id is
+ * patched. Idempotent: a request already linked to the same user
+ * is a no-op.
+ */
+export async function promoteMigrationRequestToUser(
+  requestId: string,
+  contactEmail: string,
+): Promise<{ request: MigrationRequest; linkedUserId: string | null }> {
+  const db = getDb();
+  const request = await getMigrationRequest(requestId);
+  // Resolve by the request's own contactEmail (admin doesn't pass user
+  // id — they pass intent) so we never link to the wrong account.
+  // contactEmail param is the recorded one, passed by the caller for
+  // explicitness in the audit log.
+  if (request.contactEmail.toLowerCase() !== contactEmail.toLowerCase()) {
+    throw new ValidationError(
+      'contact email mismatch — refusing to promote to a user who is not the lead',
+    );
+  }
+  const candidates = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, contactEmail.toLowerCase()))
+    .limit(1);
+  const candidate = candidates[0];
+  if (!candidate) {
+    return { request, linkedUserId: null };
+  }
+  if (request.userId === candidate.id) {
+    return { request, linkedUserId: candidate.id };
+  }
+  const [updated] = await db
+    .update(migrationRequests)
+    .set({ userId: candidate.id, updatedAt: new Date() })
+    .where(eq(migrationRequests.id, requestId))
+    .returning();
+  if (!updated) throw new NotFoundError('migration_request', requestId);
+  return { request: updated, linkedUserId: candidate.id };
 }
 
 export async function updateMigrationRequest(

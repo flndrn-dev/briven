@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { apiJson } from '../../../../../lib/api';
 import { MigrationRequestRow } from './migration-request-row';
 
@@ -42,9 +44,17 @@ export default async function AdminMigrationsPage() {
 
   return (
     <section className="flex flex-col gap-8">
-      <header>
-        <h2 className="font-mono text-lg tracking-tight">migration requests</h2>
-        <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
+      <header className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="font-mono text-lg tracking-tight">migration requests</h2>
+          <Link
+            href="/dashboard/admin/migrations/funnel"
+            className="font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          >
+            funnel →
+          </Link>
+        </div>
+        <p className="font-mono text-sm text-[var(--color-text-muted)]">
           customer-submitted import requests from /dashboard/projects/new/migrate. triage
           newest-first; bump status as you contact / schedule / complete each one.
           status + operator notes mutations require fresh step-up auth.

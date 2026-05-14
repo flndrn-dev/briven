@@ -6,6 +6,7 @@ import { BackgroundGrid } from '../../../components/marketing/background-grid';
 import { MigrationLeadForm } from '../../../components/marketing/migration-lead-form';
 import { SiteFooter } from '../../../components/marketing/site-footer';
 import { SiteHeader } from '../../../components/marketing/site-header';
+import { TrackPageView } from '../../../components/marketing/track-page-view';
 import { getSessionUser } from '../../../lib/session';
 
 interface SourceDetail {
@@ -433,6 +434,10 @@ export default async function MigrateSourceMarketingPage({
 
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
+      <TrackPageView
+        apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+        source={detail.slug}
+      />
       <BackgroundGrid />
       <SiteHeader user={user} />
 

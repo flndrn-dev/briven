@@ -115,6 +115,48 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
     }
   }
 
+  // Sentinel-keyed retry: step-up failure on promote stores `__promote`
+  // in pendingPayload so the post-step-up handler knows to re-call
+  // promoteToUser() rather than patch().
+  const PROMOTE_SENTINEL = '__promote' as const;
+
+  async function promoteToUser() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${apiOrigin}/v1/admin/migration-requests/${request.id}/promote-to-user`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        },
+      );
+      if (res.status === 403) {
+        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (body?.code === 'step_up_required') {
+          setPendingPayload({ messageToCustomer: PROMOTE_SENTINEL });
+          return;
+        }
+      }
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(body || `promote failed: ${res.status}`);
+      }
+      const body = (await res.json()) as { linkedUserId: string | null };
+      if (!body.linkedUserId) {
+        setError(
+          'no briven user exists with this email yet. ask the customer to sign up, then try again.',
+        );
+      } else {
+        startTransition(() => router.refresh());
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'promote failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function pickStatus(next: Status) {
     if (next === request.status) return;
     setStagedStatus(next);
@@ -145,9 +187,20 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
           {request.source}
         </span>
         {request.userId === null ? (
-          <span className="rounded-full border border-[var(--color-warning)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-warning)]">
-            unauth lead
-          </span>
+          <>
+            <span className="rounded-full border border-[var(--color-warning)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-warning)]">
+              unauth lead
+            </span>
+            <button
+              type="button"
+              onClick={promoteToUser}
+              disabled={busy}
+              title="link this lead to the briven user account with the same email (idempotent)"
+              className="rounded-md border border-[var(--color-border-subtle)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)] disabled:opacity-50"
+            >
+              promote to user
+            </button>
+          </>
         ) : null}
         <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
           {request.contactEmail}
@@ -305,7 +358,11 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
           onSuccess={async () => {
             const payload = pendingPayload;
             setPendingPayload(null);
-            if (payload) await patch(payload);
+            if (payload?.messageToCustomer === PROMOTE_SENTINEL) {
+              await promoteToUser();
+            } else if (payload) {
+              await patch(payload);
+            }
           }}
           onCancel={() => setPendingPayload(null)}
         />
