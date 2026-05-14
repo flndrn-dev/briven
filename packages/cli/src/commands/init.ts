@@ -511,14 +511,36 @@ function parse(argv: readonly string[]): Args {
   return out;
 }
 
+/**
+ * Templates are grouped so a user coming from convex / supabase sees
+ * the starter that matches their mental model called out first. Order
+ * within each group is stable and matches the order in TEMPLATES.
+ */
+const TEMPLATE_GROUPS: ReadonlyArray<{
+  label: string;
+  templates: readonly TemplateName[];
+}> = [
+  { label: 'starters', templates: ['blank', 'todo-app', 'chat'] },
+  {
+    label: 'migration-friendly',
+    templates: ['convex-notes', 'supabase-auth-todos'],
+  },
+];
+
 function printTemplates(): void {
   banner('templates');
   blankLine();
-  for (const [key, tpl] of Object.entries(TEMPLATES)) {
-    step(`${key.padEnd(12)} ${tpl.description}`);
+  const widest = Math.max(...Object.keys(TEMPLATES).map((k) => k.length));
+  for (const group of TEMPLATE_GROUPS) {
+    step(`${group.label}:`);
+    for (const name of group.templates) {
+      const tpl = TEMPLATES[name];
+      step(`  ${name.padEnd(widest)}  ${tpl.description}`);
+    }
+    blankLine();
   }
-  blankLine();
   step('use one with: briven init --template <name>');
+  step('migrating from convex / supabase? see https://briven.tech/migrate');
 }
 
 export async function runInit(argv: readonly string[]): Promise<number> {
