@@ -92,9 +92,9 @@ export default async function CustomersPage() {
           not demos.
         </h1>
         <p className="mt-6 max-w-2xl leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-          briven is built dogfood-first through 2026. these are the production workloads on the
-          platform right now — the same instance that&apos;s open for the private alpha. external
-          signups open with the public beta in october 2026.
+          briven was built dogfood-first through the first half of 2026. these are the production
+          workloads on the platform right now — the same instance the public beta opens to on{' '}
+          <strong>2026-05-21</strong>.
         </p>
       </section>
 

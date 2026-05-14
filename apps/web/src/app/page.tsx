@@ -121,7 +121,7 @@ function LiveBadge() {
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-primary)] opacity-60" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-primary)]" />
       </span>
-      phase 0 · foundations · private alpha
+      phase 4 · public beta · launching may 2026
     </div>
   );
 }
