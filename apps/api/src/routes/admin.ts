@@ -28,9 +28,17 @@ import {
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
 import { listDeploys } from '../services/deploy-history.js';
+import {
+  createIncident,
+  listIncidents,
+  resolveIncident,
+  updateIncident,
+} from '../services/incidents.js';
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
+import { incidentSeverity } from '../db/schema.js';
+import { ValidationError } from '@briven/shared';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
 
@@ -617,4 +625,104 @@ adminRouter.post('/v1/admin/launch-status/maintenance-mode', async (c) => {
     metadata: { maintenanceMode: parsed.data.maintenanceMode },
   });
   return c.json({ maintenanceMode: parsed.data.maintenanceMode });
+});
+
+/* ─── incidents (admin write surface; public list on /v1/status/incidents) ─── */
+
+const incidentServicesSchema = z.array(z.string().min(1)).min(1);
+const incidentSeveritySchema = z.enum(incidentSeverity);
+
+const createIncidentSchema = z.object({
+  startedAt: z.string().datetime().optional(),
+  severity: incidentSeveritySchema,
+  services: incidentServicesSchema,
+  summary: z.string().min(1).max(2000),
+  postmortem: z.string().max(20_000).optional(),
+});
+
+const updateIncidentSchema = z.object({
+  summary: z.string().min(1).max(2000).optional(),
+  postmortem: z.string().max(20_000).optional(),
+  severity: incidentSeveritySchema.optional(),
+  services: incidentServicesSchema.optional(),
+});
+
+adminRouter.get('/v1/admin/incidents', async (c) => {
+  const rows = await listIncidents({ limit: 100 });
+  return c.json({ incidents: rows });
+});
+
+adminRouter.post('/v1/admin/incidents', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = createIncidentSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const incident = await createIncident({
+      startedAt: parsed.data.startedAt ? new Date(parsed.data.startedAt) : undefined,
+      severity: parsed.data.severity,
+      services: parsed.data.services,
+      summary: parsed.data.summary,
+      postmortem: parsed.data.postmortem,
+      createdBy: actor.id,
+    });
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'admin.incident.create',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { incidentId: incident.id, severity: incident.severity },
+    });
+    return c.json({ incident }, 201);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+adminRouter.patch('/v1/admin/incidents/:id', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateIncidentSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const incident = await updateIncident(id, parsed.data);
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'admin.incident.update',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { incidentId: id, fields: Object.keys(parsed.data) },
+    });
+    return c.json({ incident });
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+adminRouter.post('/v1/admin/incidents/:id/resolve', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const incident = await resolveIncident(id);
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.incident.resolve',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { incidentId: id },
+  });
+  return c.json({ incident });
 });

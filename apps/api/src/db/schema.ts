@@ -762,6 +762,38 @@ export const abuseReports = pgTable(
   }),
 );
 
+/* ─── incidents (operator-published status events) ─────────────────── */
+// Hand-curated platform-incident log. An admin opens an incident when
+// something customer-impacting starts, edits the narrative as the
+// situation unfolds, and resolves it when restored. The public status
+// page and RSS feed read from this table.
+
+export const incidentSeverity = ['critical', 'major', 'minor', 'maintenance'] as const;
+export type IncidentSeverity = (typeof incidentSeverity)[number];
+
+export const incidents = pgTable(
+  'incidents',
+  {
+    id: id(),
+    startedAt: ts('started_at').notNull(),
+    resolvedAt: ts('resolved_at'),
+    severity: text('severity').$type<IncidentSeverity>().notNull(),
+    // List of affected services: 'api' | 'realtime' | 'runtime' | 'web'
+    // | 'docs' | 'all'. Stored as jsonb so we can grow the vocabulary
+    // without a migration.
+    services: jsonb('services').$type<readonly string[]>().notNull(),
+    summary: text('summary').notNull(),
+    postmortem: text('postmortem').notNull().default(''),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    startedIdx: index('incidents_started_idx').on(t.startedAt),
+    activeIdx: index('incidents_active_idx').on(t.startedAt).where(sql`resolved_at is null`),
+  }),
+);
+
 /* ─── platform_settings (single-row dashboard-controllable flags) ─── */
 // Key/value JSONB store for platform-level flags an admin needs to flip
 // without a container restart. Today: `openSignups` (boolean). Future:
@@ -960,3 +992,5 @@ export type SignupAllowlistEntry = typeof signupAllowlist.$inferSelect;
 export type NewSignupAllowlistEntry = typeof signupAllowlist.$inferInsert;
 export type PlatformSetting = typeof platformSettings.$inferSelect;
 export type NewPlatformSetting = typeof platformSettings.$inferInsert;
+export type Incident = typeof incidents.$inferSelect;
+export type NewIncident = typeof incidents.$inferInsert;
