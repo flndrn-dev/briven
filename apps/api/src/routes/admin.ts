@@ -500,11 +500,17 @@ adminRouter.delete('/v1/admin/signup-allowlist/:email', async (c) => {
  * `openSignups` reads the effective value (DB override → env fallback).
  */
 adminRouter.get('/v1/admin/launch-status', async (c) => {
-  const { getOpenSignupsFlag } = await import('../services/platform-settings.js');
-  const openSignups = await getOpenSignupsFlag();
+  const { getOpenSignupsFlag, getPlatformSetting } = await import(
+    '../services/platform-settings.js'
+  );
+  const [openSignups, maintenanceMode] = await Promise.all([
+    getOpenSignupsFlag(),
+    getPlatformSetting<boolean>('maintenanceMode', false),
+  ]);
   return c.json({
     openSignups,
     openSignupsEnvDefault: env.BRIVEN_OPEN_SIGNUPS,
+    maintenanceMode,
     discordInviteUrl: env.BRIVEN_DISCORD_INVITE_URL ?? null,
     domain: env.BRIVEN_DOMAIN,
     polarConfigured: Boolean(env.BRIVEN_POLAR_ACCESS_TOKEN),
@@ -539,4 +545,30 @@ adminRouter.post('/v1/admin/launch-status/open-signups', async (c) => {
     metadata: { openSignups: parsed.data.openSignups },
   });
   return c.json({ openSignups: parsed.data.openSignups });
+});
+
+/**
+ * Flip the platform-wide maintenance gate. When true, every non-admin
+ * route returns 503 until flipped back. Whitelist: /health, /ready,
+ * /info, /v1/auth/*, /v1/me, /v1/me/*, /v1/admin/* (so the admin can
+ * sign in + flip it back). Audited as admin.maintenance.toggle.
+ */
+adminRouter.post('/v1/admin/launch-status/maintenance-mode', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({ maintenanceMode: z.boolean() }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const { setPlatformSetting } = await import('../services/platform-settings.js');
+  await setPlatformSetting('maintenanceMode', parsed.data.maintenanceMode, actor.id);
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.maintenance.toggle',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { maintenanceMode: parsed.data.maintenanceMode },
+  });
+  return c.json({ maintenanceMode: parsed.data.maintenanceMode });
 });

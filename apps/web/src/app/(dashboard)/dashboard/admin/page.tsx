@@ -1,4 +1,5 @@
 import { apiJson } from '../../../../lib/api';
+import { MaintenanceToggle } from './maintenance-toggle';
 import { OpenSignupsToggle } from './open-signups-toggle';
 
 interface Stats {
@@ -10,6 +11,7 @@ interface Stats {
 interface LaunchStatus {
   openSignups: boolean;
   openSignupsEnvDefault: boolean;
+  maintenanceMode: boolean;
   discordInviteUrl: string | null;
   domain: string;
   polarConfigured: boolean;
@@ -68,6 +70,7 @@ function LaunchPanel({ launch }: { launch: LaunchStatus }) {
           envDefault={launch.openSignupsEnvDefault}
           apiOrigin={publicApiOrigin()}
         />
+        <MaintenanceToggle initial={launch.maintenanceMode} apiOrigin={publicApiOrigin()} />
         <FlagRow
           label="discord invite"
           state={launch.discordInviteUrl ? 'configured' : 'not set'}
