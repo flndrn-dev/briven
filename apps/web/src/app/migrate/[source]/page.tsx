@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { BackgroundGrid } from '../../../components/marketing/background-grid';
+import { MigrationLeadForm } from '../../../components/marketing/migration-lead-form';
 import { SiteFooter } from '../../../components/marketing/site-footer';
 import { SiteHeader } from '../../../components/marketing/site-header';
 import { getSessionUser } from '../../../lib/session';
@@ -560,22 +561,38 @@ export default async function MigrateSourceMarketingPage({
         </dl>
       </section>
 
+      <section className="relative z-10 mx-auto w-full max-w-4xl px-6 pb-16">
+        <h2 className="font-mono uppercase tracking-[0.12em] text-[var(--color-text-subtle)] text-[var(--text-xs)]">
+          ready to start? no signup needed
+        </h2>
+        <p className="mt-2 leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
+          leave us your email and we&apos;ll reach out within one business day. your{' '}
+          {detail.name} stays untouched the entire time.
+        </p>
+        <div className="mt-6">
+          <MigrationLeadForm
+            apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+            defaultSource={detail.slug}
+            sources={Object.values(SOURCES).map((s) => ({ slug: s.slug, name: s.name }))}
+          />
+        </div>
+      </section>
+
       <section className="relative z-10 mx-auto w-full max-w-4xl px-6 pb-24">
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] p-6">
           <h2 className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-h3)]">
-            ready when you are
+            already got a briven account?
           </h2>
           <p className="mt-3 leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-            free during beta. your {detail.name} stays untouched the entire time. we read,
-            copy, parallel-run, and let you press cutover when (and if) you&apos;re ready.
-            7-day rollback window after cutover.
+            jump straight into the in-product wizard for a more detailed intake form — you
+            can save progress and track status from your dashboard.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link
               href={startHref}
               className="inline-flex h-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 font-sans font-medium text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)]"
             >
-              start migration
+              open the dashboard wizard
             </Link>
             <Link
               href="/migrate"

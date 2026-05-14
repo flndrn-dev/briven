@@ -19,7 +19,9 @@ const URL_CAP = 2_000;
 const EMAIL_CAP = 320;
 
 export interface CreateMigrationRequestInput {
-  userId: string;
+  // Null for unauthenticated leads submitted via the /migrate marketing
+  // form. Operator can patch a user_id later from the admin triage row.
+  userId: string | null;
   orgId?: string | null;
   source: string;
   sourceUrl?: string | null;
@@ -106,7 +108,7 @@ export async function createMigrationRequest(
     .insert(migrationRequests)
     .values({
       id: newId('mig'),
-      userId: input.userId,
+      userId: input.userId ?? null,
       orgId: input.orgId ?? null,
       source: input.source,
       sourceUrl,

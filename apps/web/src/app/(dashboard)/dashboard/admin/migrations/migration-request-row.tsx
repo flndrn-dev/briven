@@ -7,7 +7,7 @@ import { StepUpPrompt } from '../../../../../components/step-up-prompt';
 
 interface AdminRequest {
   id: string;
-  userId: string;
+  userId: string | null;
   source: string;
   sourceUrl: string | null;
   sourceNotes: string;
@@ -144,6 +144,11 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
         <span className="rounded-full border border-[var(--color-border-subtle)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-text-subtle)]">
           {request.source}
         </span>
+        {request.userId === null ? (
+          <span className="rounded-full border border-[var(--color-warning)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-warning)]">
+            unauth lead
+          </span>
+        ) : null}
         <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
           {request.contactEmail}
         </span>

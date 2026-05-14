@@ -6,6 +6,7 @@ import {
   sendMigrationRequestOperatorAlert,
 } from '../lib/email.js';
 import { log } from '../lib/logger.js';
+import { ipKey, rateLimit } from '../middleware/rate-limit.js';
 import { requireAuth } from '../middleware/session.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
@@ -102,6 +103,90 @@ migrationRequestsRouter.post('/v1/migration-requests', async (c) => {
     throw err;
   }
 });
+
+/**
+ * Public, unauthenticated intake. Lives on a separate Hono router so
+ * the requireAuth middleware on /v1/migration-requests/* doesn't shadow
+ * it. Used by the /migrate marketing page + per-source pages so
+ * prospects can request a migration before creating an account. Rate-
+ * limited by IP (5/hour) to keep the endpoint from being a spam vector.
+ * Triaged by an operator identically to authed requests — the user_id
+ * column is null until the operator promotes the lead.
+ */
+export const migrationRequestsPublicRouter = new Hono<AppEnv>();
+
+migrationRequestsPublicRouter.post(
+  '/v1/migration-leads',
+  rateLimit({
+    scope: 'migration-public',
+    limit: 5,
+    windowMs: 60 * 60_000,
+    key: ipKey,
+  }),
+  async (c) => {
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') {
+      return c.json({ code: 'validation_failed', message: 'JSON body required' }, 400);
+    }
+    const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim() : '';
+    if (!contactEmail) {
+      return c.json(
+        { code: 'validation_failed', message: 'contactEmail is required' },
+        400,
+      );
+    }
+    try {
+      const request = await createMigrationRequest({
+        userId: null,
+        source: String(body.source ?? ''),
+        sourceUrl: typeof body.sourceUrl === 'string' ? body.sourceUrl : null,
+        sourceNotes: typeof body.sourceNotes === 'string' ? body.sourceNotes : '',
+        urgency: typeof body.urgency === 'string' ? body.urgency : 'exploring',
+        contactEmail,
+      });
+      await audit({
+        actorId: null,
+        projectId: null,
+        action: 'migration_request.public_create',
+        ipHash: hashIpFromReq(c.req.raw.headers.get('x-forwarded-for')),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { requestId: request.id, source: request.source },
+      });
+      const emailPayload = {
+        requestId: request.id,
+        source: request.source,
+        contactEmail: request.contactEmail,
+        sourceUrl: request.sourceUrl,
+        urgency: request.urgency,
+        estimatedTables: request.estimatedTables,
+        estimatedRows:
+          request.estimatedRows == null ? null : request.estimatedRows.toString(),
+        estimatedFunctions: request.estimatedFunctions,
+        sourceNotes: request.sourceNotes,
+      };
+      void sendMigrationRequestCustomerConfirmation(emailPayload).catch((err) => {
+        log.error('migration_request_customer_email_failed', {
+          requestId: request.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      void sendMigrationRequestOperatorAlert(emailPayload).catch((err) => {
+        log.error('migration_request_operator_email_failed', {
+          requestId: request.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      // We deliberately return only the request id — no PII echo to a
+      // public endpoint, no leak of contact-email back to a curl caller.
+      return c.json({ requestId: request.id }, 201);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      throw err;
+    }
+  },
+);
 
 function hashIpFromReq(forwarded: string | null): string | null {
   const ip = forwarded ? forwarded.split(',')[0]!.trim() : null;

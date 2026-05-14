@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 interface AdminRequest {
   id: string;
-  userId: string;
+  userId: string | null;
   orgId: string | null;
   source: string;
   sourceUrl: string | null;
