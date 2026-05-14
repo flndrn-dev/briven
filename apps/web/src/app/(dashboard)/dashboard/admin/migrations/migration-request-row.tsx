@@ -33,22 +33,57 @@ const STATUS_OPTIONS: readonly Status[] = [
   'cancelled',
 ];
 
+// Pre-baked operator reply templates per target status. {{source}} is
+// substituted with the request's source platform (convex / supabase /
+// etc.) so the operator's first draft already names the platform the
+// customer is coming from. The operator edits these before sending —
+// they're starting points, not final copy. Empty for 'new' since the
+// confirmation email already fires on create.
+const STATUS_TEMPLATES: Record<Status, string> = {
+  new: '',
+  contacted:
+    "hi! thanks for the {{source}} migration request. we'd like to schedule a quick 15-min call to scope your data + auth specifics. what times work for you in the next 2–3 business days?",
+  scheduled:
+    "great — we've scheduled your {{source}} migration for [date / time]. you'll get a calendar invite shortly. nothing changes on your end until we kick off; your {{source}} keeps serving traffic the entire time.",
+  in_progress:
+    "we're starting your {{source}} migration now. expected duration: ~[X] hours. your current platform stays serving traffic throughout. you'll get another email the moment we're done and your data is ready to verify.",
+  completed:
+    "your {{source}} migration is complete on the briven side. please open the dashboard to verify your data — row counts, sample queries, anything that matters. when you're ready to flip writes from {{source}} to briven, the cutover button is one click. happy to walk you through it on a call.",
+  cancelled:
+    "no problem — we've cancelled this migration request. nothing changed on your {{source}}. if your situation changes, just reply to this email and we'll pick it right back up.",
+};
+
 interface Props {
   request: AdminRequest;
   apiOrigin: string;
+}
+
+interface PatchPayload {
+  status?: Status;
+  operatorNotes?: string;
+  messageToCustomer?: string;
+}
+
+function applyTemplate(template: string, source: string): string {
+  return template.replace(/\{\{source\}\}/g, source);
 }
 
 export function MigrationRequestRow({ request, apiOrigin }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingPayload, setPendingPayload] =
-    useState<null | { status?: Status; operatorNotes?: string }>(null);
+  const [pendingPayload, setPendingPayload] = useState<PatchPayload | null>(null);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState(request.operatorNotes);
+  // Two-step status change: picking a new status opens a panel where
+  // the operator confirms + edits the customer-facing message before
+  // the PATCH fires. Skips the panel for transitions where there's
+  // nothing meaningful to say (e.g., back to 'new').
+  const [stagedStatus, setStagedStatus] = useState<Status | null>(null);
+  const [messageToCustomer, setMessageToCustomer] = useState('');
   const [, startTransition] = useTransition();
 
-  async function patch(payload: { status?: Status; operatorNotes?: string }) {
+  async function patch(payload: PatchPayload) {
     setBusy(true);
     setError(null);
     try {
@@ -70,12 +105,34 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
         throw new Error(body || `update failed: ${res.status}`);
       }
       setEditingNotes(false);
+      setStagedStatus(null);
+      setMessageToCustomer('');
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'update failed');
     } finally {
       setBusy(false);
     }
+  }
+
+  function pickStatus(next: Status) {
+    if (next === request.status) return;
+    setStagedStatus(next);
+    const template = STATUS_TEMPLATES[next];
+    setMessageToCustomer(template ? applyTemplate(template, request.source) : '');
+  }
+
+  function cancelStagedStatus() {
+    setStagedStatus(null);
+    setMessageToCustomer('');
+  }
+
+  function sendStatusUpdate() {
+    if (!stagedStatus) return;
+    void patch({
+      status: stagedStatus,
+      ...(messageToCustomer.trim() ? { messageToCustomer: messageToCustomer.trim() } : {}),
+    });
   }
 
   return (
@@ -121,9 +178,9 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">status</span>
         <select
-          value={request.status}
+          value={stagedStatus ?? request.status}
           disabled={busy}
-          onChange={(e) => patch({ status: e.target.value as Status })}
+          onChange={(e) => pickStatus(e.target.value as Status)}
           className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-xs text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none disabled:opacity-50"
         >
           {STATUS_OPTIONS.map((s) => (
@@ -132,7 +189,57 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
             </option>
           ))}
         </select>
+        {stagedStatus ? (
+          <span className="font-mono text-[10px] text-[var(--color-warning)]">
+            unsaved · review the message below before sending
+          </span>
+        ) : null}
       </div>
+
+      {stagedStatus ? (
+        <div className="flex flex-col gap-2 rounded-md border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] p-3">
+          <div className="flex items-baseline justify-between">
+            <p className="font-mono text-xs text-[var(--color-text)]">
+              message to customer · auto-sent on save
+            </p>
+            <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+              template loaded for {request.status.replace(/_/g, ' ')} →{' '}
+              {stagedStatus.replace(/_/g, ' ')}
+            </p>
+          </div>
+          <textarea
+            value={messageToCustomer}
+            onChange={(e) => setMessageToCustomer(e.target.value)}
+            rows={6}
+            maxLength={5_000}
+            placeholder="leave blank to send the auto-generated status-change email without a custom message."
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-xs text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none"
+          />
+          <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+            the email also includes the standard status blurb for{' '}
+            {stagedStatus.replace(/_/g, ' ')} and a link to /dashboard/migrations. this
+            field is your editable preamble.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={sendStatusUpdate}
+              disabled={busy}
+              className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+            >
+              {busy ? 'sending…' : `send · status → ${stagedStatus.replace(/_/g, ' ')}`}
+            </button>
+            <button
+              type="button"
+              onClick={cancelStagedStatus}
+              disabled={busy}
+              className="font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {editingNotes ? (
         <div className="flex flex-col gap-2">

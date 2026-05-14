@@ -244,6 +244,51 @@ export async function sendMigrationRequestCustomerConfirmation(
   });
 }
 
+export interface MigrationStatusUpdateInput {
+  requestId: string;
+  source: string;
+  contactEmail: string;
+  oldStatus: string;
+  newStatus: string;
+  operatorMessage?: string;
+}
+
+/**
+ * Auto-fires whenever an operator flips a migration request's status.
+ * Skipped for the transition that happens at creation (already covered
+ * by the customer confirmation email). Skipped for the `new → contacted`
+ * transition because the operator is about to email manually anyway —
+ * a status-change email on top would arrive twice. Skipped for
+ * operator-notes-only edits.
+ */
+export async function sendMigrationStatusUpdate(
+  input: MigrationStatusUpdateInput,
+): Promise<void> {
+  await send('migration_status_update', {
+    to: input.contactEmail,
+    subject: `your migration · ${migrationStatusHeadline(input.newStatus, input.source)}`,
+    html: migrationStatusUpdateHtml(input),
+    text: migrationStatusUpdateText(input),
+  });
+}
+
+function migrationStatusHeadline(status: string, source: string): string {
+  switch (status) {
+    case 'scheduled':
+      return `${source} migration scheduled`;
+    case 'in_progress':
+      return `${source} migration in progress`;
+    case 'completed':
+      return `${source} migration completed`;
+    case 'cancelled':
+      return `${source} migration cancelled`;
+    case 'contacted':
+      return `we’ve reached out about your ${source} migration`;
+    default:
+      return `${source} migration updated`;
+  }
+}
+
 /**
  * Notifies the operator inbox (default: migrations@<domain>) that a new
  * intake landed. Includes everything the customer submitted so the
@@ -475,6 +520,64 @@ function migrationOperatorHtml(input: MigrationRequestEmailInput): string {
     ${cta('open in admin', `https://${domain}/dashboard/admin/migrations`)}
   `,
   );
+}
+
+function statusBlurb(status: string): string {
+  switch (status) {
+    case 'contacted':
+      return 'we’ve reached out — check your inbox for a reply with next steps.';
+    case 'scheduled':
+      return 'a migration window has been scheduled. you should have a calendar invite or proposed time from us.';
+    case 'in_progress':
+      return 'we’re moving your project right now. you’ll get another update when we’re done. your current platform stays untouched until the cutover step you control.';
+    case 'completed':
+      return 'your migration is complete on the briven side. open the dashboard to verify your data and run the cutover when you’re ready.';
+    case 'cancelled':
+      return 'we’ve cancelled this request. nothing changed on your current platform.';
+    default:
+      return 'status updated.';
+  }
+}
+
+function migrationStatusUpdateHtml(input: MigrationStatusUpdateInput): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  const dashboardHref = `https://${domain}/dashboard/migrations`;
+  return shell(
+    migrationStatusHeadline(input.newStatus, input.source),
+    `
+    <p>${statusBlurb(input.newStatus)}</p>
+    ${
+      input.operatorMessage
+        ? `<p style="background:#1a1d24;border-radius:8px;padding:12px;white-space:pre-wrap;color:#d1d5db;border:1px solid #2a2e36;font-size:14px">${escapeHtml(input.operatorMessage)}</p>`
+        : ''
+    }
+    <p style="background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
+      request id: ${escapeHtml(input.requestId)}<br/>
+      source: ${escapeHtml(input.source)}<br/>
+      status: ${escapeHtml(input.oldStatus.replace(/_/g, ' '))} → <strong style="color:#f5f7fa">${escapeHtml(input.newStatus.replace(/_/g, ' '))}</strong>
+    </p>
+    ${cta('open dashboard', dashboardHref)}
+    <p class="muted">need a human? reply to this email or write to migrations@${escapeHtml(domain)} and quote the request id.</p>
+  `,
+  );
+}
+
+function migrationStatusUpdateText(input: MigrationStatusUpdateInput): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    migrationStatusHeadline(input.newStatus, input.source),
+    '',
+    statusBlurb(input.newStatus),
+    '',
+    ...(input.operatorMessage ? [input.operatorMessage, ''] : []),
+    `request id: ${input.requestId}`,
+    `source: ${input.source}`,
+    `status: ${input.oldStatus.replace(/_/g, ' ')} → ${input.newStatus.replace(/_/g, ' ')}`,
+    '',
+    `open dashboard: https://${domain}/dashboard/migrations`,
+    '',
+    `need a human? reply to this email or write to migrations@${domain}.`,
+  ].join('\n');
 }
 
 function migrationOperatorText(input: MigrationRequestEmailInput): string {
