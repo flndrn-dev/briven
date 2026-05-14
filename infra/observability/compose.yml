@@ -5,12 +5,26 @@
 # /metrics endpoints by container name. Grafana is exposed via Traefik
 # behind Cloudflare Access; the rest are internal-only.
 #
+# Per DOCKER.md (project root):
+#   - Promtail uses file-based discovery against /var/lib/docker/containers
+#     (read-only). NO docker.sock mount. NO docker_sd_configs.
+#   - Prometheus uses static_configs against service DNS names. NO
+#     docker_sd_configs. NO scraping of unix:///var/run/docker.sock.
+#   - Every service has logging.options.max-size set (rule §7).
+#
 # See ./README.md for the operator runbook.
+
+x-logging: &briven-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
 
 services:
   prometheus:
     image: prom/prometheus:v3.0.1
     restart: unless-stopped
+    logging: *briven-logging
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -28,6 +42,7 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.27.0
     restart: unless-stopped
+    logging: *briven-logging
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
@@ -45,6 +60,7 @@ services:
   alertmanager-discord-alerts:
     image: benjojo/alertmanager-discord:latest
     restart: unless-stopped
+    logging: *briven-logging
     environment:
       DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_ALERTS}
       LISTEN_ADDRESS: ':9094'
@@ -54,6 +70,7 @@ services:
   alertmanager-discord-deploys:
     image: benjojo/alertmanager-discord:latest
     restart: unless-stopped
+    logging: *briven-logging
     environment:
       DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_DEPLOYS}
       LISTEN_ADDRESS: ':9094'
@@ -63,6 +80,7 @@ services:
   loki:
     image: grafana/loki:3.3.2
     restart: unless-stopped
+    logging: *briven-logging
     command: -config.file=/etc/loki/config.yaml
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
@@ -70,14 +88,19 @@ services:
     networks:
       - dokploy-network
 
+  # Promtail — file-based docker log discovery per DOCKER.md §1. The
+  # /var/lib/docker/containers bind-mount is read-only so Promtail can
+  # tail the json-file driver's output without touching the daemon.
+  # DO NOT bind-mount /var/run/docker.sock here (rule §6). DO NOT switch
+  # to docker_sd_configs (rule §1).
   promtail:
     image: grafana/promtail:3.3.2
     restart: unless-stopped
+    logging: *briven-logging
     command: -config.file=/etc/promtail/config.yaml
     volumes:
       - ./promtail/config.yaml:/etc/promtail/config.yaml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki
     networks:
@@ -86,6 +109,7 @@ services:
   grafana:
     image: grafana/grafana:11.4.0
     restart: unless-stopped
+    logging: *briven-logging
     environment:
       # Local-auth mode — operator signs in with the bootstrap admin
       # password set via env. Promotable to cf-access proxy auth later

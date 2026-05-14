@@ -1,7 +1,17 @@
-# Promtail discovers docker containers on the host and ships their
-# stdout/stderr to Loki. Each line is parsed as JSON when possible —
-# briven services emit one JSON-per-line via @briven/shared/observability,
-# so structured fields land as Loki labels for free.
+# Promtail — file-based docker log discovery.
+#
+# Per DOCKER.md §1 we DO NOT touch the Docker daemon for log discovery
+# or tailing. No docker_sd_configs, no docker.sock mount. Instead we
+# read the json-file driver's output directly from
+# /var/lib/docker/containers/*/*-json.log — same data, zero daemon load.
+#
+# Filtering to "only briven containers" can't be done off the container
+# label (that would require asking the daemon). Instead we filter by
+# the JSON `service` label that briven services emit on every log line
+# via @briven/shared/observability. Non-briven containers don't produce
+# that JSON shape, so their lines flow through with `service` absent and
+# Loki queries naturally exclude them via the standard
+# `{service=~"api|runtime|realtime|web|docs"}` selector.
 
 server:
   http_listen_port: 9080
@@ -14,27 +24,43 @@ clients:
   - url: http://briven-loki:3100/loki/api/v1/push
 
 scrape_configs:
-  - job_name: docker
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      # Use the docker container name as the `container` label.
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/(.+)'
-        target_label: container
-      # Surface compose service + project as labels too.
-      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
-        target_label: service
-      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
-        target_label: compose_project
-      # Only ship containers tagged for log collection — keeps Loki ingest
-      # focused on briven services rather than every random container on
-      # the host.
-      - source_labels: ['__meta_docker_container_label_briven_logs']
-        regex: 'true'
-        action: keep
+  - job_name: docker-files
+    # Static targets + __path__ glob is the Promtail idiom for file-based
+    # discovery. No daemon involvement; Promtail tails the json files
+    # directly via inotify on the host bind-mount.
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*-json.log
     pipeline_stages:
+      # Each line in *-json.log is wrapped by the docker json-file
+      # driver as: {"log":"<raw stdout line>\n","stream":"stdout","time":"..."}.
+      # First parse unwraps the docker envelope.
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            time: time
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      - output:
+          source: output
+      - labels:
+          stream:
+      # Extract the container id from the file path so an operator can
+      # at least correlate a line back to a specific container without
+      # asking the daemon.
+      - regex:
+          source: filename
+          expression: '/var/lib/docker/containers/(?P<container_id>[a-f0-9]{12})'
+      - labels:
+          container_id:
+      # Now the wrapped `output` field holds the application's raw stdout.
+      # For briven services that's our @briven/shared/observability JSON
+      # shape; parse it to lift level/msg/service/env into labels.
       - json:
           expressions:
             level: level
