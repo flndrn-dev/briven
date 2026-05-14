@@ -21,6 +21,16 @@ const SITE_URL = process.env.BRIVEN_DOCS_ORIGIN ?? 'https://docs.briven.tech';
 const STATUS_URL = process.env.BRIVEN_STATUS_ORIGIN ?? `${SITE_URL}/status`;
 
 export async function GET(): Promise<Response> {
+  // Mirror the status-page cutover: once status.briven.tech is canonical,
+  // RSS readers still pointed at the old feed URL get redirected. Gated
+  // by the same env so it flips with the page. See
+  // docs/runbooks/status-domain-cutover.md §3.
+  if (process.env.BRIVEN_STATUS_CANONICAL === 'status') {
+    return Response.redirect(
+      'https://status.briven.tech/api/status/incidents.xml',
+      308,
+    );
+  }
   const items = await fetchIncidents({ limit: 50, fresh: true });
   const lastBuild = items[0]?.startedAt ?? new Date().toISOString();
 

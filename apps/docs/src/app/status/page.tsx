@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+
 import { DocsShell } from '../../components/shell';
 import { fetchIncidents } from '../../lib/incidents';
 
@@ -93,6 +95,14 @@ async function probe(svc: ServiceProbe): Promise<ProbeResult> {
 }
 
 export default async function StatusPage() {
+  // Once status.briven.tech is the canonical home, redirect bookmarks
+  // + RSS readers that still point at docs.briven.tech/status to the
+  // dedicated subdomain. Gated by env so the redirect only fires after
+  // the operator has verified the new host is serving. See
+  // docs/runbooks/status-domain-cutover.md §3.
+  if (process.env.BRIVEN_STATUS_CANONICAL === 'status') {
+    redirect('https://status.briven.tech');
+  }
   const [probes, incidents] = await Promise.all([
     Promise.all(PROBES.map(probe)),
     fetchIncidents({ limit: 50, fresh: true }),
