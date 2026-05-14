@@ -718,6 +718,72 @@ export const webhookDeliveries = pgTable(
   }),
 );
 
+/* ─── abuse_reports (dedicated table; replaces audit-log overload) ── */
+export const abuseSeverity = ['spam', 'phishing', 'malware', 'csam', 'tos', 'other'] as const;
+export type AbuseSeverity = (typeof abuseSeverity)[number];
+
+export const abuseStatus = ['open', 'triaged', 'resolved'] as const;
+export type AbuseStatusValue = (typeof abuseStatus)[number];
+
+export const abuseResolution = ['no_action', 'warned', 'suspended', 'banned'] as const;
+export type AbuseResolutionValue = (typeof abuseResolution)[number];
+
+export const abuseReports = pgTable(
+  'abuse_reports',
+  {
+    id: id(),
+    targetUrl: text('target_url').notNull(),
+    reason: text('reason').notNull(),
+    severity: text('severity').$type<AbuseSeverity>().notNull(),
+    reporterContact: text('reporter_contact'),
+    // ip_hash + user_agent of the submission. Per CLAUDE.md §5.1 we
+    // never store raw IPs even in the abuse pipeline.
+    sourceIpHash: text('source_ip_hash'),
+    sourceUserAgent: text('source_user_agent'),
+    status: text('status').$type<AbuseStatusValue>().notNull().default('open'),
+    resolution: text('resolution').$type<AbuseResolutionValue>(),
+    // Populated by the resolver when the report maps to a real project.
+    // FK is `set null` rather than `cascade` — if the project gets hard
+    // deleted later we keep the report's history intact for audit.
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    triagedAt: ts('triaged_at'),
+    triagedBy: text('triaged_by').references(() => users.id, { onDelete: 'set null' }),
+    triageNotes: text('triage_notes'),
+    resolvedAt: ts('resolved_at'),
+    resolvedBy: text('resolved_by').references(() => users.id, { onDelete: 'set null' }),
+    resolveNotes: text('resolve_notes'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    statusIdx: index('abuse_reports_status_idx').on(t.status, t.createdAt),
+    severityIdx: index('abuse_reports_severity_idx').on(t.severity, t.createdAt),
+    projectIdx: index('abuse_reports_project_idx').on(t.projectId).where(sql`project_id is not null`),
+  }),
+);
+
+/* ─── signup_allowlist (invite-only beta gate) ────────────────────── */
+// When BRIVEN_OPEN_SIGNUPS=false (the default for the private beta),
+// Better Auth's user.create hook rejects any email not on this list. An
+// admin manages entries via /dashboard/admin/allowlist. accepted_at is
+// stamped once the email signs in for the first time so the operator
+// can see who's claimed their invite vs who's still pending.
+
+export const signupAllowlist = pgTable(
+  'signup_allowlist',
+  {
+    id: id(),
+    email: text('email').notNull(),
+    invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    invitedAt: createdAt(),
+    acceptedAt: ts('accepted_at'),
+    notes: text('notes'),
+  },
+  (t) => ({
+    emailIdx: uniqueIndex('signup_allowlist_email_idx').on(t.email),
+  }),
+);
+
 /* ─── webhook_subscribers (customer-defined outbound webhooks) ────── */
 // Platform → customer fan-out: when briven emits an event (abuse report
 // opened, deploy succeeded/failed, tier changed) we POST a signed payload
@@ -871,3 +937,7 @@ export type WebhookSubscriber = typeof webhookSubscribers.$inferSelect;
 export type NewWebhookSubscriber = typeof webhookSubscribers.$inferInsert;
 export type WebhookOutboundDelivery = typeof webhookOutboundDeliveries.$inferSelect;
 export type NewWebhookOutboundDelivery = typeof webhookOutboundDeliveries.$inferInsert;
+export type AbuseReport = typeof abuseReports.$inferSelect;
+export type NewAbuseReport = typeof abuseReports.$inferInsert;
+export type SignupAllowlistEntry = typeof signupAllowlist.$inferSelect;
+export type NewSignupAllowlistEntry = typeof signupAllowlist.$inferInsert;

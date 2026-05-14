@@ -70,6 +70,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         >
           realtime
         </Link>
+        <Link
+          href="/dashboard/admin/allowlist"
+          className="px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        >
+          allowlist
+        </Link>
       </nav>
       <section>{children}</section>
     </div>

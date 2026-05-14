@@ -162,6 +162,20 @@
       "when": 1778950000000,
       "tag": "0022_step_up_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1779000000000,
+      "tag": "0023_abuse_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779050000000,
+      "tag": "0024_signup_allowlist",
+      "breakpoints": true
     }
   ]
 }
