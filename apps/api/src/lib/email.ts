@@ -216,6 +216,54 @@ export async function sendAccountDeletionConfirmation(to: string): Promise<void>
   });
 }
 
+export interface MigrationRequestEmailInput {
+  requestId: string;
+  source: string;
+  contactEmail: string;
+  sourceUrl: string | null;
+  urgency: string;
+  estimatedTables: number | null;
+  estimatedRows: string | null;
+  estimatedFunctions: number | null;
+  sourceNotes: string;
+}
+
+/**
+ * Confirms to the customer that their migration intake was received,
+ * shows the briven request id (to quote if they email migrations@), and
+ * sets the expectation for next contact (one business day).
+ */
+export async function sendMigrationRequestCustomerConfirmation(
+  input: MigrationRequestEmailInput,
+): Promise<void> {
+  await send('migration_request_confirmation', {
+    to: input.contactEmail,
+    subject: `we got your migration request · ${input.requestId}`,
+    html: migrationCustomerHtml(input),
+    text: migrationCustomerText(input),
+  });
+}
+
+/**
+ * Notifies the operator inbox (default: migrations@<domain>) that a new
+ * intake landed. Includes everything the customer submitted so the
+ * operator can triage from the inbox without opening the dashboard for
+ * the first read.
+ */
+export async function sendMigrationRequestOperatorAlert(
+  input: MigrationRequestEmailInput,
+): Promise<void> {
+  const inbox =
+    env.BRIVEN_MIGRATIONS_INBOX ??
+    `migrations@${env.BRIVEN_DOMAIN ?? 'briven.tech'}`;
+  await send('migration_request_alert', {
+    to: inbox,
+    subject: `new migration request · ${input.source} · ${input.urgency.replace(/_/g, ' ')}`,
+    html: migrationOperatorHtml(input),
+    text: migrationOperatorText(input),
+  });
+}
+
 /**
  * Verify a `X-mittera-Signature: v1=<hex>` header against the raw
  * request body using the shared webhook secret. The timestamp lives
@@ -358,6 +406,95 @@ function accountDeletionText(): string {
     `you have 30 days to revert: email support@${domain} from this address. after that the delete is permanent.`,
     '',
     `if you did not request this, contact support@${domain} immediately.`,
+  ].join('\n');
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function migrationCustomerHtml(input: MigrationRequestEmailInput): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    `we got your migration request from ${escapeHtml(input.source)}`,
+    `
+    <p>thanks for asking us to help move your project to briven.</p>
+    <p>an operator will reach out from <code>migrations@${escapeHtml(domain)}</code> within one business day with the next steps — typically a short call to confirm scope, then the actual data + functions move while you keep running on your current platform.</p>
+    <p style="background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
+      request id: ${escapeHtml(input.requestId)}<br/>
+      source: ${escapeHtml(input.source)}<br/>
+      urgency: ${escapeHtml(input.urgency.replace(/_/g, ' '))}
+    </p>
+    <p class="muted">your ${escapeHtml(input.source)} stays untouched. we only read from it. nothing on your source is moved or modified until you press the cutover button — which we won't do until you say so.</p>
+    <p class="muted">questions or follow-ups: reply to this email, or write to migrations@${escapeHtml(domain)} and quote the request id above.</p>
+  `,
+  );
+}
+
+function migrationCustomerText(input: MigrationRequestEmailInput): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    `we got your migration request from ${input.source}`,
+    '',
+    'thanks for asking us to help move your project to briven. an operator will reach out within one business day with the next steps.',
+    '',
+    `request id: ${input.requestId}`,
+    `source: ${input.source}`,
+    `urgency: ${input.urgency.replace(/_/g, ' ')}`,
+    '',
+    `your ${input.source} stays untouched. we only read from it. nothing on your source is moved or modified until you press the cutover button.`,
+    '',
+    `questions or follow-ups: reply to this email, or write to migrations@${domain} and quote the request id.`,
+  ].join('\n');
+}
+
+function migrationOperatorHtml(input: MigrationRequestEmailInput): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    `new migration request · ${escapeHtml(input.source)}`,
+    `
+    <p><strong>${escapeHtml(input.contactEmail)}</strong> requested a migration from <strong>${escapeHtml(input.source)}</strong>.</p>
+    <p style="background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
+      request id: ${escapeHtml(input.requestId)}<br/>
+      contact: ${escapeHtml(input.contactEmail)}<br/>
+      source: ${escapeHtml(input.source)}<br/>
+      urgency: ${escapeHtml(input.urgency.replace(/_/g, ' '))}<br/>
+      source URL: ${input.sourceUrl ? escapeHtml(input.sourceUrl) : '—'}<br/>
+      tables: ${input.estimatedTables ?? '—'} · rows: ${escapeHtml(input.estimatedRows ?? '—')} · functions: ${input.estimatedFunctions ?? '—'}
+    </p>
+    ${
+      input.sourceNotes
+        ? `<p style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;white-space:pre-wrap;background:#1a1d24;border-radius:8px;padding:12px;color:#d1d5db;border:1px solid #2a2e36">${escapeHtml(input.sourceNotes)}</p>`
+        : '<p class="muted">no extra notes from the customer.</p>'
+    }
+    ${cta('open in admin', `https://${domain}/dashboard/admin/migrations`)}
+  `,
+  );
+}
+
+function migrationOperatorText(input: MigrationRequestEmailInput): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    `new migration request · ${input.source}`,
+    '',
+    `${input.contactEmail} requested a migration from ${input.source}.`,
+    '',
+    `request id: ${input.requestId}`,
+    `contact: ${input.contactEmail}`,
+    `source: ${input.source}`,
+    `urgency: ${input.urgency.replace(/_/g, ' ')}`,
+    `source URL: ${input.sourceUrl ?? '—'}`,
+    `tables: ${input.estimatedTables ?? '—'} · rows: ${input.estimatedRows ?? '—'} · functions: ${input.estimatedFunctions ?? '—'}`,
+    '',
+    'customer notes:',
+    input.sourceNotes || '(none)',
+    '',
+    `open in admin: https://${domain}/dashboard/admin/migrations`,
   ].join('\n');
 }
 

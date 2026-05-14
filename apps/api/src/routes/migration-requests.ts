@@ -1,6 +1,11 @@
 import { ValidationError } from '@briven/shared';
 import { Hono } from 'hono';
 
+import {
+  sendMigrationRequestCustomerConfirmation,
+  sendMigrationRequestOperatorAlert,
+} from '../lib/email.js';
+import { log } from '../lib/logger.js';
 import { requireAuth } from '../middleware/session.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
@@ -60,6 +65,34 @@ migrationRequestsRouter.post('/v1/migration-requests', async (c) => {
       ipHash: hashIpFromReq(c.req.raw.headers.get('x-forwarded-for')),
       userAgent: c.req.header('user-agent') ?? null,
       metadata: { requestId: request.id, source: request.source },
+    });
+    // Fire-and-forget notifications. We never want a slow / unreachable
+    // mittera to block the POST response — the request is already
+    // persisted, so the operator can still triage from the dashboard
+    // even if the email pipeline is degraded.
+    const emailPayload = {
+      requestId: request.id,
+      source: request.source,
+      contactEmail: request.contactEmail,
+      sourceUrl: request.sourceUrl,
+      urgency: request.urgency,
+      estimatedTables: request.estimatedTables,
+      estimatedRows:
+        request.estimatedRows == null ? null : request.estimatedRows.toString(),
+      estimatedFunctions: request.estimatedFunctions,
+      sourceNotes: request.sourceNotes,
+    };
+    void sendMigrationRequestCustomerConfirmation(emailPayload).catch((err) => {
+      log.error('migration_request_customer_email_failed', {
+        requestId: request.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+    void sendMigrationRequestOperatorAlert(emailPayload).catch((err) => {
+      log.error('migration_request_operator_email_failed', {
+        requestId: request.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
     return c.json({ request: serialize(request) }, 201);
   } catch (err) {
