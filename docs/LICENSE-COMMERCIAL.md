@@ -120,7 +120,7 @@ The commercial licence terms are NOT public until reviewed and finalised. Once t
 - Publish to `briven.tech/licence-commercial` (a new marketing page).
 - Link from the GHCR README (`infra/dokploy/README.md` self-host section).
 - Add to the docs site at `docs.briven.tech/self-host` "commercial licence" section.
-- Quote requests go to `licensing@briven.tech` (mail alias to j until volume justifies a sales role).
+- Quote requests go to `licensing@flndrn.com` (mail alias to jurgen until volume justifies a sales role).
 
 ---
 
@@ -132,7 +132,7 @@ The public GHCR release at `ghcr.io/flndrn-dev/briven-{api,runtime,realtime,web,
 This work is licensed under the GNU Affero General Public License v3.0
 ("AGPL-3.0"). A commercial licence is available separately for use cases
 that AGPL-3.0 does not accommodate; see docs/LICENSE-COMMERCIAL.md for
-terms, and contact licensing@briven.tech for a quote.
+terms, and contact licensing@flndrn.com for a quote.
 ```
 
 ---

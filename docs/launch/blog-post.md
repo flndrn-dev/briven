@@ -125,7 +125,7 @@ GHCR images are also available if you'd rather pull than build.
 - docs · https://docs.briven.tech
 - source · https://code.konnos.org/flndrn/briven
 - discord · *link once private-beta cohort fills*
-- briven.tech invites are limited to ~25 hand-picked beta users right now. if you're migrating off a managed reactive backend and want to be in that cohort, email j@briven.tech with a one-paragraph description of what you're moving.
+- briven.tech invites are limited to ~25 hand-picked beta users right now. if you're migrating off a managed reactive backend and want to be in that cohort, email jurgen@flndrn.com with a one-paragraph description of what you're moving.
 
 — j
 
