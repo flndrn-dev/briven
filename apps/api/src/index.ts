@@ -50,6 +50,7 @@ import {
 } from './workers/log-fanout.js';
 import { startOutboundWebhookDispatcher } from './workers/outbound-webhook-dispatcher.js';
 import { startPolarMeterPush } from './workers/polar-meter-push.js';
+import { startStorageJanitor } from './workers/storage-janitor.js';
 import { startUsageAggregator } from './workers/usage-aggregator.js';
 
 type AppEnv = {
@@ -133,6 +134,7 @@ startScheduleDispatcher();
 startWebhookDeliveriesRetentionCron();
 startOutboundWebhookDispatcher();
 startOutboundWebhookDeliveriesRetentionCron();
+startStorageJanitor();
 
 // Audit-trail behind /info — one row per boot. recordDeploy itself
 // short-circuits when buildSha is the "dev" sentinel and never throws,

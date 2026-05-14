@@ -55,6 +55,12 @@ export function KeyRow({ apiKey, onRevoke, onRename }: Props) {
     setError(null);
   }
 
+  // Compute expiry state for the inline pill. Soft warning at <=7d,
+  // hard warning when already past the expires_at timestamp (the api
+  // already rejects requests with such keys; the dashboard shows them
+  // explicitly so the operator notices + revokes/replaces).
+  const expiryState = expiryStateFor(apiKey.expiresAt);
+
   return (
     <li className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
       <div className="min-w-0 flex-1">
@@ -90,14 +96,17 @@ export function KeyRow({ apiKey, onRevoke, onRename }: Props) {
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            title="click to rename"
-            className="text-left font-mono text-sm hover:text-[var(--color-primary)]"
-          >
-            {apiKey.name}
-          </button>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              title="click to rename"
+              className="text-left font-mono text-sm hover:text-[var(--color-primary)]"
+            >
+              {apiKey.name}
+            </button>
+            {expiryState ? <ExpiryPill state={expiryState} /> : null}
+          </div>
         )}
         <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
           brk_•••{apiKey.suffix} · created {new Date(apiKey.createdAt).toISOString().slice(0, 10)}
@@ -116,5 +125,39 @@ export function KeyRow({ apiKey, onRevoke, onRename }: Props) {
       </div>
       <RevokeButton keyId={apiKey.id} onRevoke={onRevoke} />
     </li>
+  );
+}
+
+type ExpiryState =
+  | { kind: 'expired'; daysAgo: number }
+  | { kind: 'expiring'; daysLeft: number };
+
+function expiryStateFor(expiresAt: string | null): ExpiryState | null {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  const days = Math.round(ms / 86_400_000);
+  if (days < 0) return { kind: 'expired', daysAgo: -days };
+  if (days <= 7) return { kind: 'expiring', daysLeft: days };
+  return null;
+}
+
+function ExpiryPill({ state }: { state: ExpiryState }) {
+  if (state.kind === 'expired') {
+    return (
+      <span
+        title="this key is past its expires_at and is rejected by the api — revoke and replace"
+        className="rounded-full border border-[var(--color-error)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-error)]"
+      >
+        expired · {state.daysAgo}d ago
+      </span>
+    );
+  }
+  return (
+    <span
+      title="this key expires within 7 days — rotate before it does to avoid an interruption"
+      className="rounded-full border border-[var(--color-warning)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-warning)]"
+    >
+      expires in {state.daysLeft}d
+    </span>
   );
 }

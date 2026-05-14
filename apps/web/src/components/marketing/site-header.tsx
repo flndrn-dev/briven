@@ -21,6 +21,13 @@ export function SiteHeader({ user }: { user: SiteHeaderUser | null }) {
         <span className="hidden font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)] sm:inline">
           · tech
         </span>
+        <span
+          aria-label="beta v1"
+          title="briven is in public beta — production-ready, on track for GA later this year"
+          className="ml-1 inline-flex items-center rounded-[var(--radius-full)] border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-1.5 py-0.5 font-mono uppercase tracking-wider text-[var(--color-primary)] text-[10px]"
+        >
+          beta v1
+        </span>
       </Link>
 
       <nav className="flex items-center gap-6 font-mono text-[var(--text-small)]">
