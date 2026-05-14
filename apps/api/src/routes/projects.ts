@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireProjectAuth } from '../middleware/project-auth.js';
 import { requireAuth } from '../middleware/session.js';
+import { requireRecentMfa } from '../middleware/step-up.js';
 import type { AppEnv } from '../types/app-env.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp, listAuditForProject } from '../services/audit.js';
@@ -199,7 +200,11 @@ projectsRouter.post('/v1/projects/:id/move', async (c) => {
   return c.json({ project });
 });
 
-projectsRouter.delete('/v1/projects/:id', async (c) => {
+// Project deletion requires step-up per CLAUDE.md §5.4 — a soft-delete
+// kicks off the 30-day hard-delete grace window and is the kind of
+// destructive action a stolen session shouldn't be able to perform
+// without a fresh password prompt.
+projectsRouter.delete('/v1/projects/:id', requireRecentMfa(10), async (c) => {
   const user = c.get('user')!;
   await assertProjectRole(c.req.param('id'), user.id, 'admin');
   const project = await softDeleteProjectForUser(c.req.param('id'), user.id);

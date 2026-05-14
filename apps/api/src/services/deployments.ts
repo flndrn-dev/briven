@@ -2,12 +2,14 @@ import { newId, NotFoundError } from '@briven/shared';
 import { and, desc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
+import { log } from '../lib/logger.js';
 import {
   deployments,
   type Deployment,
   type DeploymentStatus,
   type NewDeployment,
 } from '../db/schema.js';
+import { publishEvent } from './outbound-webhooks.js';
 
 export interface CreateDeploymentInput {
   projectId: string;
@@ -147,6 +149,32 @@ export async function transitionDeployment(input: TransitionDeploymentInput): Pr
     .where(eq(deployments.id, input.deploymentId))
     .returning();
   if (!updated) throw new Error('deployment update returned no row');
+
+  // Fan-out to outbound subscribers on terminal transitions only. Errors
+  // here are swallowed: the deploy state-machine is the load-bearing
+  // path, the notification is opportunistic.
+  if (input.status === 'succeeded' || input.status === 'failed') {
+    const eventType = input.status === 'succeeded' ? 'deploy.succeeded' : 'deploy.failed';
+    void publishEvent({
+      projectId: input.projectId,
+      eventType,
+      payload: {
+        projectId: input.projectId,
+        deploymentId: updated.id,
+        status: updated.status,
+        finishedAt: updated.finishedAt?.toISOString() ?? new Date().toISOString(),
+        errorCode: updated.errorCode ?? null,
+        errorMessage: updated.errorMessage ?? null,
+      },
+    }).catch((err: unknown) => {
+      log.warn('outbound_publish_failed', {
+        event: eventType,
+        projectId: input.projectId,
+        deploymentId: updated.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
   return updated;
 }
 

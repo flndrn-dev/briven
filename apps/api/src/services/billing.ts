@@ -7,6 +7,7 @@ import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import type { ProjectTier } from '../db/schema.js';
 import { invalidatePolarCustomerCache } from '../workers/polar-meter-push.js';
+import { publishEvent } from './outbound-webhooks.js';
 import { invalidateTierCache } from './tiers.js';
 
 /**
@@ -179,6 +180,24 @@ export async function upsertSubscriptionFromPolar(input: {
     // cached lookup so the next meter push picks up the fresh id without
     // waiting on the 5-min TTL.
     invalidatePolarCustomerCache(row.id);
+    // Notify outbound subscribers. Errors swallowed — the Polar sync is
+    // load-bearing; webhook notification is opportunistic.
+    void publishEvent({
+      projectId: row.id,
+      eventType: 'tier.changed',
+      payload: {
+        projectId: row.id,
+        tier: effectiveTier,
+        polarStatus: input.status,
+        changedAt: new Date().toISOString(),
+      },
+    }).catch((err: unknown) => {
+      log.warn('outbound_publish_failed', {
+        event: 'tier.changed',
+        projectId: row.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   log.info('subscription_synced', {

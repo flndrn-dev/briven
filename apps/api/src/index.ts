@@ -27,6 +27,7 @@ import { logsRouter } from './routes/logs.js';
 import { meRouter } from './routes/me.js';
 import { mitteraWebhookRouter } from './routes/mittera-webhook.js';
 import { orgsRouter } from './routes/orgs.js';
+import { outboundWebhooksRouter } from './routes/outbound-webhooks.js';
 import { projectEnvRouter } from './routes/project-env.js';
 import { membersRouter } from './routes/project-members.js';
 import { projectsRouter } from './routes/projects.js';
@@ -44,8 +45,10 @@ import {
   startAuditRetentionCron,
   startLogFanoutWorker,
   startLogRetentionCron,
+  startOutboundWebhookDeliveriesRetentionCron,
   startWebhookDeliveriesRetentionCron,
 } from './workers/log-fanout.js';
+import { startOutboundWebhookDispatcher } from './workers/outbound-webhook-dispatcher.js';
 import { startPolarMeterPush } from './workers/polar-meter-push.js';
 import { startUsageAggregator } from './workers/usage-aggregator.js';
 
@@ -111,6 +114,7 @@ app.route('/', schedulesRouter);
 app.route('/', storageRouter);
 app.route('/', webhooksAdminRouter);
 app.route('/', webhooksPublicRouter);
+app.route('/', outboundWebhooksRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);
@@ -127,6 +131,8 @@ startPolarMeterPush();
 startAccountDeletionGc();
 startScheduleDispatcher();
 startWebhookDeliveriesRetentionCron();
+startOutboundWebhookDispatcher();
+startOutboundWebhookDeliveriesRetentionCron();
 
 // Audit-trail behind /info — one row per boot. recordDeploy itself
 // short-circuits when buildSha is the "dev" sentinel and never throws,

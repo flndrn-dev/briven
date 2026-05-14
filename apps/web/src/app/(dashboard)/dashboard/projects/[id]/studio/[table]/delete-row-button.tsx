@@ -3,9 +3,15 @@
 import { useState } from 'react';
 
 interface Props {
-  primaryKeyColumn: string;
-  primaryKeyValue: string | number;
-  action: (input: { primaryKeyColumn: string; primaryKeyValue: string | number }) => Promise<void>;
+  /**
+   * Row-identity payload. Length-1 for single-PK tables, length-N for
+   * composite. The api validates the column set against the table's
+   * actual primary key on every request.
+   */
+  primaryKey: Array<{ column: string; value: string | number }>;
+  action: (input: {
+    primaryKey: Array<{ column: string; value: string | number }>;
+  }) => Promise<void>;
 }
 
 /**
@@ -14,7 +20,7 @@ interface Props {
  * interaction. Keeps the destructive operation behind a deliberate
  * second click without modal infrastructure.
  */
-export function DeleteRowButton({ primaryKeyColumn, primaryKeyValue, action }: Props) {
+export function DeleteRowButton({ primaryKey, action }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +36,7 @@ export function DeleteRowButton({ primaryKeyColumn, primaryKeyValue, action }: P
     }
     setPending(true);
     try {
-      await action({ primaryKeyColumn, primaryKeyValue });
+      await action({ primaryKey });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'delete failed');
       setConfirming(false);

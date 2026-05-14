@@ -5,6 +5,7 @@ import { getDb } from '../db/client.js';
 import { auditLogs, projects } from '../db/schema.js';
 import { log } from '../lib/logger.js';
 import { audit } from './audit.js';
+import { publishEvent } from './outbound-webhooks.js';
 
 /**
  * Phase 3 abuse-report pipeline (slice).
@@ -285,6 +286,27 @@ export async function suspendProject(args: {
     userAgent: args.userAgent,
     metadata: { reason: args.reason, matched: ok },
   });
+  if (ok) {
+    // Fan-out to any outbound webhook subscriber listening for
+    // `project.suspended`. Failure here doesn't unwind the suspension —
+    // the customer's ability to react quickly to a suspension is a
+    // nice-to-have, the suspension itself is the load-bearing action.
+    await publishEvent({
+      projectId: args.projectId,
+      eventType: 'project.suspended',
+      payload: {
+        projectId: args.projectId,
+        reason: args.reason,
+        suspendedAt: new Date().toISOString(),
+      },
+    }).catch((err: unknown) => {
+      log.warn('outbound_publish_failed', {
+        event: 'project.suspended',
+        projectId: args.projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
   return ok;
 }
 
@@ -309,6 +331,22 @@ export async function unsuspendProject(args: {
     userAgent: args.userAgent,
     metadata: { matched: ok },
   });
+  if (ok) {
+    await publishEvent({
+      projectId: args.projectId,
+      eventType: 'project.resumed',
+      payload: {
+        projectId: args.projectId,
+        resumedAt: new Date().toISOString(),
+      },
+    }).catch((err: unknown) => {
+      log.warn('outbound_publish_failed', {
+        event: 'project.resumed',
+        projectId: args.projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
   return ok;
 }
 

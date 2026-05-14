@@ -285,11 +285,22 @@ function clamp(n: number, lo: number, hi: number): number {
 
 const COLUMN_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
 
+/**
+ * One {column, value} pair for matching a row by primary key. For
+ * single-PK tables this is a length-1 array; for composite-keyed tables
+ * (M2M, time-series with natural keys) it's length-N. The service
+ * enforces that the caller-provided column set EXACTLY matches the
+ * table's PK column set — a partial PK would silently match many rows.
+ */
+export interface PrimaryKeyValue {
+  readonly column: string;
+  readonly value: string | number;
+}
+
 export interface UpdateCellInput {
   readonly projectId: string;
   readonly tableName: string;
-  readonly primaryKeyColumn: string;
-  readonly primaryKeyValue: string | number;
+  readonly primaryKey: ReadonlyArray<PrimaryKeyValue>;
   readonly column: string;
   /** Already-typed JS value. The data plane casts via parameter binding. */
   readonly value: unknown;
@@ -297,6 +308,41 @@ export interface UpdateCellInput {
 
 export interface UpdateCellResult {
   readonly affected: number;
+}
+
+function assertPrimaryKeyMatches(
+  cols: ReadonlyArray<{ name: string; isPrimaryKey: boolean }>,
+  pk: ReadonlyArray<PrimaryKeyValue>,
+): void {
+  if (pk.length === 0) {
+    throw new ValidationError('primary key array must not be empty', {});
+  }
+  for (const pair of pk) {
+    if (!COLUMN_NAME_RE.test(pair.column)) {
+      throw new ValidationError('invalid primary-key column', { column: pair.column });
+    }
+  }
+  const callerSet = new Set(pk.map((p) => p.column));
+  if (callerSet.size !== pk.length) {
+    throw new ValidationError('duplicate primary-key column in request', {});
+  }
+  const tablePkSet = new Set(cols.filter((c) => c.isPrimaryKey).map((c) => c.name));
+  if (tablePkSet.size === 0) {
+    throw new ValidationError('table has no primary key — inline edits disabled', {});
+  }
+  if (tablePkSet.size !== callerSet.size) {
+    throw new ValidationError(
+      `primary-key column count mismatch — table has ${tablePkSet.size}, request has ${callerSet.size}`,
+      {},
+    );
+  }
+  for (const name of callerSet) {
+    if (!tablePkSet.has(name)) {
+      throw new ValidationError("primary-key column doesn't match the table's pk", {
+        column: name,
+      });
+    }
+  }
 }
 
 /**
@@ -308,16 +354,14 @@ export interface UpdateCellResult {
  *  - refuses to touch platform-owned `_briven_*` tables
  *  - parameterises the row-key + the new value so the only thing
  *    interpolated is the verified table/column name
+ *  - requires the primary-key array to match the table's pk EXACTLY —
+ *    a partial PK on a composite-keyed table would silently match many
+ *    rows and clobber every one
  */
 export async function updateCell(input: UpdateCellInput): Promise<UpdateCellResult> {
   await assertTableExists(input.projectId, input.tableName);
   if (!COLUMN_NAME_RE.test(input.column)) {
     throw new ValidationError('invalid column name', { column: input.column });
-  }
-  if (!COLUMN_NAME_RE.test(input.primaryKeyColumn)) {
-    throw new ValidationError('invalid primary-key column', {
-      primaryKeyColumn: input.primaryKeyColumn,
-    });
   }
   const cols = await getTableColumns(input.projectId, input.tableName);
   if (!cols.find((c) => c.name === input.column)) {
@@ -326,17 +370,23 @@ export async function updateCell(input: UpdateCellInput): Promise<UpdateCellResu
       column: input.column,
     });
   }
-  if (!cols.find((c) => c.name === input.primaryKeyColumn)) {
-    throw new ValidationError('primary-key column not found on table', {
-      table: input.tableName,
-      primaryKeyColumn: input.primaryKeyColumn,
-    });
-  }
+  assertPrimaryKeyMatches(cols, input.primaryKey);
+
   const schema = schemaNameFor(input.projectId);
   const sql = dataPlaneClient();
+  // Param positions: $1 is the SET value, $2..$N+1 are the WHERE clauses.
+  // Building the WHERE this way keeps every identifier inside backticks
+  // and every value parameter-bound.
+  const whereSql = input.primaryKey
+    .map((p, i) => `"${p.column}" = $${i + 2}`)
+    .join(' AND ');
+  const params: ReadonlyArray<never> = [
+    input.value as never,
+    ...input.primaryKey.map((p) => p.value as never),
+  ];
   const result = (await sql.unsafe(
-    `UPDATE "${schema}"."${input.tableName}" SET "${input.column}" = $1 WHERE "${input.primaryKeyColumn}" = $2`,
-    [input.value as never, input.primaryKeyValue as never],
+    `UPDATE "${schema}"."${input.tableName}" SET "${input.column}" = $1 WHERE ${whereSql}`,
+    params as unknown as never[],
   )) as { count?: number } & ReadonlyArray<unknown>;
   return { affected: typeof result.count === 'number' ? result.count : 0 };
 }
@@ -393,8 +443,7 @@ export async function insertRow(input: InsertRowInput): Promise<InsertRowResult>
 export interface DeleteRowInput {
   readonly projectId: string;
   readonly tableName: string;
-  readonly primaryKeyColumn: string;
-  readonly primaryKeyValue: string | number;
+  readonly primaryKey: ReadonlyArray<PrimaryKeyValue>;
 }
 
 export interface DeleteRowResult {
@@ -1209,23 +1258,18 @@ export async function dropColumn(input: {
  */
 export async function deleteRow(input: DeleteRowInput): Promise<DeleteRowResult> {
   await assertTableExists(input.projectId, input.tableName);
-  if (!COLUMN_NAME_RE.test(input.primaryKeyColumn)) {
-    throw new ValidationError('invalid primary-key column', {
-      primaryKeyColumn: input.primaryKeyColumn,
-    });
-  }
   const cols = await getTableColumns(input.projectId, input.tableName);
-  if (!cols.find((c) => c.name === input.primaryKeyColumn)) {
-    throw new ValidationError('primary-key column not found on table', {
-      table: input.tableName,
-      primaryKeyColumn: input.primaryKeyColumn,
-    });
-  }
+  assertPrimaryKeyMatches(cols, input.primaryKey);
+
   const schema = schemaNameFor(input.projectId);
   const sql = dataPlaneClient();
+  const whereSql = input.primaryKey
+    .map((p, i) => `"${p.column}" = $${i + 1}`)
+    .join(' AND ');
+  const params: ReadonlyArray<never> = input.primaryKey.map((p) => p.value as never);
   const result = (await sql.unsafe(
-    `DELETE FROM "${schema}"."${input.tableName}" WHERE "${input.primaryKeyColumn}" = $1`,
-    [input.primaryKeyValue as never],
+    `DELETE FROM "${schema}"."${input.tableName}" WHERE ${whereSql}`,
+    params as unknown as never[],
   )) as { count?: number } & ReadonlyArray<unknown>;
   return { affected: typeof result.count === 'number' ? result.count : 0 };
 }

@@ -7,6 +7,7 @@ import {
   functionLogs,
   projects,
   webhookDeliveries,
+  webhookOutboundDeliveries,
   type NewFunctionLog,
   type ProjectTier,
 } from '../db/schema.js';
@@ -407,6 +408,98 @@ export function startWebhookDeliveriesRetentionCron(): void {
   // pool capacity that the api request path also needs.
   setTimeout(run, 90_000);
   setInterval(run, WEBHOOK_DELIVERIES_RETENTION_TICK_MS);
+}
+
+/* ─── outbound-delivery retention ───────────────────────────────────── */
+// webhook_outbound_deliveries grows under retry storms — each event
+// emission inserts one row per subscriber, and a failing endpoint can
+// keep a row pending for ~30 min while attempts back off. Same per-tier
+// cutoff as function_logs + inbound deliveries (free=7d, pro=30d,
+// team=90d). Terminal rows (ok/failed/cancelled) prune by created_at;
+// pending rows are spared regardless of age — they're still on the
+// dispatcher's retry path until terminal.
+
+export async function pruneOldOutboundWebhookDeliveries(): Promise<number> {
+  const db = getDb();
+  let total = 0;
+  const now = Date.now();
+
+  for (const [tier, days] of Object.entries(RETENTION_DAYS_BY_TIER) as Array<
+    [ProjectTier, number]
+  >) {
+    const cutoff = new Date(now - days * 86_400_000);
+    const tierProjects = db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.tier, tier), isNull(projects.deletedAt)));
+    const res = await db
+      .delete(webhookOutboundDeliveries)
+      .where(
+        and(
+          lt(webhookOutboundDeliveries.createdAt, cutoff),
+          sql`${webhookOutboundDeliveries.projectId} IN ${tierProjects}`,
+          sql`${webhookOutboundDeliveries.status} <> 'pending'`,
+        ),
+      )
+      .returning({ id: webhookOutboundDeliveries.id });
+    total += res.length;
+    if (res.length > 0) {
+      log.info('outbound_deliveries_pruned', {
+        tier,
+        days,
+        count: res.length,
+        cutoff: cutoff.toISOString(),
+      });
+    }
+  }
+
+  // Orphan sweep — soft-deleted projects + unknown tiers, shortest cutoff.
+  const freeCutoff = new Date(now - RETENTION_DAYS_BY_TIER.free * 86_400_000);
+  const knownTiers = sql.raw(
+    Object.keys(RETENTION_DAYS_BY_TIER)
+      .map((t) => `'${t}'`)
+      .join(','),
+  );
+  const orphans = db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(sql`${projects.deletedAt} IS NOT NULL OR ${projects.tier} NOT IN (${knownTiers})`);
+  const orphanRes = await db
+    .delete(webhookOutboundDeliveries)
+    .where(
+      and(
+        lt(webhookOutboundDeliveries.createdAt, freeCutoff),
+        sql`${webhookOutboundDeliveries.projectId} IN ${orphans}`,
+        sql`${webhookOutboundDeliveries.status} <> 'pending'`,
+      ),
+    )
+    .returning({ id: webhookOutboundDeliveries.id });
+  total += orphanRes.length;
+  if (orphanRes.length > 0) {
+    log.info('outbound_deliveries_pruned', {
+      tier: 'orphan',
+      days: RETENTION_DAYS_BY_TIER.free,
+      count: orphanRes.length,
+      cutoff: freeCutoff.toISOString(),
+    });
+  }
+  return total;
+}
+
+const OUTBOUND_RETENTION_TICK_MS = 6 * 60 * 60 * 1000;
+
+export function startOutboundWebhookDeliveriesRetentionCron(): void {
+  const run = (): void => {
+    void pruneOldOutboundWebhookDeliveries().catch((err: unknown) => {
+      log.warn('outbound_deliveries_prune_failed', {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
+  // 105s after boot — offset from the inbound retention cron (90s) so
+  // the two retention sweeps don't race for the same connection pool.
+  setTimeout(run, 105_000);
+  setInterval(run, OUTBOUND_RETENTION_TICK_MS);
 }
 
 function sleep(ms: number): Promise<void> {
