@@ -1,5 +1,5 @@
 import { DocsShell } from '../../components/shell';
-import { INCIDENTS, sortedIncidents } from '../../lib/incidents';
+import { fetchIncidents } from '../../lib/incidents';
 
 export const metadata = { title: 'status' };
 export const dynamic = 'force-dynamic';
@@ -93,7 +93,10 @@ async function probe(svc: ServiceProbe): Promise<ProbeResult> {
 }
 
 export default async function StatusPage() {
-  const probes = await Promise.all(PROBES.map(probe));
+  const [probes, incidents] = await Promise.all([
+    Promise.all(PROBES.map(probe)),
+    fetchIncidents({ limit: 50, fresh: true }),
+  ]);
   const allOk = probes.every((p) => p.ok);
   const anyDown = probes.some((p) => !p.ok);
 
@@ -183,13 +186,13 @@ export default async function StatusPage() {
             rss
           </a>
         </div>
-        {INCIDENTS.length === 0 ? (
+        {incidents.length === 0 ? (
           <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
             no incidents on record. when one happens, an entry lands here and on the rss feed.
           </p>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
-            {sortedIncidents().map((inc) => (
+            {incidents.map((inc) => (
               <li
                 key={inc.id}
                 id={inc.id}
@@ -240,8 +243,8 @@ export default async function StatusPage() {
 
       <p className="mt-12 font-mono text-xs text-[var(--color-text-subtle)]">
         page renders fresh on every request (no cache). probe timeout: 3000ms. incidents are
-        operator-curated; alertmanager → discord persists them to docs/src/lib/incidents.ts
-        once the writer ships.
+        operator-curated and read live from the api (/v1/status/incidents); if the api is
+        unreachable, the list renders empty rather than failing the page.
       </p>
     </DocsShell>
   );

@@ -210,6 +210,11 @@ services:
       dockerfile: apps/docs/Dockerfile
     container_name: briven-docs
     restart: unless-stopped
+    depends_on: [api]
+    environment:
+      # Used by the /status page + /api/status/incidents.xml RSS feed
+      # to read live incidents from /v1/status/incidents.
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
     networks:
       - briven
     labels:

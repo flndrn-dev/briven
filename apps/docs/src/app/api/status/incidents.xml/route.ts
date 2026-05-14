@@ -1,4 +1,4 @@
-import { INCIDENTS, sortedIncidents } from '../../../../lib/incidents';
+import { fetchIncidents, type IncidentEntry } from '../../../../lib/incidents';
 
 /**
  * RSS feed of the incident history. Operators + customers can subscribe
@@ -8,6 +8,10 @@ import { INCIDENTS, sortedIncidents } from '../../../../lib/incidents';
  * Served at /api/status/incidents.xml — when the status page DNS
  * cutover to status.briven.tech lands, the feed moves to
  * status.briven.tech/incidents.xml via a redirect.
+ *
+ * Reads from the api (/v1/status/incidents) at request time. The api
+ * being unreachable yields an empty feed rather than a 5xx, so RSS
+ * subscribers don't get a poison-pilled feed on a transient outage.
  */
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +21,7 @@ const SITE_URL = process.env.BRIVEN_DOCS_ORIGIN ?? 'https://docs.briven.tech';
 const STATUS_URL = process.env.BRIVEN_STATUS_ORIGIN ?? `${SITE_URL}/status`;
 
 export async function GET(): Promise<Response> {
-  const items = sortedIncidents();
+  const items = await fetchIncidents({ limit: 50, fresh: true });
   const lastBuild = items[0]?.startedAt ?? new Date().toISOString();
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -55,7 +59,7 @@ ${inc.services.map((s) => `<category>${escapeXml(s)}</category>`).join('\n')}
   });
 }
 
-function buildDescription(inc: (typeof INCIDENTS)[number]): string {
+function buildDescription(inc: IncidentEntry): string {
   const status = inc.resolvedAt
     ? `resolved ${inc.resolvedAt}`
     : 'ongoing';
