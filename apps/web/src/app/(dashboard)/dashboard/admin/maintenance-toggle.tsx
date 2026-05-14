@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
+import { StepUpPrompt } from '../../../../components/step-up-prompt';
+
 interface Props {
   initial: boolean;
   apiOrigin: string;
@@ -21,6 +23,7 @@ export function MaintenanceToggle({ initial, apiOrigin }: Props) {
   const [phase, setPhase] = useState<'idle' | 'confirming' | 'flipping'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const [pendingFlip, setPendingFlip] = useState<boolean | null>(null);
 
   async function flip(next: boolean) {
     setPhase('flipping');
@@ -35,6 +38,14 @@ export function MaintenanceToggle({ initial, apiOrigin }: Props) {
           body: JSON.stringify({ maintenanceMode: next }),
         },
       );
+      if (res.status === 403) {
+        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (body?.code === 'step_up_required') {
+          setPendingFlip(next);
+          setPhase('idle');
+          return;
+        }
+      }
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         throw new Error(body || `flip failed: ${res.status}`);
@@ -109,6 +120,23 @@ export function MaintenanceToggle({ initial, apiOrigin }: Props) {
 
       {error ? (
         <p className="font-mono text-[10px] text-[var(--color-error)]">{error}</p>
+      ) : null}
+
+      {pendingFlip !== null ? (
+        <StepUpPrompt
+          apiOrigin={apiOrigin}
+          reason={
+            pendingFlip
+              ? 'entering maintenance returns 503 across the customer-facing surface. confirm with your password.'
+              : 'exiting maintenance resumes customer traffic. confirm with your password.'
+          }
+          onSuccess={async () => {
+            const next = pendingFlip;
+            setPendingFlip(null);
+            if (next !== null) await flip(next);
+          }}
+          onCancel={() => setPendingFlip(null)}
+        />
       ) : null}
     </li>
   );

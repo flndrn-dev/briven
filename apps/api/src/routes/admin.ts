@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { env } from '../env.js';
 import { requireAdmin } from '../middleware/admin.js';
 import { requireAuth } from '../middleware/session.js';
+import { requireRecentMfa } from '../middleware/step-up.js';
 import type { AppEnv } from '../types/app-env.js';
 import {
   ABUSE_RESOLUTION,
@@ -43,6 +44,19 @@ export const adminRouter = new Hono<AppEnv>();
 
 adminRouter.use('/v1/admin/*', requireAuth());
 adminRouter.use('/v1/admin/*', requireAdmin());
+// Every admin MUTATION requires fresh step-up auth per CLAUDE.md §5.4.
+// Reads pass through so the dashboard can render without re-prompting on
+// every page navigation; writes (POST/PATCH/DELETE/PUT) check
+// users.last_mfa_at and return 403 step_up_required when stale. The
+// dashboard surfaces an inline password prompt to refresh in-place.
+const mfa = requireRecentMfa(10);
+adminRouter.use('/v1/admin/*', async (c, next) => {
+  const method = c.req.method;
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    return next();
+  }
+  return mfa(c, next);
+});
 
 adminRouter.get('/v1/admin/stats', async (c) => c.json(await adminStats()));
 
@@ -514,13 +528,29 @@ adminRouter.delete('/v1/admin/signup-allowlist/:email', async (c) => {
  * `openSignups` reads the effective value (DB override → env fallback).
  */
 adminRouter.get('/v1/admin/launch-status', async (c) => {
+  const actor = c.get('user')!;
   const { getOpenSignupsFlag, getPlatformSetting } = await import(
     '../services/platform-settings.js'
   );
+  const { getDb } = await import('../db/client.js');
+  const { users } = await import('../db/schema.js');
+  const { eq } = await import('drizzle-orm');
+  const db = getDb();
+  const [userRow] = await db
+    .select({ lastMfaAt: users.lastMfaAt })
+    .from(users)
+    .where(eq(users.id, actor.id))
+    .limit(1);
   const [openSignups, maintenanceMode] = await Promise.all([
     getOpenSignupsFlag(),
     getPlatformSetting<boolean>('maintenanceMode', false),
   ]);
+  // Compute the actor's step-up freshness so the dashboard can show a
+  // banner + re-attest button. Mirrors the 10-min window the
+  // requireRecentMfa middleware enforces.
+  const lastMfaAt = userRow?.lastMfaAt ?? null;
+  const stepUpExpiresAt = lastMfaAt ? new Date(lastMfaAt.getTime() + 10 * 60_000) : null;
+  const stepUpFresh = stepUpExpiresAt ? stepUpExpiresAt.getTime() > Date.now() : false;
   return c.json({
     openSignups,
     openSignupsEnvDefault: env.BRIVEN_OPEN_SIGNUPS,
@@ -532,6 +562,8 @@ adminRouter.get('/v1/admin/launch-status', async (c) => {
     minioConfigured: Boolean(
       env.BRIVEN_MINIO_ENDPOINT && env.BRIVEN_MINIO_ACCESS_KEY && env.BRIVEN_MINIO_SECRET_KEY,
     ),
+    stepUpFresh,
+    stepUpExpiresAt: stepUpExpiresAt?.toISOString() ?? null,
   });
 });
 
