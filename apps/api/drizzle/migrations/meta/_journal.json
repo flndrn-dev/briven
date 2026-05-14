@@ -204,6 +204,13 @@
       "when": 1779250000000,
       "tag": "0028_migration_requests_public",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1779300000000,
+      "tag": "0029_marketing_events",
+      "breakpoints": true
     }
   ]
 }

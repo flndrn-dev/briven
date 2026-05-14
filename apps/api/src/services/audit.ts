@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { newId } from '@briven/shared';
-import { and, desc, eq, like } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { auditLogs, type NewAuditLog } from '../db/schema.js';
@@ -119,6 +119,52 @@ export async function listAuditByActionPrefix(
     })
     .from(auditLogs)
     .where(like(auditLogs.action, `${prefix}%`))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({
+    ...r,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+  }));
+}
+
+/**
+ * Audit entries scoped to a specific migration request id. The request
+ * id lives in audit_logs.metadata.requestId (jsonb). Used by the
+ * customer-facing /dashboard/migrations/[id] timeline to show every
+ * status change + operator action chronologically.
+ *
+ * Restricts to known migration-related action prefixes so a malicious
+ * payload that happens to put a forged requestId into an unrelated
+ * action's metadata never surfaces here.
+ */
+const MIGRATION_AUDIT_ACTIONS = [
+  'migration_request.create',
+  'migration_request.public_create',
+  'admin.migration_request.update',
+  'admin.migration_request.promote_to_user',
+] as const;
+
+export async function listAuditForMigrationRequest(
+  requestId: string,
+  limit = 100,
+): Promise<AuditRow[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      actorId: auditLogs.actorId,
+      ipHash: auditLogs.ipHash,
+      metadata: auditLogs.metadata,
+      createdAt: auditLogs.createdAt,
+    })
+    .from(auditLogs)
+    .where(
+      and(
+        inArray(auditLogs.action, [...MIGRATION_AUDIT_ACTIONS]),
+        sql`${auditLogs.metadata}->>'requestId' = ${requestId}`,
+      ),
+    )
     .orderBy(desc(auditLogs.createdAt))
     .limit(limit);
   return rows.map((r) => ({

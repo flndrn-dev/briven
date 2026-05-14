@@ -35,10 +35,12 @@ import {
   updateIncident,
 } from '../services/incidents.js';
 import { sendMigrationStatusUpdate } from '../lib/email.js';
+import { getMarketingFunnel } from '../services/marketing-events.js';
 import { log } from '../lib/logger.js';
 import {
   getMigrationRequest,
   listMigrationRequestsForAdmin,
+  promoteMigrationRequestToUser,
   updateMigrationRequest,
 } from '../services/migration-requests.js';
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
@@ -830,6 +832,53 @@ adminRouter.patch('/v1/admin/migration-requests/:id', async (c) => {
       });
     }
     return c.json({
+      request: {
+        ...request,
+        estimatedRows:
+          request.estimatedRows == null ? null : request.estimatedRows.toString(),
+        createdAt: request.createdAt.toISOString(),
+        updatedAt: request.updatedAt.toISOString(),
+      },
+    });
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+/**
+ * Promote an unauth lead to a user account. Used when an operator
+ * verifies (via the contact email match) that the briven user signing
+ * in / already signed in is the same person who submitted the lead.
+ * Idempotent. Returns { linkedUserId: null } when no user with the
+ * lead's email exists yet — operator can wait for sign-up and retry.
+ */
+adminRouter.get('/v1/admin/marketing-funnel', async (c) => {
+  const sinceDays = Math.max(1, Math.min(365, Number(c.req.query('days')) || 30));
+  return c.json(await getMarketingFunnel({ sinceDays }));
+});
+
+adminRouter.post('/v1/admin/migration-requests/:id/promote-to-user', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  try {
+    const lead = await getMigrationRequest(id);
+    const { request, linkedUserId } = await promoteMigrationRequestToUser(
+      id,
+      lead.contactEmail,
+    );
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'admin.migration_request.promote_to_user',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { requestId: id, linkedUserId, matchedEmail: lead.contactEmail },
+    });
+    return c.json({
+      linkedUserId,
       request: {
         ...request,
         estimatedRows:
