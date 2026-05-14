@@ -8,6 +8,9 @@ const SITE = 'https://briven.tech';
  */
 const PATHS: readonly string[] = [
   '/',
+  '/pricing',
+  '/compare',
+  '/migrate',
   '/signin',
   '/privacy',
   '/terms',
