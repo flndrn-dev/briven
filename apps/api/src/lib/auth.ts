@@ -210,7 +210,12 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          if (env.BRIVEN_OPEN_SIGNUPS) return;
+          // DB-backed override (platform_settings.openSignups) takes
+          // precedence over the env var; the env stays as the bootstrap
+          // default until the first dashboard flip writes a row.
+          const { getOpenSignupsFlag } = await import('../services/platform-settings.js');
+          const openSignups = await getOpenSignupsFlag();
+          if (openSignups) return;
           const email = user.email?.toLowerCase().trim();
           if (!email) {
             throw new Error('signup_allowlist_required: email missing on user.create');
@@ -239,7 +244,12 @@ export const auth = betterAuth({
               error: err instanceof Error ? err.message : String(err),
             });
           }
-          if (!env.BRIVEN_OPEN_SIGNUPS) {
+          // Stamp the allowlist row when signups are gated. Reads the
+          // same DB-backed flag the before-hook used, so a mid-flow
+          // flag flip stays consistent.
+          const { getOpenSignupsFlag } = await import('../services/platform-settings.js');
+          const openSignups = await getOpenSignupsFlag();
+          if (!openSignups) {
             try {
               const { markAllowlistAccepted } = await import(
                 '../services/signup-allowlist.js'

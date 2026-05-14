@@ -762,6 +762,23 @@ export const abuseReports = pgTable(
   }),
 );
 
+/* ─── platform_settings (single-row dashboard-controllable flags) ─── */
+// Key/value JSONB store for platform-level flags an admin needs to flip
+// without a container restart. Today: `openSignups` (boolean). Future:
+// rate-limit overrides, maintenance-mode toggle, feature flags.
+//
+// Reads cache in-process for 60s — the auth signup hot path touches
+// this on every signup attempt and we don't want a DB roundtrip there
+// per request. Writes invalidate the cache (single-process; on multi-
+// instance the next read picks up the change within the TTL window).
+
+export const platformSettings = pgTable('platform_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').$type<unknown>().notNull(),
+  updatedAt: updatedAt(),
+  updatedBy: text('updated_by').references(() => users.id, { onDelete: 'set null' }),
+});
+
 /* ─── signup_allowlist (invite-only beta gate) ────────────────────── */
 // When BRIVEN_OPEN_SIGNUPS=false (the default for the private beta),
 // Better Auth's user.create hook rejects any email not on this list. An
@@ -941,3 +958,5 @@ export type AbuseReport = typeof abuseReports.$inferSelect;
 export type NewAbuseReport = typeof abuseReports.$inferInsert;
 export type SignupAllowlistEntry = typeof signupAllowlist.$inferSelect;
 export type NewSignupAllowlistEntry = typeof signupAllowlist.$inferInsert;
+export type PlatformSetting = typeof platformSettings.$inferSelect;
+export type NewPlatformSetting = typeof platformSettings.$inferInsert;

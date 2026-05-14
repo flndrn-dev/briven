@@ -1,4 +1,5 @@
 import { apiJson } from '../../../../lib/api';
+import { OpenSignupsToggle } from './open-signups-toggle';
 
 interface Stats {
   users: number;
@@ -8,11 +9,16 @@ interface Stats {
 
 interface LaunchStatus {
   openSignups: boolean;
+  openSignupsEnvDefault: boolean;
   discordInviteUrl: string | null;
   domain: string;
   polarConfigured: boolean;
   mitteraConfigured: boolean;
   minioConfigured: boolean;
+}
+
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
 }
 
 export const dynamic = 'force-dynamic';
@@ -57,15 +63,10 @@ function LaunchPanel({ launch }: { launch: LaunchStatus }) {
       </header>
 
       <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-        <FlagRow
-          label="signups"
-          state={launch.openSignups ? 'open' : 'invite-only'}
-          tone={launch.openSignups ? 'primary' : 'muted'}
-          hint={
-            launch.openSignups
-              ? 'public can sign up directly at /signin'
-              : 'flip BRIVEN_OPEN_SIGNUPS=true on the api host and redeploy to open signups'
-          }
+        <OpenSignupsToggle
+          initialOpen={launch.openSignups}
+          envDefault={launch.openSignupsEnvDefault}
+          apiOrigin={publicApiOrigin()}
         />
         <FlagRow
           label="discord invite"
