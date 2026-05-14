@@ -103,6 +103,12 @@ const envSchema = z.object({
   // docs/runbooks/discord-setup.md).
   BRIVEN_DISCORD_INVITE_URL: z.string().url().optional(),
 
+  // Inbox the operator notification email is sent to whenever a
+  // customer submits /dashboard/projects/new/migrate/<source>. Defaults
+  // to migrations@<BRIVEN_DOMAIN> when unset; override if the alias
+  // routes elsewhere (e.g. a shared support inbox).
+  BRIVEN_MIGRATIONS_INBOX: z.string().email().optional(),
+
   // Konnos OAuth — Forgejo at code.konnos.org. Better Auth's generic OAuth
   // plugin lets us reuse the same callback shape for any OAuth2/OIDC
   // provider; the Forgejo endpoints (authorize / token / userinfo) are

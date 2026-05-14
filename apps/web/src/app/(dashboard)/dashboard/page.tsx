@@ -49,21 +49,30 @@ const TIER_LABEL: Record<Project['tier'], string> = {
 export default async function DashboardHome() {
   const user = await requireUser();
 
-  const [projectsResult, invitesResult, orgInvitesResult] = await Promise.all([
-    apiJson<{ projects: Project[] }>('/v1/projects').catch(() => ({
-      projects: [] as Project[],
-    })),
-    apiJson<{ invitations: PendingInvitation[] }>('/v1/me/invitations').catch(() => ({
-      invitations: [] as PendingInvitation[],
-    })),
-    apiJson<{ invitations: PendingOrgInvitation[] }>('/v1/me/org-invitations').catch(() => ({
-      invitations: [] as PendingOrgInvitation[],
-    })),
-  ]);
+  const [projectsResult, invitesResult, orgInvitesResult, migrationsResult] =
+    await Promise.all([
+      apiJson<{ projects: Project[] }>('/v1/projects').catch(() => ({
+        projects: [] as Project[],
+      })),
+      apiJson<{ invitations: PendingInvitation[] }>('/v1/me/invitations').catch(() => ({
+        invitations: [] as PendingInvitation[],
+      })),
+      apiJson<{ invitations: PendingOrgInvitation[] }>('/v1/me/org-invitations').catch(
+        () => ({
+          invitations: [] as PendingOrgInvitation[],
+        }),
+      ),
+      apiJson<{ requests: { id: string; source: string; status: string }[] }>(
+        '/v1/migration-requests',
+      ).catch(() => ({ requests: [] as { id: string; source: string; status: string }[] })),
+    ]);
 
   const projects = projectsResult.projects;
   const invitations = invitesResult.invitations;
   const orgInvitations = orgInvitesResult.invitations;
+  const openMigrations = migrationsResult.requests.filter(
+    (r) => r.status !== 'completed' && r.status !== 'cancelled',
+  );
 
   // Cross-project activity rollup: fan-out to the three most recently
   // created projects only. Bounded N+1 keeps the dashboard root cheap.
@@ -139,6 +148,25 @@ export default async function DashboardHome() {
             </p>
             <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
               open the link in the email to accept.
+            </p>
+          </div>
+          <span className="font-mono text-sm text-[var(--color-primary)]">→</span>
+        </Link>
+      ) : null}
+
+      {openMigrations.length > 0 ? (
+        <Link
+          href="/dashboard/migrations"
+          className="flex items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
+        >
+          <div>
+            <p className="font-mono text-sm text-[var(--color-text)]">
+              {openMigrations.length === 1
+                ? `your ${openMigrations[0]?.source ?? ''} migration is in progress.`
+                : `${openMigrations.length} migrations in progress.`}
+            </p>
+            <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
+              click to see status updates.
             </p>
           </div>
           <span className="font-mono text-sm text-[var(--color-primary)]">→</span>

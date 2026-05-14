@@ -52,16 +52,16 @@ export default async function MigrationThanksPage() {
         </p>
         <div className="flex flex-wrap gap-3">
           <Link
-            href="/dashboard/projects/new/blank"
+            href="/dashboard/migrations"
             className="rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
           >
-            create a blank project to explore
+            track this migration
           </Link>
           <Link
-            href="/dashboard"
+            href="/dashboard/projects/new/blank"
             className="rounded-md border border-[var(--color-border)] px-4 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           >
-            back to dashboard
+            create a blank project to explore
           </Link>
         </div>
       </div>
