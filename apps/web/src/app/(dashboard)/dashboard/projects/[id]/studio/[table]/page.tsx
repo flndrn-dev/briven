@@ -85,19 +85,16 @@ export default async function TablePage({
   const nextOffset = offset + PAGE_SIZE;
 
   // Real primary-key detection — sourced from pg_index.indisprimary on
-  // the api side. Falls back to the first column only when the table
-  // genuinely has no PK (rare; flagged in the UI below). For composite
-  // PKs we pick the first PK column — composite-key edits land in a
-  // future slice when there's a UI affordance for multi-column row
-  // identity.
+  // the api side. Composite keys produce multiple PK columns; we send
+  // every column's value as part of the row-identity payload. Tables
+  // with no PK route to read-only mode (flagged in the banner below).
   const pkColumns = data.columns.filter((c) => c.isPrimaryKey);
-  const pkColumn = pkColumns[0]?.name ?? data.columns[0]?.name ?? null;
+  const pkColumnNames = pkColumns.map((c) => c.name);
   const tableHasPk = pkColumns.length > 0;
   const hasCompositePk = pkColumns.length > 1;
 
   async function updateRow(input: {
-    primaryKeyColumn: string;
-    primaryKeyValue: string | number;
+    primaryKey: Array<{ column: string; value: string | number }>;
     column: string;
     value: unknown;
   }): Promise<void> {
@@ -118,8 +115,7 @@ export default async function TablePage({
   }
 
   async function deleteRowAction(input: {
-    primaryKeyColumn: string;
-    primaryKeyValue: string | number;
+    primaryKey: Array<{ column: string; value: string | number }>;
   }): Promise<void> {
     'use server';
     const res = await apiFetch(
@@ -208,7 +204,7 @@ export default async function TablePage({
             ) : null}
             {hasCompositePk ? (
               <span className="ml-2 text-[var(--color-text-subtle)]">
-                · composite pk — use the sql editor for row edits
+                · composite pk ({pkColumnNames.join(', ')})
               </span>
             ) : null}
           </p>
@@ -259,18 +255,25 @@ export default async function TablePage({
               </tr>
             ) : (
               data.rows.map((row, i) => {
-                const pkValue = pkColumn ? row[pkColumn] : null;
-                // Allow inline edits only when the table has a real, single-
-                // column primary key. Surrogate-PK-by-first-column would
-                // silently UPDATE the wrong row when two rows share the
-                // same first-column value; composite-PK tables would lose
-                // every row sharing the first PK column. Both cases route
-                // through the SQL editor instead, surfaced in the banner.
-                const canEdit =
-                  tableHasPk
-                  && !hasCompositePk
-                  && pkColumn !== null
-                  && (typeof pkValue === 'string' || typeof pkValue === 'number');
+                // Build the row-identity payload from EVERY PK column.
+                // For single-PK tables this is length-1; for composite,
+                // length-N. The api validates the column set against the
+                // table's actual pg_index.indisprimary on every request.
+                const pkPairs: Array<{ column: string; value: string | number }> = [];
+                let pkUsable = tableHasPk;
+                for (const name of pkColumnNames) {
+                  const v = row[name];
+                  if (typeof v !== 'string' && typeof v !== 'number') {
+                    pkUsable = false;
+                    break;
+                  }
+                  pkPairs.push({ column: name, value: v });
+                }
+                // Allow inline edits only when every PK value resolves to
+                // string|number. A null or bytea PK value (rare but
+                // possible) would break the round-trip — read-only fall
+                // back is safer than half-working edit.
+                const canEdit = pkUsable && pkPairs.length > 0;
                 return (
                   <tr
                     key={i}
@@ -292,8 +295,7 @@ export default async function TablePage({
                               {canEdit ? (
                                 <EditableCell
                                   action={updateRow}
-                                  primaryKeyColumn={pkColumn}
-                                  primaryKeyValue={pkValue as string | number}
+                                  primaryKey={pkPairs}
                                   column={col.name}
                                   initialValue={cellValue}
                                   readOnly={isPk}
@@ -317,11 +319,7 @@ export default async function TablePage({
                     })}
                     <td className="px-3 py-2 align-top">
                       {canEdit ? (
-                        <DeleteRowButton
-                          action={deleteRowAction}
-                          primaryKeyColumn={pkColumn}
-                          primaryKeyValue={pkValue as string | number}
-                        />
+                        <DeleteRowButton action={deleteRowAction} primaryKey={pkPairs} />
                       ) : null}
                     </td>
                   </tr>

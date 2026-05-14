@@ -159,15 +159,19 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
               hint={`${usage.tier} tier`}
               formatter={formatCount}
             />
-            <Card
+            <QuotaCard
               label="storage"
-              value={`${formatBytes(usage.storage.bytes)} / ${formatBytes(usage.limits.storageBytes)}`}
+              current={usage.storage.bytes}
+              limit={usage.limits.storageBytes}
               hint={`${usage.storage.tableCount} table${usage.storage.tableCount === 1 ? '' : 's'}`}
+              formatter={formatBytes}
             />
-            <Card
+            <QuotaCard
               label="realtime"
-              value={`${formatSeconds(usage.connection.seconds)} / ${formatSeconds(usage.limits.connectionSecondsPerMonth)}`}
+              current={usage.connection.seconds}
+              limit={usage.limits.connectionSecondsPerMonth}
               hint="ws connection-seconds"
+              formatter={formatSeconds}
             />
             <Card
               label="compute"

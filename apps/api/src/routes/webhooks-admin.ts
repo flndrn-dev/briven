@@ -1,14 +1,19 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
+import { createHmac } from 'node:crypto';
+
 import { ValidationError } from '@briven/shared';
 
+import { env } from '../env.js';
 import { requireAuth } from '../middleware/session.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   createWebhook,
+  decryptEndpointSecret,
   deleteWebhook,
+  getWebhookRaw,
   listDeliveries,
   listWebhooks,
   rotateWebhookSecret,
@@ -162,6 +167,85 @@ const DELIVERY_STATUS_VALUES = [
   'invoke_error',
   'disabled',
 ] as const;
+
+/**
+ * Test-fire — mints a sample payload, signs it with the endpoint's
+ * stored secret, and POSTs to the endpoint's own public URL. The
+ * round-trip exercises the same path an external caller takes:
+ * signature verification + delivery recording + function invocation.
+ *
+ * The result is returned inline so the dashboard can show "200 / 401 /
+ * 410 / 502" + duration without forcing the admin to refresh the
+ * deliveries log. A delivery row is still recorded by the public route
+ * during the round-trip — that's the truth-source if the dashboard
+ * response is missed.
+ */
+webhooksAdminRouter.post(
+  '/v1/projects/:id/webhooks/:endpointId/test-fire',
+  async (c) => {
+    const user = c.get('user')!;
+    const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
+    const endpointId = c.req.param('endpointId');
+    const endpoint = await getWebhookRaw(endpointId, project.id);
+    const secret = decryptEndpointSecret(endpoint);
+
+    const timestamp = String(Date.now());
+    const body = JSON.stringify({
+      test: true,
+      sentAt: new Date().toISOString(),
+      triggeredBy: user.id,
+      endpoint: { id: endpoint.id, name: endpoint.name },
+    });
+    const signature = `v1=${createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')}`;
+
+    const url = `${env.BRIVEN_API_ORIGIN}/webhooks/${project.id}/${endpoint.id}`;
+    const t0 = Date.now();
+    let status: number | null = null;
+    let responseBody: string | null = null;
+    let networkError: string | null = null;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-briven-signature': signature,
+          'x-briven-timestamp': timestamp,
+        },
+        body,
+        // The api host signs its own request to itself — should resolve
+        // fast, but cap to keep the dashboard responsive when the
+        // function itself is slow or hung.
+        signal: AbortSignal.timeout(15_000),
+      });
+      status = res.status;
+      const raw = await res.text().catch(() => '');
+      // Truncate so a runaway function body can't blow up the dashboard
+      // JSON payload — first 4 KiB is plenty to see what went wrong.
+      responseBody = raw.length > 4096 ? `${raw.slice(0, 4096)}…` : raw;
+    } catch (err) {
+      networkError = err instanceof Error ? err.message : 'fetch failed';
+    }
+    const durationMs = Date.now() - t0;
+
+    await audit({
+      actorId: user.id,
+      projectId: project.id,
+      action: 'webhook.test-fire',
+      ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { endpointId, status, durationMs },
+    });
+
+    return c.json({
+      ok: status !== null && status >= 200 && status < 300,
+      status,
+      durationMs,
+      url,
+      responseBody,
+      networkError,
+    });
+  },
+);
 
 webhooksAdminRouter.get(
   '/v1/projects/:id/webhooks/:endpointId/deliveries',

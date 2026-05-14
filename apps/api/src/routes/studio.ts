@@ -26,10 +26,31 @@ import {
   truncateTable,
   STUDIO_COLUMN_TYPES,
   updateCell,
+  type PrimaryKeyValue,
   type StudioColumnReference,
   type StudioColumnSpec,
   type StudioColumnType,
 } from '../services/studio.js';
+
+/**
+ * Shape-validate the `primaryKey` array a client sent. Returns the typed
+ * array on success, null on any malformed input — the route then returns
+ * a 400 with a clear example. The service layer additionally checks that
+ * the column SET matches the table's actual PK; that's not done here so
+ * the route doesn't need a db roundtrip to reject obvious garbage.
+ */
+function parsePrimaryKey(raw: unknown): ReadonlyArray<PrimaryKeyValue> | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: PrimaryKeyValue[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') return null;
+    const e = entry as { column?: unknown; value?: unknown };
+    if (typeof e.column !== 'string') return null;
+    if (typeof e.value !== 'string' && typeof e.value !== 'number') return null;
+    out.push({ column: e.column, value: e.value });
+  }
+  return out;
+}
 
 const FK_ON_DELETE = ['cascade', 'restrict', 'setNull', 'noAction'] as const;
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
@@ -208,21 +229,17 @@ studioRouter.patch(
       return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
     }
     const body = (await c.req.json().catch(() => null)) as {
-      primaryKeyColumn?: string;
-      primaryKeyValue?: string | number;
+      primaryKey?: Array<{ column?: unknown; value?: unknown }>;
       column?: string;
       value?: unknown;
     } | null;
-    if (
-      !body
-      || typeof body.primaryKeyColumn !== 'string'
-      || typeof body.column !== 'string'
-      || (typeof body.primaryKeyValue !== 'string' && typeof body.primaryKeyValue !== 'number')
-    ) {
+    const primaryKey = parsePrimaryKey(body?.primaryKey);
+    if (!body || typeof body.column !== 'string' || !primaryKey) {
       return c.json(
         {
           code: 'validation_failed',
-          message: 'expected { primaryKeyColumn, primaryKeyValue, column, value }',
+          message:
+            'expected { primaryKey: [{column, value}, ...], column, value } — primaryKey must be a non-empty array of {column: string, value: string | number}',
         },
         400,
       );
@@ -230,8 +247,7 @@ studioRouter.patch(
     const result = await updateCell({
       projectId,
       tableName,
-      primaryKeyColumn: body.primaryKeyColumn,
-      primaryKeyValue: body.primaryKeyValue,
+      primaryKey,
       column: body.column,
       value: body.value,
     });
@@ -245,7 +261,7 @@ studioRouter.patch(
       metadata: {
         table: tableName,
         column: body.column,
-        primaryKeyColumn: body.primaryKeyColumn,
+        primaryKeyColumns: primaryKey.map((p) => p.column),
         affected: result.affected,
       },
     });
@@ -696,25 +712,20 @@ studioRouter.delete(
       return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
     }
     const body = (await c.req.json().catch(() => null)) as {
-      primaryKeyColumn?: string;
-      primaryKeyValue?: string | number;
+      primaryKey?: Array<{ column?: unknown; value?: unknown }>;
     } | null;
-    if (
-      !body
-      || typeof body.primaryKeyColumn !== 'string'
-      || (typeof body.primaryKeyValue !== 'string' && typeof body.primaryKeyValue !== 'number')
-    ) {
+    const primaryKey = parsePrimaryKey(body?.primaryKey);
+    if (!primaryKey) {
       return c.json(
-        { code: 'validation_failed', message: 'expected { primaryKeyColumn, primaryKeyValue }' },
+        {
+          code: 'validation_failed',
+          message:
+            'expected { primaryKey: [{column, value}, ...] } — primaryKey must be a non-empty array of {column: string, value: string | number}',
+        },
         400,
       );
     }
-    const result = await deleteRow({
-      projectId,
-      tableName,
-      primaryKeyColumn: body.primaryKeyColumn,
-      primaryKeyValue: body.primaryKeyValue,
-    });
+    const result = await deleteRow({ projectId, tableName, primaryKey });
     const user = c.get('user');
     await audit({
       actorId: user?.id ?? null,
@@ -724,7 +735,7 @@ studioRouter.delete(
       userAgent: c.req.header('user-agent') ?? null,
       metadata: {
         table: tableName,
-        primaryKeyColumn: body.primaryKeyColumn,
+        primaryKeyColumns: primaryKey.map((p) => p.column),
         affected: result.affected,
       },
     });

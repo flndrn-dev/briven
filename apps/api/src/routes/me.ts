@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { getDb } from '../db/client.js';
+import { users } from '../db/schema.js';
+import { auth } from '../lib/auth.js';
 import { requireAuth } from '../middleware/session.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types/app-env.js';
@@ -208,5 +212,65 @@ meRouter.post(
       metadata: { counts },
     });
     return c.json({ deleted: true });
+  },
+);
+
+const stepUpSchema = z.object({
+  password: z.string().min(1).max(200),
+});
+
+/**
+ * Step-up authentication. The caller re-supplies their account password;
+ * on success we bump `users.last_mfa_at` to now. The `requireRecentMfa`
+ * middleware on admin routes then accepts requests for the next 10 min.
+ *
+ * Verification delegates to Better Auth's `signInEmail` — it's the
+ * supported way to validate a password without re-implementing the
+ * scrypt cost params. The extra session row that Better Auth mints is
+ * accepted noise for v1; the existing session continues to drive the
+ * request. A real TOTP/WebAuthn upgrade is a Phase 3 follow-up.
+ */
+meRouter.post(
+  '/v1/me/step-up',
+  requireAuth(),
+  rateLimit({
+    scope: 'me-step-up',
+    limit: 10,
+    windowMs: 5 * 60_000,
+    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+  }),
+  async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+    const body = await c.req.json().catch(() => null);
+    const parsed = stepUpSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+    }
+    // Delegate password verification to Better Auth. signInEmail throws
+    // on bad password — treat any error as "wrong password" so we don't
+    // leak whether the email exists vs whether the password's wrong.
+    try {
+      await auth.api.signInEmail({
+        body: { email: user.email, password: parsed.data.password },
+        headers: c.req.raw.headers,
+      });
+    } catch {
+      return c.json({ code: 'invalid_credentials', message: 'password incorrect' }, 401);
+    }
+    const db = getDb();
+    await db
+      .update(users)
+      .set({ lastMfaAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+    await audit({
+      actorId: user.id,
+      projectId: null,
+      action: 'auth.step_up',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {},
+    });
+    return c.json({ ok: true, validUntilMs: Date.now() + 10 * 60_000 });
   },
 );

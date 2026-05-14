@@ -5,13 +5,16 @@ import { useState } from 'react';
 interface Props {
   /** Server-action that drives the actual PATCH; closes over projectId + table. */
   action: (input: {
-    primaryKeyColumn: string;
-    primaryKeyValue: string | number;
+    primaryKey: Array<{ column: string; value: string | number }>;
     column: string;
     value: unknown;
   }) => Promise<void>;
-  primaryKeyColumn: string;
-  primaryKeyValue: string | number;
+  /**
+   * Row-identity payload. Length-1 for single-PK tables, length-N for
+   * composite. The api enforces that the column set matches the table's
+   * actual primary key — no partial-PK shortcuts.
+   */
+  primaryKey: Array<{ column: string; value: string | number }>;
   column: string;
   initialValue: unknown;
   /** True when the column is the primary key — read-only. */
@@ -25,8 +28,7 @@ interface Props {
  */
 export function EditableCell({
   action,
-  primaryKeyColumn,
-  primaryKeyValue,
+  primaryKey,
   column,
   initialValue,
   readOnly,
@@ -54,7 +56,7 @@ export function EditableCell({
     const next = parseDraft(draft, committed);
     setCommitted(next);
     try {
-      await action({ primaryKeyColumn, primaryKeyValue, column, value: next });
+      await action({ primaryKey, column, value: next });
     } catch (err) {
       setCommitted(previous);
       setDraft(stringify(previous));

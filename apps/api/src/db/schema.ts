@@ -45,6 +45,11 @@ export const users = pgTable(
     // (CLAUDE.md §5.4). Defaults false; j flips the bit directly in
     // postgres for the first admin.
     isAdmin: boolean('is_admin').default(false).notNull(),
+    // Most recent step-up attestation timestamp. The `requireRecentMfa`
+    // middleware accepts requests when this is within the configured
+    // window (default 10 min per CLAUDE.md §5.4). Bumped by
+    // POST /v1/auth/step-up after a successful password re-prompt.
+    lastMfaAt: ts('last_mfa_at'),
     // Set by an admin to freeze all sign-in attempts + deploys. Sessions
     // are invalidated on next request.
     suspendedAt: ts('suspended_at'),
@@ -713,6 +718,97 @@ export const webhookDeliveries = pgTable(
   }),
 );
 
+/* ─── webhook_subscribers (customer-defined outbound webhooks) ────── */
+// Platform → customer fan-out: when briven emits an event (abuse report
+// opened, deploy succeeded/failed, tier changed) we POST a signed payload
+// to every matching subscriber's target_url. Customers verify our
+// signature exactly the way external sources verify theirs on the
+// inbound path — same HMAC scheme, same X-Briven-* headers.
+
+export const webhookOutboundStatus = [
+  'pending',
+  'ok',
+  'failed',
+  'cancelled',
+] as const;
+export type WebhookOutboundStatus = (typeof webhookOutboundStatus)[number];
+
+export const webhookSubscribers = pgTable(
+  'webhook_subscribers',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    targetUrl: text('target_url').notNull(),
+    // Comma-separated event-type allowlist. `*` matches everything.
+    // Concrete values today: abuse.report.opened, deploy.succeeded,
+    // deploy.failed, tier.changed, project.suspended.
+    eventTypes: text('event_types').notNull().default('*'),
+    // Same AES-256-GCM scheme as inbound webhook_endpoints. Plaintext
+    // returned once at create + on rotate.
+    signingSecretEncrypted: text('signing_secret_encrypted').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    lastDeliveryAt: ts('last_delivery_at'),
+    lastDeliveryStatus: text('last_delivery_status').$type<WebhookOutboundStatus>(),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => ({
+    projectNameIdx: uniqueIndex('webhook_subscribers_project_name_idx')
+      .on(t.projectId, t.name)
+      .where(sql`deleted_at is null`),
+    projectIdx: index('webhook_subscribers_project_idx')
+      .on(t.projectId)
+      .where(sql`deleted_at is null`),
+  }),
+);
+
+/* ─── webhook_outbound_deliveries (per-attempt retry log) ─────────── */
+export const webhookOutboundDeliveries = pgTable(
+  'webhook_outbound_deliveries',
+  {
+    id: id(),
+    subscriberId: text('subscriber_id')
+      .notNull()
+      .references(() => webhookSubscribers.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // Stable event id — survives across retry rows. The customer's
+    // function can dedupe on this header (X-Briven-Event-Id).
+    eventId: text('event_id').notNull(),
+    eventType: text('event_type').notNull(),
+    // The serialised JSON we POST. Stored once at publish so retries
+    // send identical bytes even if upstream state has moved on.
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    status: text('status').$type<WebhookOutboundStatus>().notNull().default('pending'),
+    attemptCount: text('attempt_count').notNull().default('0'),
+    // Set on every state transition. Dispatcher claims rows where
+    // next_attempt_at <= now() AND status = 'pending'.
+    nextAttemptAt: ts('next_attempt_at').notNull(),
+    lastAttemptAt: ts('last_attempt_at'),
+    statusCode: text('status_code'),
+    durationMs: text('duration_ms'),
+    errorMessage: text('error_message'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    dueIdx: index('webhook_outbound_deliveries_due_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`status = 'pending'`),
+    subscriberIdx: index('webhook_outbound_deliveries_subscriber_idx').on(
+      t.subscriberId,
+      t.createdAt,
+    ),
+    projectIdx: index('webhook_outbound_deliveries_project_idx').on(t.projectId, t.createdAt),
+    eventIdIdx: index('webhook_outbound_deliveries_event_id_idx').on(t.eventId),
+  }),
+);
+
 /* ─── project_files (S3-compatible object storage metadata) ──────── */
 export const projectFiles = pgTable(
   'project_files',
@@ -771,3 +867,7 @@ export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
 export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
+export type WebhookSubscriber = typeof webhookSubscribers.$inferSelect;
+export type NewWebhookSubscriber = typeof webhookSubscribers.$inferInsert;
+export type WebhookOutboundDelivery = typeof webhookOutboundDeliveries.$inferSelect;
+export type NewWebhookOutboundDelivery = typeof webhookOutboundDeliveries.$inferInsert;

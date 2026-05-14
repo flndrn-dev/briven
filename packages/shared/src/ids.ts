@@ -32,7 +32,10 @@ export type IdPrefix =
   | 'sr' // schedule run (per-fire audit record)
   | 'f' // file (project storage object)
   | 'whe' // webhook endpoint (customer-defined inbound webhook)
-  | 'whd'; // webhook delivery (per-incoming-request log row)
+  | 'whd' // webhook delivery (per-incoming-request log row)
+  | 'whs' // webhook subscriber (customer-defined outbound webhook target)
+  | 'whod' // webhook outbound delivery (per-fanout attempt log row)
+  | 'wev'; // webhook event (an emitted platform event, fans out to N deliveries)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;
