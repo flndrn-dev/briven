@@ -242,6 +242,16 @@ services:
       - 'traefik.http.routers.briven-docs.entrypoints=websecure'
       - 'traefik.http.routers.briven-docs.tls.certresolver=letsencrypt'
       - 'traefik.http.services.briven-docs.loadbalancer.server.port=3000'
+      # status.briven.tech — routes to the same docs container, with a
+      # path-rewrite so a bare `/` request lands on /status. See
+      # docs/runbooks/status-domain-cutover.md.
+      - 'traefik.http.routers.briven-status.rule=Host(`status.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-status.entrypoints=websecure'
+      - 'traefik.http.routers.briven-status.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-status.service=briven-docs'
+      - 'traefik.http.routers.briven-status.middlewares=briven-status-rewrite'
+      - 'traefik.http.middlewares.briven-status-rewrite.replacepathregex.regex=^/$$'
+      - 'traefik.http.middlewares.briven-status-rewrite.replacepathregex.replacement=/status'
 
 volumes:
   postgres_data:
