@@ -1,0 +1,108 @@
+name: release-image
+
+# Builds + publishes the briven self-host container images on every
+# `v*` tag pushed to main. Five separate images — one per app — under
+# ghcr.io/flndrn/briven-<app>:<version>. Multi-arch (amd64 + arm64) so
+# M-series Mac developers and ARM VPS can pull without QEMU.
+#
+# Required repo permissions: `packages: write` (granted by the
+# permissions block below — uses the workflow's GITHUB_TOKEN, no PAT
+# needed).
+#
+# Tag strategy:
+#   v0.3.1 → :0.3.1, :0.3, :0 (stable) and :latest
+#   v0.3.1-beta.2 → :0.3.1-beta.2 only (no :latest, no major/minor float)
+# (metadata-action handles the differentiation via flavor.latest=auto +
+# the semver/match patterns below).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # workflow_dispatch lets you re-build a release from the Actions UI
+  # without retagging — useful if a build node was flaky.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.3.1)'
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: flndrn
+
+jobs:
+  publish:
+    name: publish · ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, runtime, realtime, web, docs]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: set up qemu (for arm64 cross-build)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: set up buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/briven-${{ matrix.app }}
+          # Tag the image with: full semver, major.minor, major (when
+          # stable), and `latest` (when stable, controlled by
+          # flavor.latest=auto). Pre-releases get only the full version.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          flavor: |
+            latest=auto
+
+      - name: build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          # arm64 build is slower (qemu-emulated) but worth it — a
+          # majority of self-hosters run amd64 VPS, the ARM minority is
+          # macOS local + raspberry-pi-class boxes which still need an
+          # image. If build time becomes painful, drop arm64 from the
+          # release matrix and offer a separate "request arm build"
+          # workflow_dispatch path.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache layers between matrix runs + across tags — keyed on
+          # the app so api's cache doesn't bleed into web's.
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+          # Provenance + SBOM attestations land in the OCI manifest.
+          # Useful for downstream security scans + verifiable builds.
+          provenance: true
+          sbom: true

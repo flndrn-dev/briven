@@ -2,7 +2,9 @@
 
 single-machine compose template for running briven-core on your own infrastructure. all four services + postgres + redis + minio in one stack, fronted by traefik. tested on dokploy 0.20+, coolify 4.x, and plain `docker compose` on ubuntu 24.04.
 
-briven is **built from source** off `code.konnos.org/flndrn/briven`. there are no prebuilt images — `docker compose build` produces the per-service images locally on the deploy host. that keeps the stack self-contained and avoids relying on a hosted registry.
+briven publishes **prebuilt multi-arch images** on every tagged release at `ghcr.io/flndrn/briven-{api,runtime,realtime,web,docs}` (amd64 + arm64). for fast deploys (~30s instead of ~5-8 min) swap the `build:` blocks in `compose.yml` for `image: ghcr.io/flndrn/briven-<svc>:latest`. pin to a specific version tag (e.g. `:0.3.1`) for reproducible deploys. pulling is anonymous + free; no login.
+
+if you'd rather build from source — useful when you've forked or are tracking a branch that isn't tagged — leave `build:` in place. the rest of this guide covers that path because it's the most flexible default; switch to the prebuilt-image path once you've verified the stack works end-to-end.
 
 ## prereqs
 
