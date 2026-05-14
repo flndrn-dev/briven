@@ -93,7 +93,7 @@ export function UserMenuButton({ user, collapsed }: Props) {
         className={
           collapsed
             ? 'flex size-8 items-center justify-center rounded-md border border-[var(--color-border-subtle)] transition-colors hover:border-[var(--color-border)]'
-            : 'flex h-12 w-full items-center gap-2 rounded-md border border-[var(--color-border-subtle)] px-2 text-left transition-colors hover:border-[var(--color-border)]'
+            : 'flex h-12 w-full items-center gap-2 rounded-md border border-[var(--color-border-subtle)] px-3 text-left transition-colors hover:border-[var(--color-border)]'
         }
       >
         <Avatar user={user} size={collapsed ? 20 : 28} />
