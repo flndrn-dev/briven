@@ -82,3 +82,12 @@ apps/**/data/
 
 # Local git worktrees for parallel branch work — never commit their contents
 .worktrees/
+
+# Stray tsc emit into client-* src/ — the build script (`pnpm build`) was
+# emitting next to sources because no outDir was set in the per-package
+# tsconfig. Fixed by setting outDir: "./dist" in each client tsconfig;
+# this rule prevents drift if someone re-runs an older build script.
+packages/client-*/src/*.js
+packages/client-*/src/*.js.map
+packages/client-*/src/*.d.ts
+packages/client-*/src/*.d.ts.map
