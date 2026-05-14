@@ -496,13 +496,15 @@ adminRouter.delete('/v1/admin/signup-allowlist/:email', async (c) => {
 
 /**
  * Platform-level launch status — surfaces flags the admin needs to see
- * at a glance during the invite-only → public-beta transition. Read-only
- * for now (env-var driven); a dashboard-controllable settings table
- * lands in a follow-up slice.
+ * at a glance during the invite-only → public-beta transition.
+ * `openSignups` reads the effective value (DB override → env fallback).
  */
 adminRouter.get('/v1/admin/launch-status', async (c) => {
+  const { getOpenSignupsFlag } = await import('../services/platform-settings.js');
+  const openSignups = await getOpenSignupsFlag();
   return c.json({
-    openSignups: env.BRIVEN_OPEN_SIGNUPS,
+    openSignups,
+    openSignupsEnvDefault: env.BRIVEN_OPEN_SIGNUPS,
     discordInviteUrl: env.BRIVEN_DISCORD_INVITE_URL ?? null,
     domain: env.BRIVEN_DOMAIN,
     polarConfigured: Boolean(env.BRIVEN_POLAR_ACCESS_TOKEN),
@@ -511,4 +513,30 @@ adminRouter.get('/v1/admin/launch-status', async (c) => {
       env.BRIVEN_MINIO_ENDPOINT && env.BRIVEN_MINIO_ACCESS_KEY && env.BRIVEN_MINIO_SECRET_KEY,
     ),
   });
+});
+
+/**
+ * Flip the dashboard-controllable open-signups flag. Writes
+ * `platform_settings.openSignups = <bool>` + invalidates the in-process
+ * cache so the change takes effect within ~60s on peer instances and
+ * immediately on the writer. Audited as admin.signups.toggle.
+ */
+adminRouter.post('/v1/admin/launch-status/open-signups', async (c) => {
+  const actor = c.get('user')!;
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({ openSignups: z.boolean() }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const { setPlatformSetting } = await import('../services/platform-settings.js');
+  await setPlatformSetting('openSignups', parsed.data.openSignups, actor.id);
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.signups.toggle',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { openSignups: parsed.data.openSignups },
+  });
+  return c.json({ openSignups: parsed.data.openSignups });
 });

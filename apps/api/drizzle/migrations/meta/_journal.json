@@ -176,6 +176,13 @@
       "when": 1779050000000,
       "tag": "0024_signup_allowlist",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1779100000000,
+      "tag": "0025_platform_settings",
+      "breakpoints": true
     }
   ]
 }
