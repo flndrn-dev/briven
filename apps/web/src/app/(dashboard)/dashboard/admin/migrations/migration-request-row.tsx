@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { StepUpPrompt } from '../../../../../components/step-up-prompt';
+import { ConvexTranslator } from './convex-translator';
 
 interface AdminRequest {
   id: string;
@@ -231,6 +232,10 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
           <summary className="cursor-pointer">customer notes</summary>
           <pre className="mt-1 whitespace-pre-wrap break-words">{request.sourceNotes}</pre>
         </details>
+      ) : null}
+
+      {request.source === 'convex' ? (
+        <ConvexTranslator apiOrigin={apiOrigin} />
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
