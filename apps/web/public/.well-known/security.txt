@@ -1,0 +1,29 @@
+# briven security disclosure policy
+# RFC 9116 — https://www.rfc-editor.org/rfc/rfc9116
+
+Contact: mailto:security@briven.tech
+Expires: 2027-05-21T00:00:00.000Z
+Preferred-Languages: en, nl, fr
+Canonical: https://briven.tech/.well-known/security.txt
+Policy: https://docs.briven.tech/trust
+Acknowledgments: https://docs.briven.tech/trust#acknowledgments
+
+# We commit to:
+#   1. acknowledging valid reports within 72 hours.
+#   2. patching critical vulnerabilities within 14 days of triage.
+#   3. publicly crediting researchers (opt-in) on docs.briven.tech/trust.
+#
+# In scope: briven.tech (managed platform), docs.briven.tech, api.briven.tech,
+#           realtime.briven.tech, the briven-core open-source codebase
+#           at code.konnos.org/flndrn/briven.
+#
+# Out of scope: third-party services we use (Polar, Mittera, Hostinger,
+#               Cloudflare) — report those to the respective vendor.
+#               Social-engineering attacks against staff or customers.
+#               Physical-security tests of any briven-operated facility.
+#
+# Please do NOT:
+#   - exfiltrate or modify other customers' data
+#   - run automated scanners that meaningfully impact availability
+#   - publicly disclose before we've had a chance to patch (14 days
+#     for criticals, 90 days otherwise)

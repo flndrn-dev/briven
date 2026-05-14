@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
@@ -65,13 +64,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
     revalidatePath(`/dashboard/projects/${id}`);
   }
 
-  async function deleteProject() {
-    'use server';
-    const { id } = await params;
-    const res = await apiFetch(`/v1/projects/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`delete failed: ${res.status}`);
-    redirect('/dashboard/projects');
-  }
+  // Delete moved to the client: requireRecentMfa(10) on the api can
+  // 403 with `step_up_required`, and the client surfaces a password
+  // prompt to recover. See delete-project-button.tsx.
 
   return (
     <div className="flex flex-col gap-8">
@@ -156,7 +151,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
               deletion, per <code className="text-[var(--color-text)]">CLAUDE.md §5.5</code>.
             </p>
           </div>
-          <DeleteProjectButton projectName={project.name} onDelete={deleteProject} />
+          <DeleteProjectButton
+            projectId={id}
+            projectName={project.name}
+            apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+          />
         </div>
       </section>
     </div>
