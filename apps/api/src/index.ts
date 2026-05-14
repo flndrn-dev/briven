@@ -6,6 +6,7 @@ import { log } from './lib/logger.js';
 import { accessLog } from './middleware/access-log.js';
 import { csrfOriginCheck } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error.js';
+import { maintenanceMode } from './middleware/maintenance.js';
 import { metricsMiddleware } from './middleware/metrics.js';
 import { blockIfProjectSuspended } from './middleware/project-suspended.js';
 import { requestId } from './middleware/request-id.js';
@@ -79,6 +80,11 @@ app.use('*', accessLog());
 app.use('*', metricsMiddleware());
 app.use('*', attachSession());
 app.use('*', csrfOriginCheck());
+// Maintenance-mode gate. Reads platform_settings.maintenanceMode and
+// returns 503 on everything except /health, /ready, /info, auth, /me,
+// and admin routes. Sits AFTER attachSession so admin requests can be
+// identified for the whitelist branch.
+app.use('*', maintenanceMode());
 
 // Block state-changing routes on a suspended project at the app level
 // instead of per-router — keeps the abuse-suspension gate from drifting
