@@ -43,7 +43,12 @@ export default async function AdminUsersPage() {
           <li key={u.id} className="flex items-start justify-between py-3">
             <div>
               <p className="font-mono text-sm">
-                {u.email}
+                <a
+                  href={`/dashboard/admin/users/${u.id}`}
+                  className="hover:text-[var(--color-text-link)] hover:underline"
+                >
+                  {u.email}
+                </a>
                 {u.isAdmin ? (
                   <span className="ml-2 rounded bg-[var(--color-primary-subtle)] px-1.5 py-0.5 font-mono text-xs text-[var(--color-primary)]">
                     admin

@@ -94,9 +94,16 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
           </section>
 
           <section className="flex flex-col gap-3">
-            <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
-              files ({files.length})
-            </h3>
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+                files ({files.length})
+              </h3>
+              {files.length > 0 ? (
+                <p className="font-mono text-xs text-[var(--color-text-muted)]">
+                  {formatBytes(files.reduce((sum, f) => sum + Number(f.sizeBytes), 0))} total
+                </p>
+              ) : null}
+            </div>
             {files.length === 0 ? (
               <p className="rounded-md border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center font-mono text-sm text-[var(--color-text-muted)]">
                 no files yet.

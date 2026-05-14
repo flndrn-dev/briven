@@ -17,6 +17,7 @@ import {
 import {
   adminStats,
   forceSignOut,
+  getUserDetailForAdmin,
   grantAdmin,
   listProjects,
   listUsers,
@@ -48,6 +49,19 @@ adminRouter.get('/v1/admin/stats', async (c) => c.json(await adminStats()));
 adminRouter.get('/v1/admin/users', async (c) => {
   const rows = await listUsers(200);
   return c.json({ users: rows });
+});
+
+adminRouter.get('/v1/admin/users/:id', async (c) => {
+  const userId = c.req.param('id');
+  try {
+    const detail = await getUserDetailForAdmin(userId);
+    return c.json(detail);
+  } catch (err) {
+    if (err instanceof Error && /not found/i.test(err.message)) {
+      return c.json({ code: 'not_found' }, 404);
+    }
+    throw err;
+  }
 });
 
 adminRouter.get('/v1/admin/projects', async (c) => {

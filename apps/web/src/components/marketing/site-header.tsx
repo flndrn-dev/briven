@@ -32,7 +32,7 @@ export function SiteHeader({ user }: { user: SiteHeaderUser | null }) {
 
       <nav className="flex items-center gap-6 font-mono text-[var(--text-small)]">
         <Link
-          href="/#pricing"
+          href="/pricing"
           className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
           pricing
