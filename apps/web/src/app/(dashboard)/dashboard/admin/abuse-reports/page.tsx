@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import { revalidatePath } from 'next/cache';
 
-import { apiFetch, apiJson } from '../../../../../lib/api';
+import { apiJson } from '../../../../../lib/api';
 import { TriageActions } from './triage-actions';
 
 type Resolution = 'no_action' | 'warned' | 'suspended' | 'banned';
@@ -27,6 +26,10 @@ const STATUS_FILTERS = [
 
 export const dynamic = 'force-dynamic';
 
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+}
+
 export default async function AbuseReportsAdminPage({
   searchParams,
 }: {
@@ -37,44 +40,14 @@ export default async function AbuseReportsAdminPage({
   const { reports } = await apiJson<{ reports: AbuseReport[] }>(
     `/v1/admin/abuse-reports${filter}`,
   );
-
-  async function triage(reportId: string): Promise<void> {
-    'use server';
-    const res = await apiFetch(`/v1/admin/abuse-reports/${reportId}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'triage' }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || `triage failed: ${res.status}`);
-    }
-    revalidatePath('/dashboard/admin/abuse-reports');
-  }
-
-  async function resolve(
-    reportId: string,
-    resolution: Resolution,
-    projectId: string | undefined,
-  ): Promise<void> {
-    'use server';
-    const res = await apiFetch(`/v1/admin/abuse-reports/${reportId}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'resolve', resolution, projectId }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || `resolve failed: ${res.status}`);
-    }
-    revalidatePath('/dashboard/admin/abuse-reports');
-  }
+  const apiOrigin = publicApiOrigin();
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="font-mono text-xs text-[var(--color-text-muted)]">
-          {reports.length} report{reports.length === 1 ? '' : 's'}
+          {reports.length} report{reports.length === 1 ? '' : 's'} · mutations require fresh
+          step-up auth
         </p>
         <div className="flex gap-1 font-mono text-xs">
           {STATUS_FILTERS.map((f) => {
@@ -138,8 +111,7 @@ export default async function AbuseReportsAdminPage({
               <TriageActions
                 reportId={r.reportId}
                 currentStatus={r.status}
-                onTriage={triage}
-                onResolve={resolve}
+                apiOrigin={apiOrigin}
               />
             </li>
           ))}

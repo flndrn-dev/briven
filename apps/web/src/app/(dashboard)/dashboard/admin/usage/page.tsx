@@ -1,6 +1,5 @@
-import { revalidatePath } from 'next/cache';
-
-import { apiFetch, apiJson } from '../../../../../lib/api';
+import { apiJson } from '../../../../../lib/api';
+import { RetrySkippedForm } from './retry-skipped-form';
 
 interface UsageEvent {
   id: string;
@@ -56,15 +55,8 @@ function statusClass(s: UsageEvent['polarPushStatus']): string {
   return 'inline-flex rounded-md bg-[var(--color-surface)] px-2 py-0.5 text-[var(--color-text-subtle)]';
 }
 
-async function retrySkippedAction(formData: FormData): Promise<void> {
-  'use server';
-  const sinceDays = Number(formData.get('sinceDays') ?? 7);
-  await apiFetch('/v1/admin/usage-events/retry-skipped', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sinceDays }),
-  });
-  revalidatePath('/dashboard/admin/usage');
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
 }
 
 export default async function AdminUsagePage({
@@ -75,6 +67,7 @@ export default async function AdminUsagePage({
   const { status } = await searchParams;
   const qs = status && status !== '' ? `?status=${encodeURIComponent(status)}` : '';
   const { events } = await apiJson<{ events: UsageEvent[] }>(`/v1/admin/usage-events${qs}`);
+  const apiOrigin = publicApiOrigin();
 
   const counts = events.reduce<Record<string, number>>((acc, e) => {
     acc[e.polarPushStatus] = (acc[e.polarPushStatus] ?? 0) + 1;
@@ -116,29 +109,10 @@ export default async function AdminUsagePage({
 
         {/* Retry-skipped form — only renders when there are skipped rows to do
             something about. Window in days so the same control covers both
-            "just fixed the meter id" and reconciliation sweeps. */}
+            "just fixed the meter id" and reconciliation sweeps. Step-up
+            gated; the prompt fires inline on stale auth. */}
         {(counts.skipped ?? 0) > 0 ? (
-          <form action={retrySkippedAction} className="flex items-center gap-2">
-            <label className="font-mono text-[10px] text-[var(--color-text-muted)]">
-              retry skipped within
-            </label>
-            <select
-              name="sinceDays"
-              defaultValue="7"
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-xs text-[var(--color-text)]"
-            >
-              <option value="1">1d</option>
-              <option value="7">7d</option>
-              <option value="30">30d</option>
-              <option value="90">90d</option>
-            </select>
-            <button
-              type="submit"
-              className="rounded-md border border-[var(--color-primary)] bg-[var(--color-primary-subtle)] px-3 py-1 font-mono text-xs text-[var(--color-primary)] hover:bg-[var(--color-primary)]/15"
-            >
-              retry → pending
-            </button>
-          </form>
+          <RetrySkippedForm apiOrigin={apiOrigin} />
         ) : null}
       </div>
 
