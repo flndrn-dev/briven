@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
 import { AdminStepUpStatus } from './step-up-status';
 
@@ -11,6 +12,16 @@ function publicApiOrigin(): string {
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   if (!user.isAdmin) notFound();
+
+  // Surface the open-migration count next to the nav tab so the
+  // operator sees the queue grow without polling the page. Failure
+  // here is silent — a missing badge is preferable to a 500 across
+  // every admin page.
+  const openMigrations = await apiJson<{
+    requests: { id: string }[];
+  }>('/v1/admin/migration-requests?open=true&limit=200')
+    .then((d) => d.requests.length)
+    .catch(() => 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,9 +104,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </Link>
         <Link
           href="/dashboard/admin/migrations"
-          className="px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          className="flex items-center gap-1.5 px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
           migrations
+          {openMigrations > 0 ? (
+            <span className="rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 font-mono text-[9px] font-medium leading-none text-[var(--color-text-inverse)]">
+              {openMigrations}
+            </span>
+          ) : null}
         </Link>
       </nav>
       <section>{children}</section>

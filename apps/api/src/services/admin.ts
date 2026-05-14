@@ -198,8 +198,13 @@ export async function adminStats(): Promise<{
   users: number;
   projects: number;
   deployments: number;
+  signups24h: number;
+  openMigrations: number;
+  openAbuseReports: number;
+  suppressions: number;
 }> {
   const db = getDb();
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [u] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(users)
@@ -210,5 +215,28 @@ export async function adminStats(): Promise<{
     .where(and(isNull(projects.deletedAt)));
   // deployments table doesn't have a soft-delete; sum all
   const [d] = await db.execute<{ c: number }>(sql`SELECT count(*)::int AS c FROM deployments`);
-  return { users: u?.c ?? 0, projects: p?.c ?? 0, deployments: d?.c ?? 0 };
+  // Operator-glance rollups for the /dashboard/admin landing page.
+  // Each one is a single COUNT(*) on a small or indexed scope, so the
+  // overall admin home stays sub-50ms at Phase 3 scale.
+  const [s24] = await db.execute<{ c: number }>(
+    sql`SELECT count(*)::int AS c FROM users WHERE created_at >= ${since24h} AND deleted_at IS NULL`,
+  );
+  const [om] = await db.execute<{ c: number }>(
+    sql`SELECT count(*)::int AS c FROM migration_requests WHERE status NOT IN ('completed', 'cancelled')`,
+  );
+  const [oa] = await db.execute<{ c: number }>(
+    sql`SELECT count(*)::int AS c FROM abuse_reports WHERE status IN ('open', 'investigating')`,
+  );
+  const [sup] = await db.execute<{ c: number }>(
+    sql`SELECT count(*)::int AS c FROM email_suppressions`,
+  );
+  return {
+    users: u?.c ?? 0,
+    projects: p?.c ?? 0,
+    deployments: d?.c ?? 0,
+    signups24h: s24?.c ?? 0,
+    openMigrations: om?.c ?? 0,
+    openAbuseReports: oa?.c ?? 0,
+    suppressions: sup?.c ?? 0,
+  };
 }
