@@ -149,18 +149,14 @@ export default async function MigratePage() {
           where are you coming from?
         </h2>
         <p className="mt-2 leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
-          pick your current platform. you&apos;ll land in the briven dashboard wizard with
-          a per-source intake form. signing up takes about 30 seconds.
+          pick your current platform for a detailed look at how the move works — what comes
+          for free, what we automate, what stays manual. start the migration from there.
         </p>
         <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {SOURCES.map((s) => (
             <li key={s.slug}>
               <Link
-                href={
-                  user
-                    ? `/dashboard/projects/new/migrate/${s.slug}`
-                    : `/signin?next=/dashboard/projects/new/migrate/${s.slug}`
-                }
+                href={`/migrate/${s.slug}`}
                 className="group flex h-full flex-col gap-2 rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 transition hover:border-[var(--color-border-strong)]"
               >
                 <p className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-h4)]">
@@ -170,7 +166,7 @@ export default async function MigratePage() {
                   {s.oneliner}
                 </p>
                 <span className="mt-auto font-mono text-xs text-[var(--color-text-link)] group-hover:underline">
-                  start migration →
+                  read the {s.name} guide →
                 </span>
               </Link>
             </li>
