@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { BackgroundGrid } from '../../components/marketing/background-grid';
+import { MigrationLeadForm } from '../../components/marketing/migration-lead-form';
 import { SiteFooter } from '../../components/marketing/site-footer';
 import { SiteHeader } from '../../components/marketing/site-header';
 import { getSessionUser } from '../../lib/session';
@@ -172,6 +173,22 @@ export default async function MigratePage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="relative z-10 mx-auto w-full max-w-4xl px-6 pb-16">
+        <h2 className="font-mono uppercase tracking-[0.12em] text-[var(--color-text-subtle)] text-[var(--text-xs)]">
+          ready when you are
+        </h2>
+        <p className="mt-2 leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
+          leave us your email and a couple of words about your project. no signup
+          required. you&apos;ll hear from us within one business day with the next steps.
+        </p>
+        <div className="mt-6">
+          <MigrationLeadForm
+            apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+            sources={SOURCES}
+          />
+        </div>
       </section>
 
       <section className="relative z-10 mx-auto w-full max-w-4xl px-6 pb-24">

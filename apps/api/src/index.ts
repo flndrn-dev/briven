@@ -38,7 +38,10 @@ import { storageRouter } from './routes/storage.js';
 import { studioRouter } from './routes/studio.js';
 import { usageRouter } from './routes/usage.js';
 import { incidentsRouter } from './routes/incidents.js';
-import { migrationRequestsRouter } from './routes/migration-requests.js';
+import {
+  migrationRequestsPublicRouter,
+  migrationRequestsRouter,
+} from './routes/migration-requests.js';
 import { webhooksAdminRouter } from './routes/webhooks-admin.js';
 import { webhooksPublicRouter } from './routes/webhooks-public.js';
 import { recordDeploy } from './services/deploy-history.js';
@@ -125,6 +128,7 @@ app.route('/', webhooksAdminRouter);
 app.route('/', webhooksPublicRouter);
 app.route('/', incidentsRouter);
 app.route('/', migrationRequestsRouter);
+app.route('/', migrationRequestsPublicRouter);
 app.route('/', outboundWebhooksRouter);
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));

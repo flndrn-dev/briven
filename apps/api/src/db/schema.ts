@@ -838,9 +838,11 @@ export const migrationRequests = pgTable(
   'migration_requests',
   {
     id: id(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    // Nullable to support unauthenticated leads submitted via the
+    // /migrate marketing form. When the operator promotes a lead (or
+    // the customer signs up later), the operator patches user_id from
+    // the admin triage row.
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
     orgId: text('org_id').references(() => organizations.id, { onDelete: 'set null' }),
     source: text('source').$type<MigrationSource>().notNull(),
     sourceUrl: text('source_url'),
