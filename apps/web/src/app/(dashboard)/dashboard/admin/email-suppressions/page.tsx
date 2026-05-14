@@ -1,6 +1,5 @@
-import { revalidatePath } from 'next/cache';
-
-import { apiFetch, apiJson } from '../../../../../lib/api';
+import { apiJson } from '../../../../../lib/api';
+import { RemoveSuppressionButton, SuppressionControls } from './suppression-controls';
 
 interface Suppression {
   id: string;
@@ -34,30 +33,15 @@ function formatTs(t: string | Date): string {
   return d.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
 }
 
-async function unsuppressAction(formData: FormData): Promise<void> {
-  'use server';
-  const email = formData.get('email');
-  if (typeof email !== 'string' || !email) return;
-  await apiFetch(`/v1/admin/email-suppressions/${encodeURIComponent(email)}`, { method: 'DELETE' });
-  revalidatePath('/dashboard/admin/email-suppressions');
-}
-
-async function suppressAction(formData: FormData): Promise<void> {
-  'use server';
-  const email = formData.get('email');
-  if (typeof email !== 'string' || !email) return;
-  await apiFetch('/v1/admin/email-suppressions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, reason: 'manual' }),
-  });
-  revalidatePath('/dashboard/admin/email-suppressions');
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
 }
 
 export default async function EmailSuppressionsAdminPage() {
   const { suppressions } = await apiJson<{ suppressions: Suppression[] }>(
     '/v1/admin/email-suppressions',
   );
+  const apiOrigin = publicApiOrigin();
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,29 +50,12 @@ export default async function EmailSuppressionsAdminPage() {
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
           recipients briven won&rsquo;t send to. populated automatically by the mittera webhook
           on permanent bounces, complaints, and mittera-side suppressions. add a manual entry to
-          block a sender; remove an entry to allow sending again.
+          block a sender; remove an entry to allow sending again. mutations require fresh
+          step-up auth — the prompt appears inline on stale sessions.
         </p>
       </div>
 
-      <form
-        action={suppressAction}
-        className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 font-mono text-xs"
-      >
-        <span className="text-[var(--color-text-muted)]">add manual:</span>
-        <input
-          type="email"
-          name="email"
-          required
-          placeholder="user@example.com"
-          className="flex-1 rounded-sm border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2 py-1 outline-none focus:border-[var(--color-primary)]"
-        />
-        <button
-          type="submit"
-          className="rounded-md bg-[var(--color-primary)] px-3 py-1 font-medium text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)]"
-        >
-          suppress
-        </button>
-      </form>
+      <SuppressionControls apiOrigin={apiOrigin} />
 
       {suppressions.length === 0 ? (
         <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-6 font-mono text-sm text-[var(--color-text-muted)]">
@@ -121,15 +88,7 @@ export default async function EmailSuppressionsAdminPage() {
                   </td>
                   <td className="px-3 py-2 text-[var(--color-text-muted)]">{s.detail ?? '—'}</td>
                   <td className="px-3 py-2">
-                    <form action={unsuppressAction}>
-                      <input type="hidden" name="email" value={s.email} />
-                      <button
-                        type="submit"
-                        className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
-                      >
-                        remove
-                      </button>
-                    </form>
+                    <RemoveSuppressionButton email={s.email} apiOrigin={apiOrigin} />
                   </td>
                 </tr>
               ))}

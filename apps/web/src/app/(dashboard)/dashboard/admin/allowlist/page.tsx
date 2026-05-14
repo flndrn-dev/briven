@@ -1,6 +1,5 @@
-import { revalidatePath } from 'next/cache';
-
-import { apiFetch, apiJson } from '../../../../../lib/api';
+import { apiJson } from '../../../../../lib/api';
+import { AllowlistAddForm, AllowlistRemoveButton } from './allowlist-controls';
 
 interface Entry {
   id: string;
@@ -17,6 +16,10 @@ interface LaunchStatus {
 
 export const dynamic = 'force-dynamic';
 
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+}
+
 export default async function AllowlistPage() {
   const [entriesResult, launchResult] = await Promise.all([
     apiJson<{ entries: Entry[] }>('/v1/admin/signup-allowlist'),
@@ -24,35 +27,7 @@ export default async function AllowlistPage() {
   ]);
   const entries = entriesResult.entries;
   const openSignups = launchResult?.openSignups ?? false;
-
-  async function add(formData: FormData) {
-    'use server';
-    const email = String(formData.get('email') ?? '').trim();
-    const notes = String(formData.get('notes') ?? '').trim() || undefined;
-    const res = await apiFetch('/v1/admin/signup-allowlist', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, ...(notes ? { notes } : {}) }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || `add failed: ${res.status}`);
-    }
-    revalidatePath('/dashboard/admin/allowlist');
-  }
-
-  async function remove(formData: FormData) {
-    'use server';
-    const email = String(formData.get('email') ?? '');
-    const res = await apiFetch(
-      `/v1/admin/signup-allowlist/${encodeURIComponent(email)}`,
-      { method: 'DELETE' },
-    );
-    if (!res.ok && res.status !== 404) {
-      throw new Error(`remove failed: ${res.status}`);
-    }
-    revalidatePath('/dashboard/admin/allowlist');
-  }
+  const apiOrigin = publicApiOrigin();
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,46 +42,12 @@ export default async function AllowlistPage() {
           >
             {openSignups ? 'true (open)' : 'false (invite-only)'}
           </span>
-          , only emails on this list can sign up. add a beta tester here, send them the magic-link
-          flow at <code>/signin</code>, and the row stamps <code>acceptedAt</code> the moment they
-          claim it.
+          , only emails on this list can sign up. mutations require fresh step-up auth — the
+          prompt appears inline on stale sessions.
         </p>
       </header>
 
-      <form
-        action={add}
-        className="grid grid-cols-1 gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 md:grid-cols-[2fr_2fr_auto] md:items-end"
-      >
-        <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
-            email
-          </span>
-          <input
-            required
-            type="email"
-            name="email"
-            placeholder="alice@example.com"
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
-            notes (optional)
-          </span>
-          <input
-            name="notes"
-            placeholder="founder of acme.dev — met at handlr launch"
-            maxLength={500}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none"
-          />
-        </label>
-        <button
-          type="submit"
-          className="inline-flex h-10 items-center justify-center rounded-md bg-[var(--color-primary)] px-4 font-sans text-sm text-[var(--color-text-inverse)] transition-colors hover:bg-[var(--color-primary-hover)]"
-        >
-          add
-        </button>
-      </form>
+      <AllowlistAddForm apiOrigin={apiOrigin} />
 
       <section className="flex flex-col gap-2">
         <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
@@ -146,15 +87,7 @@ export default async function AllowlistPage() {
                     </p>
                   ) : null}
                 </div>
-                <form action={remove}>
-                  <input type="hidden" name="email" value={e.email} />
-                  <button
-                    type="submit"
-                    className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-error)] hover:text-[var(--color-error)]"
-                  >
-                    remove
-                  </button>
-                </form>
+                <AllowlistRemoveButton email={e.email} apiOrigin={apiOrigin} />
               </li>
             ))}
           </ul>

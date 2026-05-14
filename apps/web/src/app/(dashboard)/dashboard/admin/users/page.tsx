@@ -1,6 +1,4 @@
-import { revalidatePath } from 'next/cache';
-
-import { apiFetch, apiJson } from '../../../../../lib/api';
+import { apiJson } from '../../../../../lib/api';
 import { UserActions } from './user-actions';
 
 interface AdminUser {
@@ -16,27 +14,19 @@ interface AdminUser {
 
 export const dynamic = 'force-dynamic';
 
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+}
+
 export default async function AdminUsersPage() {
   const { users } = await apiJson<{ users: AdminUser[] }>('/v1/admin/users');
-
-  async function act(action: string, userId: string) {
-    'use server';
-    const res = await apiFetch(`/v1/admin/users/${action}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || `${action} failed: ${res.status}`);
-    }
-    revalidatePath('/dashboard/admin/users');
-  }
+  const apiOrigin = publicApiOrigin();
 
   return (
     <div className="flex flex-col gap-2">
       <p className="font-mono text-xs text-[var(--color-text-muted)]">
-        {users.length} user{users.length === 1 ? '' : 's'} total
+        {users.length} user{users.length === 1 ? '' : 's'} total · mutations require fresh
+        step-up auth
       </p>
       <ul className="flex flex-col divide-y divide-[var(--color-border-subtle)]">
         {users.map((u) => (
@@ -66,7 +56,7 @@ export default async function AdminUsersPage() {
                 {new Date(u.createdAt).toISOString().slice(0, 10)}
               </p>
             </div>
-            <UserActions user={u} act={act} />
+            <UserActions user={u} apiOrigin={apiOrigin} />
           </li>
         ))}
       </ul>
