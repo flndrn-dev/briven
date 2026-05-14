@@ -154,6 +154,10 @@ export default async function DashboardHome() {
         </Link>
       ) : null}
 
+      {projects.length === 0 && invitations.length === 0 && orgInvitations.length === 0 ? (
+        <OnboardingFlow />
+      ) : null}
+
       {openMigrations.length > 0 ? (
         <Link
           href="/dashboard/migrations"
@@ -343,4 +347,118 @@ function formatRelative(iso: string): string {
   if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
   if (diffSec < 86400 * 7) return `${Math.round(diffSec / 86400)}d ago`;
   return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+}
+
+/**
+ * First-run onboarding for users with zero projects, zero invitations,
+ * and zero pending org invites. Three-step path: spin up a project →
+ * open studio → ship a function. Each card is interactive on a single
+ * step (the current one); the others are passive previews so the
+ * shape of the journey is visible.
+ *
+ * The "current step" inference is intentionally simple — projects === 0
+ * means step 1. Once a project exists this whole block disappears, so
+ * we don't need to track step 2/3 cross-render. The studio + CLI links
+ * are passive learning anchors here, made interactive after the project
+ * lands and the existing dashboard layout takes over.
+ */
+function OnboardingFlow() {
+  return (
+    <section className="flex flex-col gap-4">
+      <header>
+        <h2 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+          first 60 seconds on briven
+        </h2>
+        <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
+          three steps to a live reactive backend. you can also import an existing project
+          from convex, supabase, firebase, etc. via{' '}
+          <Link
+            href="/dashboard/projects/new"
+            className="text-[var(--color-text-link)] hover:underline"
+          >
+            new project
+          </Link>
+          .
+        </p>
+      </header>
+      <ol className="flex flex-col gap-3 sm:grid sm:grid-cols-3 sm:gap-3">
+        <OnboardingStep
+          n={1}
+          title="create a project"
+          body="one click. ready in under 10 seconds. you get an empty postgres schema + function runtime + dashboard."
+          cta={{ label: 'create project', href: '/dashboard/projects/new' }}
+          tone="active"
+        />
+        <OnboardingStep
+          n={2}
+          title="open studio"
+          body="point-and-click table editor + SQL runner. add your first table, drop in a few rows, see realtime updates land in the schema view."
+          cta={{ label: 'after step 1', href: '/dashboard/projects/new' }}
+          tone="next"
+        />
+        <OnboardingStep
+          n={3}
+          title="deploy a function"
+          body="briven init from the CLI scaffolds a project locally. briven deploy ships it. your useQuery() hook in the dashboard goes live."
+          cta={{ label: 'cli docs', href: 'https://docs.briven.tech/cli', external: true }}
+          tone="next"
+        />
+      </ol>
+    </section>
+  );
+}
+
+interface OnboardingStepProps {
+  n: number;
+  title: string;
+  body: string;
+  cta: { label: string; href: string; external?: boolean };
+  tone: 'active' | 'next';
+}
+
+function OnboardingStep({ n, title, body, cta, tone }: OnboardingStepProps) {
+  const borderClass =
+    tone === 'active'
+      ? 'border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)]'
+      : 'border-[var(--color-border-subtle)] bg-[var(--color-surface)]';
+  const numberClass =
+    tone === 'active'
+      ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
+      : 'border border-[var(--color-border)] text-[var(--color-text-muted)]';
+  return (
+    <li
+      className={`flex flex-col gap-3 rounded-md border p-4 ${borderClass}`}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={`flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-xs ${numberClass}`}
+        >
+          {n}
+        </span>
+        <p className="font-mono text-sm text-[var(--color-text)]">{title}</p>
+      </div>
+      <p className="font-mono text-xs text-[var(--color-text-muted)]">{body}</p>
+      {tone === 'active' ? (
+        cta.external ? (
+          <a
+            href={cta.href}
+            className="mt-auto inline-flex w-fit items-center justify-center rounded-md bg-[var(--color-primary)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)]"
+          >
+            {cta.label} ↗
+          </a>
+        ) : (
+          <Link
+            href={cta.href}
+            className="mt-auto inline-flex w-fit items-center justify-center rounded-md bg-[var(--color-primary)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)]"
+          >
+            {cta.label}
+          </Link>
+        )
+      ) : (
+        <p className="mt-auto font-mono text-[10px] text-[var(--color-text-subtle)]">
+          {cta.label}
+        </p>
+      )}
+    </li>
+  );
 }
