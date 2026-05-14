@@ -12,8 +12,10 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -794,6 +796,78 @@ export const incidents = pgTable(
   }),
 );
 
+/* ─── migration_requests (customer-initiated platform import intake) ── */
+// One row per dashboard-wizard submission. The wizard at
+// /dashboard/projects/new/migrate collects source platform + scale +
+// credentials/notes; this row is then triaged by an operator via
+// /dashboard/admin/migrations and either auto-migrated (once the
+// adapter for the source ships) or hand-migrated for free during beta.
+export const migrationSources = [
+  'convex',
+  'supabase',
+  'firebase',
+  'mongodb',
+  'drizzle',
+  'prisma',
+  'postgres',
+  'hasura',
+  'nextauth',
+  'other',
+] as const;
+export type MigrationSource = (typeof migrationSources)[number];
+
+export const migrationUrgencies = [
+  'exploring',
+  'this_week',
+  'this_month',
+  'this_quarter',
+] as const;
+export type MigrationUrgency = (typeof migrationUrgencies)[number];
+
+export const migrationStatuses = [
+  'new',
+  'contacted',
+  'scheduled',
+  'in_progress',
+  'completed',
+  'cancelled',
+] as const;
+export type MigrationStatus = (typeof migrationStatuses)[number];
+
+export const migrationRequests = pgTable(
+  'migration_requests',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orgId: text('org_id').references(() => organizations.id, { onDelete: 'set null' }),
+    source: text('source').$type<MigrationSource>().notNull(),
+    sourceUrl: text('source_url'),
+    sourceNotes: text('source_notes').notNull().default(''),
+    estimatedTables: integer('estimated_tables'),
+    // bigint serialized as string in the wire format; jsonb-style number
+    // is unsafe for >2^53. We accept up to ~10^15 rows (no real customer
+    // hits that, but the column shouldn't artificially cap it).
+    estimatedRows: bigint('estimated_rows', { mode: 'bigint' }),
+    estimatedFunctions: integer('estimated_functions'),
+    urgency: text('urgency').$type<MigrationUrgency>().notNull().default('exploring'),
+    status: text('status').$type<MigrationStatus>().notNull().default('new'),
+    contactEmail: text('contact_email').notNull(),
+    assignedTo: text('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+    operatorNotes: text('operator_notes').notNull().default(''),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    createdIdx: index('migration_requests_created_idx').on(t.createdAt),
+    userIdx: index('migration_requests_user_idx').on(t.userId, t.createdAt),
+    openIdx: index('migration_requests_open_idx')
+      .on(t.createdAt)
+      .where(sql`status not in ('completed', 'cancelled')`),
+  }),
+);
+
 /* ─── platform_settings (single-row dashboard-controllable flags) ─── */
 // Key/value JSONB store for platform-level flags an admin needs to flip
 // without a container restart. Today: `openSignups` (boolean). Future:
@@ -994,3 +1068,5 @@ export type PlatformSetting = typeof platformSettings.$inferSelect;
 export type NewPlatformSetting = typeof platformSettings.$inferInsert;
 export type Incident = typeof incidents.$inferSelect;
 export type NewIncident = typeof incidents.$inferInsert;
+export type MigrationRequest = typeof migrationRequests.$inferSelect;
+export type NewMigrationRequest = typeof migrationRequests.$inferInsert;
