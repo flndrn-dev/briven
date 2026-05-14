@@ -265,6 +265,63 @@ export async function renameOrg(args: {
   return row ?? null;
 }
 
+export type PromoteResult =
+  | { ok: true; org: Organization }
+  | { ok: false; reason: string };
+
+/**
+ * Graduate a personal org to a real team. Personal orgs are the
+ * single-member default Better Auth creates per user; promoting flips
+ * `personal=false` so the rest of the dashboard's team affordances
+ * (invite members, rename via the normal patch route, etc.) light up.
+ *
+ * Constraints:
+ *   - org must exist and not be soft-deleted
+ *   - org must currently be personal (already-team returns `already_team`,
+ *     not an error — caller may have double-clicked through a slow form)
+ *   - caller must be an owner of the org. Personal orgs only ever have
+ *     one member (the creator at role=owner) so this is the natural
+ *     gate — no path for a non-creator to graduate someone's personal
+ *     space.
+ */
+export async function promotePersonalOrgToTeam(args: {
+  orgId: string;
+  userId: string;
+  name: string;
+}): Promise<PromoteResult> {
+  const db = getDb();
+  const [target] = await db
+    .select()
+    .from(organizations)
+    .where(and(eq(organizations.id, args.orgId), isNull(organizations.deletedAt)))
+    .limit(1);
+  if (!target) return { ok: false, reason: 'org_not_found' };
+  if (!target.personal) return { ok: false, reason: 'already_team' };
+
+  const [membership] = await db
+    .select({ role: orgMembers.role })
+    .from(orgMembers)
+    .where(and(eq(orgMembers.orgId, args.orgId), eq(orgMembers.userId, args.userId)))
+    .limit(1);
+  if (!membership) return { ok: false, reason: 'not_a_member' };
+  if (membership.role !== 'owner') return { ok: false, reason: 'owner_role_required' };
+
+  const trimmedName = args.name.trim();
+  if (trimmedName.length === 0) return { ok: false, reason: 'name_required' };
+
+  const [row] = await db
+    .update(organizations)
+    .set({
+      personal: false,
+      name: trimmedName,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizations.id, args.orgId))
+    .returning();
+  if (!row) return { ok: false, reason: 'update_failed' };
+  return { ok: true, org: row };
+}
+
 /**
  * Returns true when the user belongs to the given org. Used at project
  * creation to validate the orgId the dashboard sends actually belongs

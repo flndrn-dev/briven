@@ -56,6 +56,22 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
     redirect(`/dashboard/teams/${id}`);
   }
 
+  async function promote(formData: FormData) {
+    'use server';
+    const name = String(formData.get('name') ?? '').trim();
+    if (!name) throw new Error('team name is required');
+    const res = await apiFetch(`/v1/orgs/${id}/promote`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`promote failed (${res.status}): ${body}`);
+    }
+    redirect(`/dashboard/teams/${id}`);
+  }
+
   async function deleteTeam() {
     'use server';
     const res = await apiFetch(`/v1/orgs/${id}`, { method: 'DELETE' });
@@ -80,7 +96,38 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
         </p>
       </header>
 
-      {!team.personal ? (
+      {team.personal ? (
+        <section className="max-w-lg rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5">
+          <h2 className="font-mono text-sm text-[var(--color-text)]">promote to team</h2>
+          <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+            this is your personal org — the single-member default that gets auto-created when you
+            sign in. promoting it unlocks team rename, member invites, and the rest of the team
+            affordances. projects in this org keep working without interruption.
+          </p>
+          <form action={promote} className="mt-4 flex flex-col gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                new team name
+              </span>
+              <input
+                name="name"
+                type="text"
+                required
+                maxLength={120}
+                defaultValue={team.name}
+                placeholder="flndrn"
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+              />
+            </label>
+            <button
+              type="submit"
+              className="self-start rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
+            >
+              promote to team
+            </button>
+          </form>
+        </section>
+      ) : (
         <section className="max-w-lg">
           <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">rename</h2>
           <form action={rename} className="flex flex-col gap-3">
@@ -100,7 +147,7 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
             </button>
           </form>
         </section>
-      ) : null}
+      )}
 
       <section>
         <h2 className="mb-3 font-mono text-sm text-[var(--color-text-muted)]">

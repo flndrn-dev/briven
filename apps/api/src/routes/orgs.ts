@@ -15,6 +15,7 @@ import {
   isOrgMember,
   listOrgMembers,
   listOrgsForUser,
+  promotePersonalOrgToTeam,
   removeOrgMember,
   renameOrg,
 } from '../services/orgs.js';
@@ -176,6 +177,53 @@ orgsRouter.patch('/v1/orgs/:id', async (c) => {
       slug: updated.slug,
       name: updated.name,
       personal: updated.personal,
+    },
+  });
+});
+
+const promoteSchema = z.object({
+  name: z.string().min(1).max(120),
+});
+
+/**
+ * Promote a personal org to a real team. Personal orgs are
+ * single-member by default; graduating one unlocks the rest of the
+ * team affordances (rename via the standard patch route, invite
+ * members, ...). The caller must be an owner of the org being
+ * promoted — the service enforces that, the route just shapes the
+ * request + records audit.
+ */
+orgsRouter.post('/v1/orgs/:id/promote', async (c) => {
+  const user = c.get('user')!;
+  const orgId = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = promoteSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const result = await promotePersonalOrgToTeam({
+    orgId,
+    userId: user.id,
+    name: parsed.data.name,
+  });
+  if (!result.ok) {
+    const status = result.reason === 'org_not_found' ? 404 : 400;
+    return c.json({ code: 'cannot_promote', reason: result.reason }, status);
+  }
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'org.promoted',
+    ipHash: hashIp(c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { orgId, newName: result.org.name },
+  });
+  return c.json({
+    org: {
+      id: result.org.id,
+      slug: result.org.slug,
+      name: result.org.name,
+      personal: result.org.personal,
     },
   });
 });
