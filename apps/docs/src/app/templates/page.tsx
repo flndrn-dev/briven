@@ -51,6 +51,34 @@ const TEMPLATES: readonly Template[] = [
     └── postMessage.ts      # mutation, args: { roomId, body }`,
     highlights: ['2 tables with FK', 'per-room realtime', '2 queries', '2 mutations'],
   },
+  {
+    name: 'convex-notes',
+    pitch: 'familiar to convex users',
+    description:
+      'multi-user notes with per-owner reactive listing + optional tag filter — mirrors the canonical convex notes-app shape. ownership is enforced inside each mutation as an explicit guard, not via row-level policy. comes pre-wired so a convex user sees their mental model land 1:1.',
+    schema: `briven/
+├── schema.ts               # 1 table: notes (owner-scoped)
+└── functions/
+    ├── listNotes.ts        # reactive query, args: { ownerId, tag? }
+    ├── createNote.ts       # mutation
+    ├── updateNote.ts       # mutation with ownership guard
+    └── deleteNote.ts       # mutation with ownership guard`,
+    highlights: ['multi-user', 'per-owner realtime', 'ownership guards', 'tag filter'],
+  },
+  {
+    name: 'supabase-auth-todos',
+    pitch: 'familiar to supabase users',
+    description:
+      "auth-scoped todo list. every function reads ctx.session.userId and applies the same scoping supabase would do via row-level security — except the predicate lives in code, where you can read it and debug it. paste this to translate `auth.uid() = user_id` into briven's model.",
+    schema: `briven/
+├── schema.ts               # 1 table: todos (user_id-scoped)
+└── functions/
+    ├── myTodos.ts          # reactive query, uses ctx.session.userId
+    ├── createTodo.ts       # mutation, inserts with userId
+    ├── toggleTodo.ts       # mutation with ownership guard
+    └── deleteTodo.ts       # mutation with ownership guard`,
+    highlights: ['auth-aware', 'RLS → guards', '1 query', '3 mutations'],
+  },
 ];
 
 export default function TemplatesPage() {
