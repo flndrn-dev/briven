@@ -44,6 +44,12 @@ export function SiteHeader({ user }: { user: SiteHeaderUser | null }) {
           compare
         </Link>
         <Link
+          href="/migrate"
+          className="hidden text-[var(--color-text-muted)] hover:text-[var(--color-text)] sm:inline"
+        >
+          migrate
+        </Link>
+        <Link
           href="https://docs.briven.tech"
           className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
