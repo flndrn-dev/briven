@@ -121,6 +121,11 @@ services:
       context: ../..
       dockerfile: apps/docs/Dockerfile
     restart: unless-stopped
+    depends_on: [api]
+    environment:
+      # Used by the /status page + /api/status/incidents.xml RSS feed
+      # to read live incidents from /v1/status/incidents.
+      BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
 
 volumes:
   postgres_data:

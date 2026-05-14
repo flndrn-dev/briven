@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { fetchIncidents } from '../lib/incidents';
+
 interface NavItem {
   href: string;
   label: string;
@@ -51,9 +53,29 @@ const GROUPS: readonly NavGroup[] = [
   },
 ];
 
-export function DocsShell({ children }: { children: React.ReactNode }) {
+export async function DocsShell({ children }: { children: React.ReactNode }) {
+  // Surface ongoing incidents in the docs header so a visitor mid-outage
+  // sees the acknowledgement without having to navigate to /status. The
+  // fetch degrades to [] when the api is unreachable, so a broken api
+  // doesn't break docs page renders.
+  const ongoing = await fetchIncidents({ activeOnly: true, limit: 1 });
+  const active = ongoing[0] ?? null;
+
   return (
     <div className="min-h-dvh">
+      {active ? (
+        <Link
+          href="/status"
+          className="block border-b border-[var(--color-warning)] bg-[var(--color-warning)]/10 px-6 py-2 text-center font-mono text-xs text-[var(--color-warning)] hover:bg-[var(--color-warning)]/20"
+        >
+          <span className="font-semibold uppercase tracking-wider">
+            {active.severity}
+          </span>{' '}
+          · {active.summary}{' '}
+          <span className="text-[var(--color-text-subtle)]">→ status</span>
+        </Link>
+      ) : null}
+
       <header className="border-b border-[var(--color-border-subtle)]">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="font-mono text-sm">

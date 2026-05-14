@@ -1,53 +1,90 @@
 /**
- * Hand-curated incident history for the status page. Each entry covers
- * one operator-acknowledged event — outage, degraded performance, planned
- * maintenance. When the alertmanager → discord pipeline grows a writer
- * that persists incidents to disk, this becomes the source of truth for
- * both the html status page and the rss feed at /api/status/incidents.xml.
+ * Status-page incident feed. The status page (server component) and the
+ * RSS route (server route handler) both call `fetchIncidents()` at
+ * request time and degrade to an empty list when the API is unreachable
+ * — the alternative is the status page itself going down while the
+ * operator is trying to publish an incident about the API being down.
  *
- * Schema is intentionally minimal — we'd rather have a hand-curated
- * narrative than an auto-generated noise stream. An entry stays even
- * after resolution.
+ * The source of truth is the `incidents` table on the api, written by
+ * admins via /dashboard/admin/incidents (step-up gated). Drizzle
+ * serializes `started_at`/`resolved_at` to ISO strings over JSON.
  */
 
+const API_ORIGIN = process.env.BRIVEN_API_ORIGIN ?? 'https://api.briven.tech';
+const FETCH_TIMEOUT_MS = 3000;
+
 export interface IncidentEntry {
-  /** Stable id — append-only. Format: inc_yyyymmdd_<n>. */
   readonly id: string;
-  /** When the incident started (operator's best estimate, ISO 8601 UTC). */
   readonly startedAt: string;
-  /** When the operator declared it resolved. Null while ongoing. */
   readonly resolvedAt: string | null;
-  /** Severity. critical = customer-impacting outage. major = degraded path. minor = something noticed and fixed before customers noticed. */
   readonly severity: 'critical' | 'major' | 'minor' | 'maintenance';
-  /** Affected services — `api`, `realtime`, `runtime`, `web`, `docs`, or `all`. */
   readonly services: readonly string[];
-  /** Operator-written summary. ~1-2 sentences. honest framing. */
   readonly summary: string;
-  /** Operator-written postmortem (markdown). Empty string until written. */
   readonly postmortem: string;
 }
 
-export const INCIDENTS: readonly IncidentEntry[] = [
-  // Append new entries to the TOP. The page renders newest-first.
-  //
-  // Example:
-  // {
-  //   id: 'inc_20260512_1',
-  //   startedAt: '2026-05-12T14:00:00Z',
-  //   resolvedAt: '2026-05-12T14:30:00Z',
-  //   severity: 'minor',
-  //   services: ['api'],
-  //   summary: 'api dropped to 503 for ~5 min during a rebuild — dokploy auto-recovered.',
-  //   postmortem: 'transient. no action needed. logging this so the feed has a real entry to test against.',
-  // },
-];
+interface FetchOpts {
+  activeOnly?: boolean;
+  limit?: number;
+  /** Skip the 30s server cache. The /status page passes true so the
+   *  incident list is always fresh; the docs-shell banner leaves it
+   *  false to avoid a fetch on every docs page render. */
+  fresh?: boolean;
+}
 
-/** True when the incident has no `resolvedAt` timestamp. */
+export async function fetchIncidents(opts: FetchOpts = {}): Promise<readonly IncidentEntry[]> {
+  const params = new URLSearchParams();
+  if (opts.activeOnly) params.set('active', 'true');
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  const url = `${API_ORIGIN}/v1/status/incidents${qs ? `?${qs}` : ''}`;
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { accept: 'application/json' },
+      ...(opts.fresh
+        ? { cache: 'no-store' as const }
+        : { next: { revalidate: 30, tags: ['incidents'] } }),
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { incidents?: unknown };
+    if (!Array.isArray(body.incidents)) return [];
+    return body.incidents.map(normalize).filter((x): x is IncidentEntry => x !== null);
+  } catch {
+    return [];
+  }
+}
+
 export function isOngoing(inc: IncidentEntry): boolean {
   return inc.resolvedAt === null;
 }
 
-/** Sort newest-first (by startedAt). */
-export function sortedIncidents(): readonly IncidentEntry[] {
-  return [...INCIDENTS].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+function normalize(raw: unknown): IncidentEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === 'string' ? r.id : null;
+  const startedAt = toIso(r.startedAt);
+  const severity = r.severity;
+  const services = Array.isArray(r.services) ? r.services.filter((s) => typeof s === 'string') : null;
+  const summary = typeof r.summary === 'string' ? r.summary : null;
+  if (!id || !startedAt || !services || !summary) return null;
+  if (severity !== 'critical' && severity !== 'major' && severity !== 'minor' && severity !== 'maintenance') {
+    return null;
+  }
+  return {
+    id,
+    startedAt,
+    resolvedAt: toIso(r.resolvedAt),
+    severity,
+    services: services as string[],
+    summary,
+    postmortem: typeof r.postmortem === 'string' ? r.postmortem : '',
+  };
+}
+
+function toIso(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
 }
