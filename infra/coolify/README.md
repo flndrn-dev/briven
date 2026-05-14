@@ -1,6 +1,8 @@
 # self-host briven on coolify
 
-drop-in template for [coolify 4.x](https://coolify.io). same compose as `infra/dokploy/compose.yml`, minus the traefik labels — coolify owns routing through its own UI. images are **built from source** off `code.konnos.org/flndrn/briven`; no prebuilt image registry is involved.
+drop-in template for [coolify 4.x](https://coolify.io). same compose as `infra/dokploy/compose.yml`, minus the traefik labels — coolify owns routing through its own UI.
+
+briven publishes **prebuilt multi-arch images** on every tagged release at `ghcr.io/flndrn/briven-{api,runtime,realtime,web,docs}` (amd64 + arm64, free anonymous pull). swap the `build:` blocks in `compose.yml` for `image: ghcr.io/flndrn/briven-<svc>:latest` for ~30s deploys, or pin to a specific version tag (e.g. `:0.3.1`) for reproducibility. building from source is also supported — useful when you've forked.
 
 ## install
 
