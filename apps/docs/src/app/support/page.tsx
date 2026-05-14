@@ -19,8 +19,8 @@ export default function SupportPage() {
           <li>
             <strong>community discord</strong> — open to everyone. fastest path for &quot;how
             do i…&quot; questions; expect informal answers from the team + community within
-            an hour or two on Flanders business hours. (invite link lands with the public
-            beta in oct 2026.)
+            an hour or two on Flanders business hours. invite link lands at public-beta open
+            on <strong>2026-05-21</strong>; until then ping the team via email below.
           </li>
           <li>
             <strong>github issues</strong>{' '}

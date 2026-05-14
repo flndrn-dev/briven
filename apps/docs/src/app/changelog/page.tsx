@@ -37,9 +37,9 @@ export default function ChangelogPage() {
       </p>
 
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
-        briven is in dogfood-first development through 2026. external signups open with the
-        public beta in <strong>oct 2026</strong>; everything before that is internal validation
-        on j&apos;s own products.
+        briven ran dogfood-first through the first half of 2026 and graduates to{' '}
+        <strong>public beta on 2026-05-21</strong>. everything prior is internal validation on
+        j&apos;s own products; everything after is open to anyone with a credit card.
       </div>
 
       <div className="mt-12 flex flex-col gap-12">
