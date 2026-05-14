@@ -1,6 +1,11 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { CronExpressionField } from './cron-expression-field';
+
+function publicApiOrigin(): string {
+  return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+}
 
 interface Schedule {
   id: string;
@@ -170,13 +175,7 @@ export default async function CronPage({ params }: { params: Promise<{ id: strin
             <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
               cron expression (utc)
             </span>
-            <input
-              required
-              name="cronExpression"
-              placeholder="0 4 * * *"
-              defaultValue="0 4 * * *"
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none"
-            />
+            <CronExpressionField projectId={id} apiOrigin={publicApiOrigin()} />
             <CommonExpressionsHint />
           </label>
 
