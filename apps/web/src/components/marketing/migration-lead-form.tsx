@@ -22,6 +22,54 @@ interface SubmittedState {
   source: string;
 }
 
+// Per-source URL shape hints. We don't reject — these are advisory.
+// The form requires *no* URL at all (optional field), so this only
+// runs when the user typed something that looks wrong.
+function validateSourceUrl(source: string, url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+  } catch {
+    return 'that does not look like a URL. did you mean to leave it blank?';
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return 'URL must start with https://';
+  }
+  const host = parsed.host.toLowerCase();
+  switch (source) {
+    case 'convex':
+      // Convex deployments are https://*.convex.cloud (production) or
+      // https://*.convex.site (preview). Both are valid; nothing else is.
+      if (!host.endsWith('.convex.cloud') && !host.endsWith('.convex.site')) {
+        return 'convex deployments live on *.convex.cloud or *.convex.site — double-check the URL';
+      }
+      break;
+    case 'supabase':
+      if (!host.endsWith('.supabase.co') && !host.endsWith('.supabase.com')) {
+        return 'supabase projects are at *.supabase.co — double-check the URL';
+      }
+      break;
+    case 'firebase':
+      // Firebase project IDs are NOT URLs — they're just slugs. If the
+      // user pasted a URL, accept; if they typed a slug, accept that
+      // too (only check when they typed something).
+      if (parsed.protocol.startsWith('http') && !host.includes('firebase')) {
+        return 'firebase URLs / project IDs usually contain "firebase" — double-check';
+      }
+      break;
+    case 'hasura':
+      if (!host.endsWith('.hasura.app') && !host.includes('hasura')) {
+        return 'hasura cloud endpoints are at *.hasura.app — double-check the URL';
+      }
+      break;
+    default:
+      // mongodb / postgres / drizzle / prisma / nextauth — connection
+      // strings, not http URLs. We accept anything reasonable.
+      break;
+  }
+  return null;
+}
+
 /**
  * Public, unauthenticated migration intake form. Embedded on /migrate
  * + each /migrate/<source> page so prospects can request a migration
@@ -42,6 +90,18 @@ export function MigrationLeadForm({ apiOrigin, defaultSource = '', sources }: Pr
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
+    // Client-side URL sanity check — catches the most common typos
+    // (missing protocol, wrong tld for the source) before they hit the
+    // operator inbox. Source-specific patterns; falls through to "any
+    // https:// URL is acceptable" for sources without a known shape.
+    const trimmedUrl = sourceUrl.trim();
+    if (trimmedUrl) {
+      const urlError = validateSourceUrl(source, trimmedUrl);
+      if (urlError) {
+        setError(urlError);
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
     try {

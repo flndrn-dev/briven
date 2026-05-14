@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { apiJson } from '../../../../lib/api';
 import { MaintenanceToggle } from './maintenance-toggle';
 import { OpenSignupsToggle } from './open-signups-toggle';
@@ -6,6 +8,10 @@ interface Stats {
   users: number;
   projects: number;
   deployments: number;
+  signups24h: number;
+  openMigrations: number;
+  openAbuseReports: number;
+  suppressions: number;
 }
 
 interface LaunchStatus {
@@ -39,6 +45,47 @@ export default async function AdminStatsPage() {
         <StatCard label="deployments" value={stats.deployments} />
       </div>
 
+      <section className="flex flex-col gap-3">
+        <h2 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+          operator queue
+        </h2>
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          what needs your attention right now. each number links into the relevant
+          triage view; tone-coded so a non-zero count of red/amber things stands out
+          at a glance.
+        </p>
+        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <QueueCard
+            label="signups · 24h"
+            value={stats.signups24h}
+            tone="muted"
+            href="/dashboard/admin/users"
+            hint="new accounts since this time yesterday"
+          />
+          <QueueCard
+            label="open migrations"
+            value={stats.openMigrations}
+            tone={stats.openMigrations > 0 ? 'primary' : 'muted'}
+            href="/dashboard/admin/migrations"
+            hint="status not in (completed, cancelled)"
+          />
+          <QueueCard
+            label="open abuse reports"
+            value={stats.openAbuseReports}
+            tone={stats.openAbuseReports > 0 ? 'warning' : 'muted'}
+            href="/dashboard/admin/abuse-reports"
+            hint="status in (open, investigating)"
+          />
+          <QueueCard
+            label="email suppressions"
+            value={stats.suppressions}
+            tone="muted"
+            href="/dashboard/admin/email-suppressions"
+            hint="bounce + complaint + manual entries"
+          />
+        </ul>
+      </section>
+
       {launch ? <LaunchPanel launch={launch} /> : null}
     </div>
   );
@@ -50,6 +97,45 @@ function StatCard({ label, value }: { label: string; value: number }) {
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">{label}</p>
       <p className="mt-2 font-mono text-3xl">{value.toLocaleString()}</p>
     </div>
+  );
+}
+
+type QueueHref =
+  | '/dashboard/admin/users'
+  | '/dashboard/admin/migrations'
+  | '/dashboard/admin/abuse-reports'
+  | '/dashboard/admin/email-suppressions';
+
+interface QueueCardProps {
+  label: string;
+  value: number;
+  tone: 'primary' | 'warning' | 'muted';
+  href: QueueHref;
+  hint?: string;
+}
+
+function QueueCard({ label, value, tone, href, hint }: QueueCardProps) {
+  const valueClass =
+    tone === 'primary'
+      ? 'text-[var(--color-primary)]'
+      : tone === 'warning'
+        ? 'text-[var(--color-warning)]'
+        : 'text-[var(--color-text)]';
+  return (
+    <li>
+      <Link
+        href={href}
+        className="flex h-full flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-border-strong)]"
+      >
+        <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+          {label}
+        </p>
+        <p className={`font-mono text-2xl ${valueClass}`}>{value.toLocaleString()}</p>
+        {hint ? (
+          <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">{hint}</p>
+        ) : null}
+      </Link>
+    </li>
   );
 }
 
