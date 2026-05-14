@@ -212,10 +212,10 @@ export default async function MigrationDetailPage({
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">
         questions? reply to any email we sent, or write to{' '}
         <a
-          href="mailto:migrations@briven.tech"
+          href="mailto:migrations@flndrn.com"
           className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
         >
-          migrations@briven.tech
+          migrations@flndrn.com
         </a>{' '}
         and quote the request id.
       </p>

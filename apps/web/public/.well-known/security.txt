@@ -1,7 +1,7 @@
 # briven security disclosure policy
 # RFC 9116 — https://www.rfc-editor.org/rfc/rfc9116
 
-Contact: mailto:security@briven.tech
+Contact: mailto:security@flndrn.com
 Expires: 2027-05-21T00:00:00.000Z
 Preferred-Languages: en, nl, fr
 Canonical: https://briven.tech/.well-known/security.txt

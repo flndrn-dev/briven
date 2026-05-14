@@ -298,9 +298,7 @@ function migrationStatusHeadline(status: string, source: string): string {
 export async function sendMigrationRequestOperatorAlert(
   input: MigrationRequestEmailInput,
 ): Promise<void> {
-  const inbox =
-    env.BRIVEN_MIGRATIONS_INBOX ??
-    `migrations@${env.BRIVEN_DOMAIN ?? 'briven.tech'}`;
+  const inbox = env.BRIVEN_MIGRATIONS_INBOX;
   await send('migration_request_alert', {
     to: inbox,
     subject: `new migration request · ${input.source} · ${input.urgency.replace(/_/g, ' ')}`,
@@ -416,7 +414,6 @@ function resetPasswordText(url: string): string {
 }
 
 function accountDeletionHtml(): string {
-  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
   return shell(
     'your briven account is being deleted',
     `
@@ -428,14 +425,13 @@ function accountDeletionHtml(): string {
       <li>api keys you owned are revoked.</li>
     </ul>
     <p>if you have a paid subscription, manage cancellation on polar via your billing portal — we don't auto-cancel.</p>
-    <p>you have <strong>30 days</strong> to change your mind: email support@${domain} from this address and we can revert. after that the soft-delete becomes a hard-delete and we can't get the data back.</p>
-    <p class="muted">if you did not request this, contact support@${domain} immediately.</p>
+    <p>you have <strong>30 days</strong> to change your mind: email support@flndrn.com from this address and we can revert. after that the soft-delete becomes a hard-delete and we can't get the data back.</p>
+    <p class="muted">if you did not request this, contact support@flndrn.com immediately.</p>
   `,
   );
 }
 
 function accountDeletionText(): string {
-  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
   return [
     'your briven account is being deleted',
     '',
@@ -448,9 +444,9 @@ function accountDeletionText(): string {
     '',
     'if you have a paid subscription, cancel via polar billing portal — we do not auto-cancel.',
     '',
-    `you have 30 days to revert: email support@${domain} from this address. after that the delete is permanent.`,
+    `you have 30 days to revert: email support@flndrn.com from this address. after that the delete is permanent.`,
     '',
-    `if you did not request this, contact support@${domain} immediately.`,
+    `if you did not request this, contact support@flndrn.com immediately.`,
   ].join('\n');
 }
 
@@ -463,26 +459,29 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
+// Customer-visible contact addresses route to the parent flndrn Limited
+// inbox (admin.flndrn.com queue). Outbound product From: stays on
+// briven.tech for SPF/DKIM alignment — only inbound contact moves.
+const MIGRATIONS_CONTACT = 'migrations@flndrn.com';
+
 function migrationCustomerHtml(input: MigrationRequestEmailInput): string {
-  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
   return shell(
     `we got your migration request from ${escapeHtml(input.source)}`,
     `
     <p>thanks for asking us to help move your project to briven.</p>
-    <p>an operator will reach out from <code>migrations@${escapeHtml(domain)}</code> within one business day with the next steps — typically a short call to confirm scope, then the actual data + functions move while you keep running on your current platform.</p>
+    <p>an operator will reach out from <code>${MIGRATIONS_CONTACT}</code> within one business day with the next steps — typically a short call to confirm scope, then the actual data + functions move while you keep running on your current platform.</p>
     <p style="background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
       request id: ${escapeHtml(input.requestId)}<br/>
       source: ${escapeHtml(input.source)}<br/>
       urgency: ${escapeHtml(input.urgency.replace(/_/g, ' '))}
     </p>
     <p class="muted">your ${escapeHtml(input.source)} stays untouched. we only read from it. nothing on your source is moved or modified until you press the cutover button — which we won't do until you say so.</p>
-    <p class="muted">questions or follow-ups: reply to this email, or write to migrations@${escapeHtml(domain)} and quote the request id above.</p>
+    <p class="muted">questions or follow-ups: reply to this email, or write to ${MIGRATIONS_CONTACT} and quote the request id above.</p>
   `,
   );
 }
 
 function migrationCustomerText(input: MigrationRequestEmailInput): string {
-  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
   return [
     `we got your migration request from ${input.source}`,
     '',
@@ -494,7 +493,7 @@ function migrationCustomerText(input: MigrationRequestEmailInput): string {
     '',
     `your ${input.source} stays untouched. we only read from it. nothing on your source is moved or modified until you press the cutover button.`,
     '',
-    `questions or follow-ups: reply to this email, or write to migrations@${domain} and quote the request id.`,
+    `questions or follow-ups: reply to this email, or write to ${MIGRATIONS_CONTACT} and quote the request id.`,
   ].join('\n');
 }
 
@@ -557,7 +556,7 @@ function migrationStatusUpdateHtml(input: MigrationStatusUpdateInput): string {
       status: ${escapeHtml(input.oldStatus.replace(/_/g, ' '))} → <strong style="color:#f5f7fa">${escapeHtml(input.newStatus.replace(/_/g, ' '))}</strong>
     </p>
     ${cta('open dashboard', dashboardHref)}
-    <p class="muted">need a human? reply to this email or write to migrations@${escapeHtml(domain)} and quote the request id.</p>
+    <p class="muted">need a human? reply to this email or write to ${MIGRATIONS_CONTACT} and quote the request id.</p>
   `,
   );
 }
@@ -576,7 +575,7 @@ function migrationStatusUpdateText(input: MigrationStatusUpdateInput): string {
     '',
     `open dashboard: https://${domain}/dashboard/migrations`,
     '',
-    `need a human? reply to this email or write to migrations@${domain}.`,
+    `need a human? reply to this email or write to ${MIGRATIONS_CONTACT}.`,
   ].join('\n');
 }
 

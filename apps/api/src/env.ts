@@ -104,10 +104,11 @@ const envSchema = z.object({
   BRIVEN_DISCORD_INVITE_URL: z.string().url().optional(),
 
   // Inbox the operator notification email is sent to whenever a
-  // customer submits /dashboard/projects/new/migrate/<source>. Defaults
-  // to migrations@<BRIVEN_DOMAIN> when unset; override if the alias
-  // routes elsewhere (e.g. a shared support inbox).
-  BRIVEN_MIGRATIONS_INBOX: z.string().email().optional(),
+  // customer submits /dashboard/projects/new/migrate/<source>.
+  // Default points at flndrn.com (the parent legal entity that runs
+  // briven + ISY + Mavi from a single support queue at admin.flndrn.com).
+  // Override if you want product-specific routing later.
+  BRIVEN_MIGRATIONS_INBOX: z.string().email().default('migrations@flndrn.com'),
 
   // Konnos OAuth — Forgejo at code.konnos.org. Better Auth's generic OAuth
   // plugin lets us reuse the same callback shape for any OAuth2/OIDC

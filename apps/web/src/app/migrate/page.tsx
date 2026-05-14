@@ -123,7 +123,7 @@ export default async function MigratePage() {
             start a migration
           </Link>
           <a
-            href="mailto:migrations@briven.tech"
+            href="mailto:migrations@flndrn.com"
             className="inline-flex h-12 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-6 font-sans font-medium text-[var(--color-text)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease-briven)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)]"
           >
             email a human first
@@ -204,10 +204,10 @@ export default async function MigratePage() {
           <p className="mt-3 leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
             we still do it. email{' '}
             <a
-              href="mailto:migrations@briven.tech"
+              href="mailto:migrations@flndrn.com"
               className="text-[var(--color-text-link)] underline underline-offset-2"
             >
-              migrations@briven.tech
+              migrations@flndrn.com
             </a>{' '}
             with a one-paragraph description of where your project lives today and we&apos;ll
             scope a free beta migration for you. supabase / firebase / mongodb / hasura /
