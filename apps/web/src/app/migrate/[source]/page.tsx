@@ -459,7 +459,7 @@ export default async function MigrateSourceMarketingPage({
             start the {detail.name} migration
           </Link>
           <a
-            href={`mailto:migrations@briven.tech?subject=${encodeURIComponent(`${detail.name} → briven migration`)}`}
+            href={`mailto:migrations@flndrn.com?subject=${encodeURIComponent(`${detail.name} → briven migration`)}`}
             className="inline-flex h-12 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-6 font-sans font-medium text-[var(--color-text)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease-briven)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)]"
           >
             email a human first

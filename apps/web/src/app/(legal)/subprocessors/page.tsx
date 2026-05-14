@@ -149,7 +149,7 @@ export default function SubprocessorsPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">questions</h2>
       <p>
-        Contact <strong>privacy@briven.tech</strong> for any subprocessor-related question, including
+        Contact <strong>privacy@flndrn.com</strong> for any subprocessor-related question, including
         requests for the underlying data-processing agreements where they are not publicly available.
       </p>
     </>

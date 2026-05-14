@@ -69,10 +69,10 @@ export default async function MigrationThanksPage() {
       <p className="mt-10 font-mono text-xs text-[var(--color-text-subtle)]">
         question we missed? email{' '}
         <a
-          href="mailto:migrations@briven.tech"
+          href="mailto:migrations@flndrn.com"
           className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
         >
-          migrations@briven.tech
+          migrations@flndrn.com
         </a>{' '}
         and quote your request id.
       </p>

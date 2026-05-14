@@ -114,10 +114,10 @@ export default async function MyMigrationsPage() {
       <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
         question about an in-flight migration? email{' '}
         <a
-          href="mailto:migrations@briven.tech"
+          href="mailto:migrations@flndrn.com"
           className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
         >
-          migrations@briven.tech
+          migrations@flndrn.com
         </a>{' '}
         and quote the request id.
       </p>

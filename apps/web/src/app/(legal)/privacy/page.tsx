@@ -132,7 +132,7 @@ export default function PrivacyPage() {
         password hashes; SHA-256 for API key hashes; constant-time comparison on every secret
         check. SSH access to the host is key-only; root-password authentication is disabled.
         Dependency updates roll weekly. No system is ever fully secure; if you discover a
-        vulnerability, please email <strong>security@briven.tech</strong> rather than disclosing
+        vulnerability, please email <strong>security@flndrn.com</strong> rather than disclosing
         publicly.
       </p>
 
@@ -181,7 +181,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p className="mt-3">
-        To exercise any of these rights, email <strong>privacy@briven.tech</strong>. We answer
+        To exercise any of these rights, email <strong>privacy@flndrn.com</strong>. We answer
         within 72 hours and resolve within 30 days, extendable by 60 days for complex requests
         (we will tell you).
       </p>
@@ -219,7 +219,7 @@ export default function PrivacyPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">12. contact</h2>
       <p>
-        Privacy questions and rights requests: <strong>privacy@briven.tech</strong>. Until
+        Privacy questions and rights requests: <strong>privacy@flndrn.com</strong>. Until
         brand-fronted email is fully wired up, this address forwards to{' '}
         <strong>flandriendev@hotmail.com</strong>. We answer within 72 hours.
       </p>

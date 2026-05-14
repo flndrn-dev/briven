@@ -36,10 +36,10 @@ export default function SupportPage() {
           <li>
             <strong>email</strong>{' '}
             <a
-              href="mailto:support@briven.tech"
+              href="mailto:support@flndrn.com"
               className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
             >
-              support@briven.tech
+              support@flndrn.com
             </a>{' '}
             — for paid customers; include your project id and the rough time of the issue.
             response targets per tier are on the SLA card in your billing dashboard.
@@ -104,10 +104,10 @@ export default function SupportPage() {
         <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
           report security issues to{' '}
           <a
-            href="mailto:security@briven.tech"
+            href="mailto:security@flndrn.com"
             className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
           >
-            security@briven.tech
+            security@flndrn.com
           </a>{' '}
           — encrypted reports welcome (PGP key on{' '}
           <Link

@@ -290,7 +290,7 @@ function CommercialTierCard({ tier }: { tier: CommercialTier }) {
       </ul>
 
       <a
-        href="mailto:licensing@briven.tech?subject=commercial%20licence%20enquiry"
+        href="mailto:licensing@flndrn.com?subject=commercial%20licence%20enquiry"
         className="mt-auto inline-flex h-11 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 font-sans font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)]"
       >
         contact licensing

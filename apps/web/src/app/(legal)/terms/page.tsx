@@ -223,9 +223,9 @@ export default function TermsPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">17. contact</h2>
       <p>
-        Legal notices: <strong>legal@briven.tech</strong>. Operational issues:{' '}
-        <strong>support@briven.tech</strong>. Security disclosures:{' '}
-        <strong>security@briven.tech</strong> (PGP key on the trust page). Until brand-fronted
+        Legal notices: <strong>legal@flndrn.com</strong>. Operational issues:{' '}
+        <strong>support@flndrn.com</strong>. Security disclosures:{' '}
+        <strong>security@flndrn.com</strong> (PGP key on the trust page). Until brand-fronted
         email is fully wired up, mail to those addresses is forwarded to{' '}
         <strong>flandriendev@hotmail.com</strong>.
       </p>

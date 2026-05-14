@@ -162,10 +162,10 @@ export function ProfileForm({ initial, vatLocked, save }: Props) {
           <p className="font-mono text-xs text-[var(--color-text-subtle)]">
             VAT verified ✓ · locked. to change a verified VAT id, email{' '}
             <a
-              href="mailto:support@briven.tech?subject=VAT%20change%20request&body=please%20update%20my%20briven%20vat%20id%20to%3A%20%0A%0Areason%3A%20"
+              href="mailto:support@flndrn.com?subject=VAT%20change%20request&body=please%20update%20my%20briven%20vat%20id%20to%3A%20%0A%0Areason%3A%20"
               className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
             >
-              support@briven.tech
+              support@flndrn.com
             </a>{' '}
             with the new id + reason — we re-verify against VIES on our side.
           </p>
