@@ -17,6 +17,7 @@ export interface SessionUser {
   // EU KYC / billing profile (all optional until paid checkout).
   legalName: string | null;
   companyName: string | null;
+  companyRegistrationNumber: string | null;
   vatId: string | null;
   vatVerifiedAt: string | null;
   addressLine1: string | null;
