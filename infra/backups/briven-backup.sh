@@ -114,4 +114,17 @@ done
 
 prune_local
 
+if [ "$UPLOAD_FAILURES" -gt 0 ]; then
+  # Surface the failure detail in journal AND exit non-zero so systemd's
+  # OnFailure= unit (briven-backup-alert.service) fires. Local dump is
+  # safe — only the remote mirror missed. Next run will overwrite the
+  # same off-site key; no manual cleanup needed.
+  log "ERROR: ${UPLOAD_FAILURES} off-site upload(s) failed (dbs=${UPLOAD_FAILURE_DBS})"
+  log "briven backup run complete with upload failures — exiting non-zero"
+  # Export for the OnFailure unit; systemd preserves env via FailureActionExitStatus.
+  echo "upload_failures=${UPLOAD_FAILURES}" > /run/briven-backup-status
+  echo "upload_failure_dbs=${UPLOAD_FAILURE_DBS}" >> /run/briven-backup-status
+  exit 1
+fi
+
 log "briven backup run complete"
