@@ -63,6 +63,10 @@ export const users = pgTable(
      */
     legalName: text('legal_name'),
     companyName: text('company_name'),
+    // EU business registration number (e.g. French SIREN, German HRB,
+    // Belgian KBO/BCE). Separate from VAT ID — many micro-businesses
+    // have a registration number but no VAT ID.
+    companyRegistrationNumber: text('company_registration_number'),
     vatId: text('vat_id'),
     // Set when a vat_id is confirmed valid against VIES. Locks the field
     // against further self-service edits — changes after this must go
@@ -76,6 +80,16 @@ export const users = pgTable(
     addressRegion: text('address_region'),
     // ISO 3166-1 alpha-2 (e.g. 'BE', 'NL'). Determines VAT treatment.
     addressCountry: text('address_country'),
+    // KYC — required before paid checkout under EU AML. Stored as
+    // ISO yyyy-mm-dd text; the underlying column is DATE.
+    dateOfBirth: text('date_of_birth'),
+    // ISO 3166-1 alpha-2 (e.g. 'BE'). Separate from address_country —
+    // residency drives VAT, birth drives KYC.
+    countryOfBirth: text('country_of_birth'),
+    // IANA zone name (e.g. 'Europe/Brussels'). Used to render timestamps
+    // and schedule the Pro digest at the user's local 09:00 instead of
+    // a flat UTC time.
+    timezone: text('timezone'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

@@ -120,14 +120,27 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
     providers.google || providers.github || providers.konnos || providers.discord;
 
   if (sent) {
+    const isOutlookFamily = /@(hotmail|outlook|live|msn)\./i.test(email);
     return (
       <div className="flex flex-col gap-4">
         <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 font-mono text-sm">
           <p className="text-[var(--color-text)]">check your inbox</p>
           <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-            we sent a one-time link to <span className="text-[var(--color-text)]">{email}</span>.
-            click it to finish signing in. the link expires in 10 minutes.
+            if there&apos;s an account on briven for{' '}
+            <span className="text-[var(--color-text)]">{email}</span>, we sent a one-time link
+            to it. click it to finish signing in. the link expires in 10 minutes.
           </p>
+          <ul className="mt-3 flex flex-col gap-1 text-xs text-[var(--color-text-subtle)]">
+            <li>
+              · don&apos;t see it within 2 minutes? check spam / junk
+              {isOutlookFamily
+                ? ' — outlook / hotmail / live / msn spam-filter new sender domains aggressively'
+                : ''}
+              .
+            </li>
+            <li>· briven is invite-only beta; signing in with an address that has no account is silent on purpose.</li>
+            <li>· already linked google or github before? use that button above instead.</li>
+          </ul>
         </div>
         <button
           type="button"

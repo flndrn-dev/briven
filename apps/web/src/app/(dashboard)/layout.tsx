@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { DashboardMobileNav } from './dashboard-mobile-nav';
 import { DashboardSidebar } from './dashboard-sidebar';
 import { SignOutButton } from './sign-out-button';
+import { LiveRefresh } from '../../components/live-refresh';
 import { apiJson } from '../../lib/api';
 import { requireUser } from '../../lib/session';
 
@@ -27,6 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
+      <LiveRefresh />
       <header className="shrink-0 border-b border-[var(--color-border-subtle)]">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/dashboard" className="flex items-center gap-3" aria-label="briven dashboard">

@@ -25,6 +25,9 @@ export interface SessionUser {
   addressPostalCode: string | null;
   addressRegion: string | null;
   addressCountry: string | null;
+  dateOfBirth: string | null;
+  countryOfBirth: string | null;
+  timezone: string | null;
   createdAt: string;
   lastSignIn: {
     at: string;

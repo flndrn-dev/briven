@@ -9,7 +9,12 @@ import { accounts, sessions, users, verifications } from '../db/schema.js';
 import { env } from '../env.js';
 import { ensurePersonalOrg } from '../services/orgs.js';
 import { log } from './logger.js';
-import { sendEmailVerification, sendMagicLink, sendPasswordReset } from './email.js';
+import {
+  sendEmailChangeConfirmation,
+  sendEmailVerification,
+  sendMagicLink,
+  sendPasswordReset,
+} from './email.js';
 
 /**
  * Resolve the Better Auth signing secret. Refuses to boot in non-development
@@ -119,6 +124,21 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       await sendEmailVerification(user.email, url);
+    },
+  },
+
+  // Authenticated users can change their sign-in email from the dashboard
+  // Settings page. Better Auth exposes POST /v1/auth/change-email; the
+  // confirmation link is sent to the CURRENT (already-verified) email so
+  // a hijacked browser can't silently re-point the login email. The new
+  // address only becomes the sign-in email after the user clicks the link
+  // delivered to the old mailbox.
+  user: {
+    changeEmail: {
+      enabled: true,
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        await sendEmailChangeConfirmation(user.email, newEmail, url);
+      },
     },
   },
 

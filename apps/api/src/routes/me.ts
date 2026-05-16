@@ -23,6 +23,7 @@ const patchSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
   legalName: z.string().min(1).max(200).nullable().optional(),
   companyName: z.string().max(200).nullable().optional(),
+  companyRegistrationNumber: z.string().max(64).nullable().optional(),
   vatId: z.string().max(32).nullable().optional(),
   addressLine1: z.string().max(200).nullable().optional(),
   addressLine2: z.string().max(200).nullable().optional(),
@@ -32,6 +33,26 @@ const patchSchema = z.object({
   addressCountry: z
     .string()
     .regex(/^[A-Z]{2}$/u, 'country must be an ISO 3166-1 alpha-2 code')
+    .nullable()
+    .optional(),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/u, 'date of birth must be ISO yyyy-mm-dd')
+    .nullable()
+    .optional(),
+  countryOfBirth: z
+    .string()
+    .regex(/^[A-Z]{2}$/u, 'country of birth must be an ISO 3166-1 alpha-2 code')
+    .nullable()
+    .optional(),
+  timezone: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(
+      /^[A-Za-z]+(?:\/[A-Za-z0-9_+\-]+)+$/u,
+      'timezone must be an IANA zone (e.g. Europe/Brussels)',
+    )
     .nullable()
     .optional(),
 });
