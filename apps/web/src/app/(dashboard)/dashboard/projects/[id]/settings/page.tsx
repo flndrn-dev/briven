@@ -107,6 +107,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
             name: user.name ?? '',
             legalName: user.legalName ?? '',
             companyName: user.companyName ?? '',
+            companyRegistrationNumber: user.companyRegistrationNumber ?? '',
             vatId: user.vatId ?? '',
             addressLine1: user.addressLine1 ?? '',
             addressLine2: user.addressLine2 ?? '',
