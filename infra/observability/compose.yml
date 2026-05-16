@@ -55,14 +55,15 @@ services:
   # Translator sidecar — alertmanager webhook → discord webhook payload.
   # Two instances, one per channel, each holding a different webhook url.
   # The url is held inside the container's env so it never lands in the
-  # repo. j sets DISCORD_WEBHOOK_ALERTS + DISCORD_WEBHOOK_DEPLOYS in the
-  # dokploy project's environment.
+  # repo. J sets BRIVEN_DISCORD_WEBHOOK_ALERTS + BRIVEN_DISCORD_WEBHOOK_DEPLOYS
+  # in the dokploy project's environment per CLAUDE.md §4.1 (BRIVEN_ prefix
+  # on every briven-owned env var) and docs/runbooks/discord-setup.md §4.
   alertmanager-discord-alerts:
     image: benjojo/alertmanager-discord:latest
     restart: unless-stopped
     logging: *briven-logging
     environment:
-      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_ALERTS}
+      DISCORD_WEBHOOK: ${BRIVEN_DISCORD_WEBHOOK_ALERTS}
       LISTEN_ADDRESS: ':9094'
     networks:
       - dokploy-network
@@ -72,7 +73,7 @@ services:
     restart: unless-stopped
     logging: *briven-logging
     environment:
-      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_DEPLOYS}
+      DISCORD_WEBHOOK: ${BRIVEN_DISCORD_WEBHOOK_DEPLOYS}
       LISTEN_ADDRESS: ':9094'
     networks:
       - dokploy-network

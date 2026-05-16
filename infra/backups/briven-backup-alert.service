@@ -1,0 +1,18 @@
+[Unit]
+Description=briven.tech — Discord alert when briven-backup.service exits non-zero
+Documentation=https://code.konnos.org/flndrn/briven/src/branch/main/infra/backups
+# Only meaningful as the OnFailure= target of briven-backup.service. Reads
+# /run/briven-backup-status (written by briven-backup.sh) for the failure
+# detail, then curls $BRIVEN_DISCORD_WEBHOOK_ALERTS. Fails silently if the
+# webhook env var is unset — better a missed alert than a tight loop of
+# OnFailure → OnFailure cascades on a misconfigured host.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/briven/backup.env
+ExecStart=/usr/local/bin/briven-backup-alert.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=30s

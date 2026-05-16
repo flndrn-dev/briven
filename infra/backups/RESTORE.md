@@ -54,7 +54,7 @@ dev does not accidentally remove old snapshots. Recommended phases:
 - function bundles (stored in the api's `bundle jsonb` column, so they ride
   along with `control.dump`)
 - Better Auth sessions (ephemeral, 30-day TTL, acceptable to lose on restore)
-- Resend email deliverability history (lives at Resend, not ours)
+- mittera email deliverability history (lives at mittera.eu, not ours)
 
 When bundles migrate to object storage (Phase 3), add a second sync:
 `b2 sync --delete ./bundles b2://briven-backups/<prefix>/<ts>/bundles`.

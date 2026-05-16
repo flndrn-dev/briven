@@ -4,6 +4,12 @@ Documentation=https://code.konnos.org/flndrn/briven/src/branch/main/infra/backup
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
+# Fire briven-backup-alert.service whenever this unit exits non-zero. The
+# script exits 1 when an off-site upload fails (the local pg_dump still
+# succeeded, but the off-site copy didn't land). The alert unit reads
+# /run/briven-backup-status and posts a Discord message to #briven-alerts
+# so an operator notices within the 60s SLA from road-to-ga.md §0.2.
+OnFailure=briven-backup-alert.service
 
 [Service]
 Type=oneshot
