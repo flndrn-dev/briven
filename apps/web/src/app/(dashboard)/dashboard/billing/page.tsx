@@ -19,6 +19,20 @@ interface Plan {
   productId: string;
 }
 
+interface BillingProfile {
+  legalName: string | null;
+  companyName: string | null;
+  companyRegistrationNumber: string | null;
+  vatId: string | null;
+  vatVerifiedAt: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  addressCity: string | null;
+  addressPostalCode: string | null;
+  addressRegion: string | null;
+  addressCountry: string | null;
+}
+
 const TIER_INCLUDED: Record<
   SubscriptionSummary['tier'],
   Array<{ label: string; value: string }>
@@ -117,19 +131,6 @@ export default async function BillingPage({
   }));
 
   // Fetch billing address from the profile endpoint
-  interface BillingProfile {
-    legalName: string | null;
-    companyName: string | null;
-    companyRegistrationNumber: string | null;
-    vatId: string | null;
-    vatVerifiedAt: string | null;
-    addressLine1: string | null;
-    addressLine2: string | null;
-    addressCity: string | null;
-    addressPostalCode: string | null;
-    addressRegion: string | null;
-    addressCountry: string | null;
-  }
   const profile = await apiJson<BillingProfile>('/v1/me').catch(() => null);
 
   const tier = subscription.tier;
