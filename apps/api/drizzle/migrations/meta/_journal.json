@@ -218,6 +218,13 @@
       "when": 1779350000000,
       "tag": "0030_user_profile_dob_tz",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1779430000000,
+      "tag": "0031_user_company_registration_number",
+      "breakpoints": true
     }
   ]
 }
