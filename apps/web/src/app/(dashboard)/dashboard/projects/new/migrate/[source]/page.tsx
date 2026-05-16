@@ -1,8 +1,11 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 
 import { apiFetch } from '../../../../../../../lib/api';
 import { requireUser } from '../../../../../../../lib/session';
+import { MigrateForm } from './migrate-form';
+
+type SubmitResult = { ok: true; redirectTo: string } | { ok: false; error: string };
 
 export const metadata = { title: 'migrate to briven' };
 
@@ -149,38 +152,45 @@ const SOURCES: Record<string, SourceDetail> = {
   },
 };
 
-async function submitMigrationRequest(formData: FormData) {
+async function submitMigrationRequest(input: {
+  source: string;
+  sourceUrl: string;
+  sourceNotes: string;
+  estimatedTables: string;
+  estimatedRows: string;
+  estimatedFunctions: string;
+  urgency: string;
+  contactEmail: string;
+}): Promise<SubmitResult> {
   'use server';
-  const source = String(formData.get('source') ?? '');
-  const sourceUrl = String(formData.get('sourceUrl') ?? '').trim();
-  const sourceNotes = String(formData.get('sourceNotes') ?? '').trim();
-  const estimatedTables = String(formData.get('estimatedTables') ?? '').trim();
-  const estimatedRows = String(formData.get('estimatedRows') ?? '').trim();
-  const estimatedFunctions = String(formData.get('estimatedFunctions') ?? '').trim();
-  const urgency = String(formData.get('urgency') ?? 'exploring');
-  const contactEmail = String(formData.get('contactEmail') ?? '').trim();
-
   const res = await apiFetch('/v1/migration-requests', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      source,
-      sourceUrl: sourceUrl || null,
-      sourceNotes,
-      estimatedTables: estimatedTables ? Number(estimatedTables) : null,
-      estimatedRows: estimatedRows || null,
-      estimatedFunctions: estimatedFunctions ? Number(estimatedFunctions) : null,
-      urgency,
-      contactEmail,
+      source: input.source,
+      sourceUrl: input.sourceUrl || null,
+      sourceNotes: input.sourceNotes,
+      estimatedTables: input.estimatedTables ? Number(input.estimatedTables) : null,
+      estimatedRows: input.estimatedRows || null,
+      estimatedFunctions: input.estimatedFunctions ? Number(input.estimatedFunctions) : null,
+      urgency: input.urgency,
+      contactEmail: input.contactEmail,
     }),
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`migration request failed (${res.status}): ${body}`);
+    let message = body;
+    try {
+      const parsed = JSON.parse(body) as { message?: string };
+      if (parsed.message) message = parsed.message;
+    } catch {
+      // body wasn't JSON
+    }
+    return { ok: false, error: message || `migration request failed: ${res.status}` };
   }
 
-  redirect('/dashboard/projects/new/migrate/thanks');
+  return { ok: true, redirectTo: '/dashboard/projects/new/migrate/thanks' };
 }
 
 export default async function MigrateSourcePage({
@@ -232,137 +242,15 @@ export default async function MigrateSourcePage({
         </span>
       </div>
 
-      <form action={submitMigrationRequest} className="flex flex-col gap-5">
-        <input type="hidden" name="source" value={detail.slug} />
-
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">
-            {detail.urlLabel}{' '}
-            <span className="text-[var(--color-text-subtle)]">(optional)</span>
-          </span>
-          <input
-            name="sourceUrl"
-            type="text"
-            maxLength={2000}
-            placeholder={detail.urlPlaceholder}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-          />
-          <span className="font-mono text-[11px] text-[var(--color-text-subtle)]">
-            {detail.urlHelp}
-          </span>
-        </label>
-
-        <fieldset className="flex flex-col gap-2">
-          <legend className="font-mono text-xs text-[var(--color-text-muted)]">
-            rough scale{' '}
-            <span className="text-[var(--color-text-subtle)]">(estimates are fine)</span>
-          </legend>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-                tables / collections
-              </span>
-              <input
-                name="estimatedTables"
-                type="number"
-                min={0}
-                max={10000}
-                placeholder="12"
-                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-                total rows / documents
-              </span>
-              <input
-                name="estimatedRows"
-                type="number"
-                min={0}
-                placeholder="500000"
-                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-                functions / handlers
-              </span>
-              <input
-                name="estimatedFunctions"
-                type="number"
-                min={0}
-                max={10000}
-                placeholder="18"
-                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-              />
-            </label>
-          </div>
-        </fieldset>
-
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">
-            anything else we should know{' '}
-            <span className="text-[var(--color-text-subtle)]">
-              (auth provider, special requirements, deadlines, etc.)
-            </span>
-          </span>
-          <textarea
-            name="sourceNotes"
-            rows={5}
-            maxLength={8000}
-            placeholder="we use clerk for auth, ~50 daily active users, want to cut over before next launch on the 21st."
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-          />
-        </label>
-
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">
-            urgency
-          </span>
-          <select
-            name="urgency"
-            defaultValue="exploring"
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-          >
-            <option value="exploring">just exploring · no rush</option>
-            <option value="this_quarter">this quarter</option>
-            <option value="this_month">this month</option>
-            <option value="this_week">this week · time-sensitive</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">
-            contact email
-          </span>
-          <input
-            name="contactEmail"
-            type="email"
-            required
-            maxLength={320}
-            defaultValue={user.email}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-          />
-          <span className="font-mono text-[11px] text-[var(--color-text-subtle)]">
-            we&apos;ll reach out within one business day to walk you through next steps.
-          </span>
-        </label>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="submit"
-            className="rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-sm font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
-          >
-            request migration · free during beta
-          </button>
-          <Link
-            href="/dashboard/projects/new"
-            className="rounded-md border border-[var(--color-border)] px-4 py-2 font-mono text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
-            cancel
-          </Link>
-        </div>
-      </form>
+      <MigrateForm
+        sourceSlug={detail.slug}
+        sourceName={detail.name}
+        urlLabel={detail.urlLabel}
+        urlPlaceholder={detail.urlPlaceholder}
+        urlHelp={detail.urlHelp}
+        defaultEmail={user.email}
+        submit={submitMigrationRequest}
+      />
     </section>
   );
 }

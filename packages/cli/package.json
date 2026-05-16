@@ -27,7 +27,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && chmod +x bin/briven.js",
+    "build": "tsup && node scripts/dts-inline.mjs && chmod +x bin/briven.js",
     "lint": "eslint . --max-warnings 0",
     "pack:tarball": "pnpm build && pnpm pack --pack-destination ../../dist-pack",
     "typecheck": "tsc --noEmit",

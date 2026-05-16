@@ -6,7 +6,7 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/index.d.ts",
       "default": "./src/index.ts"
     }
   },
@@ -14,6 +14,7 @@
     "src"
   ],
   "scripts": {
+    "build": "tsup",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/schema.test.ts src/wire.test.ts"
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "tsup": "^8.5.1",
     "typescript": "^6.0.3"
   }
 }

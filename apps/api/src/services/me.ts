@@ -9,6 +9,7 @@ export interface ProfilePatch {
   name?: string | null;
   legalName?: string | null;
   companyName?: string | null;
+  companyRegistrationNumber?: string | null;
   vatId?: string | null;
   vatVerifiedAt?: Date | null;
   addressLine1?: string | null;
@@ -17,6 +18,9 @@ export interface ProfilePatch {
   addressPostalCode?: string | null;
   addressRegion?: string | null;
   addressCountry?: string | null;
+  dateOfBirth?: string | null;
+  countryOfBirth?: string | null;
+  timezone?: string | null;
 }
 
 export async function getCurrentVat(
@@ -51,6 +55,7 @@ export async function getProfile(userId: string) {
       suspendedAt: users.suspendedAt,
       legalName: users.legalName,
       companyName: users.companyName,
+      companyRegistrationNumber: users.companyRegistrationNumber,
       vatId: users.vatId,
       vatVerifiedAt: users.vatVerifiedAt,
       addressLine1: users.addressLine1,
@@ -59,6 +64,9 @@ export async function getProfile(userId: string) {
       addressPostalCode: users.addressPostalCode,
       addressRegion: users.addressRegion,
       addressCountry: users.addressCountry,
+      dateOfBirth: users.dateOfBirth,
+      countryOfBirth: users.countryOfBirth,
+      timezone: users.timezone,
       createdAt: users.createdAt,
     })
     .from(users)

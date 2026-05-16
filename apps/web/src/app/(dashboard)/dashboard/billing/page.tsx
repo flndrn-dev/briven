@@ -116,6 +116,22 @@ export default async function BillingPage({
     plans: [] as Plan[],
   }));
 
+  // Fetch billing address from the profile endpoint
+  interface BillingProfile {
+    legalName: string | null;
+    companyName: string | null;
+    companyRegistrationNumber: string | null;
+    vatId: string | null;
+    vatVerifiedAt: string | null;
+    addressLine1: string | null;
+    addressLine2: string | null;
+    addressCity: string | null;
+    addressPostalCode: string | null;
+    addressRegion: string | null;
+    addressCountry: string | null;
+  }
+  const profile = await apiJson<BillingProfile>('/v1/me').catch(() => null);
+
   const tier = subscription.tier;
   const isCheckoutSuccess = checkout === 'success';
 
@@ -212,6 +228,9 @@ export default async function BillingPage({
         </p>
       </section>
 
+      {/* Billing address — pulled from profile */}
+      <BillingAddressCard profile={profile} />
+
       {/* SLA card */}
       <section className="flex flex-col gap-4">
         <div className="flex items-baseline justify-between">
@@ -248,6 +267,74 @@ export default async function BillingPage({
         </div>
       </section>
     </div>
+  );
+}
+
+function BillingAddressCard({ profile }: { profile: BillingProfile | null }) {
+  const hasAddress = profile?.addressLine1 || profile?.addressCity || profile?.addressCountry;
+  const hasCompany = profile?.companyName || profile?.companyRegistrationNumber || profile?.vatId;
+  const hasIdentity = profile?.legalName;
+
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-baseline justify-between">
+        <h2 className="font-mono text-sm text-[var(--color-text)]">billing address</h2>
+        <a
+          href="/dashboard/settings"
+          className="font-mono text-xs text-[var(--color-text-link)] underline-offset-2 hover:underline"
+        >
+          edit in settings →
+        </a>
+      </div>
+      <dl className="grid grid-cols-1 gap-x-3 sm:grid-cols-[200px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm">
+        {hasIdentity ? (
+          <FragmentRow label="legal name" value={profile!.legalName ?? '—'} />
+        ) : null}
+        {hasCompany ? (
+          <>
+            {profile!.companyName ? (
+              <FragmentRow label="company" value={profile!.companyName} />
+            ) : null}
+            {profile!.companyRegistrationNumber ? (
+              <FragmentRow label="registration no." value={profile!.companyRegistrationNumber} />
+            ) : null}
+            {profile!.vatId ? (
+              <FragmentRow
+                label="vat id"
+                value={`${profile!.vatId}${profile!.vatVerifiedAt ? ' · verified ✓' : ''}`}
+              />
+            ) : null}
+          </>
+        ) : null}
+        {hasAddress ? (
+          <>
+            <FragmentRow
+              label="address"
+              value={[
+                profile!.addressLine1,
+                profile!.addressLine2,
+                profile!.addressCity,
+                profile!.addressPostalCode,
+                profile!.addressRegion,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+            />
+            <FragmentRow label="country" value={profile!.addressCountry ?? '—'} />
+          </>
+        ) : !hasIdentity && !hasCompany ? (
+          <dt className="col-span-full text-center text-[var(--color-text-muted)]">
+            no billing address on file —{' '}
+            <a
+              href="/dashboard/settings"
+              className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
+            >
+              add one in settings
+            </a>
+          </dt>
+        ) : null}
+      </dl>
+    </section>
   );
 }
 

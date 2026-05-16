@@ -1,11 +1,11 @@
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 
-import { AvatarUploader } from '../../../../components/avatar-uploader';
+import { ProfileBillingForm } from '../../../../components/profile-billing-form';
 import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
+import { ChangeEmailForm } from './change-email-form';
 import { DeleteAccountForm } from './delete-account-form';
-import { ProfileForm } from './profile-form';
 
 interface PendingInvitation {
   id: string;
@@ -64,76 +64,88 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-8 pb-12">
-      <section>
-        <h2 className="font-mono text-sm text-[var(--color-text)]">account</h2>
-        <dl className="mt-3 grid grid-cols-1 gap-x-3 sm:grid-cols-[160px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-sm">
-          <dt className="text-[var(--color-text-subtle)]">email</dt>
-          <dd>
-            {user.email}
-            {user.emailVerified ? (
-              <span className="ml-2 rounded bg-[var(--color-primary-subtle)] px-1.5 py-0.5 text-xs text-[var(--color-primary)]">
-                verified
-              </span>
-            ) : (
-              <span className="ml-2 rounded bg-red-400/15 px-1.5 py-0.5 text-xs text-red-400">
-                unverified
-              </span>
-            )}
-          </dd>
+      <header>
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--color-text)]">Settings</h1>
+        <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+          Account and notification preferences.
+        </p>
+      </header>
 
-          <dt className="text-[var(--color-text-subtle)]">user id</dt>
-          <dd className="truncate text-xs">{user.id}</dd>
-
-          <dt className="text-[var(--color-text-subtle)]">joined</dt>
-          <dd>{new Date(user.createdAt).toISOString().slice(0, 10)}</dd>
-
-          {user.isAdmin ? (
-            <>
-              <dt className="text-[var(--color-text-subtle)]">role</dt>
-              <dd>
-                <span className="rounded bg-[var(--color-primary-subtle)] px-2 py-0.5 text-xs text-[var(--color-primary)]">
-                  platform admin
+      <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+        <h2 className="text-base font-semibold text-[var(--color-text)]">Account</h2>
+        <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+              Email
+            </span>
+            <span className="text-sm text-[var(--color-text)]">
+              {user.email}
+              {user.emailVerified ? (
+                <span className="ml-2 rounded bg-[var(--color-primary-subtle)] px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-primary)]">
+                  verified
                 </span>
-                <Link
-                  href="/dashboard/admin"
-                  className="ml-3 text-[var(--color-text-link)] hover:underline"
-                >
-                  open admin →
-                </Link>
-              </dd>
-            </>
-          ) : null}
-        </dl>
+              ) : (
+                <span className="ml-2 rounded bg-red-400/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-red-400">
+                  unverified
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+              Name
+            </span>
+            <span className="text-sm text-[var(--color-text)]">
+              {user.legalName ?? user.name ?? '—'}
+            </span>
+          </div>
+        </div>
+        <p className="mt-4 text-xs text-[var(--color-text-muted)]">
+          Email is used for sign-in and alerts. To change it, click below — we&apos;ll send a
+          confirmation link to your current address.
+        </p>
+        <ChangeEmailForm
+          currentEmail={user.email}
+          apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+        />
+        {user.isAdmin ? (
+          <p className="mt-3 text-xs">
+            <span className="rounded bg-[var(--color-primary-subtle)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-primary)]">
+              Platform admin
+            </span>
+            <Link
+              href="/dashboard/admin"
+              className="ml-3 text-[var(--color-text-link)] hover:underline"
+            >
+              open admin →
+            </Link>
+          </p>
+        ) : null}
       </section>
 
       <section>
-        <h2 className="font-mono text-sm text-[var(--color-text)]">profile + billing (EU KYC)</h2>
-        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          required before a paid plan checkout. used for VAT determination, invoice issuance, and EU
-          KYC compliance. stored only on the control plane, never shared with a customer project.
-        </p>
-        <div className="mt-3 flex flex-col gap-4">
-          <AvatarUploader
-            currentImage={user.image}
-            displayName={user.legalName ?? user.name ?? user.email}
-          />
-          <ProfileForm
-            initial={{
-              name: user.name ?? '',
-              legalName: user.legalName ?? '',
-              companyName: user.companyName ?? '',
-              vatId: user.vatId ?? '',
-              addressLine1: user.addressLine1 ?? '',
-              addressLine2: user.addressLine2 ?? '',
-              addressCity: user.addressCity ?? '',
-              addressPostalCode: user.addressPostalCode ?? '',
-              addressRegion: user.addressRegion ?? '',
-              addressCountry: user.addressCountry ?? '',
-            }}
-            vatLocked={Boolean(user.vatVerifiedAt && user.vatId)}
-            save={save}
-          />
-        </div>
+        <ProfileBillingForm
+          initial={{
+            name: user.name ?? '',
+            legalName: user.legalName ?? '',
+            companyName: user.companyName ?? '',
+            companyRegistrationNumber: user.companyRegistrationNumber ?? '',
+            vatId: user.vatId ?? '',
+            addressLine1: user.addressLine1 ?? '',
+            addressLine2: user.addressLine2 ?? '',
+            addressCity: user.addressCity ?? '',
+            addressPostalCode: user.addressPostalCode ?? '',
+            addressRegion: user.addressRegion ?? '',
+            addressCountry: user.addressCountry ?? '',
+            dateOfBirth: user.dateOfBirth ?? '',
+            countryOfBirth: user.countryOfBirth ?? '',
+            timezone: user.timezone ?? '',
+          }}
+          currentImage={user.image}
+          displayName={user.legalName ?? user.name ?? user.email}
+          vatLocked={Boolean(user.vatVerifiedAt && user.vatId)}
+          save={save}
+        />
       </section>
 
       <section>

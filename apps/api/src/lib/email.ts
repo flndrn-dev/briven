@@ -191,6 +191,19 @@ export async function sendEmailVerification(to: string, url: string): Promise<vo
   });
 }
 
+export async function sendEmailChangeConfirmation(
+  to: string,
+  newEmail: string,
+  url: string,
+): Promise<void> {
+  await send('email_change_confirmation', {
+    to,
+    subject: 'confirm your new briven sign-in email',
+    html: emailChangeHtml(newEmail, url),
+    text: emailChangeText(newEmail, url),
+  });
+}
+
 export async function sendPasswordReset(to: string, url: string): Promise<void> {
   await send('reset_password', {
     to,
@@ -411,6 +424,22 @@ function resetPasswordHtml(url: string): string {
 
 function resetPasswordText(url: string): string {
   return `reset your briven password\n\n${url}\n\nthis link expires in 1 hour. if you didn't request a reset, ignore this email.`;
+}
+
+function emailChangeHtml(newEmail: string, url: string): string {
+  return shell(
+    'confirm your new briven sign-in email',
+    `
+    <p>we received a request to change the sign-in email on your briven account to <strong>${escapeHtml(newEmail)}</strong>.</p>
+    <p>click the button below to confirm. this link expires in 1 hour.</p>
+    ${cta('confirm new email', url)}
+    <p class="muted">if you didn't request this, ignore this email — your current sign-in email stays unchanged. if you keep getting these, email support@flndrn.com.</p>
+  `,
+  );
+}
+
+function emailChangeText(newEmail: string, url: string): string {
+  return `confirm your new briven sign-in email\n\nwe received a request to change your sign-in email to ${newEmail}.\n\n${url}\n\nthis link expires in 1 hour. if you didn't request this, ignore this email.`;
 }
 
 function accountDeletionHtml(): string {
