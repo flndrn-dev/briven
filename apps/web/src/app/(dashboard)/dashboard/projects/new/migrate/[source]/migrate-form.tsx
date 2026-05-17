@@ -24,12 +24,13 @@ interface Props {
     estimatedTables: string;
     estimatedRows: string;
     estimatedFunctions: string;
-    urgency: 'exploring' | 'this_quarter' | 'this_month' | 'this_week';
+    urgency: 'direct' | 'this_week' | 'this_month' | 'this_quarter' | 'exploring';
     contactEmail: string;
   }) => Promise<SubmitResult>;
 }
 
 const URGENCY_OPTIONS = [
+  { value: 'direct', label: 'Direct · as soon as possible' },
   { value: 'this_week', label: 'This week · time-sensitive' },
   { value: 'this_month', label: 'This month' },
   { value: 'this_quarter', label: 'This quarter' },
@@ -101,7 +102,9 @@ export function MigrateForm({
               key={opt.value}
               className={`flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 text-sm transition ${
                 urgency === opt.value
-                  ? 'border-[var(--color-primary)] bg-[var(--color-primary-subtle)] text-[var(--color-text)]'
+                  ? opt.value === 'direct'
+                    ? 'border-[var(--color-error)] bg-[var(--color-error)]/10 text-[var(--color-text)]'
+                    : 'border-[var(--color-primary)] bg-[var(--color-primary-subtle)] text-[var(--color-text)]'
                   : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] text-[var(--color-text-muted)] hover:border-[var(--color-border)]'
               }`}
             >

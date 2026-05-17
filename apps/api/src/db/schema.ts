@@ -831,10 +831,11 @@ export const migrationSources = [
 export type MigrationSource = (typeof migrationSources)[number];
 
 export const migrationUrgencies = [
-  'exploring',
+  'direct',
   'this_week',
   'this_month',
   'this_quarter',
+  'exploring',
 ] as const;
 export type MigrationUrgency = (typeof migrationUrgencies)[number];
 
