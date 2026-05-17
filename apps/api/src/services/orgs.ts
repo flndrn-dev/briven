@@ -122,9 +122,17 @@ export async function ensurePersonalOrg(input: {
       .onConflictDoNothing();
     return row;
   } catch (err) {
-    // 23505 = unique_violation on the id pkey or the slug uindex. Either
-    // way, the row exists now — re-read and continue.
-    if ((err as { code?: string }).code === '23505') {
+    const code = (err as { code?: string }).code;
+    const msg = err instanceof Error ? err.message : '';
+    // 23505 = unique_violation (PostgresError). Also catch drizzle-
+    // wrapped errors where the code is nested or the message contains
+    // "duplicate key" — the postgres driver sometimes wraps the native
+    // error inside a driver-level Error whose .code is undefined.
+    const isDuplicate =
+      code === '23505' ||
+      msg.includes('duplicate key') ||
+      msg.includes('unique constraint');
+    if (isDuplicate) {
       const [refound] = await db
         .select()
         .from(organizations)
@@ -135,6 +143,15 @@ export async function ensurePersonalOrg(input: {
           .insert(orgMembers)
           .values({ orgId: refound.id, userId: input.userId, role: 'owner' })
           .onConflictDoNothing();
+        // Self-heal: if the org was created with personal=false (pre-
+        // migration edge case), fix it now so the next getDefaultOrgForUser
+        // hits the fast path instead of re-entering ensurePersonalOrg.
+        if (!refound.personal) {
+          await db
+            .update(organizations)
+            .set({ personal: true, updatedAt: new Date() })
+            .where(eq(organizations.id, refound.id));
+        }
         return refound;
       }
     }
