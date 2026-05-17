@@ -18,10 +18,4 @@ export function AutoRefresh({ active }: { active: boolean }) {
   );
 }
 
-export async function clientApiJson(path, init = {}) {
-  const origin = "https://api.briven.tech";
-  const url = origin + path;
-  const res = await fetch(url, { ...init, headers: { "content-type": "application/json", ...init.headers }, credentials: "include" });
-  if (!res.ok) throw new Error(await res.text().catch(() => ""));
-  return await res.json();
-}
+
