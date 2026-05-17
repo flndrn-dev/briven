@@ -89,40 +89,24 @@ function PhaseTracker({
   const currentIdx = PHASE_ORDER[status] ?? 0;
   const isCancelled = status === 'cancelled';
 
-  // Find when each phase was entered from the audit trail
+  // Phase timestamps: Phase 1 = request creation time.
+  // Status-change entries carry `newStatus` (the API now serialises it).
+  // Map newStatus → phase key directly instead of guessing sequentially.
   const phaseTimestamps: Record<string, string | null> = {};
   for (const entry of timeline) {
-    if (entry.metadata.source) {
-      // The create action carries the source, not a phase timestamp.
-      // Timestamps come from admin update actions that set a new status.
-      // We approximate by using the first entry for the initial status.
+    if (
+      entry.action === 'migration_request.public_create' ||
+      entry.action === 'migration_request.create'
+    ) {
       if (!phaseTimestamps['new']) phaseTimestamps['new'] = entry.createdAt;
     }
-  }
-  // Use the request creation time for Phase 1 fallback
-  if (timeline.length > 0 && !phaseTimestamps['new']) {
-    const createEntry = timeline.find(
-      (t) =>
-        t.action === 'migration_request.create' ||
-        t.action === 'migration_request.public_create',
-    );
-    if (createEntry) phaseTimestamps['new'] = createEntry.createdAt;
-  }
-  // For subsequent phases, entries with statusChanged: true mark transitions
-  let lastPhaseAt = phaseTimestamps['new'] ?? null;
-  for (const entry of timeline) {
-    if (entry.metadata.statusChanged) {
-      // Walk forward through phases — each statusChanged increments
-      // We don't have the actual new status from the audit metadata,
-      // so we fill in sequentially.
-      for (const ph of PHASES.slice(1)) {
-        if (!phaseTimestamps[ph.key]) {
-          phaseTimestamps[ph.key] = entry.createdAt;
-          lastPhaseAt = entry.createdAt;
-          break;
-        }
-      }
+    if (entry.metadata.statusChanged && entry.metadata.newStatus) {
+      phaseTimestamps[entry.metadata.newStatus] = entry.createdAt;
     }
+  }
+  // Fallback: if no explicit create entry exists, use the first entry.
+  if (!phaseTimestamps['new'] && timeline.length > 0) {
+    phaseTimestamps['new'] = timeline[0].createdAt;
   }
 
   return (

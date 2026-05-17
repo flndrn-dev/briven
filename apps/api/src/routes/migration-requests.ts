@@ -70,6 +70,16 @@ migrationRequestsRouter.get('/v1/migration-requests/:id', async (c) => {
         statusChanged:
           typeof t.metadata?.statusChanged === 'boolean'
             ? t.metadata.statusChanged
+            : t.action === 'migration_request.status_change'
+              ? true
+              : null,
+        newStatus:
+          typeof t.metadata?.newStatus === 'string'
+            ? t.metadata.newStatus
+            : null,
+        previousStatus:
+          typeof t.metadata?.previousStatus === 'string'
+            ? t.metadata.previousStatus
             : null,
         messageIncluded:
           typeof t.metadata?.messageIncluded === 'boolean'
