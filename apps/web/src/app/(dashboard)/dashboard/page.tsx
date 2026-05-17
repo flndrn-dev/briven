@@ -38,6 +38,18 @@ interface ProjectActivity {
   rows: ActivityRow[];
 }
 
+interface MigrationCard {
+  id: string;
+  source: string;
+  sourceUrl: string | null;
+  sourceNotes: string;
+  urgency: string;
+  status: string;
+  contactEmail: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const dynamic = 'force-dynamic';
 
 const TIER_LABEL: Record<Project['tier'], string> = {
@@ -62,9 +74,9 @@ export default async function DashboardHome() {
           invitations: [] as PendingOrgInvitation[],
         }),
       ),
-      apiJson<{ requests: { id: string; source: string; status: string }[] }>(
+      apiJson<{ requests: MigrationCard[] }>(
         '/v1/migration-requests',
-      ).catch(() => ({ requests: [] as { id: string; source: string; status: string }[] })),
+      ).catch(() => ({ requests: [] as MigrationCard[] })),
     ]);
 
   const projects = projectsResult.projects;
@@ -159,22 +171,37 @@ export default async function DashboardHome() {
       ) : null}
 
       {openMigrations.length > 0 ? (
-        <Link
-          href="/dashboard/migrations"
-          className="flex items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
-        >
-          <div>
-            <p className="font-mono text-sm text-[var(--color-text)]">
-              {openMigrations.length === 1
-                ? `your ${openMigrations[0]?.source ?? ''} migration is in progress.`
-                : `${openMigrations.length} migrations in progress.`}
-            </p>
-            <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
-              click to see status updates.
-            </p>
-          </div>
-          <span className="font-mono text-sm text-[var(--color-primary)]">→</span>
-        </Link>
+        <div className="flex flex-col gap-2">
+          <h2 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+            active migrations · {openMigrations.length}
+          </h2>
+          {openMigrations.map((m) => (
+            <Link
+              key={m.id}
+              href={`/dashboard/migrations/${m.id}`}
+              className="flex items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
+            >
+              <div className="flex items-center gap-3">
+                <span className="rounded-full border border-[var(--color-border-subtle)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                  {m.source}
+                </span>
+                <span className="rounded-full border border-[var(--color-primary)] bg-[var(--color-primary-subtle)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-primary)]">
+                  {m.status.replace(/_/g, ' ')}
+                </span>
+                <p className="font-mono text-sm text-[var(--color-text)]">
+                  {m.urgency.replace(/_/g, ' ')} · submitted {new Date(m.createdAt).toISOString().slice(0, 10)}
+                </p>
+              </div>
+              <span className="font-mono text-sm text-[var(--color-primary)]">see progress →</span>
+            </Link>
+          ))}
+          <Link
+            href="/dashboard/migrations"
+            className="font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] self-start ml-1"
+          >
+            all migrations →
+          </Link>
+        </div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
