@@ -1,4 +1,3 @@
-'use client';
 import { apiOrigin } from './env';
 export async function clientApiJson(path, init = {}) {
   const url = apiOrigin ? apiOrigin + path : path;
