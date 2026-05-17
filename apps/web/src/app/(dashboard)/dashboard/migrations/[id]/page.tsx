@@ -66,6 +66,135 @@ function formatTime(iso: string): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
 }
 
+/** Ordered phases every migration passes through. */
+const PHASES = [
+  { key: 'new', label: 'Request submitted', idx: 1 },
+  { key: 'contacted', label: 'Request reviewed', idx: 2 },
+  { key: 'scheduled', label: 'Migration scheduled', idx: 3 },
+  { key: 'in_progress', label: 'Migration in progress', idx: 4 },
+  { key: 'completed', label: 'Migration completed', idx: 5 },
+] as const;
+
+const PHASE_ORDER: Record<string, number> = Object.fromEntries(
+  PHASES.map((p) => [p.key, p.idx]),
+);
+
+function PhaseTracker({
+  status,
+  timeline,
+}: {
+  status: string;
+  timeline: TimelineEntry[];
+}) {
+  const currentIdx = PHASE_ORDER[status] ?? 0;
+  const isCancelled = status === 'cancelled';
+
+  // Find when each phase was entered from the audit trail
+  const phaseTimestamps: Record<string, string | null> = {};
+  for (const entry of timeline) {
+    if (entry.metadata.source) {
+      // The create action carries the source, not a phase timestamp.
+      // Timestamps come from admin update actions that set a new status.
+      // We approximate by using the first entry for the initial status.
+      if (!phaseTimestamps['new']) phaseTimestamps['new'] = entry.createdAt;
+    }
+  }
+  // Use the request creation time for Phase 1 fallback
+  if (timeline.length > 0 && !phaseTimestamps['new']) {
+    const createEntry = timeline.find(
+      (t) =>
+        t.action === 'migration_request.create' ||
+        t.action === 'migration_request.public_create',
+    );
+    if (createEntry) phaseTimestamps['new'] = createEntry.createdAt;
+  }
+  // For subsequent phases, entries with statusChanged: true mark transitions
+  let lastPhaseAt = phaseTimestamps['new'] ?? null;
+  for (const entry of timeline) {
+    if (entry.metadata.statusChanged) {
+      // Walk forward through phases — each statusChanged increments
+      // We don't have the actual new status from the audit metadata,
+      // so we fill in sequentially.
+      for (const ph of PHASES.slice(1)) {
+        if (!phaseTimestamps[ph.key]) {
+          phaseTimestamps[ph.key] = entry.createdAt;
+          lastPhaseAt = entry.createdAt;
+          break;
+        }
+      }
+    }
+  }
+
+  return (
+    <div className="mb-4 overflow-x-auto rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+      {isCancelled ? (
+        <p className="font-mono text-sm text-[var(--color-text-subtle)]">
+          This request was cancelled.
+        </p>
+      ) : (
+        <div className="flex items-start gap-0">
+          {PHASES.map((phase, i) => {
+            const reached = currentIdx >= phase.idx;
+            const isCurrent = currentIdx === phase.idx;
+            const ts = phaseTimestamps[phase.key];
+
+            return (
+              <div key={phase.key} className="flex items-start gap-0 min-w-0 flex-1">
+                <div className="flex flex-col items-center gap-1.5 min-w-0 w-full">
+                  {/* Dot */}
+                  <div
+                    className={`z-10 flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-mono font-semibold ${
+                      reached
+                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
+                        : 'border-[var(--color-border-subtle)] bg-[var(--color-bg)] text-[var(--color-text-muted)]'
+                    }`}
+                  >
+                    {reached ? '✓' : phase.idx}
+                  </div>
+                  {/* Label */}
+                  <p
+                    className={`text-center font-mono text-[10px] leading-tight ${
+                      reached
+                        ? 'text-[var(--color-text)]'
+                        : 'text-[var(--color-text-subtle)]'
+                    }`}
+                  >
+                    Phase {phase.idx}
+                    <br />
+                    {phase.label}
+                  </p>
+                  {/* Timestamp */}
+                  {ts ? (
+                    <p className="font-mono text-[8px] text-[var(--color-text-subtle)] leading-tight text-center">
+                      {formatTime(ts)}
+                    </p>
+                  ) : isCurrent ? (
+                    <p className="font-mono text-[8px] text-[var(--color-text-muted)] text-center italic">
+                      processing…
+                    </p>
+                  ) : null}
+                </div>
+                {/* Connector line (except last) */}
+                {i < PHASES.length - 1 && (
+                  <div className="relative mt-3 h-0.5 w-full shrink-0">
+                    <div
+                      className={`h-full rounded-full ${
+                        currentIdx > phase.idx
+                          ? 'bg-[var(--color-primary)]'
+                          : 'bg-[var(--color-border-subtle)]'
+                      }`}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default async function MigrationDetailPage({
   params,
 }: {
@@ -174,6 +303,7 @@ export default async function MigrationDetailPage({
         <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
           timeline
         </h2>
+        <PhaseTracker status={request.status} timeline={timeline} />
         {timeline.length === 0 ? (
           <p className="font-mono text-sm text-[var(--color-text-muted)]">
             no activity yet.
