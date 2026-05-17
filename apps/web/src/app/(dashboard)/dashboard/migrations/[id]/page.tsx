@@ -79,7 +79,7 @@ const PHASE_ORDER: Record<string, number> = Object.fromEntries(
   PHASES.map((p) => [p.key, p.idx]),
 );
 
-function PhaseTracker({
+function StepTimeline({
   status,
   timeline,
 }: {
