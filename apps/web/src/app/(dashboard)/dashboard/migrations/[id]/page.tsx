@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { apiJson } from '../../../../../lib/api';
+import { clientApiJson } from '../../../../../lib/api';
 
 const ACTION_LABEL: Record<string, string> = {
   'migration_request.public_create': 'you submitted a migration request',
