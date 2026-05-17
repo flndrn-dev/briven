@@ -285,9 +285,9 @@ export default async function MigrationDetailPage({
 
       <div>
         <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
-          timeline
+          migration steps
         </h2>
-        <PhaseTracker status={request.status} timeline={timeline} />
+        <StepTimeline status={request.status} timeline={timeline} />
         {timeline.length === 0 ? (
           <p className="font-mono text-sm text-[var(--color-text-muted)]">
             no activity yet.

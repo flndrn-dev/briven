@@ -60,8 +60,3 @@ export class ApiError extends Error {
   }
 }
 
-
-  const res = await fetch(path, { ...init, headers: { "content-type": "application/json", ...init.headers }, credentials: "include" });
-  if (!res.ok) throw new Error(await res.text().catch(() => ""));
-  return await res.json();
-}
