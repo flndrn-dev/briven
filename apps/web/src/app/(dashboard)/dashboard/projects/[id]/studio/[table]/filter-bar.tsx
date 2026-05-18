@@ -16,37 +16,49 @@ interface Props {
 }
 
 /**
- * Compact filter bar — pick a column, type a value, submit. Builds a
- * `<col>__eq=<value>` query param that the server route validates +
- * parameterises on the data-plane side. Empty value clears the filter.
- *
- * Stays narrow on purpose. Multi-clause filters and operators other than
- * equality are a future slice.
+ * Compact filter bar — pick a column + operator + value, submit. Builds a
+ * `<col>__<op>=<value>` query param that the server route validates against
+ * the FILTER_OPS allow-list and parameterises on the data-plane side.
  */
+const FILTER_OPS = ['eq', 'contains', 'gt', 'lt', 'gte', 'lte'] as const;
+type FilterOp = (typeof FILTER_OPS)[number];
+
+const OP_LABEL: Record<FilterOp, string> = {
+  eq: '=',
+  contains: 'contains',
+  gt: '>',
+  lt: '<',
+  gte: '≥',
+  lte: '≤',
+};
+
 export function FilterBar({ columns, basePath }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [col, setCol] = useState(columns[0]?.name ?? '');
+  const [op, setOp] = useState<FilterOp>('eq');
   const [value, setValue] = useState('');
 
   // Existing filter chips, gathered from the URL.
-  const activeFilters: Array<{ col: string; value: string }> = [];
+  const activeFilters: Array<{ col: string; op: FilterOp; value: string }> = [];
   for (const [k, v] of searchParams.entries()) {
-    if (k.endsWith('__eq')) {
-      activeFilters.push({ col: k.slice(0, -'__eq'.length), value: v });
-    }
+    const sepAt = k.lastIndexOf('__');
+    if (sepAt <= 0) continue;
+    const opCandidate = k.slice(sepAt + 2) as FilterOp;
+    if (!(FILTER_OPS as readonly string[]).includes(opCandidate)) continue;
+    activeFilters.push({ col: k.slice(0, sepAt), op: opCandidate, value: v });
   }
 
   function apply(): void {
     const next = new URLSearchParams(searchParams.toString());
-    next.set(`${col}__eq`, value);
+    next.set(`${col}__${op}`, value);
     next.delete('offset'); // jump back to page 1 on filter change
     router.push(`${basePath}?${next.toString()}`);
   }
 
-  function clear(target: string): void {
+  function clear(targetCol: string, targetOp: FilterOp): void {
     const next = new URLSearchParams(searchParams.toString());
-    next.delete(`${target}__eq`);
+    next.delete(`${targetCol}__${targetOp}`);
     next.delete('offset');
     router.push(`${basePath}?${next.toString()}`);
   }
@@ -66,7 +78,18 @@ export function FilterBar({ columns, basePath }: Props) {
             </option>
           ))}
         </select>
-        <span className="text-[var(--color-text-subtle)]">=</span>
+        <select
+          value={op}
+          onChange={(e) => setOp(e.target.value as FilterOp)}
+          className="rounded-sm border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2 py-1"
+          aria-label="operator"
+        >
+          {FILTER_OPS.map((o) => (
+            <option key={o} value={o}>
+              {OP_LABEL[o]}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           value={value}
@@ -90,13 +113,13 @@ export function FilterBar({ columns, basePath }: Props) {
         <div className="flex flex-wrap gap-2 font-mono text-[10px]">
           {activeFilters.map((f) => (
             <button
-              key={f.col}
+              key={`${f.col}__${f.op}`}
               type="button"
-              onClick={() => clear(f.col)}
+              onClick={() => clear(f.col, f.op)}
               className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[var(--color-text-muted)] hover:border-[var(--color-text-error)] hover:text-[var(--color-text-error)]"
               title="click to clear"
             >
-              {f.col} = {f.value} ×
+              {f.col} {OP_LABEL[f.op]} {f.value} ×
             </button>
           ))}
         </div>

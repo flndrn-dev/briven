@@ -151,3 +151,63 @@ When briven moves from private beta to public beta:
 - [ ] AutoMod + 2FA-for-moderation enabled
 
 Once §1–§4 are done the operator-side alerting works. §5 is the polish layer for user-facing OAuth + auto-join.
+
+---
+
+## 10. Smoke test the webhook routing (Phase 0 exit criterion §0.2)
+
+Don't kill production containers to test alert delivery — push a synthetic alert directly into alertmanager instead. Two routes, two smoke tests.
+
+### `#briven-alerts` — `severity=critical` path
+
+```bash
+ssh root@187.124.64.116 '
+docker run --rm --network dokploy-network curlimages/curl:8.10.1 \
+  -sS -XPOST http://alertmanager:9093/api/v2/alerts \
+  -H "content-type: application/json" \
+  -d "$(cat <<JSON
+[{
+  "labels": {"alertname":"BrivenSmokeTest","service":"smoketest","severity":"critical"},
+  "annotations": {"summary":"phase 0.2 webhook smoke test","description":"verifying #briven-alerts wiring; safe to ignore"},
+  "startsAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "endsAt":"$(date -u -d "+2 minutes" +%Y-%m-%dT%H:%M:%SZ)"
+}]
+JSON
+)"'
+```
+
+Expect a red embed in `#briven-alerts` within 60 s (alertmanager `group_wait: 30s` + bridge round-trip).
+
+### `#briven-deploys` — info path
+
+```bash
+ssh root@187.124.64.116 '
+docker run --rm --network dokploy-network curlimages/curl:8.10.1 \
+  -sS -XPOST http://alertmanager:9093/api/v2/alerts \
+  -H "content-type: application/json" \
+  -d "$(cat <<JSON
+[{
+  "labels": {"alertname":"BrivenDeploySmokeTest","service":"smoketest","severity":"info"},
+  "annotations": {"summary":"phase 0.2 deploys webhook smoke test","description":"verifying #briven-deploys wiring; safe to ignore"},
+  "startsAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "endsAt":"$(date -u -d "+2 minutes" +%Y-%m-%dT%H:%M:%SZ)"
+}]
+JSON
+)"'
+```
+
+Capture both message timestamps as Phase 0 close-out ADR evidence.
+
+If nothing arrives:
+
+```bash
+docker logs alertmanager --tail=50
+docker logs alertmanager-discord-alerts --tail=20
+docker logs alertmanager-discord-deploys --tail=20
+```
+
+Common failure modes:
+
+- `BRIVEN_DISCORD_WEBHOOK_*` env empty in the bridge container → restart the observability project after pasting the URL in Dokploy.
+- Webhook URL revoked from the Discord side (channel deleted, integration removed) → regenerate per §4 and update Dokploy env.
+- alertmanager unreachable from the curl helper → confirm both are on `dokploy-network`.

@@ -64,7 +64,9 @@ export async function lookupIp(ip: string | null | undefined): Promise<GeoLookup
         const country = response.country?.names?.en ?? response.registered_country?.names?.en ?? null;
         if (city || region || country) return { city, region, country };
       }
-    } catch {}
+    } catch {
+      // MaxMind DB read failure — fall back to the HTTP lookup below.
+    }
   }
   return lookupViaIpApi(ip);
 }

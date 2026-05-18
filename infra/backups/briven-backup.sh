@@ -32,6 +32,12 @@ BACKUP_ENV_FILE="/etc/briven/backup.env"
 
 STAMP="$(date -u +'%Y-%m-%d/%H-%M-%S')"
 
+# Tally of off-site upload failures across all DBs in this run. Read by
+# the trailing failure-detection block; exported to /run/briven-backup-status
+# so briven-backup-alert.service can name the failing DBs in Discord.
+UPLOAD_FAILURES=0
+UPLOAD_FAILURE_DBS=""
+
 # ─── helpers ───────────────────────────────────────────────────────────
 log() {
   printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -80,13 +86,21 @@ dump_one() {
      && [ -n "${BRIVEN_BACKUP_S3_SECRET_KEY:-}" ]; then
     local object="s3://${BRIVEN_BACKUP_S3_BUCKET}/${db_name}/${STAMP}.dump.gz"
     log "uploading ${object}"
+    # Credentials are passed via env (-e), not as positional args, so they
+    # never appear in `docker inspect` / `ps -ef`. mc reads MC_HOST_<alias>
+    # in URL form: https://KEY:SECRET@host. See
+    # docs/superpowers/findings/2026-04-25-security-and-structural-review.md:177.
+    local endpoint_no_scheme="${BRIVEN_BACKUP_S3_ENDPOINT#https://}"
+    endpoint_no_scheme="${endpoint_no_scheme#http://}"
     if ! docker run --rm \
           -v "${local_file}:/backup.dump.gz:ro" \
+          -e "MC_HOST_off=https://${BRIVEN_BACKUP_S3_ACCESS_KEY}:${BRIVEN_BACKUP_S3_SECRET_KEY}@${endpoint_no_scheme}" \
           --entrypoint sh \
           minio/mc:latest \
-          -c "mc alias set off ${BRIVEN_BACKUP_S3_ENDPOINT} ${BRIVEN_BACKUP_S3_ACCESS_KEY} ${BRIVEN_BACKUP_S3_SECRET_KEY} > /dev/null \
-              && mc cp /backup.dump.gz off/${BRIVEN_BACKUP_S3_BUCKET}/${db_name}/${STAMP}.dump.gz"; then
+          -c "mc cp /backup.dump.gz off/${BRIVEN_BACKUP_S3_BUCKET}/${db_name}/${STAMP}.dump.gz"; then
       log "WARN: off-site upload failed for ${db_name} — local copy still safe"
+      UPLOAD_FAILURES=$((UPLOAD_FAILURES + 1))
+      UPLOAD_FAILURE_DBS="${UPLOAD_FAILURE_DBS:+${UPLOAD_FAILURE_DBS} }${db_name}"
     else
       log "off-site upload ok"
     fi

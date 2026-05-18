@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { newId } from '@briven/shared';
 
+import { userRateLimit } from '../middleware/rate-limit.js';
 import { requireAuth } from '../middleware/session.js';
 import type { AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
@@ -265,7 +266,7 @@ const changeRoleSchema = z.object({
   role: z.enum(orgRole),
 });
 
-orgsRouter.patch('/v1/orgs/:id/members/:userId', async (c) => {
+orgsRouter.patch('/v1/orgs/:id/members/:userId', userRateLimit('org-mutate', 30), async (c) => {
   const actor = c.get('user')!;
   const orgId = c.req.param('id');
   const targetUserId = c.req.param('userId');
@@ -296,7 +297,7 @@ orgsRouter.patch('/v1/orgs/:id/members/:userId', async (c) => {
   return c.json({ ok: true, role: parsed.data.role });
 });
 
-orgsRouter.delete('/v1/orgs/:id/members/:userId', async (c) => {
+orgsRouter.delete('/v1/orgs/:id/members/:userId', userRateLimit('org-mutate', 30), async (c) => {
   const actor = c.get('user')!;
   const orgId = c.req.param('id');
   const targetUserId = c.req.param('userId');
@@ -351,7 +352,7 @@ orgsRouter.get('/v1/orgs/:id/invitations', async (c) => {
   });
 });
 
-orgsRouter.post('/v1/orgs/:id/invitations', async (c) => {
+orgsRouter.post('/v1/orgs/:id/invitations', userRateLimit('org-mutate', 30), async (c) => {
   const user = c.get('user')!;
   const orgId = c.req.param('id');
   if (!(await isOrgMember(user.id, orgId))) {
@@ -387,7 +388,7 @@ orgsRouter.post('/v1/orgs/:id/invitations', async (c) => {
   });
 });
 
-orgsRouter.delete('/v1/orgs/:id/invitations/:invId', async (c) => {
+orgsRouter.delete('/v1/orgs/:id/invitations/:invId', userRateLimit('org-mutate', 30), async (c) => {
   const user = c.get('user')!;
   const orgId = c.req.param('id');
   const invId = c.req.param('invId');

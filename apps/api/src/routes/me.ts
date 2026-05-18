@@ -50,7 +50,7 @@ const patchSchema = z.object({
     .min(1)
     .max(64)
     .regex(
-      /^[A-Za-z]+(?:\/[A-Za-z0-9_+\-]+)+$/u,
+      /^[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)+$/u,
       'timezone must be an IANA zone (e.g. Europe/Brussels)',
     )
     .nullable()

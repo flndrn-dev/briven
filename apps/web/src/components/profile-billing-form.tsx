@@ -116,7 +116,8 @@ export function ProfileBillingForm({
     if (!values.timezone) {
       setValues((v) => ({ ...v, timezone: detectBrowserTimezone() }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentional mount-only effect: detectBrowserTimezone is module-scoped and
+    // setValues uses a functional updater, so no closure-stale-value risk.
   }, []);
 
   const tzOffset = useMemo(() => formatTzOffset(values.timezone || 'UTC'), [values.timezone]);

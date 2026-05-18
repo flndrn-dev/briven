@@ -11,8 +11,8 @@ const registry = createMetricsRegistry({
     briven_realtime_subscriptions_active: 'Active websocket subscriptions',
     briven_realtime_channels_active: 'Distinct postgres LISTEN channels currently attached',
     briven_realtime_notifies_total: 'Total NOTIFY events received from postgres',
-    briven_realtime_invokes_total:
-      'Total function re-invocations triggered by fan-out, by outcome',
+    briven_realtime_reinvoke_total:
+      'Total function re-invocations triggered by NOTIFY fan-out, by outcome',
   },
 });
 

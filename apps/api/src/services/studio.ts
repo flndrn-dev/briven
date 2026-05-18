@@ -195,12 +195,85 @@ export async function getTableColumns(
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
 
+/** Supported filter operators. Allow-list — anything else returns 400. */
+export const FILTER_OPS = ['eq', 'contains', 'gt', 'lt', 'gte', 'lte'] as const;
+export type FilterOp = (typeof FILTER_OPS)[number];
+
+/**
+ * Pure WHERE-clause builder. Extracted from `getTableRows` so the SQL
+ * shape, identifier validation, operator allow-list, and value-as-param
+ * guarantees are unit-testable without a live data plane.
+ *
+ * Returns `{ clauses, params }` — caller joins with ` AND ` and prefixes
+ * `WHERE `. Throws `ValidationError` on bad column name, unknown column,
+ * or unknown operator. Values are NEVER inlined — every value is pushed
+ * into `params` and referenced as `$N`, so user-supplied strings (e.g.
+ * `'; DROP TABLE …`) cannot escape parameterisation.
+ */
+export function buildFilterClauses(
+  filters: ReadonlyArray<{
+    column: string;
+    op: FilterOp;
+    value: string | number | boolean | null;
+  }>,
+  colNames: ReadonlySet<string>,
+  tableName: string,
+): { clauses: string[]; params: unknown[] } {
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  for (const { column: col, op, value } of filters) {
+    if (!COLUMN_NAME_RE.test(col)) {
+      throw new ValidationError('invalid filter column', { column: col });
+    }
+    if (!colNames.has(col)) {
+      throw new ValidationError('filter column not found on table', {
+        table: tableName,
+        column: col,
+      });
+    }
+    if (!(FILTER_OPS as readonly string[]).includes(op)) {
+      throw new ValidationError('invalid filter operator', { op });
+    }
+    params.push(value);
+    const placeholder = `$${params.length}`;
+    switch (op) {
+      case 'eq':
+        clauses.push(`"${col}" = ${placeholder}`);
+        break;
+      case 'contains':
+        // ILIKE for case-insensitive substring match. The placeholder is
+        // wrapped server-side so callers can't smuggle pattern characters
+        // by writing `%foo%` themselves — `'%' || $N || '%'` parameterises
+        // the literal value with `%` glued in SQL, not in the input.
+        clauses.push(`"${col}"::text ILIKE '%' || ${placeholder} || '%'`);
+        break;
+      case 'gt':
+        clauses.push(`"${col}" > ${placeholder}`);
+        break;
+      case 'lt':
+        clauses.push(`"${col}" < ${placeholder}`);
+        break;
+      case 'gte':
+        clauses.push(`"${col}" >= ${placeholder}`);
+        break;
+      case 'lte':
+        clauses.push(`"${col}" <= ${placeholder}`);
+        break;
+    }
+  }
+  return { clauses, params };
+}
+
 export interface RowsOpts {
   readonly limit?: number;
   readonly offset?: number;
   readonly orderBy?: { column: string; direction: 'asc' | 'desc' } | null;
-  /** Equality filters: `{ column: value }`. Each value is parameterised. */
-  readonly filters?: Record<string, string | number | boolean | null>;
+  /** Filter clauses with operators. Order is preserved in WHERE generation. */
+  readonly filters?: ReadonlyArray<{
+    column: string;
+    op: FilterOp;
+    value: string | number | boolean | null;
+  }>;
 }
 
 /**
@@ -225,24 +298,11 @@ export async function getTableRows(
   const columns = await getTableColumns(projectId, tableName);
   const colNames = new Set(columns.map((c) => c.name));
 
-  // Build WHERE — parameterised values, validated identifiers.
-  const filterClauses: string[] = [];
-  const params: unknown[] = [];
-  if (opts.filters) {
-    for (const [col, value] of Object.entries(opts.filters)) {
-      if (!COLUMN_NAME_RE.test(col)) {
-        throw new ValidationError('invalid filter column', { column: col });
-      }
-      if (!colNames.has(col)) {
-        throw new ValidationError('filter column not found on table', {
-          table: tableName,
-          column: col,
-        });
-      }
-      params.push(value);
-      filterClauses.push(`"${col}" = $${params.length}`);
-    }
-  }
+  const { clauses: filterClauses, params } = buildFilterClauses(
+    opts.filters ?? [],
+    colNames,
+    tableName,
+  );
   const where = filterClauses.length > 0 ? `WHERE ${filterClauses.join(' AND ')}` : '';
 
   // Build ORDER BY — validated identifier, fixed-set direction.

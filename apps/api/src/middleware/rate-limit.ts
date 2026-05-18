@@ -140,3 +140,24 @@ export function projectRateLimit(scope: RateLimitScope): MiddlewareHandler {
     key: (c) => c.req.param('id') ?? null,
   });
 }
+
+/**
+ * Flat-cap rate limit keyed by the authenticated user id. Used for routes
+ * that aren't project-scoped (billing checkout/portal, org member
+ * mutations) — there's no project tier to read, so a single fixed cap
+ * applies per user. Unauthenticated requests skip the limit; downstream
+ * auth middleware returns 401 either way.
+ *
+ * Phase 3 §3.7: covers the mutate routes that fell outside `projectRateLimit`.
+ */
+export function userRateLimit(scope: string, cap: number): MiddlewareHandler {
+  return rateLimit({
+    scope,
+    limit: cap,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    key: (c) => {
+      const user = c.get('user') as { id?: string } | undefined;
+      return user?.id ?? null;
+    },
+  });
+}
