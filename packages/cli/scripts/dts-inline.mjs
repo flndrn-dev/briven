@@ -14,12 +14,10 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
 
 // Each entry: [distRelativePath, searchRegex, sourcePackageName]
 const REPLACEMENTS = [

@@ -3,6 +3,7 @@ import { Webhook, WebhookVerificationError } from 'standardwebhooks';
 import { z } from 'zod';
 
 import { env } from '../env.js';
+import { userRateLimit } from '../middleware/rate-limit.js';
 import { requireAuth } from '../middleware/session.js';
 import type { AppEnv } from '../types/app-env.js';
 import {
@@ -91,7 +92,7 @@ billingRouter.get('/v1/billing/vat/check', async (c) => {
   return c.json(result);
 });
 
-billingRouter.post('/v1/billing/portal', async (c) => {
+billingRouter.post('/v1/billing/portal', userRateLimit('billing', 10), async (c) => {
   const user = c.get('user')!;
   const body = await c.req.json().catch(() => null);
   const parsed = portalSchema.safeParse(body);
@@ -138,7 +139,7 @@ billingRouter.get('/v1/billing/plans', async (c) => {
   return c.json({ plans });
 });
 
-billingRouter.post('/v1/billing/checkout', async (c) => {
+billingRouter.post('/v1/billing/checkout', userRateLimit('billing', 10), async (c) => {
   const user = c.get('user')!;
   const body = await c.req.json().catch(() => null);
   const parsed = checkoutSchema.safeParse(body);

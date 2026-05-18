@@ -44,14 +44,15 @@ export default async function TablePage({
   const orderBy = asString(sp.orderBy);
   const dir: 'asc' | 'desc' = asString(sp.dir) === 'desc' ? 'desc' : 'asc';
 
-  // Re-export every `<col>__eq=value` query param onto the API call so
-  // filters survive pagination + the next-page link below.
+  // Re-export every `<col>__<op>=value` query param onto the API call so
+  // filters survive pagination + the next-page link below. The API rejects
+  // unknown ops; the route only matches known suffixes from FILTER_OPS.
+  const FILTER_OP_SUFFIXES = ['__eq', '__contains', '__gt', '__lt', '__gte', '__lte'];
   const filterPairs: Array<[string, string]> = [];
   for (const [k, v] of Object.entries(sp)) {
-    if (k.endsWith('__eq')) {
-      const value = asString(v);
-      if (value !== undefined && value !== '') filterPairs.push([k, value]);
-    }
+    if (!FILTER_OP_SUFFIXES.some((s) => k.endsWith(s))) continue;
+    const value = asString(v);
+    if (value !== undefined && value !== '') filterPairs.push([k, value]);
   }
 
   const queryString = new URLSearchParams([
@@ -229,11 +230,19 @@ export default async function TablePage({
                   >
                     <span className="flex items-center gap-1 text-[var(--color-text)]">
                       {col.name}
+                      {col.isPrimaryKey ? (
+                        <span
+                          className="rounded-sm bg-[var(--color-primary)]/10 px-1 text-[9px] uppercase tracking-wider text-[var(--color-primary)]"
+                          title="primary key"
+                        >
+                          pk
+                        </span>
+                      ) : null}
                       <span className="text-[var(--color-primary)]">{sortGlyph(col.name)}</span>
                     </span>
                     <span className="text-[10px] text-[var(--color-text-subtle)]">
                       {col.dataType}
-                      {col.nullable ? '' : ' · not null'}
+                      {col.nullable ? ' · nullable' : ' · not null'}
                       {col.references
                         ? ` · → ${col.references.table}.${col.references.column}`
                         : ''}

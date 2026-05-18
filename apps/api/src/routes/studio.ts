@@ -25,7 +25,9 @@ import {
   renameTable,
   truncateTable,
   STUDIO_COLUMN_TYPES,
+  FILTER_OPS,
   updateCell,
+  type FilterOp,
   type PrimaryKeyValue,
   type StudioColumnReference,
   type StudioColumnSpec,
@@ -193,20 +195,26 @@ studioRouter.get(
     // to asc. Validated against the actual column set inside the service.
     const orderByCol = c.req.query('orderBy');
     const orderByDir = c.req.query('dir') === 'desc' ? 'desc' : 'asc';
-    // filters: every `?col__eq=value` query string. The `__eq` suffix
-    // gives us room to add `__lt` / `__like` later without breaking
-    // existing callers.
-    const filters: Record<string, string> = {};
+    // filters: `?col__op=value` per Phase 2 §2.3. Op is parsed off the
+    // suffix and passed through to the service, which validates against
+    // the FILTER_OPS allow-list. Unknown ops are silently dropped at the
+    // route layer; the service raises ValidationError for unknown columns,
+    // which the router converts to 400 upstream.
+    const filters: Array<{ column: string; op: FilterOp; value: string }> = [];
     for (const [k, v] of Object.entries(c.req.queries())) {
-      if (k.endsWith('__eq') && Array.isArray(v) && v[0] !== undefined) {
-        filters[k.slice(0, -'__eq'.length)] = v[0];
-      }
+      const sepAt = k.lastIndexOf('__');
+      if (sepAt <= 0) continue;
+      const col = k.slice(0, sepAt);
+      const op = k.slice(sepAt + 2);
+      if (!(FILTER_OPS as readonly string[]).includes(op)) continue;
+      if (!Array.isArray(v) || v[0] === undefined) continue;
+      filters.push({ column: col, op: op as FilterOp, value: v[0] });
     }
     const result = await getTableRows(projectId, tableName, {
       limit: Number.isFinite(limit) ? limit : undefined,
       offset: Number.isFinite(offset) ? offset : undefined,
       orderBy: orderByCol ? { column: orderByCol, direction: orderByDir } : null,
-      filters: Object.keys(filters).length > 0 ? filters : undefined,
+      filters: filters.length > 0 ? filters : undefined,
     });
     return c.json(result);
   },

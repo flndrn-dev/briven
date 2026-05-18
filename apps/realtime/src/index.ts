@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { env } from './env.js';
 import { incCounter, registerGauge, renderPrometheus } from './metrics.js';
+import { SubscriptionRegistry } from './subscription-registry.js';
 
 const BOOT_TIME = new Date().toISOString();
 // apps/realtime runs from /app/apps/realtime; the repo root is two
@@ -80,7 +81,7 @@ interface Subscription {
 }
 
 const subscriptions = new Map<string, Subscription>(); // subscriptionId → sub
-const channelToSubs = new Map<string, Set<string>>(); // channel → set of subscriptionIds
+const registry = new SubscriptionRegistry(); // channel ↔ subId, ref-counted
 const sockets = new WeakMap<object, Set<string>>(); // ws → set of subscriptionIds it owns
 // projectId → live sub count. Maintained inline with the subscriptions
 // map so the per-project cap can be enforced in O(1) without scanning.
@@ -160,9 +161,7 @@ async function getListener(): Promise<postgres.Sql | null> {
   return listener;
 }
 
-async function ensureListen(channel: string): Promise<void> {
-  const subs = channelToSubs.get(channel);
-  if (subs && subs.size > 0) return; // already listening
+async function startListen(channel: string): Promise<void> {
   const sql = await getListener();
   if (!sql) return;
   // postgres.js v3 re-issues LISTEN automatically on reconnect when the
@@ -176,28 +175,23 @@ async function ensureListen(channel: string): Promise<void> {
   );
 }
 
-async function ensureUnlisten(channel: string): Promise<void> {
-  const subs = channelToSubs.get(channel);
-  if (subs && subs.size > 0) return; // still has subscribers
-  channelToSubs.delete(channel);
+async function stopListen(channel: string): Promise<void> {
   const sql = await getListener();
   if (!sql) return;
   await sql.unsafe(`UNLISTEN "${channel}"`).catch(() => undefined);
 }
 
 async function fireChannel(channel: string): Promise<void> {
-  const subIds = channelToSubs.get(channel);
-  if (!subIds) return;
+  // SubscriptionRegistry.subsForChannel returns a snapshot — safe to iterate
+  // while attach/detach inside invokeOnce mutates the channel's live set.
+  const snapshot = registry.subsForChannel(channel);
+  if (snapshot.length === 0) return;
   incCounter('briven_realtime_notifies_total');
-  // why: invokeOnce mutates channelToSubs.get(channel) via attach/detach
-  // when touchedTables drift. Iterating the live Set would skip subs added
-  // mid-fan-out and re-visit subs being removed. Snapshot once.
-  const snapshot = [...subIds];
   for (const subId of snapshot) {
     const sub = subscriptions.get(subId);
     if (!sub) continue;
     const result = await invokeOnce(sub);
-    incCounter('briven_realtime_invokes_total', {
+    incCounter('briven_realtime_reinvoke_total', {
       outcome: (result as { ok?: boolean }).ok ? 'ok' : 'err',
     });
     sub.send({ type: 'data', subscriptionId: sub.subscriptionId, ...result });
@@ -254,20 +248,11 @@ async function invokeOnce(sub: Subscription): Promise<Record<string, unknown>> {
 }
 
 async function attachSubToChannel(subId: string, channel: string): Promise<void> {
-  let subs = channelToSubs.get(channel);
-  if (!subs) {
-    subs = new Set();
-    channelToSubs.set(channel, subs);
-  }
-  subs.add(subId);
-  await ensureListen(channel);
+  if (registry.attach(subId, channel)) await startListen(channel);
 }
 
 async function detachSubFromChannel(subId: string, channel: string): Promise<void> {
-  const subs = channelToSubs.get(channel);
-  if (!subs) return;
-  subs.delete(subId);
-  if (subs.size === 0) await ensureUnlisten(channel);
+  if (registry.detach(subId, channel)) await stopListen(channel);
 }
 
 async function dropSubscription(subId: string): Promise<void> {
@@ -318,7 +303,7 @@ registerGauge('briven_realtime_subscriptions_active', () => [
   { labels: {}, value: subscriptions.size },
 ]);
 registerGauge('briven_realtime_channels_active', () => [
-  { labels: {}, value: channelToSubs.size },
+  { labels: {}, value: registry.channelCount },
 ]);
 
 // Per-project cumulative connection-seconds. The closed-sub tally is the
@@ -397,14 +382,11 @@ export default {
         byProject.push({ projectId, subscriptions: count });
       }
       byProject.sort((a, b) => b.subscriptions - a.subscriptions);
-      const byChannel: { channel: string; subscriptions: number }[] = [];
-      for (const [channel, subs] of channelToSubs) {
-        byChannel.push({ channel, subscriptions: subs.size });
-      }
+      const byChannel = registry.channelCounts();
       byChannel.sort((a, b) => b.subscriptions - a.subscriptions);
       return Response.json({
         totalSubscriptions: subscriptions.size,
-        totalChannels: channelToSubs.size,
+        totalChannels: registry.channelCount,
         limits: {
           perWs: env.BRIVEN_REALTIME_MAX_SUBS_PER_WS,
           perProject: env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT,
