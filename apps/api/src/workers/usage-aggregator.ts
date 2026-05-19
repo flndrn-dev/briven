@@ -6,7 +6,9 @@ import { getDb } from '../db/client.js';
 import { projects, usageEvents, type UsageMetric } from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
+import { getAuthMauStats } from '../services/auth-mau.js';
 import { collectConnectionSecondsDeltas } from '../services/connection-seconds.js';
+import { isAuthEnabled } from '../services/tenant-config-store.js';
 import { getInvocationUsage, getStorageUsage } from '../services/usage.js';
 
 /**
@@ -115,6 +117,22 @@ async function rollUpProject(
       // some operators configure their meter as integer-typed. Sub-
       // second precision wouldn't survive Polar's aggregation anyway.
       value: String(Math.round(connectionSecondsDelta)),
+    });
+  }
+
+  // MAU is a 30-day gauge — only meaningful when this project has auth
+  // enabled (otherwise the `_briven_auth_sessions` table doesn't exist
+  // and the query would error). Skip silently when off; surface a single
+  // log line so operators can spot tenants that turned auth off mid-month.
+  try {
+    if (await isAuthEnabled(projectId)) {
+      const mau = await getAuthMauStats(projectId);
+      rows.push({ metric: 'auth_mau', value: String(mau.count) });
+    }
+  } catch (err) {
+    log.warn('usage_rollup_auth_mau_failed', {
+      projectId,
+      message: err instanceof Error ? err.message : String(err),
     });
   }
 

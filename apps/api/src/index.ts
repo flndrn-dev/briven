@@ -16,6 +16,7 @@ import { adminRouter } from './routes/admin.js';
 import { aiRouter } from './routes/ai.js';
 import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
+import { authServiceRouter } from './routes/auth-service.js';
 import { billingRouter } from './routes/billing.js';
 import { dbRouter } from './routes/db.js';
 import { deploymentsRouter } from './routes/deployments.js';
@@ -132,6 +133,15 @@ app.route('/', migrationRequestsRouter);
 app.route('/', migrationRequestsPublicRouter);
 app.route('/', marketingEventsPublicRouter);
 app.route('/', outboundWebhooksRouter);
+
+// briven auth service router — kill-switch gated per ARCHITECTURE.md §9.
+// Default-disabled in env.ts; flip BRIVEN_AUTH_ENABLED=true in Dokploy when
+// the multi-tenant pool + Better Auth wiring (BUILD_PLAN.md §13 step 3+)
+// is ready to serve customer traffic.
+if (env.BRIVEN_AUTH_ENABLED) {
+  app.route('/', authServiceRouter);
+  log.info('auth_service_mounted', { kill_switch: 'on' });
+}
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);

@@ -551,7 +551,15 @@ export const emailSuppressions = pgTable(
  * Polar metering push reads from here. The push side is a separate
  * worker so a Polar outage doesn't block the aggregation cron.
  */
-export const usageMetric = ['invocations', 'storage_bytes', 'connection_seconds'] as const;
+export const usageMetric = [
+  'invocations',
+  'storage_bytes',
+  'connection_seconds',
+  // briven auth MAU — distinct end-users active in the trailing 30 days.
+  // Gauge sample (not a delta) snapshotted by the hourly aggregator and
+  // pushed to Polar's `briven_auth_mau` meter for overage billing.
+  'auth_mau',
+] as const;
 export type UsageMetric = (typeof usageMetric)[number];
 
 export const usageEvents = pgTable(
@@ -1112,3 +1120,52 @@ export const marketingEvents = pgTable(
 
 export type MarketingEvent = typeof marketingEvents.$inferSelect;
 export type NewMarketingEvent = typeof marketingEvents.$inferInsert;
+
+/* ─── briven_auth_sdk_keys (SDK keys issued from the Auth → API Keys panel) ─ */
+// Different shape than `api_keys` (which is for CLI / deploy auth): SDK
+// keys carry an `auth`-specific scope vocabulary and a `pk_briven_auth_`
+// plaintext prefix so they're recognisable in logs + grep. Plaintext is
+// returned exactly once on creation; only a sha-256 hex digest persists.
+// The bare `prefix` column is the constant `pk_briven_auth_` — kept as a
+// column rather than hard-coded so a future v2 key scheme can coexist
+// without a migration.
+// NB: schema-diff requires `pnpm --filter @briven/api db:generate` in a
+// real TTY (road-to-ga.md §2.9) to land an actual migration; until that
+// runs the column-set above is only authoritative in TypeScript.
+
+export const brivenAuthSdkKeyScope = ['read', 'read-write', 'admin'] as const;
+export type BrivenAuthSdkKeyScope = (typeof brivenAuthSdkKeyScope)[number];
+
+export const brivenAuthSdkKeys = pgTable(
+  'briven_auth_sdk_keys',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
+    name: text('name').notNull(),
+    // sha-256 hex digest of the plaintext token. Never the plaintext itself.
+    hash: text('hash').notNull(),
+    // Plaintext prefix — currently always `pk_briven_auth_`. Stored so we
+    // can render `<prefix>•••<suffix>` for the dashboard hint without
+    // baking the constant into UI code.
+    prefix: text('prefix').notNull(),
+    // Last 4 chars of the plaintext — safe to display.
+    suffix: varchar('suffix', { length: 4 }).notNull(),
+    scope: text('scope').$type<BrivenAuthSdkKeyScope>().notNull().default('read'),
+    lastUsedAt: ts('last_used_at'),
+    expiresAt: ts('expires_at'),
+    createdAt: createdAt(),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('briven_auth_sdk_keys_hash_idx').on(t.hash),
+    projectIdx: index('briven_auth_sdk_keys_project_idx').on(t.projectId),
+  }),
+);
+
+export type BrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferSelect;
+export type NewBrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferInsert;

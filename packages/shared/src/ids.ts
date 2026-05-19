@@ -38,7 +38,8 @@ export type IdPrefix =
   | 'wev' // webhook event (an emitted platform event, fans out to N deliveries)
   | 'al' // allowlist entry (invite-only beta signup gate)
   | 'mig' // migration request (customer-initiated import from convex/supabase/etc.)
-  | 'me'; // marketing event (funnel tracking for /migrate views + leads)
+  | 'me' // marketing event (funnel tracking for /migrate views + leads)
+  | 'auk'; // briven auth SDK key (issued from the Auth → API Keys panel)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

@@ -1,0 +1,70 @@
+{
+  "name": "@briven/auth",
+  "version": "0.0.1",
+  "description": "briven auth — drop-in authentication for briven projects (OAuth, magic links, OTP, passkeys, sessions)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./react": {
+      "types": "./src/react/index.ts",
+      "default": "./src/react/index.ts"
+    },
+    "./server": {
+      "types": "./src/server/index.ts",
+      "default": "./src/server/index.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@briven/config": "workspace:*",
+    "@briven/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^6.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "briven",
+    "auth",
+    "authentication",
+    "oauth",
+    "magic-link",
+    "passkey",
+    "webauthn",
+    "better-auth"
+  ],
+  "homepage": "https://briven.tech/auth",
+  "repository": {
+    "type": "git",
+    "url": "https://code.konnos.org/flndrn/briven.git",
+    "directory": "packages/auth"
+  }
+}

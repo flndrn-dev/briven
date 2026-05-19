@@ -38,6 +38,24 @@ const envSchema = z.object({
   // Encryption key for customer secrets at rest (AES-256).
   BRIVEN_ENCRYPTION_KEY: z.string().min(32).optional(),
 
+  // Per-tenant secret store master keys (ARCHITECTURE.md §4). 32-byte hex.
+  // Each service has its own key so a leak of one cannot decrypt the other.
+  BRIVEN_AUTH_MASTER_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i)
+    .optional(),
+  BRIVEN_PAY_MASTER_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i)
+    .optional(),
+  // Kill-switch envs for the per-service routers (ARCHITECTURE.md §9).
+  // Default disabled — set BRIVEN_AUTH_ENABLED=true in Dokploy when the
+  // briven auth router is ready to serve customer traffic.
+  BRIVEN_AUTH_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   // Polar.sh billing — Phase 3.
   // Sandbox vs production: set BRIVEN_POLAR_API_BASE to
   //   https://sandbox-api.polar.sh   during dev
@@ -58,6 +76,11 @@ const envSchema = z.object({
   BRIVEN_POLAR_METER_INVOCATIONS_ID: z.string().optional(),
   BRIVEN_POLAR_METER_STORAGE_ID: z.string().optional(),
   BRIVEN_POLAR_METER_CONNECTION_ID: z.string().optional(),
+  // briven auth MAU meter — distinct users active in the trailing 30 days,
+  // pushed by polar-meter-push.ts when usage_events.metric='auth_mau'.
+  // Unset means skip; rows mark 'skipped' and the operator can flip them
+  // back to 'pending' once the meter is provisioned.
+  BRIVEN_POLAR_METER_AUTH_MAU_ID: z.string().optional(),
 
   // mittera.eu transactional email. Outbound sends authenticate with
   // the API key; inbound webhooks (delivery / bounce / complaint) are

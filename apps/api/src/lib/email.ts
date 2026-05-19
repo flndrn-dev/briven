@@ -36,6 +36,18 @@ interface SendArgs {
   subject: string;
   html: string;
   text: string;
+  /**
+   * Optional From: override. When set, replaces the global `fromAddress()`
+   * default — used by briven auth for per-tenant senders (mittera-verified
+   * customer domain) per BUILD_PLAN.md §8.
+   */
+  from?: string;
+  /**
+   * Optional tenant context. Threaded into the audit log row so admin
+   * email-events streams can scope by project. Default null preserves
+   * existing control-plane behavior.
+   */
+  projectId?: string | null;
 }
 
 function fromAddress(): string {
@@ -71,7 +83,7 @@ async function send(label: string, args: SendArgs): Promise<void> {
   }
 
   const body = JSON.stringify({
-    from: fromAddress(),
+    from: args.from ?? fromAddress(),
     to: args.to,
     subject: args.subject,
     html: args.html,
@@ -133,7 +145,7 @@ async function send(label: string, args: SendArgs): Promise<void> {
   // (mittera echoes it back on delivery / bounce / complaint webhooks).
   await audit({
     actorId: null,
-    projectId: null,
+    projectId: args.projectId ?? null,
     action: `mittera.${label}.sent`,
     ipHash: null,
     userAgent: 'briven-api',
@@ -143,6 +155,23 @@ async function send(label: string, args: SendArgs): Promise<void> {
       subject: args.subject,
     },
   });
+}
+
+/**
+ * Per-tenant send entry point — used by briven auth's customer-facing
+ * email flows (BUILD_PLAN.md §8). Same mittera POST + suppression +
+ * audit chain as the control-plane sends; only the From: address and
+ * audit projectId are tenant-scoped.
+ *
+ * Caller resolves the From: via `getAuthConfig(projectId).branding`:
+ *   - verified `senderDomain` → `senderName <noreply@<senderDomain>>`
+ *   - unset / unverified domain → fallback `briven auth <noreply@auth.briven.tech>`
+ */
+export async function sendTenantEmail(
+  label: string,
+  args: SendArgs & { from: string; projectId: string },
+): Promise<void> {
+  await send(label, args);
 }
 
 /**

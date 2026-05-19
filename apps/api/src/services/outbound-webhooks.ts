@@ -50,8 +50,35 @@ export const KNOWN_EVENT_TYPES = [
   'tier.changed',
   'project.suspended',
   'project.resumed',
+  // briven auth — fan-out of authentication lifecycle events to customer
+  // endpoints. Emitted from `apps/api/src/services/auth-audit.ts` when the
+  // matching action row lands; subscribers opt in by listing the type or
+  // by using `*`.
+  'auth.signup',
+  'auth.signin',
+  'auth.signout',
+  'auth.session.revoked',
+  'auth.account.linked',
+  'auth.account.unlinked',
+  'auth.user.deleted',
 ] as const;
 export type KnownEventType = (typeof KNOWN_EVENT_TYPES)[number];
+
+/**
+ * The subset of `KNOWN_EVENT_TYPES` produced by briven auth. The dashboard
+ * Auth → Webhooks panel exposes only these as toggle checkboxes; the
+ * general project webhooks panel surfaces every type.
+ */
+export const AUTH_EVENT_TYPES = [
+  'auth.signup',
+  'auth.signin',
+  'auth.signout',
+  'auth.session.revoked',
+  'auth.account.linked',
+  'auth.account.unlinked',
+  'auth.user.deleted',
+] as const;
+export type AuthEventType = (typeof AUTH_EVENT_TYPES)[number];
 
 function generateSigningSecret(): string {
   return randomBytes(32).toString('hex');
