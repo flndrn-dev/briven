@@ -70,6 +70,16 @@ function formatTime(iso: string): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
 }
 
+/** Compact one-line variant for the timeline — `May 17 · 08:29`. */
+function formatTimeShort(iso: string): string {
+  const d = new Date(iso);
+  const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+  const day = d.getUTCDate().toString().padStart(2, '0');
+  const hh = d.getUTCHours().toString().padStart(2, '0');
+  const mm = d.getUTCMinutes().toString().padStart(2, '0');
+  return `${month} ${day} · ${hh}:${mm}`;
+}
+
 /** Ordered phases every migration passes through. */
 const PHASES = [
   { key: 'new', label: 'Request submitted', idx: 1 },
@@ -114,70 +124,137 @@ function StepTimeline({
     phaseTimestamps['new'] = firstEntry.createdAt;
   }
 
-  return (
-    <div className="mb-4 overflow-x-auto rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
-      {isCancelled ? (
-        <p className="font-mono text-sm text-[var(--color-text-subtle)]">
-          This request was cancelled.
-        </p>
-      ) : (
-        <div className="flex items-start gap-0">
-          {PHASES.map((phase, i) => {
-            const reached = currentIdx >= phase.idx;
-            const isCurrent = currentIdx === phase.idx;
-            const ts = phaseTimestamps[phase.key];
+  // Progress fill spans from dot-1 center to dot-N center. Cells are
+  // even-width; dot centres sit at 10%, 30%, 50%, 70%, 90% for 5 phases.
+  // Track therefore runs from 10% → 90%; fill from 10% to
+  // (10% + (currentIdx - 1) / (PHASES.length - 1) * 80%).
+  const segments = PHASES.length - 1;
+  const cellCenterStart = 100 / (PHASES.length * 2);
+  const trackStart = cellCenterStart;
+  const trackEnd = 100 - cellCenterStart;
+  const trackWidth = trackEnd - trackStart;
+  const progressIdx = Math.max(0, Math.min(segments, currentIdx - 1));
+  const fillWidth = (progressIdx / segments) * trackWidth;
 
-            return (
-              <div key={phase.key} className="flex items-start gap-0 min-w-0 flex-1">
-                <div className="flex flex-col items-center gap-1.5 min-w-0 w-full">
+  return (
+    <div className="mb-4 rounded-lg border border-[var(--color-border-subtle)] bg-gradient-to-b from-[var(--color-surface)] to-[var(--color-surface-raised)]/40 p-6">
+      {isCancelled ? (
+        <div className="flex items-center gap-2 font-mono text-sm text-[var(--color-text-subtle)]">
+          <span
+            className="inline-flex size-2 rounded-full bg-[var(--color-text-subtle)]"
+            aria-hidden="true"
+          />
+          this request was cancelled.
+        </div>
+      ) : (
+        <div className="relative">
+          {/* Track: continuous behind the dots */}
+          <div
+            className="absolute top-4 h-px bg-[var(--color-border-subtle)]"
+            style={{
+              left: `${trackStart}%`,
+              width: `${trackWidth}%`,
+            }}
+            aria-hidden="true"
+          />
+          {/* Track progress fill */}
+          <div
+            className="absolute top-4 h-px bg-[var(--color-primary)] transition-[width] duration-500"
+            style={{
+              left: `${trackStart}%`,
+              width: `${fillWidth}%`,
+            }}
+            aria-hidden="true"
+          />
+          {/* Steps */}
+          <ol
+            className="relative grid"
+            style={{ gridTemplateColumns: `repeat(${PHASES.length}, minmax(0, 1fr))` }}
+          >
+            {PHASES.map((phase) => {
+              const reached = currentIdx >= phase.idx;
+              const isCurrent = currentIdx === phase.idx;
+              const ts = phaseTimestamps[phase.key];
+
+              return (
+                <li
+                  key={phase.key}
+                  className="flex flex-col items-center gap-2 px-1"
+                  aria-current={isCurrent ? 'step' : undefined}
+                >
                   {/* Dot */}
                   <div
-                    className={`z-10 flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-mono font-semibold ${
-                      reached
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
-                        : 'border-[var(--color-border-subtle)] bg-[var(--color-bg)] text-[var(--color-text-muted)]'
+                    className={`relative z-10 flex size-8 items-center justify-center rounded-full font-mono text-[11px] font-medium transition-colors ${
+                      reached && !isCurrent
+                        ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)] shadow-[0_0_0_4px_var(--color-bg)]'
+                        : isCurrent
+                          ? 'bg-[var(--color-bg)] text-[var(--color-primary)] shadow-[0_0_0_4px_var(--color-bg),0_0_0_5px_var(--color-primary),0_0_18px_var(--color-primary)/40]'
+                          : 'bg-[var(--color-bg)] text-[var(--color-text-subtle)] shadow-[0_0_0_4px_var(--color-bg),inset_0_0_0_1px_var(--color-border)]'
                     }`}
                   >
-                    {reached ? '✓' : phase.idx}
+                    {reached && !isCurrent ? (
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="size-4"
+                        aria-hidden="true"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : isCurrent ? (
+                      <span
+                        className="size-2 rounded-full bg-[var(--color-primary)]"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      phase.idx
+                    )}
                   </div>
-                  {/* Label */}
+
+                  {/* Phase number eyebrow */}
                   <p
-                    className={`text-center font-mono text-[10px] leading-tight ${
+                    className={`font-mono text-[10px] uppercase tracking-wider ${
                       reached
-                        ? 'text-[var(--color-text)]'
+                        ? 'text-[var(--color-text-muted)]'
                         : 'text-[var(--color-text-subtle)]'
                     }`}
                   >
-                    Phase {phase.idx}
-                    <br />
-                    {phase.label}
+                    phase {phase.idx}
                   </p>
-                  {/* Timestamp */}
+
+                  {/* Label */}
+                  <p
+                    className={`text-center font-mono text-xs leading-tight ${
+                      reached
+                        ? 'text-[var(--color-text)]'
+                        : 'text-[var(--color-text-subtle)]'
+                    } ${isCurrent ? 'font-medium' : ''}`}
+                  >
+                    {phase.label.toLowerCase()}
+                  </p>
+
+                  {/* Timestamp / processing chip */}
                   {ts ? (
-                    <p className="font-mono text-[8px] text-[var(--color-text-subtle)] leading-tight text-center">
-                      {formatTime(ts)}
-                    </p>
+                    <span className="rounded-sm bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">
+                      {formatTimeShort(ts)}
+                    </span>
                   ) : isCurrent ? (
-                    <p className="font-mono text-[8px] text-[var(--color-text-muted)] text-center italic">
-                      processing…
-                    </p>
+                    <span className="inline-flex items-center gap-1 rounded-sm bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-primary)]">
+                      <span
+                        className="inline-flex size-1.5 animate-pulse rounded-full bg-[var(--color-primary)]"
+                        aria-hidden="true"
+                      />
+                      in progress
+                    </span>
                   ) : null}
-                </div>
-                {/* Connector line (except last) */}
-                {i < PHASES.length - 1 && (
-                  <div className="relative mt-3 h-0.5 w-full shrink-0">
-                    <div
-                      className={`h-full rounded-full ${
-                        currentIdx > phase.idx
-                          ? 'bg-[var(--color-primary)]'
-                          : 'bg-[var(--color-border-subtle)]'
-                      }`}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                </li>
+              );
+            })}
+          </ol>
         </div>
       )}
     </div>
