@@ -1,0 +1,218 @@
+import { randomBytes } from 'node:crypto';
+
+import { betterAuth } from 'better-auth';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+
+import { authSchema } from '../db/auth-customer-schema.js';
+import { schemaNameFor } from '../db/data-plane.js';
+import { env } from '../env.js';
+import { log } from '../lib/logger.js';
+import {
+  sendBrivenAuthEmailVerification,
+  sendBrivenAuthPasswordReset,
+} from './auth-mailer.js';
+import { TenantInstancePool } from './tenant-instance-pool.js';
+
+/**
+ * Per-tenant Better Auth instance pool — the briven auth-specific factory
+ * that wires `TenantInstancePool` + Drizzle + Better Auth into a working
+ * customer-facing instance per project.
+ *
+ * Lifecycle (ARCHITECTURE.md §3):
+ *   - first `getAuthInstance(projectId)` lazily creates the pool
+ *   - cache miss opens a per-project postgres pool with `search_path`
+ *     locked to `proj_<projectId>` at libpq startup, wraps it in a
+ *     Drizzle client, and constructs a `betterAuth({...})` instance
+ *   - cache hit returns the warm instance
+ *   - eviction (idle, LRU, or forced) closes the per-project postgres
+ *     pool via `closePool()` so connections are released
+ *
+ * Search-path strategy: Better Auth's Drizzle adapter issues queries
+ * outside our transaction boundaries, so the existing `runInProjectSchema`
+ * pattern (`SET LOCAL search_path`) cannot reach those calls. Instead
+ * the schema is bound to the **connection** itself at libpq startup via
+ * postgres-js's `connection.search_path` option, which sets `search_path`
+ * for every query on that physical connection.
+ *
+ * v0 provider configuration: email + password only. OAuth providers,
+ * magic link, OTP, and passkeys land in the next step once the per-tenant
+ * config storage + mittera mailer wiring are in place (BUILD_PLAN.md
+ * §13 step 4).
+ */
+
+/**
+ * Type inferred from the factory's return rather than declared explicitly.
+ * Better Auth's `Auth<TOptions>` is invariant in its generic parameter, so
+ * a hand-written `ReturnType<typeof betterAuth>` widens to
+ * `Auth<BetterAuthOptions>` and refuses assignment from the narrow
+ * inferred type of our specific call. Letting TypeScript derive the
+ * type keeps the precise inference all the way through the pool.
+ */
+export type BrivenAuthInstance = Awaited<ReturnType<typeof createAuthInstance>>;
+
+let pool: TenantInstancePool<BrivenAuthInstance> | null = null;
+let processSecret: string | null = null;
+
+/**
+ * Resolve the Better Auth signing secret. Same fallback chain as the
+ * control-plane auth (`apps/api/src/lib/auth.ts`): real env value in
+ * prod, ephemeral per-process in dev.
+ */
+function authSecret(): string {
+  if (env.BRIVEN_BETTER_AUTH_SECRET) return env.BRIVEN_BETTER_AUTH_SECRET;
+  if (env.BRIVEN_ENV !== 'development') {
+    throw new Error(
+      'BRIVEN_BETTER_AUTH_SECRET is required outside development for briven auth',
+    );
+  }
+  if (!processSecret) {
+    processSecret = randomBytes(32).toString('hex');
+    log.warn('briven_auth_ephemeral_secret', {
+      reason: 'dev-only fallback — sessions will not survive restart',
+    });
+  }
+  return processSecret;
+}
+
+async function createAuthInstance(projectId: string) {
+  if (!env.BRIVEN_DATA_PLANE_URL) {
+    throw new Error('BRIVEN_DATA_PLANE_URL not configured — briven auth cannot bind a schema');
+  }
+  const schema = schemaNameFor(projectId);
+
+  // Per-project postgres pool. `connection.search_path` sets the schema
+  // for every query on every physical connection in the pool; the
+  // SET runs as part of the libpq startup packet so even queries that
+  // bypass our transaction wrapper land in the right schema.
+  const sql = postgres(env.BRIVEN_DATA_PLANE_URL, {
+    max: 5,
+    idle_timeout: 30,
+    connect_timeout: 5,
+    prepare: false,
+    connection: { search_path: schema },
+  });
+  const db = drizzle(sql);
+
+  const instance = betterAuth({
+    appName: `briven-auth-${projectId}`,
+    secret: authSecret(),
+    baseURL: env.BRIVEN_API_ORIGIN,
+    // Distinct from control-plane Better Auth (which owns `/v1/auth/*`
+    // for the briven.tech dashboard login). Customer-facing tenant auth
+    // claims `/v1/auth-tenant/*` so the two engines don't collide in
+    // Hono routing. SDK + hosted-pages both target this prefix.
+    basePath: '/v1/auth-tenant',
+    database: drizzleAdapter(db, {
+      provider: 'pg',
+      schema: {
+        user: authSchema.user,
+        session: authSchema.session,
+        account: authSchema.account,
+        verification: authSchema.verification,
+      },
+    }),
+    emailAndPassword: {
+      enabled: true,
+      requireEmailVerification: env.BRIVEN_ENV === 'production',
+      minPasswordLength: 10,
+      maxPasswordLength: 128,
+      autoSignIn: true,
+      sendResetPassword: async ({ user, url }) => {
+        await sendBrivenAuthPasswordReset(projectId, user.email, url);
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: env.BRIVEN_ENV === 'production',
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendBrivenAuthEmailVerification(projectId, user.email, url);
+      },
+    },
+    session: {
+      expiresIn: 60 * 60 * 24 * 30, // 30 days
+      updateAge: 60 * 60 * 24 * 7, // refresh if older than 7 days
+    },
+    advanced: {
+      cookiePrefix: 'briven-auth',
+      useSecureCookies: env.BRIVEN_ENV === 'production',
+      defaultCookieAttributes: {
+        sameSite: 'lax',
+        httpOnly: true,
+      },
+    },
+  });
+
+  return {
+    betterAuth: instance,
+    closePool: async () => {
+      await sql.end({ timeout: 5 });
+    },
+  };
+}
+
+function getPool(): TenantInstancePool<BrivenAuthInstance> {
+  if (!pool) {
+    pool = new TenantInstancePool<BrivenAuthInstance>({
+      maxSize: 256,
+      idleTtlMs: 10 * 60 * 1000, // 10 minutes
+      factory: createAuthInstance,
+      onEvict: async (projectId, instance) => {
+        await instance.closePool();
+        log.info('briven_auth_instance_evicted', { projectId });
+      },
+      onEvictError: (projectId, err) => {
+        log.warn('briven_auth_instance_evict_failed', {
+          projectId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      },
+    });
+  }
+  return pool;
+}
+
+/**
+ * Fetch (or create) the Better Auth instance for a project. Cached for
+ * 10 minutes of idle time; LRU cap at 256 instances per api process.
+ */
+export function getAuthInstance(projectId: string): Promise<BrivenAuthInstance> {
+  return getPool().get(projectId);
+}
+
+/**
+ * Force-evict a project's instance. Called by the dashboard's
+ * config-update handlers so the next request sees fresh state — e.g.
+ * after a customer toggles an OAuth provider or rotates a webhook secret.
+ */
+export function invalidateAuthInstance(projectId: string): Promise<void> {
+  if (!pool) return Promise.resolve();
+  return pool.evict(projectId);
+}
+
+/**
+ * Drop every cached instance. Test + graceful-shutdown hook.
+ */
+export async function clearAuthInstancePool(): Promise<void> {
+  if (!pool) return;
+  await pool.clear();
+}
+
+/**
+ * Current pool size. Returns 0 before any tenant has been touched.
+ */
+export function authInstancePoolSize(): number {
+  return pool?.size ?? 0;
+}
+
+/**
+ * Visible for tests — replace the pool factory with a synthetic one so
+ * test files can exercise the lifecycle without a real postgres + Better
+ * Auth roundtrip.
+ */
+export function __unsafe_setAuthInstancePool_forTesting(
+  next: TenantInstancePool<BrivenAuthInstance> | null,
+): void {
+  pool = next;
+}

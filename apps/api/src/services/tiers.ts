@@ -36,6 +36,15 @@ export interface TierLimits {
    * from exhausting the year-one 10,000 concurrent-subs target.
    */
   readonly concurrentSubscriptions: number;
+  /**
+   * Monthly active users for briven auth — distinct end-user accounts
+   * with at least one session created in the trailing 30 days. Soft cap
+   * for v1: surfaced in the auth → usage panel; overage feeds the Polar
+   * `briven_auth_mau` meter once Polar is live (BUILD_PLAN.md §9). Free
+   * + pro placeholders per "Decisions locked" Q5; team is the locked
+   * 250k figure.
+   */
+  readonly authMauPerMonth: number;
 }
 
 export const TIERS: Record<ProjectTier, TierLimits> = {
@@ -46,6 +55,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     storageBytes: 1_073_741_824, // 1 GiB
     connectionSecondsPerMonth: 1_000_000, // ~12 days of one continuous connection
     concurrentSubscriptions: 100,
+    authMauPerMonth: 1_000, // placeholder per BUILD_PLAN.md "Decisions locked" Q5
   },
   pro: {
     projectsPerOrg: 20,
@@ -54,6 +64,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     storageBytes: 10_737_418_240, // 10 GiB
     connectionSecondsPerMonth: 10_000_000, // ~115 days = roughly 4 always-on subs
     concurrentSubscriptions: 1_000,
+    authMauPerMonth: 25_000, // placeholder per BUILD_PLAN.md "Decisions locked" Q5
   },
   team: {
     projectsPerOrg: 100,
@@ -62,6 +73,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     storageBytes: 107_374_182_400, // 100 GiB
     connectionSecondsPerMonth: 100_000_000, // ~1158 days = roughly 38 always-on
     concurrentSubscriptions: 10_000,
+    authMauPerMonth: 250_000, // locked: BUILD_PLAN.md "Decisions locked" Q5
   },
 };
 

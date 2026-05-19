@@ -16,6 +16,7 @@ const TABS = [
   { href: '/logs', label: 'logs' },
   { href: '/deployments', label: 'deployments' },
   { href: '/studio', label: 'studio' },
+  { href: '/auth', label: 'auth' },
   { href: '/connect', label: 'connect' },
   { href: '/env', label: 'env' },
   { href: '/keys', label: 'api keys' },

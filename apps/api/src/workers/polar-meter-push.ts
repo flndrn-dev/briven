@@ -12,6 +12,7 @@ import { log } from '../lib/logger.js';
  *   invocations         → BRIVEN_POLAR_METER_INVOCATIONS_ID
  *   storage_bytes       → BRIVEN_POLAR_METER_STORAGE_ID
  *   connection_seconds  → BRIVEN_POLAR_METER_CONNECTION_ID
+ *   auth_mau            → BRIVEN_POLAR_METER_AUTH_MAU_ID
  *
  * Without the meter ids configured the worker marks rows as 'skipped'
  * so they don't pile up forever (and a follow-up env config flip can
@@ -80,6 +81,8 @@ function meterIdFor(metric: UsageMetric): string | null {
       return env.BRIVEN_POLAR_METER_STORAGE_ID ?? null;
     case 'connection_seconds':
       return env.BRIVEN_POLAR_METER_CONNECTION_ID ?? null;
+    case 'auth_mau':
+      return env.BRIVEN_POLAR_METER_AUTH_MAU_ID ?? null;
     default:
       return null;
   }
