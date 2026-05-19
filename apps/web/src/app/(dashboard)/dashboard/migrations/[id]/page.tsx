@@ -30,6 +30,10 @@ interface TimelineEntry {
     statusChanged: boolean | null;
     messageIncluded: boolean | null;
     linkedUserId: boolean;
+    // Status-change entries carry the new status name so the timeline can
+    // map directly into `phaseTimestamps` without guessing sequentially.
+    // Optional because only `statusChanged` entries include it.
+    newStatus?: string | null;
   };
 }
 
@@ -105,8 +109,9 @@ function StepTimeline({
     }
   }
   // Fallback: if no explicit create entry exists, use the first entry.
-  if (!phaseTimestamps['new'] && timeline.length > 0) {
-    phaseTimestamps['new'] = timeline[0].createdAt;
+  const firstEntry = timeline[0];
+  if (!phaseTimestamps['new'] && firstEntry) {
+    phaseTimestamps['new'] = firstEntry.createdAt;
   }
 
   return (

@@ -167,7 +167,9 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
               disabled={disabled || anyPending}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
             >
-              <FcGoogle className="h-5 w-5" />
+              <span className="inline-flex h-5 w-5 items-center justify-center">
+                <FcGoogle />
+              </span>
               {oauthPending === 'google' ? 'redirecting...' : 'continue with google'}
             </button>
           ) : null}
@@ -179,7 +181,9 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
               disabled={disabled || anyPending}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
             >
-              <FaGithub className="h-5 w-5" />
+              <span className="inline-flex h-5 w-5 items-center justify-center">
+                <FaGithub />
+              </span>
               {oauthPending === 'github' ? 'redirecting...' : 'continue with github'}
             </button>
           ) : null}
@@ -203,7 +207,9 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
               disabled={disabled || anyPending}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
             >
-              <FaDiscord className="h-5 w-5 text-[#5865F2]" />
+              <span className="inline-flex h-5 w-5 items-center justify-center text-[#5865F2]">
+                <FaDiscord />
+              </span>
               {oauthPending === 'discord' ? 'redirecting...' : 'continue with discord'}
             </button>
           ) : null}
