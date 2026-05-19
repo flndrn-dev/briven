@@ -159,6 +159,29 @@ export async function listMigrationRequestsForAdmin(
     .limit(limit);
 }
 
+/**
+ * Hard-delete a migration request the caller owns. Cascades to the
+ * request's audit-event rows via the FK. Returns `false` when the row
+ * doesn't exist or belongs to a different user — same shape for both so
+ * the endpoint never leaks which case applied.
+ */
+export async function deleteMigrationRequestForUser(
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(migrationRequests)
+    .where(eq(migrationRequests.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return false;
+  if (row.userId !== userId) return false;
+  await db.delete(migrationRequests).where(eq(migrationRequests.id, id));
+  return true;
+}
+
 export async function getMigrationRequest(id: string): Promise<MigrationRequest> {
   const db = getDb();
   const rows = await db

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ApiError, apiJson } from '../../../../../lib/api';
+import { DeleteMigrationButton } from './delete-migration-button';
 
 export const metadata = { title: 'migration detail' };
 export const dynamic = 'force-dynamic';
@@ -415,6 +416,16 @@ export default async function MigrationDetailPage({
         </a>{' '}
         and quote the request id.
       </p>
+
+      <div className="mt-2 flex flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+        <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+          danger zone
+        </h3>
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          deleting drops this request + its audit history permanently.
+        </p>
+        <DeleteMigrationButton requestId={request.id} />
+      </div>
     </section>
   );
 }
