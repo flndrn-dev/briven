@@ -12,6 +12,7 @@ import { audit, hashIp, listAuditForMigrationRequest } from '../services/audit.j
 import { trackMarketingEvent } from '../services/marketing-events.js';
 import {
   createMigrationRequest,
+  deleteMigrationRequestForUser,
   getMigrationRequest,
   listMigrationRequestsForUser,
 } from '../services/migration-requests.js';
@@ -89,6 +90,26 @@ migrationRequestsRouter.get('/v1/migration-requests/:id', async (c) => {
       },
     })),
   });
+});
+
+/**
+ * Hard-delete a migration request the caller owns. 404 also covers
+ * "not yours" so we don't leak the existence of other users' requests.
+ */
+migrationRequestsRouter.delete('/v1/migration-requests/:id', async (c) => {
+  const user = c.get('user')!;
+  const id = c.req.param('id');
+  const ok = await deleteMigrationRequestForUser(id, user.id);
+  if (!ok) return c.json({ code: 'not_found' }, 404);
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'migration_request.delete',
+    ipHash: hashIpFromReq(c.req.raw.headers.get('x-forwarded-for')),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { requestId: id },
+  });
+  return c.json({ ok: true });
 });
 
 migrationRequestsRouter.post('/v1/migration-requests', async (c) => {

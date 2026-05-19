@@ -208,19 +208,19 @@ export function ProfileBillingForm({
       onSubmit={onSubmit}
       className="flex flex-col gap-0 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)]"
     >
-      <header className="flex flex-wrap items-start justify-between gap-3 px-6 pt-5 pb-3">
-        <div>
+      <header className="flex flex-col gap-2 px-6 pt-5 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-[var(--color-text)]">
             Profile &amp; billing details
           </h3>
-          <p className="mt-1 max-w-xl text-xs text-[var(--color-text-muted)]">
-            Your avatar, plus the address and identity info we&apos;re required to keep on file
-            for any paid subscription under EU regulation.
-          </p>
+          <span className="inline-flex shrink-0 items-center rounded-md border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--color-primary)]">
+            {tzChip}
+          </span>
         </div>
-        <span className="inline-flex shrink-0 items-center rounded-md border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--color-primary)]">
-          {tzChip}
-        </span>
+        <p className="max-w-xl text-xs text-[var(--color-text-muted)]">
+          Your avatar, plus the address and identity info we&apos;re required to keep on file
+          for any paid subscription under EU regulation.
+        </p>
       </header>
 
       <div className="flex flex-wrap items-center gap-5 px-6 pt-2 pb-5">
