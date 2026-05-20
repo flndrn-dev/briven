@@ -64,6 +64,53 @@ describe('POST /v1/auth/cli-token', () => {
     const body = (await res.json()) as { code: string; message: string };
     expect(body.code).toBe('unauthorized');
   });
+
+  it('rejects POST from cross-origin (CSRF guard)', async () => {
+    // Mounts the same middleware chain that index.ts wires for cookie
+    // requests — a fake session attacher + the real csrfOriginCheck() —
+    // so we exercise the carve-out logic end-to-end on the cli-token
+    // path. Before the carve-out was narrowed, the request slipped past
+    // CSRF because /v1/auth/* was blanket-exempted; now it must fall
+    // through and either reject as CSRF (403) or as no-session (401).
+    const { Hono } = await import('hono');
+    const { csrfOriginCheck } = await import('../middleware/csrf.js');
+    const { authCliRouter } = await import('./auth-cli.js');
+    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
+    const app = new Hono<AppEnv>();
+    app.use('*', async (c, next) => {
+      // Simulate a logged-in browser request: a real Better Auth cookie
+      // would populate c.get('session'); we just set a sentinel so the
+      // CSRF middleware's hasSession branch fires.
+      const cookie = c.req.header('cookie') ?? '';
+      if (cookie.includes('briven-session=')) {
+        c.set('session', { id: 's_fake', userId: 'u_fake' } as unknown as never);
+        c.set('user', { id: 'u_fake', email: 'fake@example.com' } as unknown as never);
+      } else {
+        c.set('session', null as unknown as never);
+        c.set('user', null as unknown as never);
+      }
+      await next();
+    });
+    app.use('*', csrfOriginCheck());
+    app.route('/', authCliRouter);
+
+    const res = await app.request('/v1/auth/cli-token', {
+      method: 'POST',
+      headers: {
+        cookie: 'briven-session=fake',
+        origin: 'https://evil.example.com',
+      },
+    });
+    // Either 401 (no real session) or 403 (csrf rejection) is acceptable —
+    // both prove the request did NOT mint a token. The only failure mode
+    // would be 200, which is what the bug would have produced.
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).not.toBe(200);
+    expect([401, 403]).toContain(res.status);
+    const body = (await res.json()) as { code?: string; token?: string };
+    expect(body.token).toBeUndefined();
+    expect(body.code).toBe('csrf_origin_rejected');
+  });
 });
 
 afterAll(() => {
