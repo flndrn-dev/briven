@@ -130,17 +130,14 @@ export default async function ProjectsPage() {
                   prototyping and small one-off changes.
                 </p>
                 <p className="mt-2 text-[var(--color-text-muted)]">
-                  <strong>cli + git</strong> — one-line install, then the wizard handles
-                  auth, project pick or create, and scaffolding:
+                  <strong>cli + git</strong> — one command, wizard handles auth, project
+                  pick or create, and scaffolding:
                 </p>
                 <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
-                  <code>
-                    {`curl -fsSL https://briven.tech/install | sh
-cd my-app && briven`}
-                  </code>
+                  <code>{`mkdir my-app && cd my-app && npx @briven/cli`}</code>
                 </pre>
                 <p className="mt-1 text-[var(--color-text-muted)]">
-                  the wizard opens your browser to authorize, then asks{' '}
+                  browser opens to authorize, then asks{' '}
                   <em>new project or existing?</em> and picks a template. swap templates
                   with <code>briven init --template todo-app|chat|blank</code> later. anything
                   you build in studio has a <em>copy as schema.ts</em> button to graduate
@@ -150,13 +147,19 @@ cd my-app && briven`}
                   <summary className="cursor-pointer">manual / CI flow (no wizard)</summary>
                   <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
                     <code>
-                      {`curl -fsSL https://briven.tech/install | sh
-briven init my-app --template todo-app
+                      {`npx @briven/cli init my-app --template todo-app
 cd my-app
 briven login --project <p_id> --key <brk_key>
 briven link
 briven deploy`}
                     </code>
+                  </pre>
+                </details>
+                <details className="mt-2 text-[10px] text-[var(--color-text-subtle)]">
+                  <summary className="cursor-pointer">offline install (curl, no npm)</summary>
+                  <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
+                    <code>{`curl -fsSL https://briven.tech/install | sh
+cd my-app && briven`}</code>
                   </pre>
                 </details>
               </li>
