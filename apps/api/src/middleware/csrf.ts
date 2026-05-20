@@ -7,6 +7,68 @@ import type { Session } from './session.js';
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
+ * Explicit allowlist of /v1/auth/* paths owned by Better Auth (core + the
+ * plugins we mount in apps/api/src/lib/auth.ts: magic-link + genericOAuth).
+ * Better Auth carries its own internal CSRF for these, so the origin-check
+ * carve-out is justified.
+ *
+ * NOT in this list — our custom /v1/auth/* routes (e.g. /v1/auth/cli-token):
+ * those are session-cookie POSTs that mint long-lived bearers, so they MUST
+ * fall through to the origin-check below. When you add a new Better Auth
+ * route (e.g. by enabling a new plugin), add its prefix here. When you add
+ * a new custom briven-owned route under /v1/auth/, do NOT add it here.
+ *
+ * Matched as either exact equality or `path === prefix + '/' + ...` so that
+ * `/v1/auth/sign-in/email` and `/v1/auth/callback/google` both resolve.
+ */
+const BETTER_AUTH_PATHS: readonly string[] = [
+  '/v1/auth/ok',
+  '/v1/auth/error',
+  // Sessions
+  '/v1/auth/get-session',
+  '/v1/auth/update-session',
+  '/v1/auth/list-sessions',
+  '/v1/auth/revoke-session',
+  '/v1/auth/revoke-sessions',
+  '/v1/auth/revoke-other-sessions',
+  // Sign-in / sign-up / sign-out (prefix covers /email, /social, /magic-link, /oauth2, ...)
+  '/v1/auth/sign-in',
+  '/v1/auth/sign-up',
+  '/v1/auth/sign-out',
+  // OAuth callbacks
+  '/v1/auth/callback',
+  '/v1/auth/oauth2',
+  // Magic link
+  '/v1/auth/magic-link',
+  // Email verification
+  '/v1/auth/verify-email',
+  '/v1/auth/send-verification-email',
+  // Password
+  '/v1/auth/request-password-reset',
+  '/v1/auth/reset-password',
+  '/v1/auth/change-password',
+  '/v1/auth/verify-password',
+  // User / account mutations
+  '/v1/auth/change-email',
+  '/v1/auth/update-user',
+  '/v1/auth/delete-user',
+  '/v1/auth/link-social',
+  '/v1/auth/unlink-account',
+  '/v1/auth/list-accounts',
+  '/v1/auth/account-info',
+  // Tokens
+  '/v1/auth/refresh-token',
+  '/v1/auth/get-access-token',
+];
+
+function isBetterAuthPath(path: string): boolean {
+  for (const p of BETTER_AUTH_PATHS) {
+    if (path === p || path.startsWith(p + '/')) return true;
+  }
+  return false;
+}
+
+/**
  * Pure policy function — extracted so the middleware decision is unit-testable
  * without spinning up a full Hono context.
  *
@@ -17,7 +79,9 @@ const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  * never session-authenticated, so they bypass too.
  *
  * Better Auth's own /v1/auth/* routes handle their internal CSRF separately;
- * we skip those to avoid double-counting.
+ * we skip those (allowlisted in BETTER_AUTH_PATHS) to avoid double-counting.
+ * Custom briven-owned routes under /v1/auth/ (e.g. /v1/auth/cli-token) are
+ * NOT exempt and must pass the origin check like every other mutating route.
  */
 export function shouldRejectAsCsrf(input: {
   method: string;
@@ -28,7 +92,7 @@ export function shouldRejectAsCsrf(input: {
 }): boolean {
   if (!UNSAFE_METHODS.has(input.method.toUpperCase())) return false;
   if (!input.hasSession) return false;
-  if (input.path.startsWith('/v1/auth/')) return false;
+  if (isBetterAuthPath(input.path)) return false;
   if (!input.origin || !input.trustedOrigins.includes(input.origin)) return true;
   return false;
 }
