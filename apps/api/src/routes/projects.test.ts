@@ -20,6 +20,7 @@ process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
 process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL ?? 'postgres://test:test@127.0.0.1:5/test';
 
 import { afterAll, describe, expect, it } from 'bun:test';
+import type { AppEnv } from '../types/app-env.js';
 
 describe('POST /v1/projects via CLI JWT', () => {
   it('accepts a Bearer cli token without rejecting on CSRF', async () => {
@@ -27,7 +28,6 @@ describe('POST /v1/projects via CLI JWT', () => {
     const { signCliToken } = await import('../lib/cli-jwt.js');
     const { csrfOriginCheck } = await import('../middleware/csrf.js');
     const { projectsRouter } = await import('./projects.js');
-    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
 
     const app = new Hono<AppEnv>();
     app.use('*', csrfOriginCheck());
@@ -46,10 +46,6 @@ describe('POST /v1/projects via CLI JWT', () => {
     // No DB → 401 from bearer user-lookup or 500 from db acceptable.
     // KEY assertion: status is NOT 403 csrf_origin_rejected.
     expect(res.status).not.toBe(403);
-    if (res.status === 403) {
-      const body = (await res.json()) as { code: string };
-      expect(body.code).not.toBe('csrf_origin_rejected');
-    }
   });
 });
 
