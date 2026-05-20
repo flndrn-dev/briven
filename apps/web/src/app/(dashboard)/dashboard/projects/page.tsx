@@ -130,24 +130,35 @@ export default async function ProjectsPage() {
                   prototyping and small one-off changes.
                 </p>
                 <p className="mt-2 text-[var(--color-text-muted)]">
-                  <strong>cli + git</strong> — scaffold a local copy and commit your{' '}
-                  <code>schema.ts</code>:
+                  <strong>cli + git</strong> — one-line install, then the wizard handles
+                  auth, project pick or create, and scaffolding:
                 </p>
                 <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
                   <code>
-                    {`pnpm dlx @briven/cli init my-app --template todo-app
+                    {`curl -fsSL https://briven.tech/install | sh
+cd my-app && briven`}
+                  </code>
+                </pre>
+                <p className="mt-1 text-[var(--color-text-muted)]">
+                  the wizard opens your browser to authorize, then asks{' '}
+                  <em>new project or existing?</em> and picks a template. swap templates
+                  with <code>briven init --template todo-app|chat|blank</code> later. anything
+                  you build in studio has a <em>copy as schema.ts</em> button to graduate
+                  to git.
+                </p>
+                <details className="mt-2 text-[10px] text-[var(--color-text-subtle)]">
+                  <summary className="cursor-pointer">manual / CI flow (no wizard)</summary>
+                  <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
+                    <code>
+                      {`curl -fsSL https://briven.tech/install | sh
+briven init my-app --template todo-app
 cd my-app
 briven login --project <p_id> --key <brk_key>
 briven link
 briven deploy`}
-                  </code>
-                </pre>
-                <p className="mt-1 text-[var(--color-text-muted)]">
-                  <code>--template todo-app</code> ships a working schema + 4 mutations + 1
-                  reactive query. swap for <code>chat</code> or <code>blank</code>. you can
-                  mix the two paths — anything you build in studio has a{' '}
-                  <em>copy as schema.ts</em> button to graduate to git.
-                </p>
+                    </code>
+                  </pre>
+                </details>
               </li>
               <li>
                 <p className="text-[var(--color-text)]">3 · invoke + iterate</p>
@@ -184,7 +195,10 @@ briven deploy`}
           </div>
         </div>
       ) : (
-        <ProjectsList projects={projects} />
+        <ProjectsList
+          projects={projects}
+          apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+        />
       )}
     </section>
   );
