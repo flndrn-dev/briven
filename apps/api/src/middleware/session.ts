@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 
 import { auth, type Session, type User } from '../lib/auth.js';
+import { log } from '../lib/logger.js';
 
 /**
  * Populate every request context with the current user + session, or nulls.
@@ -23,7 +24,7 @@ export const attachSession = (): MiddlewareHandler => async (c, next) => {
  * structured error so the CLI/dashboard can redirect to sign-in.
  */
 export const requireAuth = (): MiddlewareHandler => async (c, next) => {
-  const authHeader = c.req.header('authorization') ?? c.req.header('Authorization');
+  const authHeader = c.req.header('authorization');
   if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
     const token = authHeader.slice(7).trim();
     try {
@@ -43,7 +44,10 @@ export const requireAuth = (): MiddlewareHandler => async (c, next) => {
       c.set('user', row as unknown as User);
       await next();
       return;
-    } catch {
+    } catch (err) {
+      log.warn('cli_bearer_rejected', {
+        err: err instanceof Error ? err.message : String(err),
+      });
       return c.json({ code: 'unauthorized', message: 'invalid cli token' }, 401);
     }
   }
