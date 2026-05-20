@@ -18,6 +18,8 @@ import {
   updateProfile,
   type ProfilePatch,
 } from '../services/me.js';
+import { listOrgsForUser } from '../services/orgs.js';
+import { listProjectsForUser } from '../services/projects.js';
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
@@ -64,6 +66,31 @@ meRouter.get('/v1/me', requireAuth(), async (c) => {
   if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
   const profile = await getProfile(user.id);
   return c.json(profile);
+});
+
+// Lightweight "what projects can I see?" list used by the CLI's wizard
+// (`existingBranch`) and by any caller that wants the minimum-viable
+// numbered-list payload without the dashboard-only enrichments returned
+// by `/v1/projects`. Six fields, one per project: id, slug, name, region,
+// tier, orgName. Same membership semantics as `listProjectsForUser` —
+// org-scoped OR project-scoped — joined to org for the org name.
+meRouter.get('/v1/me/projects', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  const [rows, orgs] = await Promise.all([
+    listProjectsForUser(user.id),
+    listOrgsForUser(user.id),
+  ]);
+  const orgsById = new Map(orgs.map((o) => [o.id, o]));
+  const projects = rows.map((p) => ({
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    region: p.region,
+    tier: p.tier,
+    orgName: orgsById.get(p.orgId)?.name ?? null,
+  }));
+  return c.json({ projects });
 });
 
 meRouter.patch('/v1/me', requireAuth(), async (c) => {
