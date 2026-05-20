@@ -10,6 +10,21 @@ import { readProjectConfig } from '../project-config.js';
 import { banner, blankLine, error as printError, step, success } from '../output.js';
 import { decideBranch, runWizard } from '../wizard.js';
 
+/**
+ * Tier-aware policy: does this schema diff need a y/N prompt before we
+ * push it? Destructive ops always prompt. Non-destructive ops auto-push
+ * on free; prompt on pro/team where prod data is on the line.
+ *
+ * Wire-up into the watcher loop is a follow-up — see plan §C7 step 3.
+ */
+export function shouldPromptForDiff(opts: {
+  tier: 'free' | 'pro' | 'team';
+  destructive: boolean;
+}): boolean {
+  if (opts.destructive) return true;
+  return opts.tier !== 'free';
+}
+
 interface DevArgs {
   quiet: boolean;
   confirmDestructive: boolean;
