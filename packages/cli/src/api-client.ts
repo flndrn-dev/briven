@@ -1,8 +1,10 @@
 export interface ApiCallOptions {
   apiOrigin: string;
   apiKey?: string;
+  bearer?: string;
   method?: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }
 
 export class ApiCallError extends Error {
@@ -17,11 +19,21 @@ export class ApiCallError extends Error {
 }
 
 export async function apiCall<T>(path: string, options: ApiCallOptions): Promise<T> {
+  const authHeaders: Record<string, string> = {};
+  if (options.bearer && options.bearer.length > 0) {
+    authHeaders.authorization = `Bearer ${options.bearer}`;
+  } else if (options.apiKey && options.apiKey.length > 0) {
+    authHeaders.authorization = `Bearer ${options.apiKey}`;
+  } else {
+    throw new Error('apiCall: either apiKey or bearer must be provided');
+  }
+
   const headers: Record<string, string> = {
     accept: 'application/json',
+    ...authHeaders,
+    ...(options.headers ?? {}),
   };
   if (options.body !== undefined) headers['content-type'] = 'application/json';
-  if (options.apiKey) headers['authorization'] = `Bearer ${options.apiKey}`;
 
   const res = await fetch(`${options.apiOrigin}${path}`, {
     method: options.method ?? 'GET',
