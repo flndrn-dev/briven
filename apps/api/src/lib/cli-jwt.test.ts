@@ -1,6 +1,7 @@
-process.env.BRIVEN_BETTER_AUTH_SECRET = 'a'.repeat(32);
+const ORIGINAL_SECRET = process.env.BRIVEN_BETTER_AUTH_SECRET;
+process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
 
-import { describe, expect, it } from 'bun:test';
+import { afterAll, describe, expect, it } from 'bun:test';
 
 describe('cli-jwt', () => {
   it('round-trips a user id', async () => {
@@ -31,4 +32,25 @@ describe('cli-jwt', () => {
       .sign(secret);
     await expect(verifyCliToken(bad)).rejects.toThrow(/scope/);
   });
+
+  it('rejects an expired token', async () => {
+    const { verifyCliToken } = await import('./cli-jwt.js');
+    const { SignJWT } = await import('jose');
+    const { env } = await import('../env.js');
+    const secret = new TextEncoder().encode(env.BRIVEN_BETTER_AUTH_SECRET);
+    const expired = await new SignJWT({ scope: 'cli' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('u_expired')
+      .setIssuer('briven-api')
+      .setAudience('briven-cli')
+      .setIssuedAt(Math.floor(Date.now() / 1000) - 7200)
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 3600)
+      .sign(secret);
+    await expect(verifyCliToken(expired)).rejects.toThrow();
+  });
+});
+
+afterAll(() => {
+  if (ORIGINAL_SECRET === undefined) delete process.env.BRIVEN_BETTER_AUTH_SECRET;
+  else process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET;
 });
