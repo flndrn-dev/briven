@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import { audit, hashIp } from '../services/audit.js';
+import { exportProjectSchema } from '../services/schema-export.js';
 import {
   addColumn,
   alterColumn,
@@ -143,6 +144,23 @@ studioRouter.get(
     const projectId = c.req.param('id');
     const edges = await listRelationships(projectId);
     return c.json({ edges });
+  },
+);
+
+/**
+ * JSON-wrapped schema export — returns `{ schemaTs }`. Used by the CLI
+ * (`briven pull`) to materialise a local `briven/schema.ts` from the
+ * server's current schema. Distinct from the text/plain `schema.ts`
+ * endpoint below, which the browser studio uses for direct download.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/schema-export',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const schemaTs = await exportProjectSchema(projectId);
+    return c.json({ schemaTs });
   },
 );
 
