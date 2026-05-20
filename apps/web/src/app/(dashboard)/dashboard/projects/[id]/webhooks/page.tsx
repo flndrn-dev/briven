@@ -68,7 +68,6 @@ export default async function WebhooksPage({ params }: { params: Promise<{ id: s
 
   async function toggle(formData: FormData) {
     'use server';
-    const { id } = await params;
     const endpointId = String(formData.get('endpointId') ?? '');
     const enabled = String(formData.get('enabled') ?? '') === 'true';
     const res = await apiFetch(`/v1/projects/${id}/webhooks/${endpointId}`, {
@@ -85,7 +84,6 @@ export default async function WebhooksPage({ params }: { params: Promise<{ id: s
 
   async function remove(formData: FormData) {
     'use server';
-    const { id } = await params;
     const endpointId = String(formData.get('endpointId') ?? '');
     const res = await apiFetch(`/v1/projects/${id}/webhooks/${endpointId}`, {
       method: 'DELETE',
@@ -96,7 +94,6 @@ export default async function WebhooksPage({ params }: { params: Promise<{ id: s
 
   async function toggleSubscriber(formData: FormData) {
     'use server';
-    const { id } = await params;
     const subscriberId = String(formData.get('subscriberId') ?? '');
     const enabled = String(formData.get('enabled') ?? '') === 'true';
     const res = await apiFetch(`/v1/projects/${id}/outbound-webhooks/${subscriberId}`, {
@@ -113,7 +110,6 @@ export default async function WebhooksPage({ params }: { params: Promise<{ id: s
 
   async function removeSubscriber(formData: FormData) {
     'use server';
-    const { id } = await params;
     const subscriberId = String(formData.get('subscriberId') ?? '');
     const res = await apiFetch(`/v1/projects/${id}/outbound-webhooks/${subscriberId}`, {
       method: 'DELETE',

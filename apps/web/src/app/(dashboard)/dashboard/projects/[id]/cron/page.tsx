@@ -52,7 +52,6 @@ export default async function CronPage({ params }: { params: Promise<{ id: strin
 
   async function create(formData: FormData) {
     'use server';
-    const { id } = await params;
     const name = String(formData.get('name') ?? '').trim();
     const functionName = String(formData.get('functionName') ?? '').trim();
     const cronExpression = String(formData.get('cronExpression') ?? '').trim();
@@ -86,7 +85,6 @@ export default async function CronPage({ params }: { params: Promise<{ id: strin
 
   async function toggle(formData: FormData) {
     'use server';
-    const { id } = await params;
     const scheduleId = String(formData.get('scheduleId') ?? '');
     const enabled = String(formData.get('enabled') ?? '') === 'true';
     const res = await apiFetch(`/v1/projects/${id}/schedules/${scheduleId}`, {
@@ -103,7 +101,6 @@ export default async function CronPage({ params }: { params: Promise<{ id: strin
 
   async function remove(formData: FormData) {
     'use server';
-    const { id } = await params;
     const scheduleId = String(formData.get('scheduleId') ?? '');
     const res = await apiFetch(`/v1/projects/${id}/schedules/${scheduleId}`, {
       method: 'DELETE',

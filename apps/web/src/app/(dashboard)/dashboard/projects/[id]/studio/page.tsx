@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { apiJson } from '../../../../../../lib/api';
+import { ApiError, apiJson } from '../../../../../../lib/api';
 import { CopySchemaButton } from './copy-schema-button';
 import { NewTableForm } from './new-table-form';
 
@@ -26,12 +26,19 @@ export default async function StudioPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [{ tables }, relResult] = await Promise.all([
-    apiJson<{ tables: TableSummary[] }>(`/v1/projects/${id}/studio/tables`),
+  const [tablesResult, relResult] = await Promise.all([
+    apiJson<{ tables: TableSummary[] }>(`/v1/projects/${id}/studio/tables`).catch((err) => {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        return { tables: [] as TableSummary[], forbidden: true as const };
+      }
+      return { tables: [] as TableSummary[], forbidden: false as const };
+    }),
     apiJson<{ edges: RelationshipEdge[] }>(`/v1/projects/${id}/studio/relationships`).catch(
       () => ({ edges: [] as RelationshipEdge[] }),
     ),
   ]);
+  const tables = tablesResult.tables;
+  const forbidden = 'forbidden' in tablesResult && tablesResult.forbidden;
   const edges = relResult.edges;
 
   return (
@@ -65,7 +72,17 @@ export default async function StudioPage({
         ) : null}
       </header>
 
-      {tables.length === 0 ? (
+      {forbidden ? (
+        <div className="rounded-md border border-dashed border-[var(--color-border)] p-6">
+          <p className="font-mono text-sm text-[var(--color-text)]">
+            admin role required.
+          </p>
+          <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+            studio surfaces full row contents, so only project admins can open it.
+            ask a project admin to bump your role, or open another tab.
+          </p>
+        </div>
+      ) : tables.length === 0 ? (
         <div className="flex flex-col gap-4 rounded-md border border-dashed border-[var(--color-border)] p-6">
           <div>
             <p className="font-mono text-sm text-[var(--color-text)]">
