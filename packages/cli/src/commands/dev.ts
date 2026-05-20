@@ -5,9 +5,10 @@ import { diff, type SchemaDef } from '@briven/schema';
 
 import { apiCall, ApiCallError } from '../api-client.js';
 import { discoverFunctions, loadProjectSchema } from '../bundler.js';
-import { readCredentials, type ProjectCredential } from '../config.js';
+import { readCredentials, readUserCredential, type ProjectCredential } from '../config.js';
 import { readProjectConfig } from '../project-config.js';
 import { banner, blankLine, error as printError, step, success } from '../output.js';
+import { decideBranch, runWizard } from '../wizard.js';
 
 interface DevArgs {
   quiet: boolean;
@@ -21,6 +22,23 @@ interface Snapshot {
 
 export async function runDev(argv: readonly string[]): Promise<number> {
   const args = parseFlags(argv);
+
+  {
+    const wizardLocal = await readProjectConfig();
+    const wizardUser = await readUserCredential();
+    const branch = decideBranch({
+      hasBrivenJson: !!wizardLocal,
+      hasUserToken: !!wizardUser,
+    });
+    if (branch !== 'watch') {
+      await runWizard({
+        apiOrigin: process.env.BRIVEN_API_ORIGIN ?? 'https://api.briven.tech',
+        dashboardOrigin: process.env.BRIVEN_DASHBOARD_ORIGIN ?? 'https://app.briven.tech',
+      });
+      // Re-read briven.json + creds since the wizard wrote them — fall through
+      // to existing logic which will pick them up.
+    }
+  }
 
   const local = await readProjectConfig();
   if (!local) {

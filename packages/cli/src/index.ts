@@ -20,7 +20,10 @@ import { runWhoami } from './commands/whoami.js';
 export async function run(argv: readonly string[]): Promise<number> {
   const [first, ...rest] = argv;
 
-  if (!first || first === '--help' || first === '-h' || first === 'help') {
+  if (!first) {
+    return runDev([]);
+  }
+  if (first === '--help' || first === '-h' || first === 'help') {
     printHelp();
     return 0;
   }
