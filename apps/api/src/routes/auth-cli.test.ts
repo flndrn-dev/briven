@@ -19,13 +19,13 @@ process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
 process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL ?? 'postgres://test:test@127.0.0.1:5/test';
 
 import { afterAll, describe, expect, it } from 'bun:test';
+import type { AppEnv } from '../types/app-env.js';
 
 describe('POST /v1/auth/cli-token', () => {
   it('mints a cli token for an authenticated request', async () => {
     const { Hono } = await import('hono');
     const { signCliToken, verifyCliToken } = await import('../lib/cli-jwt.js');
     const { authCliRouter } = await import('./auth-cli.js');
-    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
     const app = new Hono<AppEnv>();
     app.route('/', authCliRouter);
 
@@ -55,7 +55,6 @@ describe('POST /v1/auth/cli-token', () => {
   it('rejects when no session or bearer', async () => {
     const { Hono } = await import('hono');
     const { authCliRouter } = await import('./auth-cli.js');
-    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
     const app = new Hono<AppEnv>();
     app.route('/', authCliRouter);
 
@@ -75,7 +74,6 @@ describe('POST /v1/auth/cli-token', () => {
     const { Hono } = await import('hono');
     const { csrfOriginCheck } = await import('../middleware/csrf.js');
     const { authCliRouter } = await import('./auth-cli.js');
-    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
     const app = new Hono<AppEnv>();
     app.use('*', async (c, next) => {
       // Simulate a logged-in browser request: a real Better Auth cookie

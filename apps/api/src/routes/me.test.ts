@@ -19,13 +19,13 @@ process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
 process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL ?? 'postgres://test:test@127.0.0.1:5/test';
 
 import { afterAll, describe, expect, it } from 'bun:test';
+import type { AppEnv } from '../types/app-env.js';
 
 describe('GET /v1/me/projects shape', () => {
   it('handler returns 200 or auth-error and never crashes on shape introspection', async () => {
     const { Hono } = await import('hono');
     const { meRouter } = await import('./me.js');
     const { signCliToken } = await import('../lib/cli-jwt.js');
-    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
 
     const app = new Hono<AppEnv>();
     app.route('/', meRouter);

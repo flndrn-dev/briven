@@ -16,13 +16,13 @@ process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
 process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL ?? 'postgres://test:test@127.0.0.1:5/test';
 
 import { describe, expect, it, afterAll } from 'bun:test';
+import type { AppEnv } from '../types/app-env.js';
 
 describe('requireAuth — Bearer JWT', () => {
   it('attaches user from a valid cli token', async () => {
     const { Hono } = await import('hono');
     const { signCliToken } = await import('../lib/cli-jwt.js');
     const { requireAuth } = await import('./session.js');
-    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
     const app = new Hono<AppEnv>();
     app.use('*', requireAuth());
     app.get('/who', (c) => c.json({ id: (c.get('user') as { id?: string } | undefined)?.id }));
@@ -47,7 +47,6 @@ describe('requireAuth — Bearer JWT', () => {
   it('rejects an expired or malformed bearer', async () => {
     const { Hono } = await import('hono');
     const { requireAuth } = await import('./session.js');
-    type AppEnv = (typeof import('../types/app-env.js'))['AppEnv'];
     const app = new Hono<AppEnv>();
     app.use('*', requireAuth());
     app.get('/who', (c) => c.json({}));
