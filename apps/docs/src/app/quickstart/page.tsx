@@ -7,9 +7,8 @@ export const metadata = {
 };
 
 const SCAFFOLD = pmJoin(
-  pmPlain('$ curl -fsSL https://briven.tech/install | sh'),
   pmPlain('$ mkdir my-app && cd my-app'),
-  pmPlain('$ briven    # wizard: browser auth + new-or-existing project + template pick'),
+  pmExec('npx @briven/cli   # wizard: browser auth + new-or-existing project + template pick'),
 );
 
 const INSTALL_CLIENT = pmInstall('@briven/react');
