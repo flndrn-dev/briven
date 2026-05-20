@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../lib/api';
+import { RowDeleteMigrationButton } from './row-delete-migration-button';
 
 export const metadata = { title: 'my migrations' };
 export const dynamic = 'force-dynamic';
@@ -146,6 +147,7 @@ function RequestCard({ request }: { request: CustomerRequest }) {
         >
           {request.id} →
         </Link>
+        <RowDeleteMigrationButton requestId={request.id} />
       </div>
 
       <p className="font-mono text-sm text-[var(--color-text)]">
