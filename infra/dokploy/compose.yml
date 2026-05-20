@@ -216,7 +216,7 @@ services:
     labels:
       - 'briven_logs=true'
       - 'traefik.enable=true'
-      - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`) || Host(`app.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-web.entrypoints=websecure'
       - 'traefik.http.routers.briven-web.tls.certresolver=letsencrypt'
       - 'traefik.http.services.briven-web.loadbalancer.server.port=3000'
