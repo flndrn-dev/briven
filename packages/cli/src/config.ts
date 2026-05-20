@@ -29,10 +29,18 @@ export interface ProjectCredential {
   createdAt: string;
 }
 
+export interface UserCredential {
+  token: string;
+  userId: string;
+  apiOrigin: string;
+  savedAt: string;
+}
+
 export interface CredentialsFile {
   version: 1;
   default?: string; // projectId
   projects: Record<string, ProjectCredential>;
+  user?: UserCredential;
 }
 
 const EMPTY: CredentialsFile = { version: 1, projects: {} };
@@ -63,6 +71,23 @@ export async function clearCredentials(): Promise<void> {
   } catch (err) {
     if (!isNotFound(err)) throw err;
   }
+}
+
+export async function writeUserCredential(u: UserCredential): Promise<void> {
+  const current = await readCredentials();
+  await writeCredentials({ ...current, user: u });
+}
+
+export async function readUserCredential(): Promise<UserCredential | null> {
+  const current = await readCredentials();
+  return current.user ?? null;
+}
+
+export async function clearUserCredential(): Promise<void> {
+  const current = await readCredentials();
+  if (!current.user) return;
+  const { user: _drop, ...rest } = current;
+  await writeCredentials(rest);
 }
 
 function isNotFound(err: unknown): boolean {
