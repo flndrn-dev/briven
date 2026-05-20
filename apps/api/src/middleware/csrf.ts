@@ -106,6 +106,22 @@ function trustedOrigins(): string[] {
 }
 
 export const csrfOriginCheck = (): MiddlewareHandler => async (c, next) => {
+  // Bearer-token carve-out: CSRF is a browser-only attack vector — the
+  // browser auto-attaches cookies, but it never auto-attaches an
+  // `Authorization: Bearer …` header from a cross-origin form/fetch.
+  // CLI requests (and any non-browser caller using a JWT) therefore
+  // can't be CSRF'd and must skip the origin check entirely. This
+  // sits above every other branch so it can't be defeated by a stray
+  // session cookie tagging along on a bearer request.
+  const authHeader = c.req.header('authorization');
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (token.length > 0) {
+      await next();
+      return;
+    }
+  }
+
   const session = c.get('session') as Session | null | undefined;
   const path = new URL(c.req.url).pathname;
   const origin = c.req.header('origin') ?? null;
