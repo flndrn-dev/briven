@@ -31,11 +31,12 @@
     "lint": "eslint . --max-warnings 0",
     "pack:tarball": "pnpm build && pnpm pack --pack-destination ../../dist-pack",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/cli.test.ts src/commands/doctor.test.ts src/commands/init.test.ts src/config.test.ts",
+    "test": "tsx --test src/cli.test.ts src/commands/doctor.test.ts src/commands/init.test.ts src/config.test.ts src/oauth.test.ts",
     "test:tarball": "node scripts/smoke-tarball.mjs"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
+    "open": "^11.0.0",
     "picocolors": "^1.1.1",
     "tsx": "^4.21.0",
     "ulid": "^3.0.2",
