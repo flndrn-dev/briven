@@ -31,7 +31,7 @@
     "lint": "eslint . --max-warnings 0",
     "pack:tarball": "pnpm build && pnpm pack --pack-destination ../../dist-pack",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/cli.test.ts src/commands/doctor.test.ts src/commands/init.test.ts",
+    "test": "tsx --test src/cli.test.ts src/commands/doctor.test.ts src/commands/init.test.ts src/config.test.ts",
     "test:tarball": "node scripts/smoke-tarball.mjs"
   },
   "dependencies": {
