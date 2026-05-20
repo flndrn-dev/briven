@@ -34,8 +34,10 @@ describe('requireAuth — Bearer JWT', () => {
     // Either 200 (user found) or 401 (cli-token user not in DB) is acceptable.
     // The point of this test is to prove the BEARER PATH ran — not that the DB has the user.
     expect([200, 401]).toContain(res.status);
-    if (res.status === 401) {
-      const body = (await res.json()) as { code: string; message: string };
+    const body = (await res.json()) as { id?: string; code?: string; message?: string };
+    if (res.status === 200) {
+      expect(body.id).toBe('u_session_test');
+    } else {
       expect(body.code).toBe('unauthorized');
       // The message must come from the cli-token branch, not the cookie branch.
       expect(body.message).toMatch(/cli token/i);
