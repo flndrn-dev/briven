@@ -23,6 +23,31 @@ export const attachSession = (): MiddlewareHandler => async (c, next) => {
  * structured error so the CLI/dashboard can redirect to sign-in.
  */
 export const requireAuth = (): MiddlewareHandler => async (c, next) => {
+  const authHeader = c.req.header('authorization') ?? c.req.header('Authorization');
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    const token = authHeader.slice(7).trim();
+    try {
+      const { verifyCliToken } = await import('../lib/cli-jwt.js');
+      const payload = await verifyCliToken(token);
+      const { getDb } = await import('../db/client.js');
+      const { users: userTable } = await import('../db/schema.js');
+      const { eq } = await import('drizzle-orm');
+      const [row] = await getDb()
+        .select({ id: userTable.id, email: userTable.email, name: userTable.name })
+        .from(userTable)
+        .where(eq(userTable.id, payload.sub))
+        .limit(1);
+      if (!row) {
+        return c.json({ code: 'unauthorized', message: 'cli token user not found' }, 401);
+      }
+      c.set('user', row as unknown as User);
+      await next();
+      return;
+    } catch {
+      return c.json({ code: 'unauthorized', message: 'invalid cli token' }, 401);
+    }
+  }
+
   const user = c.get('user') as User | null;
   if (!user) {
     return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
