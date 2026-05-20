@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
+import { RowDeleteProjectButton } from './row-delete-project-button';
+
 interface Project {
   id: string;
   slug: string;
@@ -20,7 +22,13 @@ interface Project {
  * Kept client-side because the dataset is already capped at "everything
  * the user can access" — no point paginating server-side.
  */
-export function ProjectsList({ projects }: { projects: Project[] }) {
+export function ProjectsList({
+  projects,
+  apiOrigin,
+}: {
+  projects: Project[];
+  apiOrigin: string;
+}) {
   const [q, setQ] = useState('');
   const [orgFilter, setOrgFilter] = useState<string>('');
 
@@ -90,10 +98,13 @@ export function ProjectsList({ projects }: { projects: Project[] }) {
       ) : (
         <ul className="flex flex-col gap-2">
           {filtered.map((p) => (
-            <li key={p.id}>
+            <li
+              key={p.id}
+              className="group flex items-center gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] pr-2 transition hover:border-[var(--color-border)]"
+            >
               <Link
                 href={`/dashboard/projects/${p.id}`}
-                className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 transition hover:border-[var(--color-border)]"
+                className="flex flex-1 items-center justify-between px-4 py-3"
               >
                 <div>
                   <p className="font-mono text-sm">{p.name}</p>
@@ -114,6 +125,11 @@ export function ProjectsList({ projects }: { projects: Project[] }) {
                   {new Date(p.createdAt).toISOString().slice(0, 10)}
                 </span>
               </Link>
+              <RowDeleteProjectButton
+                projectId={p.id}
+                projectName={p.name}
+                apiOrigin={apiOrigin}
+              />
             </li>
           ))}
         </ul>
