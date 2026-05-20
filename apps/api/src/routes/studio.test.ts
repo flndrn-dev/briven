@@ -17,7 +17,14 @@ describe('GET /v1/projects/:id/studio/schema-export', () => {
     const res = await app.request('/v1/projects/p_test/studio/schema-export', {
       headers: { authorization: `Bearer ${token}` },
     });
-    // No DB / no admin role in test env. Acceptable: 200, 401 (bearer rejected at db), 403 (no role), 500.
+    // Post-A8: CLI JWT now traverses requireProjectAuth. A 401 here is
+    // only acceptable if it comes from the new cli-jwt branch (e.g.
+    // "invalid cli token" / "cli token user not found") — never from
+    // the old `brk_` rejection. The message guard proves which path ran.
+    if (res.status === 401) {
+      const body = (await res.json()) as { message?: string };
+      expect(body.message ?? '').not.toMatch(/brk_/i);
+    }
     expect([200, 401, 403, 500]).toContain(res.status);
     if (res.status === 200) {
       const body = (await res.json()) as { schemaTs: string };
