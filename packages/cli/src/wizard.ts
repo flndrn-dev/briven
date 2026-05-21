@@ -1,7 +1,9 @@
-import { basename } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { apiCall } from './api-client.js';
+import { generate, type SchemaSnapshot } from './codegen.js';
 import { writeProjectConfig } from './project-config.js';
 import { readUserCredential, writeProjectCredential, writeUserCredential } from './config.js';
 import { runOAuth } from './oauth.js';
@@ -9,6 +11,37 @@ import { runInit } from './commands/init.js';
 import { REGIONS } from './regions.js';
 import { pullSchemaToDisk } from './schema-pull.js';
 import { banner, blankLine, error as printError, step, success } from './output.js';
+
+async function writeGeneratedFiles(args: {
+  cwd: string;
+  snapshot: SchemaSnapshot;
+  functionFilenames: string[];
+}): Promise<void> {
+  const files = generate(args.snapshot, args.functionFilenames);
+  for (const [relPath, content] of files) {
+    const abs = join(args.cwd, relPath);
+    await mkdir(join(abs, '..'), { recursive: true });
+    let existing: string | null = null;
+    try {
+      existing = await readFile(abs, 'utf8');
+    } catch {
+      existing = null;
+    }
+    if (existing !== content) {
+      await writeFile(abs, content, 'utf8');
+    }
+  }
+}
+
+async function listFunctionFilenames(cwd: string): Promise<string[]> {
+  const { readdir } = await import('node:fs/promises');
+  try {
+    const all = await readdir(join(cwd, 'briven', 'functions'));
+    return all.filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+  } catch {
+    return [];
+  }
+}
 
 export type Branch = 'wizard' | 'auth-then-watch' | 'watch';
 
@@ -86,6 +119,11 @@ async function newBranch(env: WizardEnv, token: string, cwd: string): Promise<vo
   await runInit(['--name', name, '--template', template, '--force']);
   await writeProjectConfig({ name, projectId: created.project.id }, cwd);
   await mintAndStoreKey(env, token, created.project.id);
+  await writeGeneratedFiles({
+    cwd,
+    snapshot: { version: 1, tables: {} },
+    functionFilenames: await listFunctionFilenames(cwd),
+  });
   success(`created ${created.project.slug} (${created.project.id})`);
 }
 
@@ -121,6 +159,11 @@ async function existingBranch(env: WizardEnv, token: string, cwd: string): Promi
   });
   await writeProjectConfig({ name: project.slug, projectId: project.id }, cwd);
   await mintAndStoreKey(env, token, project.id);
+  await writeGeneratedFiles({
+    cwd,
+    snapshot: { version: 1, tables: {} },
+    functionFilenames: await listFunctionFilenames(cwd),
+  });
   success(`linked ${project.slug} (${project.id})`);
 }
 
