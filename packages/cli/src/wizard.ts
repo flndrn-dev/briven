@@ -22,7 +22,8 @@ async function writeEnvLocal(args: {
   let existing = '';
   try {
     existing = await readFile(path, 'utf8');
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     existing = '';
   }
   const merged = mergeEnvFile(existing, {
