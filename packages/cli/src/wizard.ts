@@ -147,6 +147,7 @@ async function newBranch(env: WizardEnv, token: string, cwd: string): Promise<vo
   });
   await writeEnvLocal({ cwd, projectId: created.project.id, apiOrigin: env.apiOrigin });
   success(`created ${created.project.slug} (${created.project.id})`);
+  step(`dashboard: ${env.dashboardOrigin}/dashboard/projects/${created.project.id}`);
 }
 
 async function existingBranch(env: WizardEnv, token: string, cwd: string): Promise<void> {
@@ -188,6 +189,7 @@ async function existingBranch(env: WizardEnv, token: string, cwd: string): Promi
   });
   await writeEnvLocal({ cwd, projectId: project.id, apiOrigin: env.apiOrigin });
   success(`linked ${project.slug} (${project.id})`);
+  step(`dashboard: ${env.dashboardOrigin}/dashboard/projects/${project.id}`);
 }
 
 /**
