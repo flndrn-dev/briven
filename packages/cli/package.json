@@ -1,6 +1,6 @@
 {
   "name": "@briven/cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "ship typescript backends to your own postgres",
   "license": "MIT",
   "type": "module",
@@ -31,7 +31,7 @@
     "lint": "eslint . --max-warnings 0",
     "pack:tarball": "pnpm build && pnpm pack --pack-destination ../../dist-pack",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/cli.test.ts src/commands/doctor.test.ts src/commands/init.test.ts src/commands/dev.test.ts src/config.test.ts src/oauth.test.ts src/api-client.test.ts src/wizard.test.ts src/schema-pull.test.ts",
+    "test": "tsx --test src/cli.test.ts src/commands/doctor.test.ts src/commands/init.test.ts src/commands/dev.test.ts src/config.test.ts src/oauth.test.ts src/api-client.test.ts src/wizard.test.ts src/schema-pull.test.ts src/codegen.test.ts src/env-file.test.ts",
     "test:tarball": "node scripts/smoke-tarball.mjs"
   },
   "dependencies": {
