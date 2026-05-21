@@ -4,7 +4,7 @@ import { newId, NotFoundError, ValidationError } from '@briven/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
+import { dropProjectSchema, provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
 import {
   projects,
   projectMembers,
@@ -77,9 +77,9 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     role: 'owner',
   });
 
-  // Provision the data-plane schema. If this fails we log and let the row
-  // stand — the deploy worker will retry the schema creation before applying
-  // any DDL, so a transient outage here doesn't strand the project.
+  // Provision the data-plane schema. If this fails we roll back the meta
+  // rows so the user can retry with the same slug — leaving the meta row
+  // behind would orphan the project (no schema, name/slug taken).
   try {
     await provisionProjectSchema(created.id);
   } catch (err) {
@@ -87,6 +87,33 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       projectId: created.id,
       message: err instanceof Error ? err.message : String(err),
     });
+    // Best-effort cleanup. Each step is independent; we don't want a
+    // secondary failure to mask the original cause.
+    try {
+      await dropProjectSchema(created.id);
+    } catch (dropErr) {
+      log.warn('project_rollback_schema_drop_failed', {
+        projectId: created.id,
+        message: dropErr instanceof Error ? dropErr.message : String(dropErr),
+      });
+    }
+    try {
+      await db.delete(projectMembers).where(eq(projectMembers.projectId, created.id));
+    } catch (memberErr) {
+      log.warn('project_rollback_member_delete_failed', {
+        projectId: created.id,
+        message: memberErr instanceof Error ? memberErr.message : String(memberErr),
+      });
+    }
+    try {
+      await db.delete(projects).where(eq(projects.id, created.id));
+    } catch (rowErr) {
+      log.warn('project_rollback_row_delete_failed', {
+        projectId: created.id,
+        message: rowErr instanceof Error ? rowErr.message : String(rowErr),
+      });
+    }
+    throw err;
   }
 
   return created;
