@@ -90,6 +90,17 @@ export async function clearUserCredential(): Promise<void> {
   await writeCredentials(rest);
 }
 
+export async function writeProjectCredential(cred: ProjectCredential): Promise<void> {
+  const current = await readCredentials();
+  const next: CredentialsFile = {
+    ...current,
+    projects: { ...current.projects, [cred.projectId]: cred },
+  };
+  // First project becomes the default so `briven dev` without --project works.
+  if (!current.default) next.default = cred.projectId;
+  await writeCredentials(next);
+}
+
 function isNotFound(err: unknown): boolean {
   return (
     typeof err === 'object' &&
