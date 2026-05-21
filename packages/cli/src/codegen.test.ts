@@ -35,8 +35,8 @@ test('generate emits api.ts with imports + typed api object', () => {
   assert.match(api, /import listNotes from '\.\.\/functions\/listNotes\.js';/);
   assert.match(api, /import createNote from '\.\.\/functions\/createNote\.js';/);
   assert.match(api, /export const api = \{/);
-  assert.match(api, /  listNotes,/);
-  assert.match(api, /  createNote,/);
+  assert.match(api, / {2}listNotes,/);
+  assert.match(api, / {2}createNote,/);
 });
 
 test('generate maps every supported sql type to TS', () => {
