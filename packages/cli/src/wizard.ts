@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 
 import { apiCall } from './api-client.js';
 import { writeProjectConfig } from './project-config.js';
-import { readUserCredential, writeUserCredential } from './config.js';
+import { readUserCredential, writeProjectCredential, writeUserCredential } from './config.js';
 import { runOAuth } from './oauth.js';
 import { runInit } from './commands/init.js';
 import { REGIONS } from './regions.js';
@@ -85,6 +85,7 @@ async function newBranch(env: WizardEnv, token: string, cwd: string): Promise<vo
 
   await runInit(['--name', name, '--template', template, '--force']);
   await writeProjectConfig({ name, projectId: created.project.id }, cwd);
+  await mintAndStoreKey(env, token, created.project.id);
   success(`created ${created.project.slug} (${created.project.id})`);
 }
 
@@ -119,7 +120,34 @@ async function existingBranch(env: WizardEnv, token: string, cwd: string): Promi
     cwd,
   });
   await writeProjectConfig({ name: project.slug, projectId: project.id }, cwd);
+  await mintAndStoreKey(env, token, project.id);
   success(`linked ${project.slug} (${project.id})`);
+}
+
+/**
+ * Mint a project-scoped admin key via the control-plane and persist it
+ * to `~/.config/briven/credentials.json` so subsequent `briven dev`
+ * invocations have credentials. The plaintext is returned once by the
+ * API and never logged.
+ */
+async function mintAndStoreKey(env: WizardEnv, token: string, projectId: string): Promise<void> {
+  step('minting cli credentials…');
+  const minted = await apiCall<{
+    key: { id: string; suffix: string; createdAt: string };
+    plaintext: string;
+  }>(`/v1/projects/${projectId}/api-keys`, {
+    apiOrigin: env.apiOrigin,
+    bearer: token,
+    method: 'POST',
+    body: { name: 'cli', role: 'admin' },
+  });
+  await writeProjectCredential({
+    projectId,
+    apiKey: minted.plaintext,
+    apiOrigin: env.apiOrigin,
+    suffix: minted.key.suffix,
+    createdAt: minted.key.createdAt,
+  });
 }
 
 function promptLine(prompt: string): Promise<string> {
