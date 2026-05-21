@@ -1,7 +1,9 @@
 import chokidar from 'chokidar';
 import pc from 'picocolors';
 
-import { diff, type SchemaDef } from '@briven/schema';
+import { diff, type SchemaDef, type SchemaSnapshotWire } from '@briven/schema';
+
+import type { SchemaSnapshot } from '../codegen.js';
 
 import { apiCall, ApiCallError } from '../api-client.js';
 import { discoverFunctions, loadProjectSchema } from '../bundler.js';
@@ -177,10 +179,18 @@ async function push(
     }
   }
 
+  // SchemaDef from the user's briven/schema.ts is structurally the wire
+  // format the API expects (schemaSnapshotSchema in @briven/schema/wire).
+  // Hoist it into a typed variable so we can reuse the exact same shape
+  // for both the PATCH body and the local codegen call below.
+  const wireSnapshot: SchemaSnapshotWire = nextSchema
+    ? (nextSchema as unknown as SchemaSnapshotWire)
+    : { version: 1, tables: {} };
+
   const body: Record<string, unknown> = {};
   if (Object.keys(changedFunctions).length > 0) body.changedFunctions = changedFunctions;
   if (removedFunctions.length > 0) body.removedFunctions = removedFunctions;
-  if (schemaChanged && nextSchema) body.schemaSnapshot = nextSchema;
+  if (schemaChanged && nextSchema) body.schemaSnapshot = wireSnapshot;
   if (args.confirmDestructive) body.confirmDestructive = true;
 
   const started = Date.now();
@@ -213,7 +223,9 @@ async function push(
     } catch {
       fnFiles = [];
     }
-    const generated = generate((nextSchema ?? { version: 1, tables: {} }) as never, fnFiles);
+    // wireSnapshot and codegen's SchemaSnapshot are structurally identical
+    // (see packages/schema/src/wire.ts vs packages/cli/src/codegen.ts).
+    const generated = generate(wireSnapshot as SchemaSnapshot, fnFiles);
     for (const [rel, content] of generated) {
       const abs = join(process.cwd(), rel);
       await mkdir(join(abs, '..'), { recursive: true });
