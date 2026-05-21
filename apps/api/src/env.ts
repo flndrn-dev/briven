@@ -231,4 +231,13 @@ if (env.BRIVEN_ENV !== 'development') {
       'BRIVEN_ENCRYPTION_KEY must be set outside development (AES-256 KEK for customer env vars at rest)',
     );
   }
+  // why: BRIVEN_DATA_PLANE_URL is marked .optional() so local dev can boot
+  // without a data-plane, but every customer-facing operation (project
+  // create, schema apply, studio reads/writes) requires it. Failing here
+  // surfaces the misconfiguration at boot instead of on the first request.
+  if (!env.BRIVEN_DATA_PLANE_URL) {
+    throw new Error(
+      'BRIVEN_DATA_PLANE_URL must be set outside development (per-project schemas live in this cluster)',
+    );
+  }
 }
