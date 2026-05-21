@@ -419,7 +419,6 @@ div[data-radix-portal]:not(.portal--toast) {
  * brand green (#00e87a = 151.7 100 46). Source of truth lives in
  * packages/config/tailwind/theme.css (--color-primary). HSL form is
  * used here to integrate with Studio's existing theme variable shape.
- * Visual restyle (Phase 5) will replace the rest of the chrome.
  */
 [data-theme='classic-dark'],
 .classic-dark,
@@ -433,4 +432,61 @@ div[data-radix-portal]:not(.portal--toast) {
   --brand-400: 151.7deg 70% 22%;
   --brand-300: 151.7deg 60% 13%;
   --brand-200: 151.7deg 50% 8%;
+
+  /* Phase 5 screen 3 — extend brand override to absolute scale tokens
+   * (--color-brand-700..1000) so Tailwind utilities like bg-brand-900
+   * resolve to briven green rather than upstream's supabase HSL. */
+  --color-brand-700: hsla(151.7, 70%, 38%, 1);
+  --color-brand-800: hsla(151.7, 85%, 42%, 1);
+  --color-brand-900: hsla(151.7, 100%, 45.5%, 1);
+  --color-brand-1000: hsla(151.7, 90%, 50%, 1);
+}
+
+/*
+ * Briven typography override — Phase 5 (screen 2: project home, applies
+ * chrome-wide because the layout components are shared). Force mono
+ * across the app to match the terminal aesthetic of the control plane
+ * (apps/web). Headings render lowercase per BRAND.md §3.
+ *
+ * `var(--font-mono)` resolves to Studio's existing fallback stack
+ * (Source Code Pro -> Office Code Pro -> Menlo -> monospace). When the
+ * Geist Mono webfont lands in Phase 6+, it slots into --font-custom-mono
+ * and propagates through this override.
+ */
+:root {
+  --font-sans: var(
+    --font-geist-mono,
+    'Geist Mono',
+    'JetBrains Mono',
+    'Source Code Pro',
+    Menlo,
+    monospace
+  );
+  --font-mono: var(
+    --font-geist-mono,
+    'Geist Mono',
+    'JetBrains Mono',
+    'Source Code Pro',
+    Menlo,
+    monospace
+  );
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-mono);
+}
+
+/* Lowercase all chrome headings — matches lowercase brand voice. Decorative
+ * <h*> inside marketing strings can opt out with .normal-case if needed. */
+h1:not(.normal-case),
+h2:not(.normal-case),
+h3:not(.normal-case),
+h4:not(.normal-case),
+h5:not(.normal-case),
+h6:not(.normal-case) {
+  text-transform: lowercase;
 }

@@ -35,7 +35,7 @@ const ProjectBillingUsage: NextPageWithLayout = () => {
 
 ProjectBillingUsage.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="Usage">{page}</SettingsLayout>
+    <SettingsLayout title="usage">{page}</SettingsLayout>
   </DefaultLayout>
 )
 

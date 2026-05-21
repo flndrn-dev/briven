@@ -27,7 +27,7 @@ export const LogPage: NextPageWithLayout = () => {
   if (!logsEnabled) {
     return (
       <DefaultLayout>
-        <ProjectLayout browserTitle={{ section: 'Logs' }}>
+        <ProjectLayout browserTitle={{ section: 'logs' }}>
           <UnknownInterface urlBack={`/project/${ref}`} />
         </ProjectLayout>
       </DefaultLayout>
@@ -38,7 +38,7 @@ export const LogPage: NextPageWithLayout = () => {
     return (
       <DefaultLayout>
         {/* Omit the generic product segment here; project/org context already makes the route clear. */}
-        <ProjectLayout browserTitle={{ section: 'Unified Logs' }}>
+        <ProjectLayout browserTitle={{ section: 'unified logs' }}>
           <UnifiedLogs />
         </ProjectLayout>
       </DefaultLayout>

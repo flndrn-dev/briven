@@ -63,7 +63,7 @@ const JWTKeysLegacyPage: NextPageWithLayout = () => {
 
 JWTKeysLegacyPage.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="JWT Keys (Legacy)">{page}</SettingsLayout>
+    <SettingsLayout title="jwt keys (legacy)">{page}</SettingsLayout>
   </DefaultLayout>
 )
 

@@ -191,8 +191,8 @@ const LogDrainsSettings: NextPageWithLayout = () => {
   if (!isLoadingEntitlement && hasAccessToLogDrains) {
     return (
       <PageLayout
-        title="Log Drains"
-        subtitle="Send your project logs to third party destinations"
+        title="log drains"
+        subtitle="send your project logs to third party destinations"
         primaryActions={
           <>
             {!(logDrains?.length === 0) && (
@@ -261,7 +261,7 @@ const LogDrainsSettings: NextPageWithLayout = () => {
 
 LogDrainsSettings.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="Log Drains">{page}</SettingsLayout>
+    <SettingsLayout title="log drains">{page}</SettingsLayout>
   </DefaultLayout>
 )
 

@@ -1,0 +1,53 @@
+# briven data-plane reverse proxy — Phase 6 of BACKEND_FORK_BRIEF.md.
+# Strips identifying upstream headers (Server, X-Powered-By, Via) so no
+# response leaving the trust zone names a backend component. Replaces
+# the upstream Kong API gateway per plan §1.
+
+{
+	admin off
+}
+
+{$BRIVEN_PUBLIC_HOST:api.briven.tech} {
+	header {
+		-Server
+		-X-Powered-By
+		-Via
+		Server "briven"
+		Strict-Transport-Security "max-age=63072000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	handle_path /rest/v1/* {
+		reverse_proxy http://rest:3000 {
+			header_down -Server
+			header_down -X-Powered-By
+		}
+	}
+
+	handle_path /auth/v1/* {
+		reverse_proxy http://auth:9999 {
+			header_down -Server
+			header_down -X-Powered-By
+		}
+	}
+
+	handle_path /realtime/v1/* {
+		reverse_proxy http://realtime:4000 {
+			header_down -Server
+			header_down -X-Powered-By
+		}
+	}
+
+	handle_path /pg/* {
+		reverse_proxy http://meta:8080 {
+			header_down -Server
+			header_down -X-Powered-By
+		}
+	}
+
+	respond 404 {
+		body `{"error":"not_found"}`
+		close
+	}
+}
