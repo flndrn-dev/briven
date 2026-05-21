@@ -6,11 +6,31 @@ import { apiCall } from './api-client.js';
 import { generate, type SchemaSnapshot } from './codegen.js';
 import { writeProjectConfig } from './project-config.js';
 import { readUserCredential, writeProjectCredential, writeUserCredential } from './config.js';
+import { mergeEnvFile } from './env-file.js';
 import { runOAuth } from './oauth.js';
 import { runInit } from './commands/init.js';
 import { REGIONS } from './regions.js';
 import { pullSchemaToDisk } from './schema-pull.js';
 import { banner, blankLine, error as printError, step, success } from './output.js';
+
+async function writeEnvLocal(args: {
+  cwd: string;
+  projectId: string;
+  apiOrigin: string;
+}): Promise<void> {
+  const path = join(args.cwd, '.env.local');
+  let existing = '';
+  try {
+    existing = await readFile(path, 'utf8');
+  } catch {
+    existing = '';
+  }
+  const merged = mergeEnvFile(existing, {
+    BRIVEN_DEPLOYMENT: args.projectId,
+    NEXT_PUBLIC_BRIVEN_URL: args.apiOrigin,
+  });
+  await writeFile(path, merged, 'utf8');
+}
 
 async function writeGeneratedFiles(args: {
   cwd: string;
@@ -124,6 +144,7 @@ async function newBranch(env: WizardEnv, token: string, cwd: string): Promise<vo
     snapshot: { version: 1, tables: {} },
     functionFilenames: await listFunctionFilenames(cwd),
   });
+  await writeEnvLocal({ cwd, projectId: created.project.id, apiOrigin: env.apiOrigin });
   success(`created ${created.project.slug} (${created.project.id})`);
 }
 
@@ -164,6 +185,7 @@ async function existingBranch(env: WizardEnv, token: string, cwd: string): Promi
     snapshot: { version: 1, tables: {} },
     functionFilenames: await listFunctionFilenames(cwd),
   });
+  await writeEnvLocal({ cwd, projectId: project.id, apiOrigin: env.apiOrigin });
   success(`linked ${project.slug} (${project.id})`);
 }
 
