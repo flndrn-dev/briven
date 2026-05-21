@@ -91,3 +91,8 @@ packages/client-*/src/*.js
 packages/client-*/src/*.js.map
 packages/client-*/src/*.d.ts
 packages/client-*/src/*.d.ts.map
+
+# Briven Build Protocol R4 — read-only third-party reference repos. Populate
+# with `git clone --depth=1` (per machine); never committed, never built
+# against, never imported from. Used as shape spec only.
+_reference/
