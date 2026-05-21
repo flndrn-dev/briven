@@ -201,6 +201,30 @@ async function push(
     );
     snapshot.schema = nextSchema;
     snapshot.bundle = nextBundle;
+
+    // Regenerate ./briven/_generated/ from the snapshot we just pushed.
+    const { generate } = await import('../codegen.js');
+    const { writeFile, mkdir, readFile, readdir } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    let fnFiles: string[] = [];
+    try {
+      const all = await readdir(join(process.cwd(), 'briven', 'functions'));
+      fnFiles = all.filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+    } catch {
+      fnFiles = [];
+    }
+    const generated = generate((nextSchema ?? { version: 1, tables: {} }) as never, fnFiles);
+    for (const [rel, content] of generated) {
+      const abs = join(process.cwd(), rel);
+      await mkdir(join(abs, '..'), { recursive: true });
+      let existing: string | null = null;
+      try {
+        existing = await readFile(abs, 'utf8');
+      } catch {
+        existing = null;
+      }
+      if (existing !== content) await writeFile(abs, content, 'utf8');
+    }
   } catch (err) {
     if (err instanceof ApiCallError) {
       printError(`push failed: ${err.code} (${err.status})`);
