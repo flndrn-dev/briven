@@ -30,7 +30,7 @@ const JWTSigningKeysPage: NextPageWithLayout = () => {
 
 JWTSigningKeysPage.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="JWT Keys">
+    <SettingsLayout title="jwt keys">
       <JWTKeysLayout>{page}</JWTKeysLayout>
     </SettingsLayout>
   </DefaultLayout>

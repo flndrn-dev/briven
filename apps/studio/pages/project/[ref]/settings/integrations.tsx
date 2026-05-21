@@ -25,7 +25,7 @@ const ProjectSettingsIntegrations: NextPageWithLayout = () => {
 
 ProjectSettingsIntegrations.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="Integrations">{page}</SettingsLayout>
+    <SettingsLayout title="integrations">{page}</SettingsLayout>
   </DefaultLayout>
 )
 export default ProjectSettingsIntegrations

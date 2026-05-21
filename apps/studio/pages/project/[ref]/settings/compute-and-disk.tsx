@@ -27,7 +27,7 @@ const AuthSettings: NextPageWithLayout = () => {
 
 AuthSettings.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="Compute and Disk">{page}</SettingsLayout>
+    <SettingsLayout title="compute and disk">{page}</SettingsLayout>
   </DefaultLayout>
 )
 export default AuthSettings

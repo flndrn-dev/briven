@@ -11,12 +11,12 @@ const ApiKeysLayout = ({ children }: PropsWithChildren) => {
 
   const navigationItems = [
     {
-      label: 'Publishable and secret API keys',
+      label: 'publishable and secret api keys',
       href: `/project/${projectRef}/settings/api-keys`,
       id: 'new-keys',
     },
     {
-      label: 'Legacy anon, service_role API keys',
+      label: 'legacy anon, service_role api keys',
       href: `/project/${projectRef}/settings/api-keys/legacy`,
       id: 'legacy-keys',
     },
@@ -24,8 +24,8 @@ const ApiKeysLayout = ({ children }: PropsWithChildren) => {
 
   return (
     <PageLayout
-      title="API Keys"
-      subtitle="Configure API keys to securely control access to your project"
+      title="api keys"
+      subtitle="configure api keys to securely control access to your project"
       navigationItems={navigationItems}
       secondaryActions={<DocsButton href={`${DOCS_URL}/guides/api/api-keys`} />}
     >

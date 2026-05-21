@@ -48,7 +48,7 @@ const Preferences: NextPageWithLayout = () => {
 
 Preferences.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="General">{page}</SettingsLayout>
+    <SettingsLayout title="general">{page}</SettingsLayout>
   </DefaultLayout>
 )
 export default Preferences

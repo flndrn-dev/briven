@@ -153,7 +153,7 @@
   @apply bg-surface-200 border-default rounded-xs border;
 }
 .rdg-header-row .rdg-checkbox-input:checked + .rdg-checkbox {
-  @apply border-default border-4 bg-green-900;
+  @apply border-default border-4 bg-brand-900;
 }
 .rdg-header-row .rdg-checkbox-input:focus + .rdg-checkbox {
   box-shadow: none;
@@ -498,7 +498,7 @@
 }
 
 .sb-grid-status-label__no-msg > div {
-  @apply m-auto h-2 w-2 rounded-full bg-green-900;
+  @apply m-auto h-2 w-2 rounded-full bg-brand-900;
 }
 
 /*

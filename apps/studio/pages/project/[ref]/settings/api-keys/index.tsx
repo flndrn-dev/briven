@@ -49,7 +49,7 @@ const ApiKeysNewPage: NextPageWithLayout = () => {
 
 ApiKeysNewPage.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="API Keys">
+    <SettingsLayout title="api keys">
       <ApiKeysLayout>{page}</ApiKeysLayout>
     </SettingsLayout>
   </DefaultLayout>

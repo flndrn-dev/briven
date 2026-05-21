@@ -31,7 +31,7 @@ const ProjectInfrastructure: NextPageWithLayout = () => {
 
 ProjectInfrastructure.getLayout = (page) => (
   <DefaultLayout>
-    <SettingsLayout title="Infrastructure">{page}</SettingsLayout>
+    <SettingsLayout title="infrastructure">{page}</SettingsLayout>
   </DefaultLayout>
 )
 
