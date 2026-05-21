@@ -5,7 +5,10 @@
  */
 export function mergeEnvFile(existing: string, updates: Record<string, string>): string {
   const updateKeys = new Set(Object.keys(updates));
-  const lines = existing.split('\n');
+  // Normalize CRLF (Windows-edited .env.local) to LF so we don't leave
+  // stray \r on preserved lines and emit mixed line endings on rewrite.
+  const normalized = existing.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
   const out: string[] = [];
   const seen = new Set<string>();
 

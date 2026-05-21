@@ -40,3 +40,12 @@ test('passes malformed lines through untouched', () => {
   assert.match(out, /WEIRDLINE no equals/);
   assert.match(out, /BRIVEN_X="new"/);
 });
+
+test('normalizes CRLF input to LF output', () => {
+  const existing = 'DATABASE_URL=postgres://x\r\nBRIVEN_X="old"\r\nOTHER=keep\r\n';
+  const out = mergeEnvFile(existing, { BRIVEN_X: 'new' });
+  assert.doesNotMatch(out, /\r/);
+  assert.match(out, /BRIVEN_X="new"/);
+  assert.match(out, /DATABASE_URL=postgres:\/\/x/);
+  assert.match(out, /OTHER=keep/);
+});
