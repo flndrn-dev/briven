@@ -1,8 +1,12 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-alpine AS base
-# python3/make/g++ — see apps/web/Dockerfile for why (libpg-query node-gyp fallback
-# runs during repo-root pnpm install).
-RUN apk add --no-cache libc6-compat python3 make g++
+# Base = node:22-slim (Debian) — see apps/web/Dockerfile for the libpg-query
+# alpine-vs-debian rationale.
+FROM node:22-slim AS base
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+      git python3 ca-certificates build-essential && \
+    rm -rf /var/lib/apt/lists/* && \
+    update-ca-certificates
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 FROM base AS build
@@ -12,12 +16,12 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 RUN pnpm --filter @briven/docs... build
 
-FROM node:22-alpine AS runtime
+FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3002
 ENV HOSTNAME=0.0.0.0
-RUN addgroup -S app && adduser -S app -G app
+RUN groupadd -r app && useradd -r -g app app
 COPY --from=build --chown=app:app /repo /app
 USER app
 EXPOSE 3002
