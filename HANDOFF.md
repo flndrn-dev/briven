@@ -68,7 +68,11 @@ What works today: nothing end-to-end. Studio dev mode renders chrome on `localho
 2. **Deploy `infra/datapane/compose.yml` as a new Dokploy compose service.** Medium. Needs `.env` populated from `infra/datapane/.env.example` (17 BRIVEN_* + 5 BRIVEN_BACKUP_*), DNS for `api.briven.tech` → new stack IP.
 3. **Set `NEXT_PUBLIC_BRIVEN_STUDIO_ORIGIN=https://studio.briven.tech` on control plane.** Trivial.
 4. **Deploy `apps/studio` as a new Dokploy app at `studio.briven.tech`.** Medium. pnpm-workspace pulls ~1,605 packages; build window ~10 min. macOS-only `libpg-query` failure must be re-tested on Linux.
-5. **Add multi-tenant routing layer in Studio.** Medium-large, code work, no prior plan. Middleware that reads `[ref]` from URL + injects `Accept-Profile: proj_<id>` on every REST/Auth/Meta request. **This is the real gap** — without it, Studio at `studio.briven.tech` will load but every API call will hit the wrong (or no) schema.
+5. **Add multi-tenant routing layer.** Architectural choice required, then implementation. Investigation in session 2026-05-22 surfaced two options:
+   - **Option A — control-plane proxy (stock supabase model, recommended).** Briven control plane exposes the `/platform/*` API surface that Studio already calls (e.g. `/platform/pg-meta/{ref}/query`), reads `{ref}` from URL path, forwards to data-plane Caddy with `Accept-Profile: proj_<ref>` injected. Studio code path unchanged. Cost lives on the control-plane side.
+   - **Option B — Studio direct.** Rewrite every fetcher in `apps/studio/data/` to talk straight to `api.briven.tech/{rest,auth,realtime,pg}/v1/*` with `Accept-Profile` injected client-side via `client.use()` middleware at `apps/studio/data/fetchers.ts:88`. Bypasses `/platform/*` surface entirely. Control plane shrinks to auth + project provisioning only.
+   - Studio injection point if Option B chosen: `client.use({ onRequest })` in `apps/studio/data/fetchers.ts:88-95` already handles header injection — add `request.headers.set('Accept-Profile', \`proj_\${resolveRef(request.url)}\`)`. The `ref` lives in URL pathname (`/project/[ref]/...`).
+   - Studio's existing `data/fetchers.ts:33` reads base URL from `NEXT_PUBLIC_API_URL`. Pointing this at `https://api.briven.tech` is necessary for either option.
 6. **Wire pgBackRest `stanza-create` + Postgres `archive_command`** so backups actually run (see `infra/datapane/RESTORE.md` §"When restore fails", row 4). Small.
 7. **Demo:** create project in dashboard → open studio → create table → insert row → query back.
 

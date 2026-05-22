@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 FROM oven/bun:1.3-alpine AS base
-RUN apk add --no-cache libstdc++ nodejs npm
+# python3/make/g++ — see apps/web/Dockerfile for why (libpg-query node-gyp fallback
+# runs during repo-root pnpm install).
+RUN apk add --no-cache libstdc++ nodejs npm python3 make g++
 RUN npm install -g pnpm@9.12.0
 
 FROM base AS build

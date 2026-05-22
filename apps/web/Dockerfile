@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1.7
 FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat
+# python3/make/g++ are required because apps/studio depends on libpg-query@15.2.0,
+# whose pre-built binary 404s for node-v127-musl. pnpm at the repo root resolves
+# the entire workspace, so libpg-query's node-gyp fallback runs even for the
+# briven control-plane services — needs Python to configure the build.
+RUN apk add --no-cache libc6-compat python3 make g++
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 FROM base AS build
