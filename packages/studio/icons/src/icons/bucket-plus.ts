@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name BucketPlus
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTkgMTNWMTkiIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8cGF0aCBkPSJNMTYgMTZIMjIiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+CjxwYXRoIGQ9Ik0xMy41IDIwSDRDMy40Njk1NyAyMCAyLjk2MDg2IDE5Ljc4OTMgMi41ODU3OSAxOS40MTQyQzIuMjEwNzEgMTkuMDM5MSAyIDE4LjUzMDQgMiAxOFY1QzIgNC40Njk1NyAyLjIxMDcxIDMuOTYwODYgMi41ODU3OSAzLjU4NTc5QzIuOTYwODYgMy4yMTA3MSAzLjQ2OTU3IDMgNCAzSDcuOTNDOC4yNjExMSAzLjAwMDA1IDguNTg3MDIgMy4wODIzMSA4Ljg3ODUgMy4yMzk0QzkuMTY5OTcgMy4zOTY0OCA5LjQxNzg5IDMuNjIzNDcgOS42IDMuOUwxMC40MSA1LjFDMTAuNTk0IDUuMzc5MzggMTAuODQ1MSA1LjYwODE1IDExLjE0MDMgNS43NjUzOEMxMS40MzU1IDUuOTIyNjEgMTEuNzY1NSA2LjAwMzI4IDEyLjEgNkgyMEMyMC41MzA0IDYgMjEuMDM5MSA2LjIxMDcxIDIxLjQxNDIgNi41ODU3OUMyMS43ODkzIDYuOTYwODYgMjIgNy40Njk1NyAyMiA4VjEwIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const BucketPlus = createSupabaseIcon(
+const BucketPlus = createBrivenIcon(
   'BucketPlus',
   [
     [

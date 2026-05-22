@@ -11,14 +11,14 @@ describe('MultipleCodeBlock', () => {
           {
             name: '.env.local',
             language: 'bash',
-            code: 'NEXT_PUBLIC_SUPABASE_URL=https://next.example',
+            code: 'NEXT_PUBLIC_BRIVEN_URL=https://next.example',
           },
         ]}
       />
     )
 
     expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('.env.local')
-    expect(screen.getByText('NEXT_PUBLIC_SUPABASE_URL=https://next.example')).toBeVisible()
+    expect(screen.getByText('NEXT_PUBLIC_BRIVEN_URL=https://next.example')).toBeVisible()
 
     rerender(
       <MultipleCodeBlock
@@ -26,13 +26,13 @@ describe('MultipleCodeBlock', () => {
           {
             name: '.env',
             language: 'bash',
-            code: 'VITE_SUPABASE_URL=https://react.example',
+            code: 'VITE_BRIVEN_URL=https://react.example',
           },
         ]}
       />
     )
 
     expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('.env')
-    expect(screen.getByText('VITE_SUPABASE_URL=https://react.example')).toBeVisible()
+    expect(screen.getByText('VITE_BRIVEN_URL=https://react.example')).toBeVisible()
   })
 })

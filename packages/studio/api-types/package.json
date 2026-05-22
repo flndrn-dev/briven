@@ -1,7 +1,7 @@
 {
   "name": "api-types",
   "version": "0.0.0",
-  "description": "Types shared between Supabase apps and packages",
+  "description": "Types shared between Briven apps and packages",
   "main": "./index.ts",
   "types": "./index.ts",
   "scripts": {

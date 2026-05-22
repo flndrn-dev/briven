@@ -739,7 +739,7 @@ importers:
       date-fns:
         specifier: ^2.30.0
         version: 2.30.0
-      eslint-config-supabase:
+      eslint-config-briven:
         specifier: workspace:*
         version: link:../../packages/studio/eslint-config-supabase
       eslint-plugin-barrel-files:
@@ -8409,6 +8409,7 @@ packages:
     resolution: {integrity: sha512-X41YRfKkVCooILai2N0aN0Q5O0imu+MbNt894QWU683A82xJJXIR01dEqxwYJ91M6IdExtyFB3GCOJb4eBMBMQ==}
     peerDependencies:
       eslint: '>= 5'
+    bundledDependencies: []
 
   eslint-plugin-import@2.32.0:
     resolution: {integrity: sha512-whOE1HFo/qJDyX4SnXzP4N6zOWn79WhnCUY/iDR0mPfQZO8wcYE4JClzI2oZrhBnnMUCBCHZhO6VQyoBU95mZA==}

@@ -43,7 +43,7 @@ export type FeatureKey =
   | 'auth.anonSignIns'
   | 'auth.socialOAuthProviders'
   | 'auth.customSMTPServer'
-  | 'auth.removeSupabaseBranding'
+  | 'auth.removeBrivenBranding'
   | 'auth.auditLogs'
   | 'auth.basicMFA'
   | 'auth.advancedMFAPhone'
@@ -268,8 +268,8 @@ export const pricing: Pricing = {
         usage_based: false,
       },
       {
-        key: 'auth.removeSupabaseBranding',
-        title: 'Remove Supabase branding from emails',
+        key: 'auth.removeBrivenBranding',
+        title: 'Remove Briven branding from emails',
         plans: {
           free: false,
           pro: true,

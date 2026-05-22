@@ -146,9 +146,9 @@ BEGIN;
     created_at timestamptz NOT NULL DEFAULT NOW(),
     request_id bigint
   );
-  CREATE INDEX supabase_functions_hooks_request_id_idx ON supabase_functions.hooks USING btree (request_id);
-  CREATE INDEX supabase_functions_hooks_h_table_id_h_name_idx ON supabase_functions.hooks USING btree (hook_table_id, hook_name);
-  COMMENT ON TABLE supabase_functions.hooks IS 'Supabase Functions Hooks: Audit trail for triggered hooks.';
+  CREATE INDEX briven_functions_hooks_request_id_idx ON supabase_functions.hooks USING btree (request_id);
+  CREATE INDEX briven_functions_hooks_h_table_id_h_name_idx ON supabase_functions.hooks USING btree (hook_table_id, hook_name);
+  COMMENT ON TABLE supabase_functions.hooks IS 'Briven Functions Hooks: Audit trail for triggered hooks.';
 
   CREATE FUNCTION supabase_functions.http_request()
     RETURNS trigger
@@ -235,19 +235,19 @@ BEGIN;
   ALTER function "supabase_functions".http_request() OWNER TO supabase_functions_admin;
   GRANT supabase_functions_admin TO postgres;
 
-  -- Remove unused supabase_pg_net_admin role
+  -- Remove unused briven_pg_net_admin role
   DO
   $$
   BEGIN
     IF EXISTS (
       SELECT 1
       FROM pg_roles
-      WHERE rolname = 'supabase_pg_net_admin'
+      WHERE rolname = 'briven_pg_net_admin'
     )
     THEN
-      REASSIGN OWNED BY supabase_pg_net_admin TO supabase_admin;
-      DROP OWNED BY supabase_pg_net_admin;
-      DROP ROLE supabase_pg_net_admin;
+      REASSIGN OWNED BY briven_pg_net_admin TO supabase_admin;
+      DROP OWNED BY briven_pg_net_admin;
+      DROP ROLE briven_pg_net_admin;
     END IF;
   END
   $$;

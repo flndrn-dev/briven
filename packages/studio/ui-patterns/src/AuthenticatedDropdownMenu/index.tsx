@@ -1,7 +1,7 @@
 'use client'
 
 import type { User } from '@supabase/supabase-js'
-import type { LucideIcon } from 'icons/src/createSupabaseIcon'
+import type { LucideIcon } from 'icons/src/createBrivenIcon'
 import { UserIcon } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import Image from 'next/image'

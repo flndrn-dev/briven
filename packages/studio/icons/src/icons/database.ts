@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name Database
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAiIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiAjZmZmOyBib3JkZXItcmFkaXVzOiAycHgiICAgIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aCBkPSIgTTUuNTY3NzQgOS43MDY0MkgxOC40NTQ3VjE1LjcwNjRINS41Njc3NFY5LjcwNjQyWiIgLz4KICAgIDxwYXRoIGQ9IiBNNC41IDE2LjcwOTRDNC41IDE2LjE1NzEgNC45NDc3MiAxNS43MDk0IDUuNSAxNS43MDk0SDE4LjVDMTkuMDUyMyAxNS43MDk0IDE5LjUgMTYuMTU3MSAxOS41CiAgICAgICAgMTYuNzA5NFYyMC43MDk0QzE5LjUgMjEuMjYxNiAxOS4wNTIzIDIxLjcwOTQgMTguNSAyMS43MDk0SDUuNUM0Ljk0NzcyIDIxLjcwOTQgNC41IDIxLjI2MTYgNC41CiAgICAgICAgMjAuNzA5NFYxNi43MDk0WiIgLz4KICAgIDxwYXRoCiAgICAgICAgZD0iTTQuNSA0LjcwNjc5QzQuNSA0LjE1NDUgNC45NDc3MiAzLjcwNjc5IDUuNSAzLjcwNjc5SDE4LjVDMTkuMDUyMyAzLjcwNjc5IDE5LjUgNC4xNTQ1IDE5LjUgNC43MDY3OVY4LjcwNjc5QzE5LjUgOS4yNTkwNyAxOS4wNTIzIDkuNzA2NzkgMTguNSA5LjcwNjc5SDUuNUM0Ljk0NzcyIDkuNzA2NzkgNC41IDkuMjU5MDcgNC41IDguNzA2NzlWNC43MDY3OVoiIC8+Cjwvc3ZnPg==)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const Database = createSupabaseIcon(
+const Database = createBrivenIcon(
   'Database',
   [
     ['path', { d: ' M5.56774 9.70642H18.4547V15.7064H5.56774V9.70642Z', key: 'g5hndz' }],

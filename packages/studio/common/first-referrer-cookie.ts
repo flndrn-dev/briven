@@ -79,7 +79,7 @@ export interface FirstReferrerData {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true if the referrer URL points to an external (non-Supabase) domain.
+ * Returns true if the referrer URL points to an external (non-Briven) domain.
  * Handles malformed URLs gracefully by returning false.
  */
 export function isExternalReferrer(referrer: string): boolean {
@@ -96,7 +96,7 @@ export function isExternalReferrer(referrer: string): boolean {
  * Returns true if the referrer URL is an OAuth/SSO redirect that should NOT
  * be treated as a genuine traffic source.
  *
- * A referrer should reflect how someone discovered Supabase, not how they
+ * A referrer should reflect how someone discovered Briven, not how they
  * authenticated. This function identifies auth provider redirects:
  * - accounts.google.com — blocked entirely (dedicated SSO subdomain)
  * - github.com with no path (bare domain) — blocked (OAuth strips the path

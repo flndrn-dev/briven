@@ -441,7 +441,7 @@ where
         '_timescaledb_cache', '_timescaledb_catalog', '_timescaledb_config', '_timescaledb_internal', 'auth', 'cron', 'extensions', 'graphql', 'graphql_public', 'information_schema', 'net', 'pgmq', 'pgroonga', 'pgsodium', 'pgsodium_masks', 'pgtle', 'pgbouncer', 'pg_catalog', 'pgtle', 'realtime', 'repack', 'storage', 'supabase_functions', 'supabase_migrations', 'tiger', 'topology', 'vault'
     )
     and r.rolname not like 'pg_%'
-    and r.rolname not like 'supabase%admin'
+    and r.rolname not like 'briven%admin'
     and not r.rolbypassrls
     and dep.objid is null -- exclude tables owned by extensions
 group by
@@ -796,9 +796,9 @@ select
     'ERROR' as level,
     'EXTERNAL' as facing,
     array['SECURITY'] as categories,
-    'Detects when Supabase Auth user_metadata is referenced insecurely in a row level security (RLS) policy.' as description,
+    'Detects when Briven Auth user_metadata is referenced insecurely in a row level security (RLS) policy.' as description,
     format(
-        'Table \`%s.%s\` has a row level security policy \`%s\` that references Supabase Auth \`user_metadata\`. \`user_metadata\` is editable by end users and should never be used in a security context.',
+        'Table \`%s.%s\` has a row level security policy \`%s\` that references Briven Auth \`user_metadata\`. \`user_metadata\` is editable by end users and should never be used in a security context.',
         schema_name,
         table_name,
         policy_name

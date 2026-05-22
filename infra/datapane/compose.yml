@@ -53,6 +53,11 @@ services:
         condition: service_healthy
       rest:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Postgres ─────────────────────────────────────────────────────────
   # The data plane. Schemas per project are created on demand by the
@@ -94,8 +99,11 @@ services:
   # ── Auth (gotrue) ────────────────────────────────────────────────────
   # GOTRUE_* env names are baked into the upstream Go binary; we wrap
   # them with BRIVEN_AUTH_* indirection at the compose layer. Caddy
-  # strips the response Server header and scrubs error bodies — see
-  # volumes/proxy/caddy/Caddyfile.
+  # strips response headers (Server, X-Powered-By, Via) — see
+  # volumes/proxy/caddy/Caddyfile. Response BODY scrubbing of upstream
+  # identifiers (gotrue error messages, postgrest hints) is not yet
+  # implemented — vanilla caddy:2-alpine lacks the replace-response
+  # module. Tracked in HANDOFF.md §"Carry-over gaps".
   auth:
     image: supabase/gotrue:v2.186.0
     container_name: briven-auth
@@ -221,6 +229,55 @@ services:
       PG_META_DB_NAME: ${BRIVEN_POSTGRES_DB:-postgres}
       PG_META_DB_USER: supabase_admin
       PG_META_DB_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── pgBackRest ───────────────────────────────────────────────────────
+  # Phase 9 of BACKEND_FORK_BRIEF.md. Continuous WAL archive + incremental
+  # backups to Cloudflare R2 every 15 minutes; full backup nightly. Reads
+  # PGDATA via a shared bind-mount with the db service (NOT via the
+  # daemon API). Restore procedure documented in infra/datapane/RESTORE.md.
+  pgbackrest:
+    image: pgbackrest/pgbackrest:2.55.1
+    container_name: briven-pgbackrest
+    restart: unless-stopped
+    logging: *briven-logging
+    networks:
+      - briven-network
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGBACKREST_REPO1_TYPE: s3
+      PGBACKREST_REPO1_S3_BUCKET: ${BRIVEN_BACKUP_R2_BUCKET:?BRIVEN_BACKUP_R2_BUCKET is required}
+      PGBACKREST_REPO1_S3_ENDPOINT: ${BRIVEN_BACKUP_R2_ENDPOINT:?BRIVEN_BACKUP_R2_ENDPOINT is required}
+      PGBACKREST_REPO1_S3_REGION: auto
+      PGBACKREST_REPO1_S3_KEY: ${BRIVEN_BACKUP_R2_ACCESS_KEY:?BRIVEN_BACKUP_R2_ACCESS_KEY is required}
+      PGBACKREST_REPO1_S3_KEY_SECRET: ${BRIVEN_BACKUP_R2_SECRET_KEY:?BRIVEN_BACKUP_R2_SECRET_KEY is required}
+      PGBACKREST_REPO1_RETENTION_FULL: '4'
+      PGBACKREST_REPO1_RETENTION_DIFF: '7'
+      PGBACKREST_REPO1_CIPHER_TYPE: aes-256-cbc
+      PGBACKREST_REPO1_CIPHER_PASS: ${BRIVEN_BACKUP_ENCRYPTION_KEY:?BRIVEN_BACKUP_ENCRYPTION_KEY is required}
+      PGBACKREST_PROCESS_MAX: '2'
+      PGBACKREST_COMPRESS_TYPE: zst
+      PGBACKREST_LOG_LEVEL_FILE: info
+      PGBACKREST_LOG_LEVEL_CONSOLE: warn
+    volumes:
+      - briven-db-data:/var/lib/postgresql/data:ro
+      - briven-backup-cache:/var/lib/pgbackrest
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro,z
+      - ./pgbackrest/crontab:/etc/crontabs/root:ro,z
+      - ./pgbackrest/entrypoint.sh:/entrypoint.sh:ro,z
+    entrypoint: ['/bin/sh']
+    command: ['/entrypoint.sh']
+    healthcheck:
+      test: ['CMD', 'pgbackrest', '--stanza=briven', 'check']
+      interval: 1m
+      timeout: 30s
+      retries: 3
 
 networks:
   briven-network:
@@ -231,6 +288,8 @@ volumes:
     name: briven-db-data
   briven-db-config:
     name: briven-db-config
+  briven-backup-cache:
+    name: briven-backup-cache
   caddy_data:
     name: briven-caddy-data
   caddy_config:

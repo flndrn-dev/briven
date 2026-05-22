@@ -6,8 +6,8 @@ export function getTelemetryCookieOptions() {
   if (!IS_PROD) return 'path=/; SameSite=Lax'
 
   const hostname = window.location.hostname
-  const isSupabaseCom = hostname === 'supabase.com' || hostname.endsWith('.supabase.com')
-  return isSupabaseCom ? 'path=/; domain=supabase.com; SameSite=Lax' : 'path=/; SameSite=Lax'
+  const isBrivenCom = hostname === 'supabase.com' || hostname.endsWith('.supabase.com')
+  return isBrivenCom ? 'path=/; domain=supabase.com; SameSite=Lax' : 'path=/; SameSite=Lax'
 }
 
 // Parse session_id from PostHog cookie since SDK doesn't expose session ID

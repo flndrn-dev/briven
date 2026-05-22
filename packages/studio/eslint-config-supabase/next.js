@@ -7,7 +7,7 @@ const tanstackQuery = require('@tanstack/eslint-plugin-query')
 const tseslint = require('@typescript-eslint/eslint-plugin')
 const tsparser = require('@typescript-eslint/parser')
 
-// Custom Supabase rules
+// Custom Briven rules
 const noAwaitBeforeCopyToClipboard = require('./rules/no-await-before-copy-to-clipboard')
 
 const compat = new FlatCompat({
@@ -16,8 +16,8 @@ const compat = new FlatCompat({
   allConfig: js.configs.all,
 })
 
-// Custom Supabase ESLint plugin
-const supabasePlugin = {
+// Custom Briven ESLint plugin
+const brivenPlugin = {
   rules: {
     'no-await-before-copy-to-clipboard': noAwaitBeforeCopyToClipboard,
   },
@@ -36,11 +36,11 @@ const typescriptConfig = {
   },
   plugins: {
     '@typescript-eslint': tseslint,
-    supabase: supabasePlugin,
+    briven: brivenPlugin,
   },
   rules: {
     '@typescript-eslint/no-explicit-any': 'warn',
-    'supabase/no-await-before-copy-to-clipboard': 'error',
+    'briven/no-await-before-copy-to-clipboard': 'error',
   },
 }
 

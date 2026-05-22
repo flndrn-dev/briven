@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name SqlEditor
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAiIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiAjZmZmOyBib3JkZXItcmFkaXVzOiAycHgiICAgIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aAogICAgICAgIGQ9Ik03Ljg5ODQ0IDguNDM0MkwxMS41MDA0IDEyLjAzNTZMNy44OTg0NCAxNS42Mzc1TTEyIDE1LjMyOTJIMTYuNU01IDIxLjEwNTVIMTlDMjAuMTA0NiAyMS4xMDU1IDIxIDIwLjIxIDIxIDE5LjEwNTVWNS4xMDU0N0MyMSA0LjAwMDkgMjAuMTA0NiAzLjEwNTQ3IDE5IDMuMTA1NDdINUMzLjg5NTQzIDMuMTA1NDcgMyA0LjAwMDkgMyA1LjEwNTQ3VjE5LjEwNTVDMyAyMC4yMSAzLjg5NTQzIDIxLjEwNTUgNSAyMS4xMDU1WiIgLz4KPC9zdmc+)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const SqlEditor = createSupabaseIcon(
+const SqlEditor = createBrivenIcon(
   'SqlEditor',
   [
     [

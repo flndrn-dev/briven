@@ -22,7 +22,7 @@ export const FEATURE_GROUPS_PLATFORM: McpFeatureGroup[] = [
   {
     id: 'docs',
     name: 'Documentation',
-    description: 'Access Supabase documentation and guides',
+    description: 'Access Briven documentation and guides',
   },
   {
     id: 'account',
@@ -76,16 +76,16 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): ClaudeCodeMcpConfig => {
       return {
         mcpServers: {
-          supabase: {
+          briven: {
             type: 'http',
-            url: config.mcpServers.supabase.url,
+            url: config.mcpServers.briven.url,
           },
         },
       }
     },
     primaryInstructions: (_config, onCopy) => {
       const config = _config as ClaudeCodeMcpConfig
-      const command = `claude mcp add --scope project --transport http supabase "${config.mcpServers.supabase.url}"`
+      const command = `claude mcp add --scope project --transport http briven "${config.mcpServers.briven.url}"`
       return (
         <div className="space-y-2">
           <p className="text-xs text-foreground-light">
@@ -117,7 +117,7 @@ export const MCP_CLIENTS: McpClient[] = [
           onCopyCallback={() => onCopy('command')}
         />
         <p className="text-xs text-foreground-light">
-          Select the "supabase" server, then "Authenticate" to begin the authentication flow.
+          Select the "briven" server, then "Authenticate" to begin the authentication flow.
         </p>
       </div>
     ),
@@ -129,7 +129,7 @@ export const MCP_CLIENTS: McpClient[] = [
     configFile: '.cursor/mcp.json',
     externalDocsUrl: 'https://docs.cursor.com/context/mcp',
     generateDeepLink: (config) => {
-      const name = 'supabase'
+      const name = 'briven'
       const mcpUrl = getMcpUrl(config)
       const serverConfig = {
         url: mcpUrl,
@@ -147,16 +147,16 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): VSCodeMcpConfig => {
       return {
         servers: {
-          supabase: {
+          briven: {
             type: 'http',
-            url: config.mcpServers.supabase.url,
+            url: config.mcpServers.briven.url,
           },
         },
       }
     },
     generateDeepLink: (_config) => {
       const config = _config as VSCodeMcpConfig
-      const mcpConfig = { name: 'supabase', ...config.servers.supabase }
+      const mcpConfig = { name: 'briven', ...config.servers.briven }
 
       return `vscode:mcp/install?${encodeURIComponent(JSON.stringify(mcpConfig))}`
     },
@@ -171,18 +171,18 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): CodexMcpConfig => {
       return {
         mcp_servers: {
-          supabase: {
-            url: config.mcpServers.supabase.url,
+          briven: {
+            url: config.mcpServers.briven.url,
           },
         },
       }
     },
     primaryInstructions: (config, onCopy) => {
       const mcpUrl = getMcpUrl(config)
-      const command = `codex mcp add supabase --url "${mcpUrl}"`
+      const command = `codex mcp add briven --url "${mcpUrl}"`
       return (
         <div className="space-y-2">
-          <p className="text-xs text-foreground-light">Add the Supabase MCP server to Codex:</p>
+          <p className="text-xs text-foreground-light">Add the Briven MCP server to Codex:</p>
           <CodeBlock
             value={command}
             language="bash"
@@ -207,7 +207,7 @@ export const MCP_CLIENTS: McpClient[] = [
         />
         <p className="text-xs text-foreground-light">Then authenticate:</p>
         <CodeBlock
-          value="codex mcp login supabase"
+          value="codex mcp login briven"
           language="bash"
           focusable={false}
           className="block"
@@ -228,15 +228,15 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): GeminiMcpConfig => {
       return {
         mcpServers: {
-          supabase: {
-            httpUrl: config.mcpServers.supabase.url,
+          briven: {
+            httpUrl: config.mcpServers.briven.url,
           },
         },
       }
     },
     primaryInstructions: (config, onCopy, options) => {
       const mcpUrl = getMcpUrl(config)
-      const mcpCommand = `gemini mcp add -t http supabase ${mcpUrl}`
+      const mcpCommand = `gemini mcp add -t http briven ${mcpUrl}`
       return (
         <div className="space-y-2">
           <p className="text-xs text-warning">
@@ -245,7 +245,7 @@ export const MCP_CLIENTS: McpClient[] = [
           {options?.isPlatform && (
             <>
               <p className="text-xs text-foreground-light">
-                Install the Supabase{' '}
+                Install the Briven{' '}
                 <a
                   href="https://github.com/supabase-community/gemini-extension"
                   target="_blank"
@@ -254,7 +254,7 @@ export const MCP_CLIENTS: McpClient[] = [
                 >
                   extension
                 </a>{' '}
-                for Gemini CLI. This bundles the Supabase MCP server connection,{' '}
+                for Gemini CLI. This bundles the Briven MCP server connection,{' '}
                 <a
                   href="https://github.com/supabase/agent-skills"
                   target="_blank"
@@ -279,7 +279,7 @@ export const MCP_CLIENTS: McpClient[] = [
           )}
           {!options?.isPlatform && (
             <p className="text-xs text-foreground-light">
-              Add the Supabase MCP server to Gemini CLI:
+              Add the Briven MCP server to Gemini CLI:
             </p>
           )}
           <CodeBlock
@@ -300,7 +300,7 @@ export const MCP_CLIENTS: McpClient[] = [
             the server:
           </p>
           <CodeBlock
-            value="/mcp auth supabase"
+            value="/mcp auth briven"
             language="bash"
             focusable={false}
             className="block"
@@ -321,16 +321,16 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): CopilotMcpConfig => {
       return {
         mcpServers: {
-          supabase: {
+          briven: {
             type: 'http',
-            url: config.mcpServers.supabase.url,
+            url: config.mcpServers.briven.url,
           },
         },
       }
     },
     primaryInstructions: (_config, onCopy) => {
       const config = _config as CopilotMcpConfig
-      const command = `copilot mcp add --transport http supabase "${config.mcpServers.supabase.url}"`
+      const command = `copilot mcp add --transport http briven "${config.mcpServers.briven.url}"`
       return (
         <div className="space-y-2">
           <p className="text-xs text-foreground-light">
@@ -373,8 +373,8 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): AntigravityMcpConfig => {
       return {
         mcpServers: {
-          supabase: {
-            serverUrl: config.mcpServers.supabase.url,
+          briven: {
+            serverUrl: config.mcpServers.briven.url,
           },
         },
       }
@@ -383,7 +383,7 @@ export const MCP_CLIENTS: McpClient[] = [
       <div className="space-y-2">
         <p className="text-xs text-foreground-light">
           After saving the config, restart Antigravity. It will prompt you to complete the OAuth
-          flow to authenticate with Supabase.
+          flow to authenticate with Briven.
         </p>
         <p className="text-xs text-foreground-light">
           To edit the config from within Antigravity, click the <strong>···</strong> menu at the top
@@ -396,11 +396,11 @@ export const MCP_CLIENTS: McpClient[] = [
           If you run into authentication issues, open Agent Settings with <strong>Cmd+,</strong>{' '}
           (Mac) or <strong>Ctrl+,</strong> (Windows/Linux), navigate to the{' '}
           <strong>Customizations</strong> tab, and click the <strong>Authenticate</strong> button
-          next to the Supabase server.
+          next to the Briven server.
         </p>
         <Image
           src={antigravityAuthenticateScreenshot}
-          alt="Antigravity MCP server settings showing the Authenticate button next to the Supabase server"
+          alt="Antigravity MCP server settings showing the Authenticate button next to the Briven server"
           width={1316}
           height={258}
           className="rounded border border-muted w-full"
@@ -418,9 +418,9 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): WindsurfMcpConfig => {
       return {
         mcpServers: {
-          supabase: {
+          briven: {
             command: 'npx',
-            args: ['-y', 'mcp-remote', config.mcpServers.supabase.url],
+            args: ['-y', 'mcp-remote', config.mcpServers.briven.url],
           },
         },
       }
@@ -447,27 +447,27 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): GooseMcpConfig => {
       return {
         extensions: {
-          supabase: {
+          briven: {
             available_tools: [],
             bundled: null,
             description:
-              'Connect your Supabase projects to AI assistants. Manage tables, query data, deploy Edge Functions, and interact with your Supabase backend directly from your MCP client.',
+              'Connect your Briven projects to AI assistants. Manage tables, query data, deploy Edge Functions, and interact with your Briven backend directly from your MCP client.',
             enabled: true,
             env_keys: [],
             envs: {},
             headers: {},
-            name: 'Supabase',
+            name: 'Briven',
             timeout: 300,
             type: 'streamable_http',
-            uri: config.mcpServers.supabase.url,
+            uri: config.mcpServers.briven.url,
           },
         },
       }
     },
     generateDeepLink: (config) => {
-      const name = 'supabase'
+      const name = 'briven'
       const mcpUrl = getMcpUrl(config)
-      return `goose://extension?type=streamable_http&url=${encodeURIComponent(mcpUrl)}&id=supabase&name=${name}&description=${encodeURIComponent('Connect your Supabase projects to AI assistants. Manage tables, query data, deploy Edge Functions, and interact with your Supabase backend directly from your MCP client.')}`
+      return `goose://extension?type=streamable_http&url=${encodeURIComponent(mcpUrl)}&id=briven&name=${name}&description=${encodeURIComponent('Connect your Briven projects to AI assistants. Manage tables, query data, deploy Edge Functions, and interact with your Briven backend directly from your MCP client.')}`
     },
     primaryInstructions: (config, onCopy) => {
       const mcpUrl = getMcpUrl(config)
@@ -475,7 +475,7 @@ export const MCP_CLIENTS: McpClient[] = [
       return (
         <div className="space-y-2">
           <p className="text-xs text-foreground-light">
-            Start a Goose session with the Supabase extension:
+            Start a Goose session with the Briven extension:
           </p>
           <CodeBlock
             value={command}
@@ -514,19 +514,19 @@ export const MCP_CLIENTS: McpClient[] = [
     transformConfig: (config): FactoryMcpConfig => {
       return {
         mcpServers: {
-          supabase: {
+          briven: {
             type: 'http',
-            url: config.mcpServers.supabase.url,
+            url: config.mcpServers.briven.url,
           },
         },
       }
     },
     primaryInstructions: (config, onCopy) => {
       const mcpUrl = getMcpUrl(config)
-      const command = `droid mcp add supabase ${mcpUrl} --type http`
+      const command = `droid mcp add briven ${mcpUrl} --type http`
       return (
         <div className="space-y-2">
-          <p className="text-xs text-foreground-light">Add Supabase MCP server to Factory:</p>
+          <p className="text-xs text-foreground-light">Add Briven MCP server to Factory:</p>
           <CodeBlock
             value={command}
             language="bash"
@@ -558,7 +558,7 @@ export const MCP_CLIENTS: McpClient[] = [
       return {
         $schema: 'https://opencode.ai/config.json',
         mcp: {
-          supabase: {
+          briven: {
             type: 'remote',
             url: mcpUrl,
             enabled: true,
@@ -572,7 +572,7 @@ export const MCP_CLIENTS: McpClient[] = [
           After adding the configuration, run the following command to authenticate:
         </p>
         <CodeBlock
-          value="opencode mcp auth supabase"
+          value="opencode mcp auth briven"
           language="bash"
           focusable={false}
           className="block"
@@ -591,12 +591,12 @@ export const MCP_CLIENTS: McpClient[] = [
     configFile: '~/.kiro/settings/mcp.json',
     externalDocsUrl: 'https://kiro.dev/docs/mcp/',
     generateDeepLink: (_config, options) => {
-      const power = options?.isPlatform ? 'supabase-hosted' : 'supabase-local'
+      const power = options?.isPlatform ? 'briven-hosted' : 'briven-local'
       return `https://kiro.dev/launch/powers/${power}`
     },
     deepLinkDescription: (
       <>
-        Install the Supabase{' '}
+        Install the Briven{' '}
         <a
           href="https://kiro.dev/docs/powers/"
           target="_blank"
@@ -605,7 +605,7 @@ export const MCP_CLIENTS: McpClient[] = [
         >
           power
         </a>{' '}
-        for Kiro. This bundles the Supabase MCP server and steering files for best practices.
+        for Kiro. This bundles the Briven MCP server and steering files for best practices.
       </>
     ),
   },
@@ -624,7 +624,7 @@ export const MCP_CLIENTS: McpClient[] = [
     hasDistinctDarkIcon: true,
     externalDocsUrl: 'https://chatgpt.com/features/apps/',
     generateDeepLink: () =>
-      'https://chatgpt.com/apps/supabase/asdk_app_69d3e5ee6a708191baa733f7b8931995',
+      'https://chatgpt.com/apps/briven/asdk_app_69d3e5ee6a708191baa733f7b8931995',
   },
 ]
 

@@ -246,7 +246,7 @@ export interface FeaturePreviewEnabledEvent {
   action: 'feature_preview_enabled'
   properties: {
     /**
-     * Feature key of the preview that was enabled. e.g. supabase-ui-api-side-panel
+     * Feature key of the preview that was enabled. e.g. briven-ui-api-side-panel
      */
     feature: string
   }
@@ -265,7 +265,7 @@ export interface FeaturePreviewDisabledEvent {
   action: 'feature_preview_disabled'
   properties: {
     /**
-     * Feature key of the preview that was disabled. e.g. supabase-ui-api-side-panel
+     * Feature key of the preview that was disabled. e.g. briven-ui-api-side-panel
      */
     feature: string
   }
@@ -1494,14 +1494,14 @@ export interface AssistantMessageRatingSubmittedEvent {
 }
 
 /**
- * User copied the command for a Supabase UI component.
+ * User copied the command for a Briven UI component.
  *
  * @group Events
- * @source supabase-ui
+ * @source briven-ui
  * @page /ui/docs/{framework}/{templateTitle}
  */
-export interface SupabaseUiCommandCopyButtonClickedEvent {
-  action: 'supabase_ui_command_copy_button_clicked'
+export interface BrivenUiCommandCopyButtonClickedEvent {
+  action: 'briven_ui_command_copy_button_clicked'
   properties: {
     templateTitle: string
     command: string
@@ -3091,7 +3091,7 @@ export interface UnifiedLogsRowClickedEvent {
 }
 
 /**
- * User clicked the Supabase logo in the top-left corner of the page header.
+ * User clicked the Briven logo in the top-left corner of the page header.
  *
  * @group Events
  * @source studio
@@ -3367,7 +3367,7 @@ export type TelemetryEvent =
   | EdgeFunctionDeployUpdatesButtonClickedEvent
   | EdgeFunctionTestSendButtonClickedEvent
   | EdgeFunctionTestSidePanelOpenedEvent
-  | SupabaseUiCommandCopyButtonClickedEvent
+  | BrivenUiCommandCopyButtonClickedEvent
   | SupportTicketSubmittedEvent
   | AiAssistantInSupportFormClickedEvent
   | OrganizationMfaEnforcementUpdatedEvent

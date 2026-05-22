@@ -8,7 +8,7 @@
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "clean": "rimraf node_modules .turbo tsconfig.tsbuildinfo",
-    "gen:types": "supabase gen types typescript --local >| ./database-types.ts",
+    "gen:types": "briven gen types typescript --local >| ./database-types.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

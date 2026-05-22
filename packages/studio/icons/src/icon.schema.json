@@ -10,7 +10,7 @@
     "https://json-schema.org/draft/2020-12/vocab/format-annotation": true,
     "https://json-schema.org/draft/2020-12/vocab/content": true
   },
-  "title": "Supabase icon schema (Originally from lucide.dev)",
+  "title": "Briven icon schema (Originally from lucide.dev)",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "categories", "tags"],

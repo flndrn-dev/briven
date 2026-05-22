@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name FilesBucket
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTMuOTk5ODggMjBIMTkuOTk5OUMyMC41MzAzIDIwIDIxLjAzOSAxOS43ODkzIDIxLjQxNDEgMTkuNDE0MkMyMS43ODkyIDE5LjAzOTEgMjEuOTk5OSAxOC41MzA0IDIxLjk5OTkgMThWOEMyMS45OTk5IDcuNDY5NTcgMjEuNzg5MiA2Ljk2MDg2IDIxLjQxNDEgNi41ODU3OUMyMS4wMzkgNi4yMTA3MSAyMC41MzAzIDYgMTkuOTk5OSA2SDEyLjA2OTlDMTEuNzQwNSA1Ljk5ODMgMTEuNDE2NiA1LjkxNTI1IDExLjEyNyA1Ljc1ODI0QzEwLjgzNzQgNS42MDEyMyAxMC41OTExIDUuMzc1MTIgMTAuNDA5OSA1LjFMOS41ODk4OCAzLjlDOS40MDg3IDMuNjI0ODggOS4xNjIzNyAzLjM5ODc3IDguODcyNzggMy4yNDE3NkM4LjU4MzE5IDMuMDg0NzUgOC4yNTkyOSAzLjAwMTcgNy45Mjk4OCAzSDMuOTk5ODhDMy40Njk0NCAzIDIuOTYwNzQgMy4yMTA3MSAyLjU4NTY2IDMuNTg1NzlDMi4yMTA1OSAzLjk2MDg2IDEuOTk5ODggNC40Njk1NyAxLjk5OTg4IDVWMThDMS45OTk4OCAxOS4xIDIuODk5ODggMjAgMy45OTk4OCAyMFoiIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+CjxwYXRoIGQ9Ik01IDEwLjVIMTkiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+Cg==)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const FilesBucket = createSupabaseIcon(
+const FilesBucket = createBrivenIcon(
   'FilesBucket',
   [
     [

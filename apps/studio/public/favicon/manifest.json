@@ -1,7 +1,7 @@
 {
-  "name": "Supabase Studio",
-  "short_name": "Supabase",
-  "description": "The Postgres Development Platform.",
+  "name": "briven studio",
+  "short_name": "briven",
+  "description": "the postgres development platform.",
   "display_override": ["minimal-ui"],
   "display": "standalone",
   "theme_color": "#1C1C1C",

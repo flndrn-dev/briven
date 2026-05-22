@@ -9,19 +9,19 @@ export default ({ componentName, iconName, children, getSvg, deprecated, svgAttr
   const attrsArg = hasAttrs ? `, ${JSON.stringify(svgAttributes)}` : ''
 
   return `
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name ${componentName}
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,${svgBase64})
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  * ${deprecated ? '@deprecated' : ''}
  */
-const ${componentName} = createSupabaseIcon('${componentName}', ${JSON.stringify(children)}${attrsArg});
+const ${componentName} = createBrivenIcon('${componentName}', ${JSON.stringify(children)}${attrsArg});
 
 export default ${componentName};
 `

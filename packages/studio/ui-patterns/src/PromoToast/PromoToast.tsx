@@ -37,7 +37,7 @@ const PromoToast = () => {
       )}
     >
       <video
-        src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.mp4`}
+        src={`${process.env.NEXT_PUBLIC_BRIVEN_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.mp4`}
         autoPlay
         loop
         muted
@@ -45,7 +45,7 @@ const PromoToast = () => {
         style={{
           opacity: 0.05,
         }}
-        poster={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.png`}
+        poster={`${process.env.NEXT_PUBLIC_BRIVEN_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.png`}
       />
       <div className="relative z-10 text-foreground-lighter uppercase flex flex-col text-sm w-full mb-2">
         <span className="mb-1">{announcement.text}</span>

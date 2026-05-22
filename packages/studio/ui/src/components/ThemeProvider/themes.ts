@@ -5,7 +5,7 @@ export interface Theme {
 
 export const themes = [
   { name: 'System', value: 'system' }, // Switches between dark and light
-  { name: 'Dark', value: 'dark' }, // Classic Supabase dark
-  { name: 'Classic dark', value: 'classic-dark' }, // Deep Dark Supabase dark
-  { name: 'Light', value: 'light' }, // Classic Supabase light
+  { name: 'Dark', value: 'dark' }, // Classic Briven dark
+  { name: 'Classic dark', value: 'classic-dark' }, // Deep Dark Briven dark
+  { name: 'Light', value: 'light' }, // Classic Briven light
 ]

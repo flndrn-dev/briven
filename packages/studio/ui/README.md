@@ -1,6 +1,6 @@
 # `packages/ui`
 
-Supabase's shared React component library. Built on [Radix UI](https://www.radix-ui.com/) primitives and [shadcn/ui](https://ui.shadcn.com/), styled with Tailwind CSS, and used across all Supabase apps.
+Briven's shared React component library. Built on [Radix UI](https://www.radix-ui.com/) primitives and [shadcn/ui](https://ui.shadcn.com/), styled with Tailwind CSS, and used across all Briven apps.
 
 ## Usage
 

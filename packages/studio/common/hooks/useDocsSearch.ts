@@ -7,8 +7,8 @@ import { isFeatureEnabled } from '../enabled-features'
 
 const NUMBER_SOURCES = 2
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const BRIVEN_URL = process.env.NEXT_PUBLIC_BRIVEN_URL
+const BRIVEN_ANON_KEY = process.env.NEXT_PUBLIC_BRIVEN_ANON_KEY
 const FUNCTIONS_URL = '/functions/v1/'
 
 enum PageType {
@@ -206,13 +206,13 @@ const useDocsSearch = () => {
     const useAlternateSearchIndex = !isFeatureEnabled('search:fullIndex')
 
     const searchEndpoint = useAlternateSearchIndex ? 'docs_search_fts_nimbus' : 'docs_search_fts'
-    fetch(`${SUPABASE_URL}/rest/v1/rpc/${searchEndpoint}`, {
+    fetch(`${BRIVEN_URL}/rest/v1/rpc/${searchEndpoint}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        ...(SUPABASE_ANON_KEY && {
-          apikey: SUPABASE_ANON_KEY,
-          authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        ...(BRIVEN_ANON_KEY && {
+          apikey: BRIVEN_ANON_KEY,
+          authorization: `Bearer ${BRIVEN_ANON_KEY}`,
         }),
       },
       body: JSON.stringify({ query: query.trim() }),
@@ -248,7 +248,7 @@ const useDocsSearch = () => {
         })
       })
 
-    fetch(`${SUPABASE_URL}${FUNCTIONS_URL}search-embeddings`, {
+    fetch(`${BRIVEN_URL}${FUNCTIONS_URL}search-embeddings`, {
       method: 'POST',
       body: JSON.stringify({ query, useAlternateSearchIndex }),
     })

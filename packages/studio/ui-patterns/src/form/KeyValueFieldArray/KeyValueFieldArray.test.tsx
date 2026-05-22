@@ -45,7 +45,7 @@ const presetActions: KeyValueFieldArrayAction<KeyValueFormValues['headers'][numb
     key: 'source',
     label: 'Add custom source header',
     description: 'Useful to verify that the edge function was triggered from this webhook',
-    createRows: () => ({ key: 'x-supabase-webhook-source', value: '[Use a secret value]' }),
+    createRows: () => ({ key: 'x-briven-webhook-source', value: '[Use a secret value]' }),
     separatorAbove: true,
   },
 ]
@@ -207,6 +207,6 @@ describe('KeyValueFieldArray', () => {
     expect(screen.getAllByPlaceholderText('Header name')).toHaveLength(3)
     expect(screen.getByDisplayValue('Authorization')).toBeInTheDocument()
     expect(screen.getByDisplayValue('apikey')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('x-supabase-webhook-source')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('x-briven-webhook-source')).toBeInTheDocument()
   })
 })
