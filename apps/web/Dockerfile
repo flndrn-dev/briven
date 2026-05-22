@@ -1,10 +1,15 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-alpine AS base
-# python3/make/g++ are required because apps/studio depends on libpg-query@15.2.0,
-# whose pre-built binary 404s for node-v127-musl. pnpm at the repo root resolves
-# the entire workspace, so libpg-query's node-gyp fallback runs even for the
-# briven control-plane services — needs Python to configure the build.
-RUN apk add --no-cache libc6-compat python3 make g++
+# Base = node:22-slim (Debian glibc), matching supabase/apps/studio/Dockerfile.
+# Why not alpine: apps/studio depends on libpg-query@15.2.0, which (a) only has
+# pre-built binaries for glibc-linux-x64 on supabase's S3 bucket (musl 404s),
+# and (b) when source-compiled, runs script/buildAddon.sh which requires bash
+# (alpine ships only busybox sh). Debian gives us glibc prebuilds AND bash.
+FROM node:22-slim AS base
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+      git python3 ca-certificates build-essential && \
+    rm -rf /var/lib/apt/lists/* && \
+    update-ca-certificates
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 FROM base AS build
@@ -19,12 +24,12 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 RUN pnpm --filter @briven/web... build
 
-FROM node:22-alpine AS runtime
+FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-RUN addgroup -S app && adduser -S app -G app
+RUN groupadd -r app && useradd -r -g app app
 COPY --from=build --chown=app:app /repo /app
 USER app
 EXPOSE 3000
