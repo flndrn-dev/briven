@@ -92,6 +92,11 @@ const PROTECT_PATTERNS: RegExp[] = [
   /\bsupabase\.com\b[^\s'"\)<>]*/g,
   /\bsupabase\.io\b[^\s'"\)<>]*/g,
   /\bsupabase\.co\b[^\s'"\)<>]*/g,
+  /\bgithub\.com\/supabase[a-z0-9_-]*\/[^\s'"\)<>]+/g,
+  /\bgithub\.com\/orgs\/supabase[^\s'"\)<>]*/g,
+  /\bsupabase_(?:admin|auth_admin|storage_admin|functions_admin|realtime_admin|replication_admin|read_only_user)\b/g,
+  /\bsupabase_(?:functions|migrations)\b/g,
+  /\bclient_connections_supabase_[a-z_]+\b/g,
 ];
 
 const REPLACEMENTS: Array<[RegExp, string]> = [

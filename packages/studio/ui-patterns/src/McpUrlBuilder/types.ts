@@ -47,7 +47,7 @@ export interface McpUrlBuilderConfig {
 
 export interface McpClientBaseConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       url: string
     }
   }
@@ -57,7 +57,7 @@ export interface CursorMcpConfig extends McpClientBaseConfig {}
 
 export interface VSCodeMcpConfig {
   servers: {
-    supabase: {
+    briven: {
       type: 'http'
       url: string
     }
@@ -66,7 +66,7 @@ export interface VSCodeMcpConfig {
 
 export interface WindsurfMcpConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       command: 'npx'
       args: ['-y', 'mcp-remote', string]
     }
@@ -75,7 +75,7 @@ export interface WindsurfMcpConfig {
 
 export interface ClaudeCodeMcpConfig extends McpClientBaseConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       type: 'http'
       url: string
     }
@@ -84,7 +84,7 @@ export interface ClaudeCodeMcpConfig extends McpClientBaseConfig {
 
 export interface ClaudeDesktopMcpConfig extends McpClientBaseConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       type: 'http'
       url: string
     }
@@ -93,7 +93,7 @@ export interface ClaudeDesktopMcpConfig extends McpClientBaseConfig {
 
 export interface OtherMcpConfig extends McpClientBaseConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       type: 'http'
       url: string
     }
@@ -102,7 +102,7 @@ export interface OtherMcpConfig extends McpClientBaseConfig {
 
 export interface GooseMcpConfig {
   extensions: {
-    supabase: {
+    briven: {
       available_tools: string[]
       bundled: null
       description: string
@@ -120,7 +120,7 @@ export interface GooseMcpConfig {
 
 export interface FactoryMcpConfig extends McpClientBaseConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       type: 'http'
       url: string
     }
@@ -129,7 +129,7 @@ export interface FactoryMcpConfig extends McpClientBaseConfig {
 
 export interface CodexMcpConfig {
   mcp_servers: {
-    supabase: {
+    briven: {
       url: string
     }
   }
@@ -141,7 +141,7 @@ export interface CodexMcpConfig {
  */
 export interface GeminiMcpConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       httpUrl: string
     }
   }
@@ -150,7 +150,7 @@ export interface GeminiMcpConfig {
 export interface OpenCodeMcpConfig {
   $schema: string
   mcp: {
-    supabase: {
+    briven: {
       type: 'remote'
       url: string
       enabled?: boolean
@@ -160,7 +160,7 @@ export interface OpenCodeMcpConfig {
 
 export interface AntigravityMcpConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       serverUrl: string
     }
   }
@@ -168,7 +168,7 @@ export interface AntigravityMcpConfig {
 
 export interface CopilotMcpConfig extends McpClientBaseConfig {
   mcpServers: {
-    supabase: {
+    briven: {
       type: 'http'
       url: string
     }
@@ -194,65 +194,65 @@ export type McpClientConfig =
 
 // Type guards
 export function isVSCodeMcpConfig(config: McpClientConfig): config is VSCodeMcpConfig {
-  return 'servers' in config && 'supabase' in config.servers
+  return 'servers' in config && 'briven' in config.servers
 }
 
 export function isGooseMcpConfig(config: McpClientConfig): config is GooseMcpConfig {
-  return 'extensions' in config && 'supabase' in config.extensions
+  return 'extensions' in config && 'briven' in config.extensions
 }
 
 export function isCodexMcpConfig(config: McpClientConfig): config is CodexMcpConfig {
-  return 'mcp_servers' in config && 'supabase' in config.mcp_servers
+  return 'mcp_servers' in config && 'briven' in config.mcp_servers
 }
 
 export function isGeminiMcpConfig(config: McpClientConfig): config is GeminiMcpConfig {
   return (
     'mcpServers' in config &&
-    'supabase' in config.mcpServers &&
-    'httpUrl' in config.mcpServers.supabase
+    'briven' in config.mcpServers &&
+    'httpUrl' in config.mcpServers.briven
   )
 }
 
 export function isOpenCodeMcpConfig(config: McpClientConfig): config is OpenCodeMcpConfig {
-  return '$schema' in config && 'mcp' in config && 'supabase' in config.mcp
+  return '$schema' in config && 'mcp' in config && 'briven' in config.mcp
 }
 
 export function isAntigravityMcpConfig(config: McpClientConfig): config is AntigravityMcpConfig {
   return (
     'mcpServers' in config &&
-    'supabase' in config.mcpServers &&
-    'serverUrl' in config.mcpServers.supabase
+    'briven' in config.mcpServers &&
+    'serverUrl' in config.mcpServers.briven
   )
 }
 
 export function isMcpServersConfig(
   config: McpClientConfig
 ): config is McpClientBaseConfig | ClaudeCodeMcpConfig | FactoryMcpConfig {
-  return 'mcpServers' in config && 'supabase' in config.mcpServers
+  return 'mcpServers' in config && 'briven' in config.mcpServers
 }
 
 // Helper to extract MCP URL from any config type
 export function getMcpUrl(config: McpClientConfig): string {
   if (isVSCodeMcpConfig(config)) {
-    return config.servers.supabase.url
+    return config.servers.briven.url
   }
   if (isGooseMcpConfig(config)) {
-    return config.extensions.supabase.uri
+    return config.extensions.briven.uri
   }
   if (isCodexMcpConfig(config)) {
-    return config.mcp_servers.supabase.url
+    return config.mcp_servers.briven.url
   }
   if (isGeminiMcpConfig(config)) {
-    return config.mcpServers.supabase.httpUrl
+    return config.mcpServers.briven.httpUrl
   }
   if (isOpenCodeMcpConfig(config)) {
-    return config.mcp.supabase.url
+    return config.mcp.briven.url
   }
   if (isAntigravityMcpConfig(config)) {
-    return config.mcpServers.supabase.serverUrl
+    return config.mcpServers.briven.serverUrl
   }
   if (isMcpServersConfig(config)) {
-    return config.mcpServers.supabase.url
+    return config.mcpServers.briven.url
   }
   throw new Error('Invalid MCP config type')
 }

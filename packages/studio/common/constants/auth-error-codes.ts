@@ -15,7 +15,7 @@ export const AUTH_ERROR_CODES = {
   },
   bad_oauth_state: {
     description:
-      'OAuth state (data echoed back by the OAuth provider to Supabase Auth) is not in the correct format. Indicates an issue with the OAuth provider integration.',
+      'OAuth state (data echoed back by the OAuth provider to Briven Auth) is not in the correct format. Indicates an issue with the OAuth provider integration.',
   },
   captcha_failed: {
     description:
@@ -79,7 +79,7 @@ export const AUTH_ERROR_CODES = {
   },
   manual_linking_disabled: {
     description:
-      'Calling the supabase.auth.linkUser() and related APIs is not enabled on the Auth server.',
+      'Calling the briven.auth.linkUser() and related APIs is not enabled on the Auth server.',
   },
   mfa_challenge_expired: {
     description: 'Responding to an MFA challenge took too long. Request a new challenge.',

@@ -59,7 +59,7 @@ export const ERROR_CODES: Record<ErrorCodeService, Record<string, ErrorCodeDefin
     },
     bad_oauth_state: {
       description:
-        'OAuth state (data echoed back by the OAuth provider to Supabase Auth) is not in the correct format. Indicates an issue with the OAuth provider integration.',
+        'OAuth state (data echoed back by the OAuth provider to Briven Auth) is not in the correct format. Indicates an issue with the OAuth provider integration.',
     },
     captcha_failed: {
       description:
@@ -75,7 +75,7 @@ export const ERROR_CODES: Record<ErrorCodeService, Record<string, ErrorCodeDefin
     },
     email_address_not_authorized: {
       description:
-        'Email sending is not allowed for this address as your project is using the default SMTP service. Emails can only be sent to members in your Supabase organization. If you want to send emails to others, set up a custom SMTP provider.',
+        'Email sending is not allowed for this address as your project is using the default SMTP service. Emails can only be sent to members in your Briven organization. If you want to send emails to others, set up a custom SMTP provider.',
       references: [
         {
           href: 'https://supabase.com/docs/guides/auth/auth-smtp',
@@ -141,7 +141,7 @@ export const ERROR_CODES: Record<ErrorCodeService, Record<string, ErrorCodeDefin
     },
     manual_linking_disabled: {
       description:
-        'Calling the supabase.auth.linkUser() and related APIs is not enabled on the Auth server.',
+        'Calling the briven.auth.linkUser() and related APIs is not enabled on the Auth server.',
     },
     mfa_challenge_expired: {
       description:
@@ -242,11 +242,11 @@ export const ERROR_CODES: Record<ErrorCodeService, Record<string, ErrorCodeDefin
     },
     provider_email_needs_verification: {
       description:
-        "Not all OAuth providers verify their user's email address. Supabase Auth requires emails to be verified, so this error is sent out when a verification email is sent after completing the OAuth flow.",
+        "Not all OAuth providers verify their user's email address. Briven Auth requires emails to be verified, so this error is sent out when a verification email is sent after completing the OAuth flow.",
     },
     reauthentication_needed: {
       description:
-        'A user needs to reauthenticate to change their password. Ask the user to reauthenticate by calling the supabase.auth.reauthenticate() API.',
+        'A user needs to reauthenticate to change their password. Ask the user to reauthenticate by calling the briven.auth.reauthenticate() API.',
     },
     reauthentication_not_valid: {
       description:
@@ -289,7 +289,7 @@ export const ERROR_CODES: Record<ErrorCodeService, Record<string, ErrorCodeDefin
     },
     saml_idp_not_found: {
       description:
-        'SAML identity provider not found. Most often returned after IdP-initiated sign-in with an unregistered SAML identity provider in Supabase Auth.',
+        'SAML identity provider not found. Most often returned after IdP-initiated sign-in with an unregistered SAML identity provider in Briven Auth.',
     },
     saml_metadata_fetch_failed: {
       description:
@@ -306,7 +306,7 @@ export const ERROR_CODES: Record<ErrorCodeService, Record<string, ErrorCodeDefin
     },
     saml_relay_state_expired: {
       description:
-        'SAML relay state is an object that tracks the progress of a supabase.auth.signInWithSSO() request. The SAML identity provider should respond after a fixed amount of time, after which this error is shown. Ask the user to sign in again.',
+        'SAML relay state is an object that tracks the progress of a briven.auth.signInWithSSO() request. The SAML identity provider should respond after a fixed amount of time, after which this error is shown. Ask the user to sign in again.',
     },
     saml_relay_state_not_found: {
       description:
@@ -340,14 +340,14 @@ export const ERROR_CODES: Record<ErrorCodeService, Record<string, ErrorCodeDefin
       description: '(Admin API.) Only one SSO domain can be registered per SSO identity provider.',
     },
     sso_provider_not_found: {
-      description: 'SSO provider not found. Check the arguments in supabase.auth.signInWithSSO().',
+      description: 'SSO provider not found. Check the arguments in briven.auth.signInWithSSO().',
     },
     too_many_enrolled_mfa_factors: {
       description: 'A user can only have a fixed number of enrolled MFA factors.',
     },
     unexpected_audience: {
       description:
-        "(Deprecated feature not available via Supabase client libraries.) The request's X-JWT-AUD claim does not match the JWT's audience.",
+        "(Deprecated feature not available via Briven client libraries.) The request's X-JWT-AUD claim does not match the JWT's audience.",
     },
     unexpected_failure: {
       description: 'Auth service is degraded or a bug is present, without a specific reason.',

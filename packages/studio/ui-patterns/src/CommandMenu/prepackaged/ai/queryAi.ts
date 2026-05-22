@@ -11,8 +11,8 @@ export function queryAi(messages: Message[], timeout = 0) {
   return new Promise<string>((resolve, reject) => {
     const eventSource = new SSE(`${BASE_PATH}/api/ai/docs`, {
       headers: {
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        apikey: process.env.NEXT_PUBLIC_BRIVEN_ANON_KEY ?? '',
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_BRIVEN_ANON_KEY}`,
         'Content-Type': 'application/json',
       },
       payload: JSON.stringify({

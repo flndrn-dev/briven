@@ -39,8 +39,8 @@ export function LW15Banner() {
     <div className="relative w-full p-2 flex items-center group justify-center text-foreground bg-alternative border-b border-muted transition-colors overflow-hidden">
       <video
         ref={videoRef}
-        src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.mp4`}
-        poster={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.png`}
+        src={`${process.env.NEXT_PUBLIC_BRIVEN_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.mp4`}
+        poster={`${process.env.NEXT_PUBLIC_BRIVEN_URL}/storage/v1/object/public/images/launch-week/lw15/assets/lw15-galaxy.png`}
         autoPlay
         loop
         muted

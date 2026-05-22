@@ -1,7 +1,7 @@
 import type { ThemeRegistration } from 'shiki'
 
-export const supabaseDark: ThemeRegistration = {
-  name: 'supabase-dark',
+export const brivenDark: ThemeRegistration = {
+  name: 'briven-dark',
   type: 'dark',
   colors: {
     'editor.background': '#00000000',
@@ -51,8 +51,8 @@ export const supabaseDark: ThemeRegistration = {
   ],
 }
 
-export const supabaseLight: ThemeRegistration = {
-  name: 'supabase-light',
+export const brivenLight: ThemeRegistration = {
+  name: 'briven-light',
   type: 'light',
   colors: {
     'editor.background': '#00000000',

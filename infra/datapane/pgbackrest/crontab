@@ -1,0 +1,7 @@
+# briven pgBackRest cron — Phase 9 of BACKEND_FORK_BRIEF.md.
+# Incremental backup every 15 min; full backup nightly at 02:00 UTC.
+# Stanza-create runs idempotently at container start (handled by entrypoint).
+
+*/15 * * * * pgbackrest --stanza=briven --type=incr backup >> /var/log/pgbackrest/cron.log 2>&1
+0 2 * * *    pgbackrest --stanza=briven --type=full backup >> /var/log/pgbackrest/cron.log 2>&1
+0 3 * * 0    pgbackrest --stanza=briven expire >> /var/log/pgbackrest/cron.log 2>&1

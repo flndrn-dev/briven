@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name Storage
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAiIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiAjZmZmOyBib3JkZXItcmFkaXVzOiAycHgiICAgIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aAogICAgICAgIGQ9Ik0xOS40OTk1IDExLjM2ODVWOC41MDcyNUwxNC4wNzIzIDMuMTA1ODRINS40OTk1MUM0Ljk0NzIyIDMuMTA1ODQgNC40OTk1MSAzLjU1MzU1IDQuNDk5NTEgNC4xMDU4NFY5LjEwNTFNMTkuNDQ2OCA4LjQ4MjE4TDE0LjA3MDEgMy4xMDU0N0wxNC4wNzAxIDcuNDgyMThDMTQuMDcwMSA4LjAzNDQ2IDE0LjUxNzggOC40ODIxOCAxNS4wNzAxIDguNDgyMThMMTkuNDQ2OCA4LjQ4MjE4Wk02Ljg2Njc1IDkuMTA1MUgzLjk2MDQ1QzMuNDA4MTYgOS4xMDUxIDIuOTYwNDUgOS41NTI4MiAyLjk2MDQ1IDEwLjEwNTFWMTkuMTA1MUMyLjk2MDQ1IDIwLjIwOTcgMy44NTU4OCAyMS4xMDUxIDQuOTYwNDUgMjEuMTA1MUgxOC45NjA0QzIwLjA2NSAyMS4xMDUxIDIwLjk2MDQgMjAuMjA5NyAyMC45NjA0IDE5LjEwNTFWMTIuMzY4NUMyMC45NjA0IDExLjgxNjIgMjAuNTEyNyAxMS4zNjg1IDE5Ljk2MDUgMTEuMzY4NUg5Ljk4NjIyQzkuNzIzODIgMTEuMzY4NSA5LjQ3MTk0IDExLjI2NTQgOS4yODQ4OSAxMS4wODEzTDcuNTY4MDggOS4zOTIyNkM3LjM4MTAzIDkuMjA4MjQgNy4xMjkxNSA5LjEwNTEgNi44NjY3NSA5LjEwNTFaIiAvPgo8L3N2Zz4=)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const Storage = createSupabaseIcon(
+const Storage = createBrivenIcon(
   'Storage',
   [
     [

@@ -37,7 +37,7 @@ class PostHogClient {
 
   constructor(config: PostHogClientConfig = {}) {
     const apiHost =
-      config.apiHost || process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://ph.supabase.green'
+      config.apiHost || process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://ph.briven.green'
     const uiHost =
       config.uiHost || process.env.NEXT_PUBLIC_POSTHOG_UI_HOST || 'https://eu.posthog.com'
 

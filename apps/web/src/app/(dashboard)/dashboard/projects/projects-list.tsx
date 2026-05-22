@@ -32,6 +32,15 @@ export function ProjectsList({
   const [q, setQ] = useState('');
   const [orgFilter, setOrgFilter] = useState<string>('');
 
+  // Phase 7 of BACKEND_FORK_BRIEF.md — project card opens the per-project
+  // studio at studio.briven.tech when NEXT_PUBLIC_BRIVEN_STUDIO_ORIGIN is
+  // set. Falls back to the internal /dashboard/projects/[id] detail page
+  // when not configured, so the dashboard still works in environments
+  // where the external studio hasn't been deployed yet.
+  const studioOrigin = process.env.NEXT_PUBLIC_BRIVEN_STUDIO_ORIGIN;
+  const projectHref = (id: string): string =>
+    studioOrigin ? `${studioOrigin}/project/${id}` : `/dashboard/projects/${id}`;
+
   const orgs = useMemo(() => {
     const set = new Map<string, { name: string; personal: boolean }>();
     for (const p of projects) {
@@ -103,8 +112,11 @@ export function ProjectsList({
               className="group flex items-center gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] pr-2 transition hover:border-[var(--color-border)]"
             >
               <Link
-                href={`/dashboard/projects/${p.id}`}
+                href={projectHref(p.id)}
                 className="flex flex-1 items-center justify-between px-4 py-3"
+                {...(studioOrigin
+                  ? { rel: 'noopener', target: '_self' }
+                  : {})}
               >
                 <div>
                   <p className="font-mono text-sm">{p.name}</p>

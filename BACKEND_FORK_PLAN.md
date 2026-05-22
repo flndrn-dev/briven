@@ -141,6 +141,8 @@ Three candidates from the brief:
 
 **Recommendation**: **(a) shared cluster, logical database per project**.
 
+> **Phase 7 correction (2026-05-21)**: briven control plane was inspected and **already ships option (b)** — schema-per-project — via `apps/api/src/db/data-plane.ts` (`provisionProjectSchema()`, `schemaNameFor()` → `proj_<id>`). The `createProject()` flow at `apps/api/src/services/projects.ts:46-119` atomically creates a schema + owner role + cleanup on rollback. The recommendation above is no longer the live decision; the live decision is (b) and reversing it is a separate migration project. The (b)-vs-(a) cons listed (RLS-only boundary, `search_path` foot-guns, shared WAL noisy-neighbor) remain real risks to track. Re-open the decision before Phase 3 (external users) or before the first regulated-industry tenant lands.
+
 ### Reasoning
 
 briven is dogfood-first through Phase 1-2 (`docs/CLAUDE.md` §3). Volumes:

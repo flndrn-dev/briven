@@ -15,7 +15,7 @@ import {
 
 describe('first-referrer-cookie', () => {
   describe('isExternalReferrer', () => {
-    it('returns false for supabase domains', () => {
+    it('returns false for briven domains', () => {
       expect(isExternalReferrer('https://supabase.com')).toBe(false)
       expect(isExternalReferrer('https://www.supabase.com')).toBe(false)
       expect(isExternalReferrer('https://docs.supabase.com')).toBe(false)

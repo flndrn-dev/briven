@@ -12,7 +12,7 @@ import { useCallback, useEffect, useId, useMemo, useReducer, useRef } from 'reac
  * See https://nextjs.org/docs/app/api-reference/functions/use-search-params
  */
 const useSearchParamsShallow = () => {
-  const EVENT_NAME = 'supabase.events.packages.common.useSearchParamsShallow'
+  const EVENT_NAME = 'briven.events.packages.common.useSearchParamsShallow'
   const id = useId()
   const timeoutHandle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 

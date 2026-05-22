@@ -82,7 +82,7 @@ export const plans: PricingInformation[] = [
       'SOC2 & ISO 27001',
       'Project-scoped and read-only access',
       'HIPAA available as paid add-on',
-      'SSO for Supabase Dashboard',
+      'SSO for Briven Dashboard',
       'Priority email support & SLAs',
       'Daily backups stored for 14 days',
       '28-day log retention',

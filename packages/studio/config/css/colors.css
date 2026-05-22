@@ -2,7 +2,7 @@
  * Radix/scale/brand --color-* CSS variables, with per-theme values inlined.
  *
  * Hand-edited. Source palette: @radix-ui/colors (light/dark hue scales) plus a
- * curated brand scale. The Supabase `scale` namespace maps to slate in light
+ * curated brand scale. The Briven `scale` namespace maps to slate in light
  * and gray in dark (scale-1100 dark is the hard-coded #bbbbbb override that
  * predates the migration).
  *

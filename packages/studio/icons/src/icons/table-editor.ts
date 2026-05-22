@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name TableEditor
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAiIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiAjZmZmOyBib3JkZXItcmFkaXVzOiAycHgiICAgIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aAogICAgICAgIGQ9Ik0yLjk3MDcgMTUuMzQ5NEwyMC45NzA3IDE1LjM1NU0yMC45NDA1IDkuNjE1ODhIMi45OTY5OU04Ljc3NjYxIDkuNjE1ODhWMjEuMTM2N00yMC45NDA1IDUuODU1NDdWMTkuMTM2N0MyMC45NDA1IDIwLjI0MTMgMjAuMDQ1MSAyMS4xMzY3IDE4Ljk0MDUgMjEuMTM2N0g0Ljk5Njk5QzMuODkyNDIgMjEuMTM2NyAyLjk5Njk5IDIwLjI0MTMgMi45OTY5OSAxOS4xMzY3VjUuODU1NDdDMi45OTY5OSA0Ljc1MDkgMy44OTI0MiAzLjg1NTQ3IDQuOTk2OTkgMy44NTU0N0gxOC45NDA1QzIwLjA0NTEgMy44NTU0NyAyMC45NDA1IDQuNzUwOSAyMC45NDA1IDUuODU1NDdaIiAvPgo8L3N2Zz4=)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const TableEditor = createSupabaseIcon(
+const TableEditor = createBrivenIcon(
   'TableEditor',
   [
     [

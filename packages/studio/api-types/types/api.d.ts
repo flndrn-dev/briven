@@ -1904,7 +1904,7 @@ export interface paths {
     }
     /**
      * Generate TypeScript types
-     * @description Returns the TypeScript types of your schema for use with supabase-js.
+     * @description Returns the TypeScript types of your schema for use with briven-js.
      */
     get: operations['v1-generate-typescript-types']
     put?: never
@@ -2754,7 +2754,7 @@ export interface components {
      *       }
      *     ] */
     CreateSecretBody: {
-      /** @description Secret name must not start with the SUPABASE_ prefix. */
+      /** @description Secret name must not start with the BRIVEN_ prefix. */
       name: string
       value: string
     }[]
@@ -2998,7 +2998,7 @@ export interface components {
     }
     /** @example {
      *       "file": [
-     *         "./supabase/functions/hello-world/index.ts"
+     *         "./briven/functions/hello-world/index.ts"
      *       ],
      *       "metadata": {
      *         "entrypoint_path": "index.ts",

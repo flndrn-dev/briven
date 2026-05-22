@@ -7,7 +7,7 @@ import { type TabsProps } from 'ui'
 
 const isString = (maybeStr: unknown): maybeStr is string => typeof maybeStr === 'string'
 
-const LOCAL_STORAGE_KEY = 'supabase.ui-patterns.ComplexTabs.withQueryParams.v0'
+const LOCAL_STORAGE_KEY = 'briven.ui-patterns.ComplexTabs.withQueryParams.v0'
 
 interface QueryParamsProps {
   queryGroup?: string

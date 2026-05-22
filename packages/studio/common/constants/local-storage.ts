@@ -3,9 +3,9 @@ export const LOCAL_STORAGE_KEYS = {
    * STUDIO
    */
   AI_ASSISTANT_STATE: (projectRef: string | undefined) =>
-    `supabase-ai-assistant-state-${projectRef}`,
-  SIDEBAR_BEHAVIOR: 'supabase-sidebar-behavior',
-  EDITOR_PANEL_STATE: 'supabase-editor-panel-state',
+    `briven-ai-assistant-state-${projectRef}`,
+  SIDEBAR_BEHAVIOR: 'briven-sidebar-behavior',
+  EDITOR_PANEL_STATE: 'briven-editor-panel-state',
   PROJECTS_VIEW: 'projects-view',
   PROJECTS_FILTER: 'projects-filter',
   PROJECTS_SORT: 'projects-sort',
@@ -16,18 +16,18 @@ export const LOCAL_STORAGE_KEYS = {
   DASHBOARD_PREFERENCES: (ref: string) => `dashboard-preferences-${ref}`,
   UNIFIED_LOGS_DOCK: 'unified-logs-dock',
 
-  UI_TIMEZONE: 'supabase-ui-timezone',
-  UI_PREVIEW_CLS: 'supabase-ui-cls',
-  UI_PREVIEW_INLINE_EDITOR: 'supabase-ui-preview-inline-editor',
-  UI_PREVIEW_UNIFIED_LOGS: 'supabase-ui-preview-unified-logs',
-  UI_ONBOARDING_NEW_PAGE_SHOWN: 'supabase-ui-onboarding-new-page-shown',
-  UI_PREVIEW_ADVISOR_RULES: 'supabase-ui-advisor-rules',
-  UI_PREVIEW_QUEUE_OPERATIONS: 'supabase-ui-queue-operations',
-  UI_PREVIEW_PG_DELTA_DIFF: 'supabase-ui-pg-delta-diff',
-  UI_PREVIEW_PLATFORM_WEBHOOKS: 'supabase-ui-platform-webhooks',
-  UI_PREVIEW_JIT_DB_ACCESS: 'supabase-ui-jit-db-access',
-  UI_PREVIEW_RLS_TESTER: 'supabase-ui-rls-tester',
-  UI_PREVIEW_MARKETPLACE: 'supabase-ui-marketplace',
+  UI_TIMEZONE: 'briven-ui-timezone',
+  UI_PREVIEW_CLS: 'briven-ui-cls',
+  UI_PREVIEW_INLINE_EDITOR: 'briven-ui-preview-inline-editor',
+  UI_PREVIEW_UNIFIED_LOGS: 'briven-ui-preview-unified-logs',
+  UI_ONBOARDING_NEW_PAGE_SHOWN: 'briven-ui-onboarding-new-page-shown',
+  UI_PREVIEW_ADVISOR_RULES: 'briven-ui-advisor-rules',
+  UI_PREVIEW_QUEUE_OPERATIONS: 'briven-ui-queue-operations',
+  UI_PREVIEW_PG_DELTA_DIFF: 'briven-ui-pg-delta-diff',
+  UI_PREVIEW_PLATFORM_WEBHOOKS: 'briven-ui-platform-webhooks',
+  UI_PREVIEW_JIT_DB_ACCESS: 'briven-ui-jit-db-access',
+  UI_PREVIEW_RLS_TESTER: 'briven-ui-rls-tester',
+  UI_PREVIEW_MARKETPLACE: 'briven-ui-marketplace',
 
   NEW_LAYOUT_NOTICE_ACKNOWLEDGED: 'new-layout-notice-acknowledge',
   TABS_INTERFACE_ACKNOWLEDGED: 'tabs-interface-acknowledge',
@@ -38,55 +38,55 @@ export const LOCAL_STORAGE_KEYS = {
 
   AUTH_USERS_FILTER: (ref: string) => `auth-users-filter-${ref}`,
   AUTH_USERS_SORT_BY_VALUE: (ref: string) => `auth-users-sort-by-value-${ref}`,
-  AUTH_USERS_COLUMNS_CONFIGURATION: (ref: string) => `supabase-auth-users-columns-${ref}`,
+  AUTH_USERS_COLUMNS_CONFIGURATION: (ref: string) => `briven-auth-users-columns-${ref}`,
   AUTH_USERS_IMPROVED_SEARCH_DISMISSED: (ref: string) =>
     `auth-users-improved-search-dismissed-${ref}`,
 
-  SQL_EDITOR_INTELLISENSE: 'supabase_sql-editor-intellisense-enabled',
-  SQL_EDITOR_SPLIT_SIZE: 'supabase_sql-editor-split-size',
+  SQL_EDITOR_INTELLISENSE: 'briven_sql-editor-intellisense-enabled',
+  SQL_EDITOR_SPLIT_SIZE: 'briven_sql-editor-split-size',
   // Key to track which schemas are ok to be sent to AI. The project ref is intentionally put at the end for easier search in the browser console.
-  SQL_EDITOR_AI_SCHEMA: (ref: string) => `supabase_sql-editor-ai-schema-enabled-${ref}`,
-  SQL_EDITOR_AI_OPEN: 'supabase_sql-editor-ai-open',
+  SQL_EDITOR_AI_SCHEMA: (ref: string) => `briven_sql-editor-ai-schema-enabled-${ref}`,
+  SQL_EDITOR_AI_OPEN: 'briven_sql-editor-ai-open',
   SQL_EDITOR_LAST_SELECTED_DB: (ref: string) => `sql-editor-last-selected-db-${ref}`,
   SQL_EDITOR_SQL_BLOCK_ACKNOWLEDGED: (ref: string) => `sql-editor-sql-block-acknowledged-${ref}`,
   SQL_EDITOR_SECTION_STATE: (ref: string) => `sql-editor-section-state-${ref}`,
   SQL_EDITOR_SORT: (ref: string) => `sql-editor-sort-${ref}`,
 
-  LOG_EXPLORER_SPLIT_SIZE: 'supabase_log-explorer-split-size',
+  LOG_EXPLORER_SPLIT_SIZE: 'briven_log-explorer-split-size',
   GRAPHIQL_RLS_BYPASS_WARNING: 'graphiql-rls-bypass-warning-dismissed',
   GRAPHQL_INTROSPECTION_NOTICE_COLLAPSED: (ref: string) =>
     `graphql-introspection-notice-collapsed-${ref}`,
   CLS_DIFF_WARNING: 'cls-diff-warning-dismissed',
   CLS_SELECT_STAR_WARNING: 'cls-select-star-warning-dismissed',
-  QUERY_PERF_SHOW_BOTTOM_SECTION: 'supabase-query-perf-show-bottom-section',
-  LINTER_SHOW_FOOTER: 'supabase-linter-show-footer',
+  QUERY_PERF_SHOW_BOTTOM_SECTION: 'briven-query-perf-show-bottom-section',
+  LINTER_SHOW_FOOTER: 'briven-linter-show-footer',
   // Key to track account deletion requests
-  ACCOUNT_DELETION_REQUEST: 'supabase-account-deletion-request',
+  ACCOUNT_DELETION_REQUEST: 'briven-account-deletion-request',
   // Used for storing a user id when sending reports to Sentry. The id is hashed for anonymity.
-  SENTRY_USER_ID: 'supabase-sentry-user-id',
+  SENTRY_USER_ID: 'briven-sentry-user-id',
   // Used for storing the last sign in method used by the user
-  LAST_SIGN_IN_METHOD: 'supabase-last-sign-in-method',
+  LAST_SIGN_IN_METHOD: 'briven-last-sign-in-method',
   // Key to track the last selected schema. The project ref is intentionally put at the end for easier search in the browser console.
   LAST_SELECTED_SCHEMA: (ref: string) => `last-selected-schema-${ref}`,
   // Track position of nodes for schema visualizer
   SCHEMA_VISUALIZER_POSITIONS: (ref: string, schemaId: number) =>
     `schema-visualizer-positions-${ref}-${schemaId}`,
   // Used for allowing the main nav panel to expand on hover
-  EXPAND_NAVIGATION_PANEL: 'supabase-expand-navigation-panel',
-  GITHUB_AUTHORIZATION_STATE: 'supabase-github-authorization-state',
+  EXPAND_NAVIGATION_PANEL: 'briven-expand-navigation-panel',
+  GITHUB_AUTHORIZATION_STATE: 'briven-github-authorization-state',
   // Notice banner keys
   FLY_DEPRECATION_2026_05_31: 'fly-deprecation-2026-05-31-dismissed',
-  API_KEYS_FEEDBACK_DISMISSED: (ref: string) => `supabase-api-keys-feedback-dismissed-${ref}`,
+  API_KEYS_FEEDBACK_DISMISSED: (ref: string) => `briven-api-keys-feedback-dismissed-${ref}`,
   TERMS_OF_SERVICE_UPDATE: 'terms-of-service-update-2026-06-06',
-  REPORT_DATERANGE: 'supabase-report-daterange',
-  PROJECT_PAUSING_STARTED_AT: (ref: string) => `supabase-project-pausing-started-at-${ref}`,
-  PROJECT_RESTORING_STARTED_AT: (ref: string) => `supabase-project-restoring-started-at-${ref}`,
+  REPORT_DATERANGE: 'briven-report-daterange',
+  PROJECT_PAUSING_STARTED_AT: (ref: string) => `briven-project-pausing-started-at-${ref}`,
+  PROJECT_RESTORING_STARTED_AT: (ref: string) => `briven-project-restoring-started-at-${ref}`,
 
   // api keys view switcher for new and legacy api keys
-  API_KEYS_VIEW: (ref: string) => `supabase-api-keys-view-${ref}`,
+  API_KEYS_VIEW: (ref: string) => `briven-api-keys-view-${ref}`,
 
   // Shortcut preferences
-  SHORTCUT_STORAGE_KEY: 'supabase-shortcut-preferences',
+  SHORTCUT_STORAGE_KEY: 'briven-shortcut-preferences',
 
   LAST_VISITED_ORGANIZATION: 'last-visited-organization',
 
@@ -125,7 +125,7 @@ export const LOCAL_STORAGE_KEYS = {
    * COMMON
    */
   /** @deprecated – we're using usercentrics instead to handle telemetry consent */
-  TELEMETRY_CONSENT: 'supabase-consent-ph',
+  TELEMETRY_CONSENT: 'briven-consent-ph',
 
   /**
    * DOCS
@@ -134,12 +134,12 @@ export const LOCAL_STORAGE_KEYS = {
   SAVED_PROJECT: 'docs.ui.user.selected.project',
   SAVED_BRANCH: 'docs.ui.user.selected.branch',
 
-  HIDE_PROMO_TOAST: 'supabase-hide-promo-toast-lw15-ticket',
+  HIDE_PROMO_TOAST: 'briven-hide-promo-toast-lw15-ticket',
 
   /**
    * WWW
    */
-  BLOG_VIEW: 'supabase-blog-view',
+  BLOG_VIEW: 'briven-blog-view',
 } as const
 
 export type LocalStorageKey = (typeof LOCAL_STORAGE_KEYS)[keyof typeof LOCAL_STORAGE_KEYS]
@@ -147,9 +147,9 @@ export type LocalStorageKey = (typeof LOCAL_STORAGE_KEYS)[keyof typeof LOCAL_STO
 const LOCAL_STORAGE_KEYS_ALLOWLIST = [
   'graphiql:theme',
   'theme',
-  'supabaseDarkMode',
-  'supabase.dashboard.auth.debug',
-  'supabase.dashboard.auth.navigatorLock.disabled',
+  'brivenDarkMode',
+  'briven.dashboard.auth.debug',
+  'briven.dashboard.auth.navigatorLock.disabled',
   LOCAL_STORAGE_KEYS.TELEMETRY_CONSENT,
   LOCAL_STORAGE_KEYS.UI_PREVIEW_INLINE_EDITOR,
   LOCAL_STORAGE_KEYS.UI_PREVIEW_QUEUE_OPERATIONS,

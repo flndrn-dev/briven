@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name Realtime
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAiIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiAjZmZmOyBib3JkZXItcmFkaXVzOiAycHgiICAgIHN0cm9rZS13aWR0aD0iMSI+CiAgICA8cGF0aAogICAgICAgIGQ9Ik04LjA0MjczIDEuNTgyMDNWNS4zMjIwNU01LjI0MzU0IDUuMzIyMDVMMi4wNDcxMiAyLjAyNzkxTTUuMjQzNTQgNy45MDk3OUgxLjU3NzY0TTE1LjM3NzYgMTUuNTUwN0wyMS4wNzkgMTQuMTMxNkMyMS41NDE3IDE0LjAxNjQgMjEuNTk1OSAxMy4zODA2IDIxLjE1OTUgMTMuMTg4N0w4LjAwODI4IDcuNDA1ODZDNy41OTEzNyA3LjIyMjU0IDcuMTY2NDMgNy42NDY2MSA3LjM0ODkgOC4wNjM4OUwxMy4wMzIxIDIxLjA2MDdDMTMuMjIyNCAyMS40OTYgMTMuODU1NiAyMS40NDU0IDEzLjk3NDMgMjAuOTg1NEwxNS4zNzc2IDE1LjU1MDdaIiAvPgo8L3N2Zz4=)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const Realtime = createSupabaseIcon(
+const Realtime = createBrivenIcon(
   'Realtime',
   [
     [

@@ -1,16 +1,16 @@
-import createSupabaseIcon from '../createSupabaseIcon';
+import createBrivenIcon from '../createBrivenIcon';
 
 /**
  * @component @name Sentry
- * @description Supabase SVG icon component, renders SVG Element with children.
+ * @description Briven SVG icon component, renders SVG Element with children.
  *
  * @preview ![img](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJjdXJyZW50Q29sb3IiIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIgc3Ryb2tlLXdpZHRoPSIwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLXNlbnRyeSB0ZXh0LWZvcmVncm91bmQtbGlnaHQiPjxwYXRoIGQ9Ik0xMy45MSAyLjUwNWMtLjg3My0xLjQ0OC0yLjk3Mi0xLjQ0OC0zLjg0NCAwTDYuOTA0IDcuOTJhMTUuNDc4IDE1LjQ3OCAwIDAgMSA4LjUzIDEyLjgxMWgtMi4yMjFBMTMuMzAxIDEzLjMwMSAwIDAgMCA1Ljc4NCA5LjgxNGwtMi45MjYgNS4wNmE3LjY1IDcuNjUgMCAwIDEgNC40MzUgNS44NDhIMi4xOTRhLjM2NS4zNjUgMCAwIDEtLjI5OC0uNTM0bDEuNDEzLTIuNDAyYTUuMTYgNS4xNiAwIDAgMC0xLjYxNC0uOTEzTC4yOTYgMTkuMjc1YTIuMTgyIDIuMTgyIDAgMCAwIC44MTIgMi45OTkgMi4yNCAyLjI0IDAgMCAwIDEuMDg2LjI4OGg2Ljk4M2E5LjMyMiA5LjMyMiAwIDAgMC0zLjg0NS04LjMxOGwxLjExLTEuOTIyYTExLjQ3IDExLjQ3IDAgMCAxIDQuOTUgMTAuMjRoNS45MTVhMTcuMjQyIDE3LjI0MiAwIDAgMC03Ljg4NS0xNS4yOGwyLjI0NC0zLjg0NWEuMzcuMzcgMCAwIDEgLjUwNC0uMTNjLjI1NS4xNCA5Ljc1IDE2LjcwOCA5LjkyOCAxNi45YS4zNjUuMzY1IDAgMCAxLS4zMjcuNTQzaC0yLjI4N2MuMDI5LjYxMi4wMjkgMS4yMjMgMCAxLjgzMWgyLjI5N2EyLjIwNiAyLjIwNiAwIDAgMCAxLjkyMi0zLjMxeiI+PC9wYXRoPjwvc3ZnPg==)
  *
- * @param {Object} props - Supabase icons props and any valid SVG attribute
+ * @param {Object} props - Briven icons props and any valid SVG attribute
  * @returns {JSX.Element} JSX Element
  *
  */
-const Sentry = createSupabaseIcon(
+const Sentry = createBrivenIcon(
   'Sentry',
   [
     [

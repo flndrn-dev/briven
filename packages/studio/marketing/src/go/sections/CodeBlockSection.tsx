@@ -2,7 +2,7 @@ import { codeToHtml } from 'shiki'
 
 import type { GoCodeBlockSection } from '../schemas'
 import CodeBlockTabs from './CodeBlockTabs'
-import { supabaseDark, supabaseLight } from './codeThemes'
+import { brivenDark, brivenLight } from './codeThemes'
 
 const lineNumberStyles = `
   .go-code code { counter-reset: line; }
@@ -20,8 +20,8 @@ const lineNumberStyles = `
 
 async function highlightCode(code: string, language: string) {
   const [darkHtml, lightHtml] = await Promise.all([
-    codeToHtml(code, { lang: language, theme: supabaseDark }),
-    codeToHtml(code, { lang: language, theme: supabaseLight }),
+    codeToHtml(code, { lang: language, theme: brivenDark }),
+    codeToHtml(code, { lang: language, theme: brivenLight }),
   ])
   return { darkHtml, lightHtml }
 }

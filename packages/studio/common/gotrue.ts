@@ -1,14 +1,14 @@
 import { AuthClient, navigatorLock, User } from '@supabase/auth-js'
 import { isBrowser } from './helpers'
 
-export const STORAGE_KEY = process.env.NEXT_PUBLIC_STORAGE_KEY || 'supabase.dashboard.auth.token'
+export const STORAGE_KEY = process.env.NEXT_PUBLIC_STORAGE_KEY || 'briven.dashboard.auth.token'
 export const AUTH_DEBUG_KEY =
-  process.env.NEXT_PUBLIC_AUTH_DEBUG_KEY || 'supabase.dashboard.auth.debug'
+  process.env.NEXT_PUBLIC_AUTH_DEBUG_KEY || 'briven.dashboard.auth.debug'
 export const AUTH_DEBUG_PERSISTED_KEY =
-  process.env.NEXT_PUBLIC_AUTH_DEBUG_PERSISTED_KEY || 'supabase.dashboard.auth.debug.persist'
+  process.env.NEXT_PUBLIC_AUTH_DEBUG_PERSISTED_KEY || 'briven.dashboard.auth.debug.persist'
 export const AUTH_NAVIGATOR_LOCK_DISABLED_KEY =
   process.env.NEXT_PUBLIC_AUTH_NAVIGATOR_LOCK_KEY ||
-  'supabase.dashboard.auth.navigatorLock.disabled'
+  'briven.dashboard.auth.navigatorLock.disabled'
 
 /**
  * Catches errors thrown when accessing localStorage. Safari with certain

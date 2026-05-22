@@ -1,4 +1,4 @@
-# Supabase UI Patterns
+# Briven UI Patterns
 
 This package should be used for components which are built using NPM libraries (`react-markdown`, `reactflow` for example),
 which make no sense to be included in all apps. It should also be used for components which are constructed using various

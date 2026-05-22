@@ -5,7 +5,7 @@ export const CLIENT_LIBRARIES = [
     is_officially_supported: true,
     libraries: [
       {
-        name: 'supabase-js',
+        name: 'briven-js',
         url: 'https://github.com/supabase/supabase-js',
       },
       {
@@ -36,7 +36,7 @@ export const CLIENT_LIBRARIES = [
     is_officially_supported: false,
     libraries: [
       {
-        name: 'supabase-csharp',
+        name: 'briven-csharp',
         url: 'https://github.com/supabase-community/supabase-csharp',
       },
       {
@@ -67,11 +67,11 @@ export const CLIENT_LIBRARIES = [
     is_officially_supported: false,
     libraries: [
       {
-        name: 'supabase-flutter',
+        name: 'briven-flutter',
         url: 'https://github.com/supabase-community/supabase-flutter',
       },
       {
-        name: 'supabase-dart',
+        name: 'briven-dart',
         url: 'https://github.com/supabase-community/supabase-dart',
       },
       {
@@ -159,7 +159,7 @@ export const CLIENT_LIBRARIES = [
     is_officially_supported: true,
     libraries: [
       {
-        name: 'supabase-py',
+        name: 'briven-py',
         url: 'https://github.com/supabase/supabase-py',
       },
       {
@@ -190,7 +190,7 @@ export const CLIENT_LIBRARIES = [
     is_officially_supported: false,
     libraries: [
       {
-        name: 'supabase-ruby',
+        name: 'briven-ruby',
         url: 'https://github.com/supabase-community/supabase-rb',
       },
       {
@@ -216,7 +216,7 @@ export const CLIENT_LIBRARIES = [
     is_officially_supported: false,
     libraries: [
       {
-        name: 'supabase-swift',
+        name: 'briven-swift',
         url: 'https://github.com/supabase/supabase-swift',
       },
       {
@@ -243,7 +243,7 @@ export const CLIENT_LIBRARIES = [
     is_officially_supported: false,
     libraries: [
       {
-        name: 'supabase-gdscript',
+        name: 'briven-gdscript',
         url: 'https://github.com/supabase-community/godot-engine.supabase',
       },
       {

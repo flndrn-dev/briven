@@ -60,7 +60,7 @@ export async function getFlags(userEmail: string = '', customAttributes?: Record
   const client = await getClient()
   const _customAttributes = {
     ...customAttributes,
-    is_staff: !!userEmail ? userEmail.includes('@supabase.').toString() : 'false',
+    is_staff: !!userEmail ? userEmail.includes('@briven.').toString() : 'false',
   }
 
   if (!client) {

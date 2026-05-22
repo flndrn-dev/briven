@@ -83,7 +83,7 @@ describe('detectPriorConsent', () => {
               S1_9Vsuj_Q: { name: 'Google Ads', consent: false },
               HkocEodjb7: { name: 'Google Analytics', consent: false },
               BJ59EidsWQ: { name: 'Google Tag Manager', consent: false },
-              nV4hGUA8RQK5Ez: { name: 'Supabase Event Tracking', consent: false },
+              nV4hGUA8RQK5Ez: { name: 'Briven Event Tracking', consent: false },
             },
           },
         })

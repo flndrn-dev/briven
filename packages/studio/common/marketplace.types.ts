@@ -124,7 +124,7 @@ export type Database = {
   }
 }
 
-type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+type DatabaseWithoutInternals = Omit<Database, '__InternalBriven'>
 
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
 

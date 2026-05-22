@@ -606,7 +606,7 @@ export interface paths {
     /** List organization GitHub connections */
     get: operations['GitHubConnectionsController_listOrganizationGitHubConnections']
     put?: never
-    /** Connects a GitHub project to a supabase project */
+    /** Connects a GitHub project to a briven project */
     post: operations['GitHubConnectionsController_createGitHubConnection']
     delete?: never
     options?: never
@@ -628,7 +628,7 @@ export interface paths {
     delete: operations['GitHubConnectionsController_deleteGitHubConnection']
     options?: never
     head?: never
-    /** Updates a GitHub connection for a supabase project */
+    /** Updates a GitHub connection for a briven project */
     patch: operations['GitHubConnectionsController_updateGitHubConnection']
     trace?: never
   }
@@ -751,7 +751,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** Connects a Vercel project to a supabase project */
+    /** Connects a Vercel project to a briven project */
     post: operations['VercelConnectionsController_createVercelConnection']
     delete?: never
     options?: never
@@ -773,7 +773,7 @@ export interface paths {
     delete: operations['VercelConnectionsController_deleteVercelConnection']
     options?: never
     head?: never
-    /** Updates a Vercel connection for a supabase project */
+    /** Updates a Vercel connection for a briven project */
     patch: operations['VercelConnectionsController_updateVercelConnection']
     trace?: never
   }
@@ -786,7 +786,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** Syncs supabase project envs with given connection id */
+    /** Syncs briven project envs with given connection id */
     post: operations['VercelConnectionsController_syncVercelConnectionEnvironments']
     delete?: never
     options?: never
@@ -5105,7 +5105,7 @@ export interface components {
       new_branch_per_pr?: boolean
       project_ref: string
       repository_id: number
-      supabase_changes_only?: boolean
+      briven_changes_only?: boolean
       workdir?: string
     }
     CreateGitHubConnectionResponse: {
@@ -5114,7 +5114,7 @@ export interface components {
       inserted_at: string
       installation_id: number
       new_branch_per_pr: boolean
-      supabase_changes_only: boolean
+      briven_changes_only: boolean
       updated_at: string
       workdir: string
     }
@@ -5459,7 +5459,7 @@ export interface components {
       auth_site_url?: string
       /** @enum {string} */
       cloud_provider: 'AWS' | 'FLY' | 'AWS_K8S' | 'AWS_NIMBUS'
-      custom_supabase_internal_requests?: {
+      custom_briven_internal_requests?: {
         ami: {
           /**
            * @description Exact AWS instance type to provision (e.g. `t3.nano`, `t4g.nano`). When omitted the default for `desired_instance_size` is used. Only for internal use; rejected for user-facing requests in production.
@@ -5632,7 +5632,7 @@ export interface components {
           }
         | {
             iceberg: {
-              supabase: {
+              briven: {
                 /**
                  * @description Catalog token
                  * @example A jwt secret
@@ -5720,7 +5720,7 @@ export interface components {
                */
               s3_secret_access_key: string
               /**
-               * @description S3 URL style: `path` (MinIO/Supabase) or `vhost` (AWS)
+               * @description S3 URL style: `path` (MinIO/Briven) or `vhost` (AWS)
                * @example path
                * @enum {string}
                */
@@ -5770,7 +5770,7 @@ export interface components {
           }
         | {
             iceberg: {
-              supabase: {
+              briven: {
                 /**
                  * @description Catalog token
                  * @example A jwt secret
@@ -5858,7 +5858,7 @@ export interface components {
                */
               s3_secret_access_key: string
               /**
-               * @description S3 URL style: `path` (MinIO/Supabase) or `vhost` (AWS)
+               * @description S3 URL style: `path` (MinIO/Briven) or `vhost` (AWS)
                * @example path
                * @enum {string}
                */
@@ -6237,7 +6237,7 @@ export interface components {
         metadata: {
           [key: string]: unknown
         }
-        supabase_project_ref: string
+        briven_project_ref: string
       }
       organization_integration_id: string
     }
@@ -6687,7 +6687,7 @@ export interface components {
         id: string
         inserted_at: string
         organization_integration_id: string
-        supabase_project_ref: string
+        briven_project_ref: string
         updated_at: string
       }[]
       id: string
@@ -6743,7 +6743,7 @@ export interface components {
         aws_account_id: string
         /**
          * Format: date-time
-         * @description The time and date at which the AWS Resource Share Association was requested from Supabase. `null` means that the association was not yet requested while the PrivateLink Association is pending.
+         * @description The time and date at which the AWS Resource Share Association was requested from Briven. `null` means that the association was not yet requested while the PrivateLink Association is pending.
          */
         shared_at: string | null
         /**
@@ -6752,7 +6752,7 @@ export interface components {
          *       - `READY`: The PrivateLink resources have been created and the PrivateLink Share can be accepted for the duration of 12h after sharing. See `shared_at`.
          *       - `ASSOCIATION_REQUEST_EXPIRED`: The PrivateLink Share has not been accepted within the 12h time limit. This association can now be deleted.
          *       - `ASSOCIATION_ACCEPTED`: The PrivateLink Share was successfully accepted.
-         *       - `CREATION_FAILED`: The PrivateLink resources failed to create. This likely means something went wrong on Supabase's and and support should be contacted.
+         *       - `CREATION_FAILED`: The PrivateLink resources failed to create. This likely means something went wrong on Briven's and and support should be contacted.
          *       - `DELETING`: The PrivateLink resources and the Association are in the process of being deleted. The PrivateLink Share cannot be accepted yet.
          *
          * @enum {string}
@@ -6842,7 +6842,7 @@ export interface components {
           metadata: {
             framework?: string | null
             name: string
-            supabaseConfig: {
+            brivenConfig: {
               projectEnvVars: {
                 write: boolean
               }
@@ -6850,7 +6850,7 @@ export interface components {
           }
           organization_integration_id: string
           public_env_var_prefix: string
-          supabase_project_ref: string
+          briven_project_ref: string
           updated_at: string
         }[]
         id: string
@@ -6989,7 +6989,7 @@ export interface components {
       addons: {
         name: string
         price: number
-        supabase_prod_id: string
+        briven_prod_id: string
       }[]
       billing_cycle_anchor: number
       /** @enum {string} */
@@ -7721,7 +7721,7 @@ export interface components {
           id: number
           name: string
         }
-        supabase_changes_only: boolean
+        briven_changes_only: boolean
         updated_at: string
         user: {
           id: number
@@ -9310,7 +9310,7 @@ export interface components {
           }
         | {
             iceberg: {
-              supabase: {
+              briven: {
                 /**
                  * @description Catalog token
                  * @example A jwt secret
@@ -9398,7 +9398,7 @@ export interface components {
                */
               s3_secret_access_key: string
               /**
-               * @description S3 URL style: `path` (MinIO/Supabase) or `vhost` (AWS)
+               * @description S3 URL style: `path` (MinIO/Briven) or `vhost` (AWS)
                * @example path
                * @enum {string}
                */
@@ -9460,7 +9460,7 @@ export interface components {
             }
           | {
               iceberg: {
-                supabase: {
+                briven: {
                   /**
                    * @description Catalog token
                    * @example A jwt secret
@@ -9548,7 +9548,7 @@ export interface components {
                  */
                 s3_secret_access_key: string
                 /**
-                 * @description S3 URL style: `path` (MinIO/Supabase) or `vhost` (AWS)
+                 * @description S3 URL style: `path` (MinIO/Briven) or `vhost` (AWS)
                  * @example path
                  * @enum {string}
                  */
@@ -10204,7 +10204,7 @@ export interface components {
     ServiceVersions: {
       gotrue?: string
       postgrest?: string
-      'supabase-postgres': string
+      'briven-postgres': string
     }
     SetupIntentRequest: {
       hcaptchaToken?: string
@@ -10761,7 +10761,7 @@ export interface components {
     UpdateGitHubConnectionBody: {
       branch_limit?: number
       new_branch_per_pr?: boolean
-      supabase_changes_only?: boolean
+      briven_changes_only?: boolean
       workdir?: string
     }
     UpdateGoTrueConfigBody: {
@@ -11307,7 +11307,7 @@ export interface components {
           }
         | {
             iceberg: {
-              supabase: {
+              briven: {
                 /**
                  * @description Catalog token
                  * @example A jwt secret
@@ -11395,7 +11395,7 @@ export interface components {
                */
               s3_secret_access_key: string
               /**
-               * @description S3 URL style: `path` (MinIO/Supabase) or `vhost` (AWS)
+               * @description S3 URL style: `path` (MinIO/Briven) or `vhost` (AWS)
                * @example path
                * @enum {string}
                */
@@ -11445,7 +11445,7 @@ export interface components {
           }
         | {
             iceberg: {
-              supabase: {
+              briven: {
                 /**
                  * @description Catalog token
                  * @example A jwt secret
@@ -11533,7 +11533,7 @@ export interface components {
                */
               s3_secret_access_key: string
               /**
-               * @description S3 URL style: `path` (MinIO/Supabase) or `vhost` (AWS)
+               * @description S3 URL style: `path` (MinIO/Briven) or `vhost` (AWS)
                * @example path
                * @enum {string}
                */
@@ -11994,7 +11994,7 @@ export interface components {
           }
         | {
             iceberg: {
-              supabase: {
+              briven: {
                 /**
                  * @description Catalog token
                  * @example A jwt secret
@@ -12082,7 +12082,7 @@ export interface components {
                */
               s3_secret_access_key: string
               /**
-               * @description S3 URL style: `path` (MinIO/Supabase) or `vhost` (AWS)
+               * @description S3 URL style: `path` (MinIO/Briven) or `vhost` (AWS)
                * @example path
                * @enum {string}
                */
@@ -14087,7 +14087,7 @@ export interface operations {
       path: {
         /** @description The slug of the listing in the marketplace database */
         listing_slug: string
-        /** @description Supabase project ref */
+        /** @description Briven project ref */
         ref: string
       }
       cookie?: never
@@ -14374,7 +14374,7 @@ export interface operations {
         }
         content?: never
       }
-      /** @description Failed to sync supabase project envs with given connection id */
+      /** @description Failed to sync briven project envs with given connection id */
       500: {
         headers: {
           [name: string]: unknown
