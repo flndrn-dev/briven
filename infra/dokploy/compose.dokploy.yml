@@ -23,6 +23,10 @@
 #   BRIVEN_GOOGLE_CLIENT_ID       optional — google oauth signin
 #   BRIVEN_GOOGLE_CLIENT_SECRET   optional
 #   BRIVEN_OPEN_SIGNUPS           true | false (default false)
+#   BRIVEN_STUDIO_USERNAME        optional — studio dashboard basic-auth user (default: briven)
+#   BRIVEN_STUDIO_PASSWORD        REQUIRED in prod — studio dashboard basic-auth password
+#   BRIVEN_STUDIO_ANON_KEY        optional — placeholder until kong/gotrue wired
+#   BRIVEN_STUDIO_SERVICE_KEY     optional — placeholder until kong/gotrue wired
 #
 # Per DOCKER.md §7: every service caps its log volume to prevent any one
 # noisy container from filling the host disk. Applied via the anchor
@@ -211,6 +215,9 @@ services:
       NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+true}
       NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH: ${BRIVEN_KONNOS_CLIENT_ID:+true}
       NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH: ${BRIVEN_DISCORD_CLIENT_ID:+true}
+      # Dashboard project cards link to ${studioOrigin}/project/${id} when set.
+      # See apps/web/src/app/(dashboard)/dashboard/projects/projects-list.tsx.
+      NEXT_PUBLIC_BRIVEN_STUDIO_ORIGIN: https://studio.${BRIVEN_DOMAIN}
     networks:
       - dokploy-network
     labels:
@@ -253,6 +260,100 @@ services:
       - 'traefik.http.routers.briven-status.middlewares=briven-status-rewrite'
       - 'traefik.http.middlewares.briven-status-rewrite.replacepathregex.regex=^/$$'
       - 'traefik.http.middlewares.briven-status-rewrite.replacepathregex.replacement=/status'
+
+  # pg-meta — postgres-meta REST API consumed by studio for schema
+  # introspection, table editor, SQL runner, RLS policies, etc. Studio
+  # talks to it on the internal dokploy-network at http://meta:8080.
+  # Not Traefik-exposed; never reachable from outside the network.
+  # Phase A (decision X confirmed 2026-05-23): one shared pg-meta in the
+  # control plane, pointed at briven_control. Per-project pg-meta is
+  # tracked under task #10 (multi-tenant routing).
+  meta:
+    image: supabase/postgres-meta:v0.96.3
+    restart: unless-stopped
+    logging: *briven-logging
+    depends_on: [postgres]
+    environment:
+      PG_META_PORT: '8080'
+      PG_META_DB_HOST: postgres
+      PG_META_DB_PORT: '5432'
+      PG_META_DB_NAME: briven_control
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+    networks:
+      - dokploy-network
+
+  # studio — forked supabase/studio Next.js app at studio.${BRIVEN_DOMAIN}.
+  #
+  # Env-var protocol (decision A confirmed 2026-05-23): source code reads
+  # the upstream SUPABASE_* names directly (lib/constants/, pages/api/,
+  # docker-entrypoint.sh). DO NOT rename to BRIVEN_* — the deployed
+  # container would silently receive empty strings and every storage/auth
+  # panel would 500. Treat SUPABASE_* as an internal protocol; rebrand
+  # only user-facing surfaces.
+  #
+  # SUPABASE_URL points at api:3001 as a placeholder — briven's api does
+  # not yet speak the gotrue/storage REST shapes upstream studio expects,
+  # so the auth/storage panels will be partially broken until either (a)
+  # kong is added to the stack or (b) those routes are proxied through
+  # briven's api. The table editor + SQL editor + schema browser only
+  # need STUDIO_PG_META_URL, so the original demo flow (#19) is unblocked.
+  studio:
+    build:
+      context: ../..
+      dockerfile: apps/studio/Dockerfile
+      target: production
+    restart: unless-stopped
+    logging: *briven-logging
+    depends_on: [postgres, meta]
+    environment:
+      # pg-meta endpoint — drives table editor, SQL runner, RLS, etc.
+      STUDIO_PG_META_URL: http://meta:8080
+      PG_META_CRYPTO_KEY: ${BRIVEN_ENCRYPTION_KEY}
+      # SUPABASE_* — see comment block above for why these names are kept.
+      # Placeholders until kong/gotrue/storage are wired into the stack.
+      SUPABASE_URL: http://api:3001
+      SUPABASE_PUBLIC_URL: https://api.${BRIVEN_DOMAIN}
+      SUPABASE_ANON_KEY: ${BRIVEN_STUDIO_ANON_KEY:-}
+      SUPABASE_SERVICE_KEY: ${BRIVEN_STUDIO_SERVICE_KEY:-}
+      # Direct DB connection (read by studio for migrations preview only;
+      # everything else goes through pg-meta).
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: briven_control
+      POSTGRES_PORT: '5432'
+      POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+      # Self-hosted gates: studio shows a single org/project, not the
+      # platform's multi-tenant chooser.
+      NEXT_PUBLIC_IS_PLATFORM: 'false'
+      NEXT_PUBLIC_SITE_URL: https://studio.${BRIVEN_DOMAIN}
+      DEFAULT_ORGANIZATION_NAME: briven
+      DEFAULT_PROJECT_NAME: Default
+      # Dashboard basic-auth gate. Falls back to the upstream defaults
+      # only if BRIVEN_STUDIO_* envs are unset; production MUST set them.
+      DASHBOARD_USERNAME: ${BRIVEN_STUDIO_USERNAME:-briven}
+      DASHBOARD_PASSWORD: ${BRIVEN_STUDIO_PASSWORD:-this_password_is_insecure_and_should_be_updated}
+      AUTH_JWT_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
+      # Sentry CLI noise during build; matches upstream default.
+      SENTRY_IGNORE_API_RESOLUTION_ERROR: '1'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - dokploy-network
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
+      - 'traefik.http.routers.briven-studio.rule=Host(`studio.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-studio.entrypoints=websecure'
+      - 'traefik.http.routers.briven-studio.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.briven-studio.loadbalancer.server.port=3000'
 
 volumes:
   postgres_data:
