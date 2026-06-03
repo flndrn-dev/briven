@@ -1,0 +1,122 @@
+# Host + container resource alerts (node-exporter + cAdvisor).
+# Routed via alertmanager → discord bridge: severity=critical|warning →
+# #briven-alerts, info → #briven-deploys. Severity labels MUST match the
+# route matchers in infra/observability/alertmanager/alertmanager.yml.
+#
+# Thresholds tuned for kvm4: 4 vCPU, 16 GB RAM, 4 GB swap, on an
+# oversubscribed Hostinger VPS (CPU steal is a real signal here).
+#
+# NOTE: Dokploy builds can run as a HOST process (no container cgroup), so
+# a runaway build is caught by the host memory/swap alerts below, not by
+# the per-container cAdvisor alert. Both layers are intentional.
+
+groups:
+  - name: briven-host
+    interval: 30s
+    rules:
+      - alert: HostMemoryCritical
+        expr: |
+          node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'host {{ $labels.instance }} memory critically low'
+          description: 'Available memory <5% for 5m ({{ $value | printf "%.1f" }}%). Builds/exec will start failing with OCI "unable to start container process".'
+
+      - alert: HostMemoryHigh
+        expr: |
+          node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'host {{ $labels.instance }} memory low'
+          description: 'Available memory <10% for 10m ({{ $value | printf "%.1f" }}%).'
+
+      - alert: HostSwapHigh
+        expr: |
+          (1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes) * 100 > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'host {{ $labels.instance }} swapping heavily'
+          description: 'Swap usage >50% for 10m ({{ $value | printf "%.0f" }}%). Sustained swap means a process (often a build) is exhausting RAM.'
+
+      - alert: HostDiskHigh
+        # rootfs only. With --path.rootfs=/host, node-exporter reports the
+        # host root as mountpoint "/". If your build reports "/host", widen
+        # the matcher to mountpoint=~"/|/host".
+        expr: |
+          (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"}
+             / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"}) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'host {{ $labels.instance }} disk >85%'
+          description: 'Root filesystem {{ $value | printf "%.0f" }}% full. Run docker builder/image prune.'
+
+      - alert: HostDiskCritical
+        expr: |
+          (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"}
+             / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"}) * 100 > 92
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'host {{ $labels.instance }} disk >92%'
+          description: 'Root filesystem {{ $value | printf "%.0f" }}% full — deploys and Docker will fail imminently.'
+
+      - alert: HostLoadHigh
+        # 5-min load above 2x core count. count(idle cpu series) = vCPU count.
+        expr: |
+          node_load5 > 2 * count by (instance) (node_cpu_seconds_total{mode="idle"})
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'host {{ $labels.instance }} load high'
+          description: '5-min load {{ $value | printf "%.1f" }} is >2x vCPU count for 10m.'
+
+      - alert: HostCPUStealHigh
+        # Hostinger oversubscription signal — the hypervisor is taking CPU.
+        expr: |
+          avg by (instance) (rate(node_cpu_seconds_total{mode="steal"}[5m])) * 100 > 25
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'host {{ $labels.instance }} CPU steal >25%'
+          description: 'Hypervisor stealing {{ $value | printf "%.0f" }}% CPU for 15m. VPS is oversold — consider resizing or moving load.'
+
+      - alert: ContainerMemoryHigh
+        # Any single container >6 GB RSS. Catches containerized heavy builds
+        # and memory-leaking apps. Host-level builds are caught by HostMemory*.
+        expr: |
+          container_memory_rss{name!=""} > 6e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'container {{ $labels.name }} using >6 GB RAM'
+          description: '{{ $labels.name }} RSS {{ $value | humanize1024 }}B for 10m on a 16 GB host.'
+
+      - alert: ContainerOOMKilled
+        expr: |
+          increase(container_oom_events_total{name!=""}[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'container {{ $labels.name }} OOM-killed'
+          description: '{{ $labels.name }} hit an OOM event in the last 10m.'
+
+      - alert: ContainerRestarting
+        expr: |
+          changes(container_start_time_seconds{name!=""}[15m]) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: 'container {{ $labels.name }} restart-looping'
+          description: '{{ $labels.name }} restarted >2 times in 15m.'

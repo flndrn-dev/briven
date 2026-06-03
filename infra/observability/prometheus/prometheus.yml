@@ -56,3 +56,17 @@ scrape_configs:
       - targets: ['postgres-exporter:9187']
         labels:
           service: postgres
+
+  # Host metrics (node-exporter) and per-container metrics (cAdvisor).
+  # Both run in this compose project; see compose.yml.
+  - job_name: node
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: host
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: containers
