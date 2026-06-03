@@ -14,6 +14,8 @@ WORKDIR /repo
 COPY . .
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
+# Bound build heap so a runaway build OOMs itself instead of swap-killing the host (kvm4 16GB).
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm --filter @briven/docs... build
 
 FROM node:22-slim AS runtime

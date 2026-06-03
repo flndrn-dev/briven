@@ -52,6 +52,10 @@ CMD ["pnpm", "dev:studio"]
 # Compile Next.js
 FROM dev AS builder
 
+# Bound build heap so a runaway build OOMs itself instead of swap-killing the host (kvm4 16GB).
+# Studio is Supabase-derived and genuinely heavy, so it gets a higher ceiling than the 4096 default.
+ENV NODE_OPTIONS="--max-old-space-size=6144"
+
 RUN pnpm --filter studio exec next build
 
 # Copy only compiled code and dependencies
