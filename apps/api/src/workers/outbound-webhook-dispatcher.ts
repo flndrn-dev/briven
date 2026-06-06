@@ -135,7 +135,7 @@ async function fireOne(
 
 export function startOutboundWebhookDispatcher(): void {
   if (timer) return;
-  if (!env.BRIVEN_DATABASE_URL) {
+  if (!env.BRIVEN_DOLT_URL) {
     log.warn('outbound_webhook_dispatcher_skipped_no_db');
     return;
   }

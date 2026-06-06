@@ -1,29 +1,34 @@
-import { rotateProjectRolePassword, schemaNameFor } from '../db/data-plane.js';
+import { dbNameFor, rotateProjectRolePassword } from '../db/data-plane.js';
 import { env } from '../env.js';
 
 /**
- * Issue a short-lived DSN the user can pass to `psql`. The role's password
- * is rotated on every call, so leaked DSNs expire with the SQL-side
- * VALID UNTIL clause — no manual revocation required.
+ * Issue a short-lived DSN the user can pass to `mysql`. The role's password
+ * is rotated on every call, so leaked DSNs expire with the MySQL-side
+ * PASSWORD EXPIRE clause — no manual revocation required.
+ *
+ * @README-DOLT ADR 0001 — migrated from Postgres `psql` DSN to MySQL DSN.
+ *   - `BRIVEN_DATA_PLANE_URL` → `BRIVEN_DOLT_URL`
+ *   - `schemaNameFor` → `dbNameFor`
+ *   - `-csearch_path=<schema>` → `database` query param (MySQL)
  */
 export async function issueShellToken(projectId: string): Promise<{
   dsn: string;
   role: string;
   expiresAt: Date;
 }> {
-  if (!env.BRIVEN_DATA_PLANE_URL) {
-    throw new Error('BRIVEN_DATA_PLANE_URL is not configured');
+  if (!env.BRIVEN_DOLT_URL) {
+    throw new Error('BRIVEN_DOLT_URL is not configured');
   }
   const { role, password, expiresAt } = await rotateProjectRolePassword(projectId, 15 * 60);
-  const schema = schemaNameFor(projectId);
+  const db = dbNameFor(projectId);
 
-  const base = new URL(env.BRIVEN_DATA_PLANE_URL);
+  const base = new URL(env.BRIVEN_DOLT_URL);
   base.username = role;
   base.password = password;
-  // why: `-csearch_path=<schema>` drops the user straight into their own
-  // tables without having to remember `SET search_path`. Platform tables
-  // are blocked by REVOKE at the grant layer, not by this path.
-  base.searchParams.set('options', `-csearch_path=${schema}`);
+  // MySQL clients use `database` query param to select the default
+  // database on connect — equivalent to Postgres `-csearch_path`.
+  // The user lands directly in their project database.
+  base.searchParams.set('database', db);
 
   return { dsn: base.toString(), role, expiresAt };
 }

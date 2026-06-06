@@ -23,10 +23,10 @@ const envSchema = z.object({
   // only for bundle fetches; never the public api.briven.tech hostname.
   BRIVEN_API_INTERNAL_URL: z.string().url().default('http://localhost:3001'),
 
-  // Data-plane postgres URL — same cluster the api provisions per-project
-  // schemas against. The runtime opens a pooled connection here and scopes
-  // `search_path` per invoke so user functions only see their own tables.
-  BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
+  // @README-DOLT ADR 0001 — Dolt URL for the runtime's database pool.
+  // The runtime opens pooled connections here and switches database
+  // per invoke via `USE proj_<projectId>`.
+  BRIVEN_DOLT_URL: z.string().url().optional(),
 
   // Redis URL — used to publish function invocation log envelopes as a
   // stream. Optional: when unset the publisher is a no-op and invocations

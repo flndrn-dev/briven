@@ -34,11 +34,12 @@ export function getPool(): IsolatePoolImpl {
       // same trust boundary as the inline executor. The isolate never
       // sees raw connection state; it only sees the rows we ship back.
       // `as never[]` matches the pattern used in `query-builder.ts`;
-      // postgres.js's generic for `unsafe` is too tight to express
-      // "any JSON-serializable param" without a cast.
-      return withProjectTx(projectId, async (tx) =>
-        tx.unsafe(sql, params as never[]),
-      ) as Promise<readonly unknown[]>;
+      // @README-DOLT: mysql2 `conn.query()` replaces postgres.js `tx.unsafe()`.
+      // Same trust boundary — the isolate never sees raw connection state.
+      return withProjectTx(projectId, async (conn) => {
+        const [rows] = await conn.query(sql, params);
+        return rows as readonly unknown[];
+      });
     },
     loadProjectEnv: fetchProjectEnv,
     onLog: (line, projectId, envValues) => {

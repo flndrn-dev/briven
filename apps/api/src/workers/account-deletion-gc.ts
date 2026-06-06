@@ -51,7 +51,7 @@ async function tick(): Promise<void> {
  */
 export function startAccountDeletionGc(): void {
   if (timer) return;
-  if (!env.BRIVEN_DATABASE_URL) {
+  if (!env.BRIVEN_DOLT_URL) {
     log.warn('account_deletion_gc_skipped_no_db');
     return;
   }

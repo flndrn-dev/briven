@@ -35,25 +35,23 @@ healthRouter.get('/health', (c) =>
 
 /**
  * /ready — dependency readiness. Returns 200 only when every required
- * upstream is reachable (control-plane postgres, data-plane postgres,
- * runtime reachable from the swarm network).
+ * upstream is reachable.
+ *
+ * @README-DOLT: BRIVEN_DOLT_URL serves both control-plane queries and
+ * data-plane (per-project databases). A single ping covers both.
  */
 healthRouter.get('/ready', async (c) => {
-  const [controlOk, dataOk, runtimeOk, redisOk] = await Promise.all([
-    env.BRIVEN_DATABASE_URL ? pingDb() : Promise.resolve(false),
-    env.BRIVEN_DATA_PLANE_URL ? pingDataPlane() : Promise.resolve(false),
+  const [doltOk, runtimeOk, redisOk] = await Promise.all([
+    env.BRIVEN_DOLT_URL ? Promise.all([pingDb(), pingDataPlane()]).then(
+      ([c, d]) => c && d,
+    ) : Promise.resolve(false),
     probeRuntime(),
     env.BRIVEN_REDIS_URL ? pingRedis() : Promise.resolve(false),
   ]);
 
   const checks = {
-    control_postgres: env.BRIVEN_DATABASE_URL
-      ? controlOk
-        ? 'ok'
-        : 'unreachable'
-      : 'not_configured',
-    data_plane_postgres: env.BRIVEN_DATA_PLANE_URL
-      ? dataOk
+    dolt: env.BRIVEN_DOLT_URL
+      ? doltOk
         ? 'ok'
         : 'unreachable'
       : 'not_configured',
@@ -64,7 +62,7 @@ healthRouter.get('/ready', async (c) => {
   // Redis powers logs streaming + rate limits. Required when configured;
   // unconfigured = dev mode where logs/limits silently no-op.
   const redisRequired = !!env.BRIVEN_REDIS_URL;
-  const ready = controlOk && dataOk && runtimeOk && (!redisRequired || redisOk);
+  const ready = doltOk && runtimeOk && (!redisRequired || redisOk);
   return c.json({ status: ready ? 'ready' : 'not_ready', checks }, ready ? 200 : 503);
 });
 

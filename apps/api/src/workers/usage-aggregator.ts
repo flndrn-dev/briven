@@ -174,7 +174,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
  */
 export function startUsageAggregator(): void {
   if (timer) return;
-  if (!env.BRIVEN_DATABASE_URL) {
+  if (!env.BRIVEN_DOLT_URL) {
     log.warn('usage_aggregator_skipped_no_db');
     return;
   }

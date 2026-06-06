@@ -1,4 +1,4 @@
-import type postgres from 'postgres';
+import type { PoolConnection } from 'mysql2/promise';
 
 import type {
   Ctx,
@@ -13,24 +13,41 @@ import type {
 } from '@briven/schema';
 
 /**
- * Phase 1 query builder backed by `postgres` and a per-invoke transaction.
+ * Phase 1 query builder backed by `mysql2` and a per-invoke transaction.
  *
  * Scope: covers the 90% path from the `Ctx` interface in @briven/schema —
  * select / insert / update / delete with where (equality), orderBy, limit,
- * offset, returning. Predicates beyond equality, joins, transactions
- * exposed to user code, and parameterised raw queries land in Phase 2.
+ * offset. Predicates beyond equality, joins, transactions exposed to user
+ * code, and parameterised raw queries land in Phase 2.
  *
  * Table and column names are validated to a strict identifier shape before
  * being interpolated into SQL — never accept arbitrary strings here.
+ *
+ * @README-DOLT ADR 0001 — migrated from postgres to mysql2.
+ *
+ *   - Identifier quoting: `"name"` → `` `name` `` (MySQL backticks)
+ *   - Parameter placeholders: `$1`, `$2` → `?` (MySQL positional only)
+ *   - `RETURNING` clause: **removed** — MySQL does not support it.
+ *     Queries with `.returning()` return an empty array.
+ *     **Phase 5** must implement post-INSERT/UPDATE/DELETE SELECT.
+ *   - Vector search: pgvector operators (`<->`, `<#>`, `<=>`) are
+ *     Postgres-only. `vectorSearch()` throws an error.
+ *     **Phase 5** replaces with LanceDB embedded.
+ *   - `postgres.TransactionSql` → `mysql.PoolConnection`
+ *   - `tx.unsafe(sql, params)` → `conn.query(sql, params)`
  */
 
 const IDENT = /^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/;
 
+/**
+ * @README-DOLT MySQL uses backticks for identifier quoting,
+ * not double quotes.
+ */
 function quote(name: string): string {
   if (!IDENT.test(name)) {
     throw new Error(`invalid identifier: ${JSON.stringify(name)}`);
   }
-  return `"${name}"`;
+  return `\`${name}\``;
 }
 
 function quoteList(names: readonly string[]): string {
@@ -43,7 +60,7 @@ class WhereClause {
 
   add(predicate: Record<string, unknown>): void {
     for (const [col, value] of Object.entries(predicate)) {
-      this.parts.push(`${quote(col)} = $${this.params.length + 1}`);
+      this.parts.push(`${quote(col)} = ?`);
       this.params.push(value);
     }
   }
@@ -55,10 +72,6 @@ class WhereClause {
   values(): unknown[] {
     return this.params;
   }
-
-  count(): number {
-    return this.params.length;
-  }
 }
 
 class SelectImpl implements SelectQuery {
@@ -69,7 +82,7 @@ class SelectImpl implements SelectQuery {
   private _offset: number | null = null;
 
   constructor(
-    private readonly tx: postgres.TransactionSql,
+    private readonly conn: PoolConnection,
     private readonly table: string,
     columns?: readonly string[],
   ) {
@@ -109,7 +122,8 @@ class SelectImpl implements SelectQuery {
     if (this.order) sql += ` ORDER BY ${quote(this.order.col)} ${this.order.dir.toUpperCase()}`;
     if (this._limit !== null) sql += ` LIMIT ${Number(this._limit)}`;
     if (this._offset !== null) sql += ` OFFSET ${Number(this._offset)}`;
-    return this.tx.unsafe(sql, this.w.values() as never[]) as Promise<unknown[]>;
+    const [rows] = await this.conn.query(sql, this.w.values());
+    return rows as unknown[];
   }
 }
 
@@ -117,13 +131,16 @@ class InsertImpl implements InsertQuery {
   private returningCols: readonly string[] | null = null;
 
   constructor(
-    private readonly tx: postgres.TransactionSql,
+    private readonly conn: PoolConnection,
     private readonly table: string,
     private readonly values: Record<string, unknown> | readonly Record<string, unknown>[],
   ) {}
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
+    // @README-DOLT Phase 5: MySQL has no RETURNING clause.
+    // Currently returns empty array. Phase 5 must implement
+    // post-INSERT SELECT to return inserted rows.
     return this.execute();
   }
 
@@ -143,16 +160,19 @@ class InsertImpl implements InsertQuery {
     const valueRows = rows.map((r) => {
       const placeholders = cols.map((c) => {
         params.push(r[c]);
-        return `$${params.length}`;
+        return '?';
       });
       return `(${placeholders.join(', ')})`;
     });
-    let sql = `INSERT INTO ${quote(this.table)} (${colSql}) VALUES ${valueRows.join(', ')}`;
+    // @README-DOLT: no RETURNING clause in MySQL.
+    // Phase 5: follow INSERT with SELECT WHERE to return rows.
+    const sql = `INSERT INTO ${quote(this.table)} (${colSql}) VALUES ${valueRows.join(', ')}`;
     if (this.returningCols !== null) {
-      const ret = this.returningCols.length === 0 ? '*' : quoteList(this.returningCols);
-      sql += ` RETURNING ${ret}`;
+      // RETURNING is not supported — caller gets empty array.
+      // Phase 5 will add SELECT after INSERT.
     }
-    return this.tx.unsafe(sql, params as never[]) as Promise<unknown[]>;
+    await this.conn.query(sql, params);
+    return [];
   }
 }
 
@@ -161,7 +181,7 @@ class UpdateImpl implements UpdateQuery {
   private returningCols: readonly string[] | null = null;
 
   constructor(
-    private readonly tx: postgres.TransactionSql,
+    private readonly conn: PoolConnection,
     private readonly table: string,
     private readonly patch: Record<string, unknown>,
   ) {}
@@ -173,6 +193,7 @@ class UpdateImpl implements UpdateQuery {
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
+    // @README-DOLT Phase 5: MySQL has no RETURNING clause.
     return this.execute();
   }
 
@@ -188,17 +209,18 @@ class UpdateImpl implements UpdateQuery {
     const params: unknown[] = [];
     for (const [col, value] of Object.entries(this.patch)) {
       params.push(value);
-      setParts.push(`${quote(col)} = $${params.length}`);
+      setParts.push(`${quote(col)} = ?`);
     }
-    const whereParts = this.w.sql().replace(/\$(\d+)/g, (_, n) => {
-      return `$${Number(n) + params.length}`;
-    });
-    let sql = `UPDATE ${quote(this.table)} SET ${setParts.join(', ')}${whereParts}`;
+    const whereSql = this.w.sql();
+    const allParams = [...params, ...this.w.values()];
+    // @README-DOLT: no RETURNING clause in MySQL.
+    // Phase 5: follow UPDATE with SELECT WHERE to return updated rows.
+    let sql = `UPDATE ${quote(this.table)} SET ${setParts.join(', ')}${whereSql}`;
     if (this.returningCols !== null) {
-      const ret = this.returningCols.length === 0 ? '*' : quoteList(this.returningCols);
-      sql += ` RETURNING ${ret}`;
+      // RETURNING is not supported — caller gets empty array.
     }
-    return this.tx.unsafe(sql, [...params, ...this.w.values()] as never[]) as Promise<unknown[]>;
+    await this.conn.query(sql, allParams);
+    return [];
   }
 }
 
@@ -207,7 +229,7 @@ class DeleteImpl implements DeleteQuery {
   private returningCols: readonly string[] | null = null;
 
   constructor(
-    private readonly tx: postgres.TransactionSql,
+    private readonly conn: PoolConnection,
     private readonly table: string,
   ) {}
 
@@ -218,6 +240,7 @@ class DeleteImpl implements DeleteQuery {
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
+    // @README-DOLT Phase 5: MySQL has no RETURNING clause.
     return this.execute();
   }
 
@@ -231,27 +254,25 @@ class DeleteImpl implements DeleteQuery {
   private async execute(): Promise<unknown[]> {
     let sql = `DELETE FROM ${quote(this.table)}${this.w.sql()}`;
     if (this.returningCols !== null) {
-      const ret = this.returningCols.length === 0 ? '*' : quoteList(this.returningCols);
-      sql += ` RETURNING ${ret}`;
+      // @README-DOLT Phase 5: MySQL has no RETURNING clause.
+      // Caller gets empty array. Phase 5 adds post-DELETE SELECT.
     }
-    return this.tx.unsafe(sql, this.w.values() as never[]) as Promise<unknown[]>;
+    await this.conn.query(sql, this.w.values());
+    return [];
   }
 }
 
 /**
- * pgvector nearest-neighbour query. Compiles to
- *   SELECT <cols> FROM <table> WHERE <predicate> ORDER BY <col> <op> $N LIMIT $N+1
- * The distance operator maps `l2`→`<->`, `inner_product`→`<#>`, `cosine`→`<=>`.
- * Default columns = all columns minus the vector column itself (the
- * vector payload is typically large and not useful to ship back to
- * callers; explicit .select(['embedding', ...]) opts back in).
+ * @README-DOLT Phase 5: pgvector operators (`<->`, `<#>`, `<=>`)
+ * are Postgres-only. Vector search via LanceDB embedded replaces
+ * this implementation in Phase 5. For now, throws an error.
  */
 class VectorSearchImpl implements VectorSearchQuery {
   private readonly w = new WhereClause();
   private selectedCols: readonly string[] | null = null;
 
   constructor(
-    private readonly tx: postgres.TransactionSql,
+    private readonly conn: PoolConnection,
     private readonly table: string,
     private readonly input: VectorSearchInput,
   ) {}
@@ -274,41 +295,25 @@ class VectorSearchImpl implements VectorSearchQuery {
   }
 
   private async execute(): Promise<unknown[]> {
-    const opMap: Record<'l2' | 'inner_product' | 'cosine', string> = {
-      l2: '<->',
-      inner_product: '<#>',
-      cosine: '<=>',
-    };
-    const op = opMap[this.input.distance ?? 'l2'];
-    const limit = Math.min(Math.max(this.input.limit ?? 10, 1), 1000);
-    // Default projection = * minus the vector column. Callers opt in
-    // explicitly with .select(['embedding', ...]) when they want it.
-    const cols =
-      this.selectedCols === null
-        ? '*'
-        : this.selectedCols.length === 0
-          ? '*'
-          : quoteList(this.selectedCols);
-    const wherePart = this.w.sql();
-    // The query vector + the limit live as positional params. The
-    // vector serialises to pgvector via its textual form `[1,2,3]`.
-    const vectorParam = `[${this.input.vector.join(',')}]`;
-    const sql =
-      `SELECT ${cols} FROM ${quote(this.table)}${wherePart} ` +
-      `ORDER BY ${quote(this.input.column)} ${op} $${this.w.count() + 1} ` +
-      `LIMIT $${this.w.count() + 2}`;
-    const params = [...this.w.values(), vectorParam, limit];
-    return this.tx.unsafe(sql, params as never[]) as Promise<unknown[]>;
+    throw new Error(
+      'ctx.db().vectorSearch() is not available on Dolt. ' +
+      'Vector search will ship with LanceDB in Phase 5. ' +
+      'See docs/ADR/0001-dolt-migration.md § "Vector search".',
+    );
   }
 }
 
 /**
  * Build a `DbClient` and a Set the caller can read after the function
  * resolves — every `ctx.db('<table>')` call records the table name. The
- * realtime service uses this to decide which postgres LISTEN channels to
- * subscribe to for change-driven re-invocation.
+ * realtime service uses this to decide which tables to watch for
+ * change-driven re-invocation.
+ *
+ * @README-DOLT Phase 2: The realtime service replaces Postgres LISTEN/NOTIFY
+ * with Dolt commit-diff polling. The `touched` Set is still recorded; Phase 2
+ * consumes it via the PollManager instead of LISTEN channels.
  */
-export function buildDbClient(tx: postgres.TransactionSql): {
+export function buildDbClient(conn: PoolConnection): {
   db: DbClient;
   touched: Set<string>;
 } {
@@ -316,23 +321,24 @@ export function buildDbClient(tx: postgres.TransactionSql): {
   const dbFn = ((table: string): TableQuery => {
     touched.add(table);
     return {
-      select: (cols) => new SelectImpl(tx, table, cols),
-      insert: (values) => new InsertImpl(tx, table, values),
-      update: (patch) => new UpdateImpl(tx, table, patch),
-      delete: () => new DeleteImpl(tx, table),
-      vectorSearch: (input) => new VectorSearchImpl(tx, table, input),
+      select: (cols) => new SelectImpl(conn, table, cols),
+      insert: (values) => new InsertImpl(conn, table, values),
+      update: (patch) => new UpdateImpl(conn, table, patch),
+      delete: () => new DeleteImpl(conn, table),
+      vectorSearch: (input) => new VectorSearchImpl(conn, table, input),
     };
   }) as DbClient;
 
   dbFn.execute = async (sql: string, params: readonly unknown[] = []) => {
-    return tx.unsafe(sql, [...params] as never[]) as Promise<unknown[]>;
+    const [rows] = await conn.query(sql, [...params]);
+    return rows as unknown[];
   };
 
   return { db: dbFn, touched };
 }
 
 export function makeCtx(
-  tx: postgres.TransactionSql,
+  conn: PoolConnection,
   request: {
     requestId: string;
     auth: Ctx['auth'];
@@ -340,7 +346,7 @@ export function makeCtx(
     log?: Ctx['log'];
   },
 ): { ctx: Ctx; touched: Set<string> } {
-  const { db, touched } = buildDbClient(tx);
+  const { db, touched } = buildDbClient(conn);
   const ctx: Ctx = {
     db,
     requestId: request.requestId,

@@ -75,8 +75,8 @@ authServiceRouter.get('/v1/auth-service/health', (c) =>
  */
 authServiceRouter.get('/v1/auth-service/ready', (c) => {
   const masterKeyConfigured = Boolean(process.env.BRIVEN_AUTH_MASTER_KEY);
-  const dataPlaneConfigured = Boolean(env.BRIVEN_DATA_PLANE_URL);
-  const ready = masterKeyConfigured && dataPlaneConfigured;
+  const doltConfigured = Boolean(env.BRIVEN_DOLT_URL);
+  const ready = masterKeyConfigured && doltConfigured;
   return c.json(
     {
       status: ready ? 'ready' : 'degraded',
