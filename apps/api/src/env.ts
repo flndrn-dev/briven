@@ -14,13 +14,10 @@ const envSchema = z.object({
   BRIVEN_API_ORIGIN: z.string().url().default('http://localhost:3001'),
   BRIVEN_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
-  // Control-plane meta-DB — required once Phase 1 week 1 services are wired.
-  BRIVEN_DATABASE_URL: z.string().url().optional(),
-
-  // Data-plane: shared postgres cluster where each project gets its own
-  // schema. CLAUDE.md §3.4 — schema-per-tenant up to Team tier, then
-  // dedicated cluster per tenant. Phase 1 has one cluster.
-  BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
+  // @README-DOLT ADR 0001 — single Dolt URL replaces both
+  // BRIVEN_DATABASE_URL (control plane) and BRIVEN_DATA_PLANE_URL
+  // (data plane / per-project databases).
+  BRIVEN_DOLT_URL: z.string().url().optional(),
 
   // Redis — sessions, queues. Optional until auth lands.
   BRIVEN_REDIS_URL: z.string().url().optional(),
@@ -231,13 +228,12 @@ if (env.BRIVEN_ENV !== 'development') {
       'BRIVEN_ENCRYPTION_KEY must be set outside development (AES-256 KEK for customer env vars at rest)',
     );
   }
-  // why: BRIVEN_DATA_PLANE_URL is marked .optional() so local dev can boot
-  // without a data-plane, but every customer-facing operation (project
-  // create, schema apply, studio reads/writes) requires it. Failing here
-  // surfaces the misconfiguration at boot instead of on the first request.
-  if (!env.BRIVEN_DATA_PLANE_URL) {
+  // @README-DOLT: BRIVEN_DOLT_URL serves as both control-plane and data-plane
+  // URL. Failing here surfaces the misconfiguration at boot instead of on
+  // the first request.
+  if (!env.BRIVEN_DOLT_URL) {
     throw new Error(
-      'BRIVEN_DATA_PLANE_URL must be set outside development (per-project schemas live in this cluster)',
+      'BRIVEN_DOLT_URL must be set outside development (Dolt serves both control-plane and per-project databases)',
     );
   }
 }

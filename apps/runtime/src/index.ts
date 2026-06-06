@@ -66,7 +66,7 @@ app.get('/ready', async (c) => {
       status: ready ? 'ready' : 'not_ready',
       checks: {
         api: apiOk ? 'ok' : 'unreachable',
-        data_plane_postgres: env.BRIVEN_DATA_PLANE_URL
+        data_plane_dolt: env.BRIVEN_DOLT_URL
           ? dpOk
             ? 'ok'
             : 'unreachable'
@@ -89,16 +89,18 @@ async function probeApi(): Promise<boolean> {
 }
 
 async function probeDataPlane(): Promise<boolean> {
-  if (!env.BRIVEN_DATA_PLANE_URL) return false;
+  if (!env.BRIVEN_DOLT_URL) return false;
   try {
-    const postgresMod = await import('postgres');
-    const sql = postgresMod.default(env.BRIVEN_DATA_PLANE_URL, {
-      max: 1,
-      connect_timeout: 2,
-      prepare: false,
+    // @README-DOLT: migrated from dynamic `import('postgres')` to static
+    // `import('mysql2/promise')` for the readiness probe. Opens a single
+    // connection, pings, and closes — never leaves a connection in the pool.
+    const mysql2 = await import('mysql2/promise');
+    const conn = await mysql2.createConnection({
+      uri: env.BRIVEN_DOLT_URL,
+      connectTimeout: 2000,
     });
-    await sql`SELECT 1`;
-    await sql.end({ timeout: 1 });
+    await conn.ping();
+    await conn.end();
     return true;
   } catch {
     return false;
@@ -135,11 +137,10 @@ app.post('/invoke', async (c) => {
 // inside the swarm overlay network and the host firewall keeps the port
 // off the public internet. Adding bearer-auth here would force every
 // scrape config to manage a secret.
-app.get('/metrics', (c) =>
-  c.text(renderPrometheus(), 200, {
-    'content-type': 'text/plain; version=0.0.4',
-  }),
-);
+app.get('/metrics', async (c) => {
+  const text = await renderPrometheus();
+  return c.text(text, 200, { 'content-type': 'text/plain; version=0.0.4' });
+});
 
 // Eagerly construct the pool on boot so the gauge provider has a stable
 // reference before the first scrape arrives. `getPool()` is idempotent —

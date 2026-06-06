@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 
 import { constantTimeEqual, resolveBuildIdentity } from '@briven/shared';
 import { createLogger } from '@briven/shared/observability';
-import postgres from 'postgres';
+import mysql from 'mysql2/promise';
 import { z } from 'zod';
 
 import { env } from './env.js';
@@ -37,17 +37,17 @@ const log = createLogger({
  *
  * Subscription lifecycle:
  *   1. Client subscribes → realtime calls apps/api invoke endpoint
- *   2. Response includes `touchedTables`; realtime LISTENs on
- *      `briven_<projectSchema>_<table>` for each (one LISTEN per channel
- *      shared across subscriptions, refcounted)
- *   3. Postgres NOTIFY → realtime re-invokes every subscription that
+ *   2. Response includes `touchedTables`; realtime watches those tables
+ *      for changes (Phase 2: Dolt commit-diff polling)
+ *   3. Change detected → realtime re-invokes every subscription that
  *      touched that table, sends a fresh `data` frame
  *   4. Unsubscribe / disconnect → drop the subscription, decrement channel
  *      refcounts, UNLISTEN when no subscriber remains
  *
- * Note: postgres LISTEN is connection-scoped. We hold a single dedicated
- * connection (no pooling) for the whole realtime instance and serialise
- * LISTEN/UNLISTEN through it.
+ * @README-DOLT Phase 2: Postgres LISTEN/NOTIFY is replaced with Dolt
+ * commit-diff polling (500ms default, configurable). Phase 1 stubs out
+ * the listener — subscriptions record `touchedTables` but no change
+ * notifications are delivered until Phase 2 lands.
  */
 
 const subscribeSchema = z.object({
@@ -139,46 +139,40 @@ async function resolveProjectCap(projectId: string): Promise<number | null> {
   }
 }
 
-function schemaNameFor(projectId: string): string {
+function dbNameFor(projectId: string): string {
   return `proj_${projectId.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
 }
 
 function channelFor(projectId: string, table: string): string {
-  return `briven_${schemaNameFor(projectId)}_${table}`;
+  return `briven_${dbNameFor(projectId)}_${table}`;
 }
 
-let listener: postgres.Sql | null = null;
-
-async function getListener(): Promise<postgres.Sql | null> {
-  if (!env.BRIVEN_DATA_PLANE_URL) return null;
-  if (listener) return listener;
-  listener = postgres(env.BRIVEN_DATA_PLANE_URL, {
-    max: 1,
-    idle_timeout: 0,
-    connect_timeout: 5,
-    prepare: false,
+// @README-DOLT Phase 2: Listener stubs. Phase 1 records touchedTables
+// but does not deliver change notifications. Phase 2 replaces these
+// with Dolt commit-diff polling via PollManager.
+let _listenerPool: mysql.Pool | null = null;
+async function ensurePool(): Promise<mysql.Pool | null> {
+  if (!env.BRIVEN_DOLT_URL) return null;
+  if (_listenerPool) return _listenerPool;
+  _listenerPool = mysql.createPool({
+    uri: env.BRIVEN_DOLT_URL,
+    connectionLimit: 1,
+    idleTimeout: 0,
+    connectTimeout: 5000,
   });
-  return listener;
+  return _listenerPool;
 }
 
 async function startListen(channel: string): Promise<void> {
-  const sql = await getListener();
-  if (!sql) return;
-  // postgres.js v3 re-issues LISTEN automatically on reconnect when the
-  // subscription is still attached; the third callback fires every time the
-  // attachment goes live, including after a reconnect. We log it so the loss
-  // and recovery of a connection is visible in ops.
-  await sql.listen(
-    channel,
-    () => fireChannel(channel),
-    () => log.info('realtime_listen_attached', { channel }),
-  );
+  // @README-DOLT Phase 2: stub — no LISTEN on Dolt.
+  // Phase 2 PollManager subscribes to this channel.
+  log.debug('realtime_listen_stub', { channel, phase: 1 });
 }
 
 async function stopListen(channel: string): Promise<void> {
-  const sql = await getListener();
-  if (!sql) return;
-  await sql.unsafe(`UNLISTEN "${channel}"`).catch(() => undefined);
+  // @README-DOLT Phase 2: stub — no UNLISTEN on Dolt.
+  // Phase 2 PollManager unsubscribes from this channel.
+  log.debug('realtime_unlisten_stub', { channel, phase: 1 });
 }
 
 async function fireChannel(channel: string): Promise<void> {
@@ -336,7 +330,8 @@ log.info('realtime_boot', {
   port: env.BRIVEN_REALTIME_PORT,
   apiUrl: env.BRIVEN_API_INTERNAL_URL,
   auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
-  listen: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
+  listen: env.BRIVEN_DOLT_URL ? 'enabled' : 'disabled',
+  phase: 1, // @README-DOLT: polling stub, Phase 2 delivers notifications
 });
 
 interface SocketHandle {
@@ -350,8 +345,9 @@ export default {
     if (url.pathname === '/health') return Response.json({ status: 'ok', service: 'realtime' });
     if (url.pathname === '/ready') {
       return Response.json({
-        status: env.BRIVEN_DATA_PLANE_URL ? 'ready' : 'degraded',
-        listen: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
+        status: env.BRIVEN_DOLT_URL ? 'ready' : 'degraded',
+        listen: env.BRIVEN_DOLT_URL ? 'enabled' : 'disabled',
+        phase: 1, // @README-DOLT: Phase 2 enables commit-diff polling
       });
     }
     if (url.pathname === '/info') {

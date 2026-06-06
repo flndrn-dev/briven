@@ -15,9 +15,9 @@
 // CSRF and reached the route handler / requireAuth bearer branch.
 
 const ORIGINAL_SECRET = process.env.BRIVEN_BETTER_AUTH_SECRET;
-const ORIGINAL_DB_URL = process.env.BRIVEN_DATABASE_URL;
+const ORIGINAL_DB_URL = process.env.BRIVEN_DOLT_URL;
 process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
-process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL ?? 'postgres://test:test@127.0.0.1:5/test';
+process.env.BRIVEN_DOLT_URL = ORIGINAL_DB_URL ?? 'mysql://test:test@127.0.0.1:5/test';
 
 import { afterAll, describe, expect, it } from 'bun:test';
 import type { AppEnv } from '../types/app-env.js';
@@ -52,6 +52,6 @@ describe('POST /v1/projects via CLI JWT', () => {
 afterAll(() => {
   if (ORIGINAL_SECRET === undefined) delete process.env.BRIVEN_BETTER_AUTH_SECRET;
   else process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET;
-  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_DATABASE_URL;
-  else process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL;
+  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_DOLT_URL;
+  else process.env.BRIVEN_DOLT_URL = ORIGINAL_DB_URL;
 });

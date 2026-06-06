@@ -1,5 +1,5 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/mysql2';
+import mysql from 'mysql2/promise';
 
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
@@ -7,45 +7,50 @@ import { log } from '../lib/logger.js';
 import * as schema from './schema.js';
 
 /**
- * Postgres connection pool for the control-plane meta-DB.
+ * MySQL connection pool for the control-plane meta-DB.
  *
  * Lazy-initialised: the API boots without a DB connection if one isn't
  * configured yet (Phase 0 dev), and `/ready` reports `not_configured`
- * until BRIVEN_DATABASE_URL is set. Real dependency probes arrive with
- * Phase 1 once the KVM4 Postgres is up.
+ * until BRIVEN_DOLT_URL is set.
+ *
+ * @README-DOLT ADR 0001 — migrated from postgres-js to mysql2.
+ *   - `postgres(url, opts)` → `mysql.createPool(url)`
+ *   - `postgres.Sql` → `mysql.Pool`
+ *   - `client.end()` → `pool.end()`
+ *   - `client\`SELECT 1\`` → `pool.query('SELECT 1')`
  */
-let _client: postgres.Sql | null = null;
+let _pool: mysql.Pool | null = null;
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
 export function getDb() {
-  if (!env.BRIVEN_DATABASE_URL) {
-    throw new Error('BRIVEN_DATABASE_URL is not configured');
+  if (!env.BRIVEN_DOLT_URL) {
+    throw new Error('BRIVEN_DOLT_URL is not configured');
   }
   if (!_db) {
-    _client = postgres(env.BRIVEN_DATABASE_URL, {
-      max: 10,
-      idle_timeout: 30,
-      connect_timeout: 5,
-      prepare: false,
+    _pool = mysql.createPool({
+      uri: env.BRIVEN_DOLT_URL,
+      connectionLimit: 10,
+      idleTimeout: 30000,
+      connectTimeout: 5000,
     });
-    _db = drizzle(_client, { schema });
+    _db = drizzle(_pool, { schema });
     log.info('db_connected', { max: 10 });
   }
   return _db;
 }
 
-export function getSqlClient(): postgres.Sql {
-  if (!_client) {
+export function getSqlClient(): mysql.Pool {
+  if (!_pool) {
     getDb();
   }
-  return _client as postgres.Sql;
+  return _pool as mysql.Pool;
 }
 
 export async function pingDb(): Promise<boolean> {
-  if (!env.BRIVEN_DATABASE_URL) return false;
+  if (!env.BRIVEN_DOLT_URL) return false;
   try {
-    const client = getSqlClient();
-    await client`SELECT 1`;
+    const pool = getSqlClient();
+    await pool.query('SELECT 1');
     return true;
   } catch (err) {
     log.warn('db_ping_failed', {
@@ -56,9 +61,9 @@ export async function pingDb(): Promise<boolean> {
 }
 
 export async function closeDb(): Promise<void> {
-  if (_client) {
-    await _client.end({ timeout: 5 });
-    _client = null;
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
     _db = null;
   }
 }

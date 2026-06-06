@@ -2,11 +2,11 @@ import { randomBytes } from 'node:crypto';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/mysql2';
+import mysql from 'mysql2/promise';
 
 import { authSchema } from '../db/auth-customer-schema.js';
-import { schemaNameFor } from '../db/data-plane.js';
+import { dbNameFor } from '../db/data-plane.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import {
@@ -22,24 +22,22 @@ import { TenantInstancePool } from './tenant-instance-pool.js';
  *
  * Lifecycle (ARCHITECTURE.md §3):
  *   - first `getAuthInstance(projectId)` lazily creates the pool
- *   - cache miss opens a per-project postgres pool with `search_path`
- *     locked to `proj_<projectId>` at libpq startup, wraps it in a
- *     Drizzle client, and constructs a `betterAuth({...})` instance
+ *   - cache miss opens a per-project MySQL pool with `database` locked
+ *     to `proj_<projectId>` at pool creation, wraps it in a Drizzle
+ *     client, and constructs a `betterAuth({...})` instance
  *   - cache hit returns the warm instance
- *   - eviction (idle, LRU, or forced) closes the per-project postgres
+ *   - eviction (idle, LRU, or forced) closes the per-project MySQL
  *     pool via `closePool()` so connections are released
  *
- * Search-path strategy: Better Auth's Drizzle adapter issues queries
- * outside our transaction boundaries, so the existing `runInProjectSchema`
- * pattern (`SET LOCAL search_path`) cannot reach those calls. Instead
- * the schema is bound to the **connection** itself at libpq startup via
- * postgres-js's `connection.search_path` option, which sets `search_path`
- * for every query on that physical connection.
+ * @README-DOLT ADR 0001 — migrated from postgres-js to mysql2.
  *
- * v0 provider configuration: email + password only. OAuth providers,
- * magic link, OTP, and passkeys land in the next step once the per-tenant
- * config storage + mittera mailer wiring are in place (BUILD_PLAN.md
- * §13 step 4).
+ *   - `postgres(url, { connection: { search_path } })` →
+ *     `mysql.createPool({ uri: url, database: dbName })`
+ *     MySQL's `database` pool option sets the default database for all
+ *     connections — same effect as Postgres `search_path`.
+ *   - `drizzle-orm/postgres-js` → `drizzle-orm/mysql2`
+ *   - `provider: 'pg'` → `provider: 'mysql'`
+ *   - `sql.end({ timeout: 5 })` → `pool.end()`
  */
 
 /**
@@ -77,23 +75,24 @@ function authSecret(): string {
 }
 
 async function createAuthInstance(projectId: string) {
-  if (!env.BRIVEN_DATA_PLANE_URL) {
-    throw new Error('BRIVEN_DATA_PLANE_URL not configured — briven auth cannot bind a schema');
+  if (!env.BRIVEN_DOLT_URL) {
+    throw new Error('BRIVEN_DOLT_URL not configured — briven auth cannot bind a database');
   }
-  const schema = schemaNameFor(projectId);
+  const db = dbNameFor(projectId);
 
-  // Per-project postgres pool. `connection.search_path` sets the schema
-  // for every query on every physical connection in the pool; the
-  // SET runs as part of the libpq startup packet so even queries that
-  // bypass our transaction wrapper land in the right schema.
-  const sql = postgres(env.BRIVEN_DATA_PLANE_URL, {
-    max: 5,
-    idle_timeout: 30,
-    connect_timeout: 5,
-    prepare: false,
-    connection: { search_path: schema },
+  // Per-project MySQL pool. `database` sets the default database for
+  // every connection in this pool — the equivalent of Postgres
+  // `connection.search_path`. All queries, including those issued by
+  // Better Auth's Drizzle adapter outside our transaction boundaries,
+  // land in the correct project database.
+  const sql = mysql.createPool({
+    uri: env.BRIVEN_DOLT_URL,
+    connectionLimit: 5,
+    idleTimeout: 30000,
+    connectTimeout: 5000,
+    database: db,
   });
-  const db = drizzle(sql);
+  const drizzleDb = drizzle(sql);
 
   const instance = betterAuth({
     appName: `briven-auth-${projectId}`,
@@ -104,8 +103,8 @@ async function createAuthInstance(projectId: string) {
     // claims `/v1/auth-tenant/*` so the two engines don't collide in
     // Hono routing. SDK + hosted-pages both target this prefix.
     basePath: '/v1/auth-tenant',
-    database: drizzleAdapter(db, {
-      provider: 'pg',
+    database: drizzleAdapter(drizzleDb, {
+      provider: 'mysql',
       schema: {
         user: authSchema.user,
         session: authSchema.session,
@@ -147,7 +146,7 @@ async function createAuthInstance(projectId: string) {
   return {
     betterAuth: instance,
     closePool: async () => {
-      await sql.end({ timeout: 5 });
+      await sql.end();
     },
   };
 }
@@ -197,22 +196,4 @@ export function invalidateAuthInstance(projectId: string): Promise<void> {
 export async function clearAuthInstancePool(): Promise<void> {
   if (!pool) return;
   await pool.clear();
-}
-
-/**
- * Current pool size. Returns 0 before any tenant has been touched.
- */
-export function authInstancePoolSize(): number {
-  return pool?.size ?? 0;
-}
-
-/**
- * Visible for tests — replace the pool factory with a synthetic one so
- * test files can exercise the lifecycle without a real postgres + Better
- * Auth roundtrip.
- */
-export function __unsafe_setAuthInstancePool_forTesting(
-  next: TenantInstancePool<BrivenAuthInstance> | null,
-): void {
-  pool = next;
 }

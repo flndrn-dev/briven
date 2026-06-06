@@ -15,10 +15,10 @@ const envSchema = z.object({
   // to validate the bearer token on the WebSocket upgrade.
   BRIVEN_RUNTIME_SHARED_SECRET: z.string().min(32).optional(),
 
-  // Data-plane URL: realtime opens a single dedicated connection here and
-  // issues `LISTEN briven_<schema>_<table>` per active subscription. When a
-  // NOTIFY arrives it re-invokes any subscriptions touching that table.
-  BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
+  // @README-DOLT ADR 0001 — single Dolt URL for connection pooling.
+  // Phase 1 stubs out LISTEN/NOTIFY; Phase 2 PollManager uses this
+  // for commit-diff polling.
+  BRIVEN_DOLT_URL: z.string().url().optional(),
 
   // Per-WebSocket subscription cap. A single client opening more than
   // this many concurrent subs gets `error: subscription_limit_ws`. Sized
