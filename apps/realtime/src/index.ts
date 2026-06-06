@@ -2,11 +2,11 @@ import { resolve } from 'node:path';
 
 import { constantTimeEqual, resolveBuildIdentity } from '@briven/shared';
 import { createLogger } from '@briven/shared/observability';
-import mysql from 'mysql2/promise';
 import { z } from 'zod';
 
 import { env } from './env.js';
 import { incCounter, registerGauge, renderPrometheus } from './metrics.js';
+import { PollManager } from './poll-manager.js';
 import { SubscriptionRegistry } from './subscription-registry.js';
 
 const BOOT_TIME = new Date().toISOString();
@@ -42,12 +42,12 @@ const log = createLogger({
  *   3. Change detected → realtime re-invokes every subscription that
  *      touched that table, sends a fresh `data` frame
  *   4. Unsubscribe / disconnect → drop the subscription, decrement channel
- *      refcounts, UNLISTEN when no subscriber remains
+ *      refcounts, stop polling the project when its last channel is removed
  *
- * @README-DOLT Phase 2: Postgres LISTEN/NOTIFY is replaced with Dolt
- * commit-diff polling (500ms default, configurable). Phase 1 stubs out
- * the listener — subscriptions record `touchedTables` but no change
- * notifications are delivered until Phase 2 lands.
+ * @README-DOLT Phase 2: Postgres LISTEN/NOTIFY replaced with Dolt
+ * commit-diff polling. The PollManager queries `DOLT_HASHOF('HEAD')`
+ * for each active project at the configured interval; when the hash
+ * changes it fires every channel belonging to that project.
  */
 
 const subscribeSchema = z.object({
@@ -147,32 +147,55 @@ function channelFor(projectId: string, table: string): string {
   return `briven_${dbNameFor(projectId)}_${table}`;
 }
 
-// @README-DOLT Phase 2: Listener stubs. Phase 1 records touchedTables
-// but does not deliver change notifications. Phase 2 replaces these
-// with Dolt commit-diff polling via PollManager.
-let _listenerPool: mysql.Pool | null = null;
-async function ensurePool(): Promise<mysql.Pool | null> {
-  if (!env.BRIVEN_URL) return null;
-  if (_listenerPool) return _listenerPool;
-  _listenerPool = mysql.createPool({
-    uri: env.BRIVEN_URL,
-    connectionLimit: 1,
-    idleTimeout: 0,
-    connectTimeout: 5000,
-  });
-  return _listenerPool;
+// ── PollManager — Dolt commit-diff polling (Phase 2) ──────────────
+// Replaces Postgres LISTEN/NOTIFY. Each project is polled for HEAD
+// changes; when a change is detected every channel for that project
+// fires via the existing `fireChannel` path.
+
+const pollManager = new PollManager(registry, fireChannel, env.BRIVEN_REALTIME_POLL_MS);
+
+// Per-project refcount — when the first channel is attached for a
+// project we call pollManager.addProject; when the last is detached
+// we call pollManager.removeProject. Keeps the poll set tight.
+const projectRefCount = new Map<string, number>();
+
+function projectIdFromChannel(channel: string): string | null {
+  // channels are `briven_<dbName>_<table>` where dbName = `proj_<sanitizedId>`.
+  // Strip the `briven_` prefix and the trailing `_<table>` suffix to recover
+  // the database name, then strip `proj_` to recover the raw project id.
+  const withoutPrefix = channel.slice('briven_'.length);
+  const lastUnderscore = withoutPrefix.lastIndexOf('_');
+  if (lastUnderscore === -1) return null;
+  const dbName = withoutPrefix.slice(0, lastUnderscore);
+  // dbName is `proj_<sanitized>`. The project id is everything after `proj_`.
+  // Since project ids are sanitised (alphanumeric + underscores only), this is
+  // a reversible mapping (the sanitised id is what's stored in the db name).
+  return dbName.slice('proj_'.length);
 }
 
 async function startListen(channel: string): Promise<void> {
-  // @README-DOLT Phase 2: stub — no LISTEN on Dolt.
-  // Phase 2 PollManager subscribes to this channel.
-  log.debug('realtime_listen_stub', { channel, phase: 1 });
+  const pid = projectIdFromChannel(channel);
+  if (!pid) return;
+  const prev = projectRefCount.get(pid) ?? 0;
+  projectRefCount.set(pid, prev + 1);
+  if (prev === 0) {
+    // First channel for this project — start polling it.
+    pollManager.addProject(pid);
+    log.info('realtime_project_watch_started', { projectId: pid, channel });
+  }
 }
 
 async function stopListen(channel: string): Promise<void> {
-  // @README-DOLT Phase 2: stub — no UNLISTEN on Dolt.
-  // Phase 2 PollManager unsubscribes from this channel.
-  log.debug('realtime_unlisten_stub', { channel, phase: 1 });
+  const pid = projectIdFromChannel(channel);
+  if (!pid) return;
+  const prev = projectRefCount.get(pid) ?? 0;
+  if (prev <= 1) {
+    projectRefCount.delete(pid);
+    pollManager.removeProject(pid);
+    log.info('realtime_project_watch_stopped', { projectId: pid, channel });
+  } else {
+    projectRefCount.set(pid, prev - 1);
+  }
 }
 
 async function fireChannel(channel: string): Promise<void> {
@@ -326,12 +349,24 @@ registerGauge('briven_realtime_connection_seconds_total', () => {
   return out;
 });
 
+// Eagerly open the PollManager pool so the first subscription doesn't
+// block on pool creation. When BRIVEN_URL is unset the init is a no-op;
+// PollManager handles the null pool gracefully.
+if (env.BRIVEN_URL) {
+  pollManager.init(env.BRIVEN_URL).catch((err) => {
+    log.error('realtime_poll_manager_init_failed', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
+}
+
 log.info('realtime_boot', {
   port: env.BRIVEN_REALTIME_PORT,
   apiUrl: env.BRIVEN_API_INTERNAL_URL,
   auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
-  listen: env.BRIVEN_URL ? 'enabled' : 'disabled',
-  phase: 1, // @README-DOLT: polling stub, Phase 2 delivers notifications
+  poll: env.BRIVEN_URL ? 'enabled' : 'disabled',
+  pollIntervalMs: env.BRIVEN_REALTIME_POLL_MS,
+  phase: 2, // @README-DOLT Phase 2: commit-diff polling live
 });
 
 interface SocketHandle {
@@ -346,8 +381,9 @@ export default {
     if (url.pathname === '/ready') {
       return Response.json({
         status: env.BRIVEN_URL ? 'ready' : 'degraded',
-        listen: env.BRIVEN_URL ? 'enabled' : 'disabled',
-        phase: 1, // @README-DOLT: Phase 2 enables commit-diff polling
+        poll: env.BRIVEN_URL ? 'enabled' : 'disabled',
+        pollIntervalMs: env.BRIVEN_REALTIME_POLL_MS,
+        activeProjects: pollManager.projectCount,
       });
     }
     if (url.pathname === '/info') {
