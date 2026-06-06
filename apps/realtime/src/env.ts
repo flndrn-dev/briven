@@ -20,6 +20,10 @@ const envSchema = z.object({
   // for commit-diff polling.
   BRIVEN_URL: z.string().url().optional(),
 
+  // Poll interval in ms for commit-diff change detection. Lower = less
+  // latency but more database load. Default 500 ms, floor 100 ms, cap 5000 ms.
+  BRIVEN_REALTIME_POLL_MS: z.coerce.number().int().min(100).max(5000).default(500),
+
   // Per-WebSocket subscription cap. A single client opening more than
   // this many concurrent subs gets `error: subscription_limit_ws`. Sized
   // so a normal app (one page, ~dozens of useQuery hooks) is well under,

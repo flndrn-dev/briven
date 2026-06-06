@@ -25,7 +25,7 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 |---|---|---|
 | 0 | ADR + architecture decisions | **done** |
 | 1 | Database engine swap: mysql2 driver, drizzle mysql-core, tenant isolation (database-per-project) | **done** |
-| 2 | Realtime: commit-diff polling, PollManager, trigger removal | pending |
+| 2 | Realtime: commit-diff polling, PollManager, trigger removal | **done** |
 | 3 | Auth: Better Auth mysql-core adapter | pending |
 | 4 | Storage: MinIO (unchanged) | pending |
 | 5 | Edge functions: MySQL query builder, LanceDB vectors | pending |
@@ -91,10 +91,21 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 - `vectorSearch()` throws a descriptive error (LanceDB replacement pending)
 - MySQL `TIMESTAMP` only stores to 2038-01-19 (acceptable for control-plane metadata)
 
-**Known Phase 2 gaps (not blocking):**
-- Realtime LISTEN/NOTIFY is stubbed — subscriptions record `touchedTables` but no change notifications fire
-- Metrics counters (`briven_realtime_notifies_total`, `briven_realtime_channels_active`) are inactive
+### Phase 2 complete (2026-06-07)
+
+**3 files changed / 1 new file:**
+
+- **`apps/realtime/src/poll-manager.ts`** (new, 164 lines) — `PollManager` class that queries `DOLT_HASHOF('HEAD')` for each active project at the configured interval. When the hash changes, fires every channel for that project via the `fireChannel` callback. Pool auto-starts on first project; auto-stops when no projects remain.
+- **`apps/realtime/src/index.ts`** — replaced `startListen`/`stopListen` stubs with real implementations. Added `projectRefCount` map to track per-project channel counts; `projectIdFromChannel()` parses channel names to extract project IDs. PollManager pool eager-init'd at boot.
+- **`apps/realtime/src/subscription-registry.ts`** — added `channelsForProject(projectId)` prefix-matching method.
+- **`apps/realtime/src/env.ts`** — added `BRIVEN_REALTIME_POLL_MS` (default 500ms, floor 100ms, cap 5000ms).
+- **`apps/realtime/src/metrics.ts`** — updated help text to reflect live commit-diff polling.
+
+**Design decisions:**
+- Polls at project granularity (not per-table). When any table in a project changes, all channels for that project fire. Simpler and correct — over-fires slightly but avoids per-table `dolt_diff` queries.
+- `projectIdFromChannel()` extracts the project id from channel names (`briven_proj_<sanitized>_<table>`). Since project ids are sanitised to alphanumeric+underscores, this is fully reversible.
+- First poll for a project stores the initial hash without firing — avoids spurious re-invocation on subscribe.
 
 ### Next action
 
-Start **Phase 2**: implement Dolt commit-diff polling (`PollManager`), replace LISTEN/NOTIFY stubs in `apps/realtime/src/index.ts`, and add `dolt_diff()` query logic. See `docs/ADR/0001-dolt-migration.md` § "Realtime: LISTEN/NOTIFY → commit-diff polling".
+Start **Phase 3**: verify Better Auth's mysql-core adapter wiring. The schema was migrated in Phase 1 (`auth-customer-schema.ts`, `auth-tenant-pool.ts` with `provider: 'mysql'`). Test end-to-end auth flows (signup, signin, session persistence, OAuth linking) against a Dolt instance.

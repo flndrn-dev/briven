@@ -9,8 +9,8 @@ import { createMetricsRegistry } from '@briven/shared/observability';
 const registry = createMetricsRegistry({
   help: {
     briven_realtime_subscriptions_active: 'Active websocket subscriptions',
-    briven_realtime_channels_active: 'Distinct channels currently watched (Phase 1 stub; Phase 2 commit-diff)',
-    briven_realtime_notifies_total: 'Total change events received (Phase 1 stub; Phase 2 commit-diff)',
+    briven_realtime_channels_active: 'Distinct channels currently watched via commit-diff polling',
+    briven_realtime_notifies_total: 'Total change events detected via Dolt commit-diff polling',
     briven_realtime_reinvoke_total:
       'Total function re-invocations triggered by change events, by outcome',
   },

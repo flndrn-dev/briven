@@ -58,6 +58,13 @@ export class SubscriptionRegistry {
     return this.channelToSubs.size;
   }
 
+  /** Return every channel that belongs to a given project. Channels are
+   *  named `briven_proj_<id>_<table>` — we prefix-match the project id. */
+  channelsForProject(projectId: string): string[] {
+    const prefix = `briven_${dbNameFor(projectId)}_`;
+    return [...this.channelToSubs.keys()].filter((c) => c.startsWith(prefix));
+  }
+
   /** Snapshot of all channels and their current sub counts. Used by the
    *  `/v1/realtime/stats` operator endpoint; not on any hot path. */
   channelCounts(): { channel: string; subscriptions: number }[] {
@@ -67,4 +74,9 @@ export class SubscriptionRegistry {
     }
     return out;
   }
+}
+
+function dbNameFor(projectId: string): string {
+  const safe = projectId.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  return `proj_${safe}`;
 }
