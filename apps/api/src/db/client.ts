@@ -13,7 +13,7 @@ import * as schema from './schema.js';
  * configured yet (Phase 0 dev), and `/ready` reports `not_configured`
  * until BRIVEN_URL is set.
  *
- * @README-DOLT ADR 0001 — migrated from postgres-js to mysql2.
+ * @README-BRIVEN ADR 0001 — migrated from postgres-js to mysql2.
  *   - `postgres(url, opts)` → `mysql.createPool(url)`
  *   - `postgres.Sql` → `mysql.Pool`
  *   - `client.end()` → `pool.end()`

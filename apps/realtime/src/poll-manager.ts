@@ -11,11 +11,11 @@ import type { SubscriptionRegistry } from './subscription-registry.js';
  *
  * Poll cycle per project:
  *   1. Acquire a connection from the pool, `USE proj_<id>`
- *   2. Query `SELECT DOLT_HASHOF('HEAD')` to get the current commit hash
+ *   2. Query `SELECT BRIVEN_HASHOF('HEAD')` to get the current commit hash
  *   3. If the hash changed since last poll, fire every channel for that
  *      project via the provided `onChange` callback
  *
- * @README-DOLT Phase 2: This replaces the Phase 1 stubs in
+ * @README-BRIVEN Phase 2: This replaces the Phase 1 stubs in
  * `apps/realtime/src/index.ts:startListen` / `stopListen`.
  * When no projects are active, the interval timer stops to avoid
  * burning CPU on an empty poll set.
@@ -127,7 +127,7 @@ export class PollManager {
     try {
       await conn.query(`USE \`${dbNameFor(projectId)}\``);
       const [rows] = await conn.query(
-        'SELECT DOLT_HASHOF(?) AS h',
+        'SELECT BRIVEN_HASHOF(?) AS h',
         ['HEAD'],
       );
       const h = (rows as Array<{ h: string | null }>)[0]?.h;

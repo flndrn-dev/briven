@@ -91,7 +91,7 @@ async function probeApi(): Promise<boolean> {
 async function probeDataPlane(): Promise<boolean> {
   if (!env.BRIVEN_URL) return false;
   try {
-    // @README-DOLT: migrated from dynamic `import('postgres')` to static
+    // @README-BRIVEN: migrated from dynamic `import('postgres')` to static
     // `import('mysql2/promise')` for the readiness probe. Opens a single
     // connection, pings, and closes — never leaves a connection in the pool.
     const mysql2 = await import('mysql2/promise');

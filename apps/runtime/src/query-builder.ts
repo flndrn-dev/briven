@@ -23,7 +23,7 @@ import type {
  * Table and column names are validated to a strict identifier shape before
  * being interpolated into SQL — never accept arbitrary strings here.
  *
- * @README-DOLT ADR 0001 — migrated from postgres to mysql2.
+ * @README-BRIVEN ADR 0001 — migrated from postgres to mysql2.
  *
  *   - Identifier quoting: `"name"` → `` `name` `` (MySQL backticks)
  *   - Parameter placeholders: `$1`, `$2` → `?` (MySQL positional only)
@@ -40,7 +40,7 @@ import type {
 const IDENT = /^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/;
 
 /**
- * @README-DOLT MySQL uses backticks for identifier quoting,
+ * @README-BRIVEN MySQL uses backticks for identifier quoting,
  * not double quotes.
  */
 function quote(name: string): string {
@@ -138,7 +138,7 @@ class InsertImpl implements InsertQuery {
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
-    // @README-DOLT Phase 5: MySQL has no RETURNING clause.
+    // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
     // Currently returns empty array. Phase 5 must implement
     // post-INSERT SELECT to return inserted rows.
     return this.execute();
@@ -164,7 +164,7 @@ class InsertImpl implements InsertQuery {
       });
       return `(${placeholders.join(', ')})`;
     });
-    // @README-DOLT: no RETURNING clause in MySQL.
+    // @README-BRIVEN: no RETURNING clause in MySQL.
     // Phase 5: follow INSERT with SELECT WHERE to return rows.
     const sql = `INSERT INTO ${quote(this.table)} (${colSql}) VALUES ${valueRows.join(', ')}`;
     if (this.returningCols !== null) {
@@ -193,7 +193,7 @@ class UpdateImpl implements UpdateQuery {
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
-    // @README-DOLT Phase 5: MySQL has no RETURNING clause.
+    // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
     return this.execute();
   }
 
@@ -213,7 +213,7 @@ class UpdateImpl implements UpdateQuery {
     }
     const whereSql = this.w.sql();
     const allParams = [...params, ...this.w.values()];
-    // @README-DOLT: no RETURNING clause in MySQL.
+    // @README-BRIVEN: no RETURNING clause in MySQL.
     // Phase 5: follow UPDATE with SELECT WHERE to return updated rows.
     let sql = `UPDATE ${quote(this.table)} SET ${setParts.join(', ')}${whereSql}`;
     if (this.returningCols !== null) {
@@ -240,7 +240,7 @@ class DeleteImpl implements DeleteQuery {
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
-    // @README-DOLT Phase 5: MySQL has no RETURNING clause.
+    // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
     return this.execute();
   }
 
@@ -254,7 +254,7 @@ class DeleteImpl implements DeleteQuery {
   private async execute(): Promise<unknown[]> {
     let sql = `DELETE FROM ${quote(this.table)}${this.w.sql()}`;
     if (this.returningCols !== null) {
-      // @README-DOLT Phase 5: MySQL has no RETURNING clause.
+      // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
       // Caller gets empty array. Phase 5 adds post-DELETE SELECT.
     }
     await this.conn.query(sql, this.w.values());
@@ -263,7 +263,7 @@ class DeleteImpl implements DeleteQuery {
 }
 
 /**
- * @README-DOLT Phase 5: pgvector operators (`<->`, `<#>`, `<=>`)
+ * @README-BRIVEN Phase 5: pgvector operators (`<->`, `<#>`, `<=>`)
  * are Postgres-only. Vector search via LanceDB embedded replaces
  * this implementation in Phase 5. For now, throws an error.
  */
@@ -309,7 +309,7 @@ class VectorSearchImpl implements VectorSearchQuery {
  * realtime service uses this to decide which tables to watch for
  * change-driven re-invocation.
  *
- * @README-DOLT Phase 2: The realtime service replaces Postgres LISTEN/NOTIFY
+ * @README-BRIVEN Phase 2: The realtime service replaces Postgres LISTEN/NOTIFY
  * with Dolt commit-diff polling. The `touched` Set is still recorded; Phase 2
  * consumes it via the PollManager instead of LISTEN channels.
  */

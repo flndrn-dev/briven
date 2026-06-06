@@ -6,7 +6,7 @@ import type { Config } from 'drizzle-kit';
  * Commands that hit a live database (`migrate`, `push`, `studio`) will fail
  * explicitly at drizzle-kit's level, which is clearer than throwing here.
  *
- * @README-DOLT ADR 0001 — migrated from postgresql to mysql dialect.
+ * @README-BRIVEN ADR 0001 — migrated from postgresql to mysql dialect.
  */
 const url = process.env.BRIVEN_URL;
 

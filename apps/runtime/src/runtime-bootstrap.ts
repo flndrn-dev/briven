@@ -34,7 +34,7 @@ export function getPool(): IsolatePoolImpl {
       // same trust boundary as the inline executor. The isolate never
       // sees raw connection state; it only sees the rows we ship back.
       // `as never[]` matches the pattern used in `query-builder.ts`;
-      // @README-DOLT: mysql2 `conn.query()` replaces postgres.js `tx.unsafe()`.
+      // @README-BRIVEN: mysql2 `conn.query()` replaces postgres.js `tx.unsafe()`.
       // Same trust boundary — the isolate never sees raw connection state.
       return withProjectTx(projectId, async (conn) => {
         const [rows] = await conn.query(sql, params);

@@ -6,7 +6,7 @@ import { env } from '../env.js';
  * is rotated on every call, so leaked DSNs expire with the MySQL-side
  * PASSWORD EXPIRE clause — no manual revocation required.
  *
- * @README-DOLT ADR 0001 — migrated from Postgres `psql` DSN to MySQL DSN.
+ * @README-BRIVEN ADR 0001 — migrated from Postgres `psql` DSN to MySQL DSN.
  *   - `BRIVEN_DATA_PLANE_URL` → `BRIVEN_URL`
  *   - `schemaNameFor` → `dbNameFor`
  *   - `-csearch_path=<schema>` → `database` query param (MySQL)

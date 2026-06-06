@@ -15,7 +15,7 @@ const envSchema = z.object({
   // to validate the bearer token on the WebSocket upgrade.
   BRIVEN_RUNTIME_SHARED_SECRET: z.string().min(32).optional(),
 
-  // @README-DOLT ADR 0001 — single Dolt URL for connection pooling.
+  // @README-BRIVEN ADR 0001 — single Dolt URL for connection pooling.
   // Phase 1 stubs out LISTEN/NOTIFY; Phase 2 PollManager uses this
   // for commit-diff polling.
   BRIVEN_URL: z.string().url().optional(),

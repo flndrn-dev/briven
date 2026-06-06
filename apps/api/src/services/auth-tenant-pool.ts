@@ -29,7 +29,7 @@ import { TenantInstancePool } from './tenant-instance-pool.js';
  *   - eviction (idle, LRU, or forced) closes the per-project MySQL
  *     pool via `closePool()` so connections are released
  *
- * @README-DOLT ADR 0001 — migrated from postgres-js to mysql2.
+ * @README-BRIVEN ADR 0001 — migrated from postgres-js to mysql2.
  *
  *   - `postgres(url, { connection: { search_path } })` →
  *     `mysql.createPool({ uri: url, database: dbName })`
