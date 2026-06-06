@@ -20,7 +20,7 @@
  * derived from these models, then records the applied migration in
  * `_briven_migrations` like every other schema apply.
  *
- * @README-DOLT ADR 0001 — migrated from pg-core to mysql-core.
+ * @README-BRIVEN ADR 0001 — migrated from pg-core to mysql-core.
  *
  *   - `pgTable` → `mysqlTable`
  *   - `text('id').primaryKey()` → `varchar('id', { length: 36 }).primaryKey()`

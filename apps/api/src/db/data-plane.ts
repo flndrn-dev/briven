@@ -12,7 +12,7 @@ import { log } from '../lib/logger.js';
  * to a dedicated server per CLAUDE.md §3.4 — when that lands this file
  * becomes a per-project router instead of a singleton.
  *
- * @README-DOLT ADR 0001 — migrated from postgres (schema-per-project)
+ * @README-BRIVEN ADR 0001 — migrated from postgres (schema-per-project)
  *   to mysql2 (database-per-project).
  *
  *   - `postgres(url, opts)` → `mysql.createPool({ uri: url, ...opts })`
@@ -207,7 +207,7 @@ export async function dropProjectSchema(projectId: string): Promise<void> {
  * dedicated connection, switches to the project database via `USE`, and
  * runs the function within a transaction.
  *
- * @README-DOLT MySQL `USE` is connection-scoped, not transaction-scoped.
+ * @README-BRIVEN MySQL `USE` is connection-scoped, not transaction-scoped.
  * We get a dedicated connection per call to avoid polluting the pool's
  * default database. The connection is released back to the pool after
  * the function completes (or throws).

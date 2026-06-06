@@ -23,7 +23,7 @@ const envSchema = z.object({
   // only for bundle fetches; never the public api.briven.tech hostname.
   BRIVEN_API_INTERNAL_URL: z.string().url().default('http://localhost:3001'),
 
-  // @README-DOLT ADR 0001 — Dolt URL for the runtime's database pool.
+  // @README-BRIVEN ADR 0001 — Dolt URL for the runtime's database pool.
   // The runtime opens pooled connections here and switches database
   // per invoke via `USE proj_<projectId>`.
   BRIVEN_URL: z.string().url().optional(),

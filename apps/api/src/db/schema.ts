@@ -10,7 +10,7 @@
  * via its drizzle adapter; schema here matches Better Auth's expected shape so
  * the adapter works without translation.
  *
- * @README-DOLT ADR 0001 — migrated from pg-core to mysql-core.
+ * @README-BRIVEN ADR 0001 — migrated from pg-core to mysql-core.
  *
  *   - `text('id').primaryKey()` → `varchar('id', { length: 36 }).primaryKey()`
  *     MySQL cannot primary-key on TEXT.
@@ -412,7 +412,7 @@ export const scheduleStatus = ['active', 'paused', 'disabled'] as const;
 export type ScheduleStatus = (typeof scheduleStatus)[number];
 
 /**
- * @README-DOLT Partial unique index removed.
+ * @README-BRIVEN Partial unique index removed.
  *
  * The original pg-core schema had:
  *   uniqueIndex('project_schedules_project_name_idx')
@@ -446,7 +446,7 @@ export const projectSchedules = mysqlTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-DOLT: was partial unique (WHERE deleted_at IS NULL).
+    // @README-BRIVEN: was partial unique (WHERE deleted_at IS NULL).
     // Now full unique — app must enforce soft-delete uniqueness.
     projectNameIdx: uniqueIndex('project_schedules_project_name_idx').on(t.projectId, t.slug),
     projectIdx: index('project_schedules_project_idx').on(t.projectId),
@@ -499,7 +499,7 @@ export const deployHistory = mysqlTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-DOLT: was partial index WHERE deleted_at IS NULL.
+    // @README-BRIVEN: was partial index WHERE deleted_at IS NULL.
     // MySQL doesn't support partial indexes; full index is acceptable.
     projectCreatedIdx: index('deploy_history_project_created_idx').on(t.projectId, t.createdAt),
   }),
@@ -699,7 +699,7 @@ export const webhookDeliveryStatus = [
 export type WebhookDeliveryStatus = (typeof webhookDeliveryStatus)[number];
 
 /**
- * @README-DOLT Partial unique + partial regular indexes removed.
+ * @README-BRIVEN Partial unique + partial regular indexes removed.
  *
  * MySQL does not support partial indexes. The unique constraint on
  * (projectId, name) now covers soft-deleted rows too — application-layer
@@ -732,9 +732,9 @@ export const webhookEndpoints = mysqlTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-DOLT: was partial unique (WHERE deleted_at IS NULL).
+    // @README-BRIVEN: was partial unique (WHERE deleted_at IS NULL).
     projectNameIdx: uniqueIndex('webhook_endpoints_project_name_idx').on(t.projectId, t.name),
-    // @README-DOLT: was partial index (WHERE deleted_at IS NULL).
+    // @README-BRIVEN: was partial index (WHERE deleted_at IS NULL).
     projectIdx: index('webhook_endpoints_project_idx').on(t.projectId),
   }),
 );
@@ -813,7 +813,7 @@ export const abuseReports = mysqlTable(
   (t) => ({
     statusIdx: index('abuse_reports_status_idx').on(t.status, t.createdAt),
     severityIdx: index('abuse_reports_severity_idx').on(t.severity, t.createdAt),
-    // @README-DOLT: was partial index (WHERE project_id IS NOT NULL).
+    // @README-BRIVEN: was partial index (WHERE project_id IS NOT NULL).
     projectIdx: index('abuse_reports_project_idx').on(t.projectId),
   }),
 );
@@ -846,7 +846,7 @@ export const incidents = mysqlTable(
   },
   (t) => ({
     startedIdx: index('incidents_started_idx').on(t.startedAt),
-    // @README-DOLT: was partial index (WHERE resolved_at IS NULL).
+    // @README-BRIVEN: was partial index (WHERE resolved_at IS NULL).
     activeIdx: index('incidents_active_idx').on(t.startedAt),
   }),
 );
@@ -920,7 +920,7 @@ export const webhookOutboundStatus = [
 export type WebhookOutboundStatus = (typeof webhookOutboundStatus)[number];
 
 /**
- * @README-DOLT Partial unique + partial regular indexes removed.
+ * @README-BRIVEN Partial unique + partial regular indexes removed.
  * Application-layer enforcement for (projectId, name) uniqueness among
  * non-deleted subscribers.
  */
@@ -949,9 +949,9 @@ export const webhookSubscribers = mysqlTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-DOLT: was partial unique (WHERE deleted_at IS NULL).
+    // @README-BRIVEN: was partial unique (WHERE deleted_at IS NULL).
     projectNameIdx: uniqueIndex('webhook_subscribers_project_name_idx').on(t.projectId, t.name),
-    // @README-DOLT: was partial index (WHERE deleted_at IS NULL).
+    // @README-BRIVEN: was partial index (WHERE deleted_at IS NULL).
     projectIdx: index('webhook_subscribers_project_idx').on(t.projectId),
   }),
 );
@@ -986,7 +986,7 @@ export const webhookOutboundDeliveries = mysqlTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    // @README-DOLT: was partial index (WHERE status = 'pending').
+    // @README-BRIVEN: was partial index (WHERE status = 'pending').
     dueIdx: index('webhook_outbound_deliveries_due_idx').on(t.nextAttemptAt),
     subscriberIdx: index('webhook_outbound_deliveries_subscriber_idx').on(
       t.subscriberId,
@@ -1023,7 +1023,7 @@ export const projectFiles = mysqlTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-DOLT: was partial index (WHERE deleted_at IS NULL).
+    // @README-BRIVEN: was partial index (WHERE deleted_at IS NULL).
     projectIdx: index('project_files_project_idx').on(t.projectId),
     objectKeyIdx: uniqueIndex('project_files_object_key_idx').on(t.objectKey),
   }),

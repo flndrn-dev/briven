@@ -25,7 +25,7 @@ function pool(): mysql.Pool {
  * project id so the api never has to ship the database name in the
  * invoke request payload.
  *
- * @README-DOLT Previously `schemaNameFor` — now `dbNameFor` since each
+ * @README-BRIVEN Previously `schemaNameFor` — now `dbNameFor` since each
  * project gets a dedicated MySQL database, not a Postgres schema.
  */
 export function dbNameFor(projectId: string): string {
@@ -43,7 +43,7 @@ export interface DbSession {
  * transaction commits when `fn` resolves; on throw it rolls back
  * automatically.
  *
- * @README-DOLT ADR 0001 — migrated from postgres to mysql2.
+ * @README-BRIVEN ADR 0001 — migrated from postgres to mysql2.
  *   - `SET LOCAL search_path TO "schema"` → `USE database` (per-connection)
  *   - `sql.begin()` → `conn.beginTransaction()` + `conn.commit()` / `conn.rollback()`
  */

@@ -37,7 +37,7 @@ healthRouter.get('/health', (c) =>
  * /ready — dependency readiness. Returns 200 only when every required
  * upstream is reachable.
  *
- * @README-DOLT: BRIVEN_URL serves both control-plane queries and
+ * @README-BRIVEN: BRIVEN_URL serves both control-plane queries and
  * data-plane (per-project databases). A single ping covers both.
  */
 healthRouter.get('/ready', async (c) => {

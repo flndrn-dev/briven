@@ -44,8 +44,8 @@ const log = createLogger({
  *   4. Unsubscribe / disconnect → drop the subscription, decrement channel
  *      refcounts, stop polling the project when its last channel is removed
  *
- * @README-DOLT Phase 2: Postgres LISTEN/NOTIFY replaced with Dolt
- * commit-diff polling. The PollManager queries `DOLT_HASHOF('HEAD')`
+ * @README-BRIVEN Phase 2: Postgres LISTEN/NOTIFY replaced with Dolt
+ * commit-diff polling. The PollManager queries `BRIVEN_HASHOF('HEAD')`
  * for each active project at the configured interval; when the hash
  * changes it fires every channel belonging to that project.
  */
@@ -366,7 +366,7 @@ log.info('realtime_boot', {
   auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
   poll: env.BRIVEN_URL ? 'enabled' : 'disabled',
   pollIntervalMs: env.BRIVEN_REALTIME_POLL_MS,
-  phase: 2, // @README-DOLT Phase 2: commit-diff polling live
+  phase: 2, // @README-BRIVEN Phase 2: commit-diff polling live
 });
 
 interface SocketHandle {

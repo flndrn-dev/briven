@@ -64,7 +64,7 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 
 **~25 files changed across 3 services:**
 
-- **`apps/api/src/db/schema.ts`** (1146 lines) — pg-core → mysql-core, 30+ tables, `text` PK → `varchar(36)`, `timestamptz` → `timestamp(3)`, `jsonb` → `json`, partial unique indexes dropped (application-level enforcement). All `@README-DOLT` markers on affected indexes.
+- **`apps/api/src/db/schema.ts`** (1146 lines) — pg-core → mysql-core, 30+ tables, `text` PK → `varchar(36)`, `timestamptz` → `timestamp(3)`, `jsonb` → `json`, partial unique indexes dropped (application-level enforcement). All `@README-BRIVEN` markers on affected indexes.
 - **`apps/api/src/db/client.ts`** — postgres-js → mysql2 pool (`drizzle-orm/mysql2`), `BRIVEN_DATABASE_URL` → `BRIVEN_URL`
 - **`apps/api/src/db/auth-customer-schema.ts`** — pg-core → mysql-core, `citext` → `utf8mb4_unicode_ci` collation
 - **`apps/api/src/db/data-plane.ts`** — `CREATE SCHEMA` → `CREATE DATABASE`, `SET search_path` → `USE database` (per-connection), pg_roles → MySQL users, `$1` → `?` placeholders
@@ -95,7 +95,7 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 
 **3 files changed / 1 new file:**
 
-- **`apps/realtime/src/poll-manager.ts`** (new, 164 lines) — `PollManager` class that queries `DOLT_HASHOF('HEAD')` for each active project at the configured interval. When the hash changes, fires every channel for that project via the `fireChannel` callback. Pool auto-starts on first project; auto-stops when no projects remain.
+- **`apps/realtime/src/poll-manager.ts`** (new, 164 lines) — `PollManager` class that queries `BRIVEN_HASHOF('HEAD')` for each active project at the configured interval. When the hash changes, fires every channel for that project via the `fireChannel` callback. Pool auto-starts on first project; auto-stops when no projects remain.
 - **`apps/realtime/src/index.ts`** — replaced `startListen`/`stopListen` stubs with real implementations. Added `projectRefCount` map to track per-project channel counts; `projectIdFromChannel()` parses channel names to extract project IDs. PollManager pool eager-init'd at boot.
 - **`apps/realtime/src/subscription-registry.ts`** — added `channelsForProject(projectId)` prefix-matching method.
 - **`apps/realtime/src/env.ts`** — added `BRIVEN_REALTIME_POLL_MS` (default 500ms, floor 100ms, cap 5000ms).
