@@ -43,7 +43,7 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 - **Tenant isolation:** `CREATE DATABASE proj_<id>` per project, `USE proj_<id>` instead of `SET LOCAL search_path`
 - **Vector search:** LanceDB embedded replaces pgvector, `ctx.db.vectorSearch()` API unchanged
 - **Extensions:** pg_cron→node-cron dispatcher, pgmq→Redis streams
-- **Infrastructure:** single `BRIVEN_DOLT_URL=mysql://...` env var replaces two Postgres URLs
+- **Infrastructure:** single `BRIVEN_URL=mysql://...` env var replaces two Postgres URLs
 - **Billing:** mavi-pay meters branch count via `dolt_branches`, commit volume via `dolt_log`, time-travel via config flag
 
 ### Pricing ladder (Dolt-native levers in bold)
@@ -65,25 +65,25 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 **~25 files changed across 3 services:**
 
 - **`apps/api/src/db/schema.ts`** (1146 lines) — pg-core → mysql-core, 30+ tables, `text` PK → `varchar(36)`, `timestamptz` → `timestamp(3)`, `jsonb` → `json`, partial unique indexes dropped (application-level enforcement). All `@README-DOLT` markers on affected indexes.
-- **`apps/api/src/db/client.ts`** — postgres-js → mysql2 pool (`drizzle-orm/mysql2`), `BRIVEN_DATABASE_URL` → `BRIVEN_DOLT_URL`
+- **`apps/api/src/db/client.ts`** — postgres-js → mysql2 pool (`drizzle-orm/mysql2`), `BRIVEN_DATABASE_URL` → `BRIVEN_URL`
 - **`apps/api/src/db/auth-customer-schema.ts`** — pg-core → mysql-core, `citext` → `utf8mb4_unicode_ci` collation
 - **`apps/api/src/db/data-plane.ts`** — `CREATE SCHEMA` → `CREATE DATABASE`, `SET search_path` → `USE database` (per-connection), pg_roles → MySQL users, `$1` → `?` placeholders
 - **`apps/api/drizzle.config.ts`** — `dialect: 'postgresql'` → `dialect: 'mysql'`
 - **`apps/api/src/services/auth-tenant-pool.ts`** — `connection.search_path` → `database` pool option, `provider: 'pg'` → `provider: 'mysql'`
 - **`apps/api/src/services/db-shell.ts`** — DSN generation for `mysql` client (not `psql`)
 - **`apps/api/src/routes/health.ts`** — merged control + data plane checks into single `dolt` check
-- **`apps/api/src/routes/auth-service.ts`** — `BRIVEN_DATA_PLANE_URL` → `BRIVEN_DOLT_URL`
+- **`apps/api/src/routes/auth-service.ts`** — `BRIVEN_DATA_PLANE_URL` → `BRIVEN_URL`
 - **5 workers** (`account-deletion-gc`, `outbound-webhook-dispatcher`, `polar-meter-push`, `schedule-dispatcher`, `storage-janitor`, `usage-aggregator`) — env var check updated
-- **4 test files** — `BRIVEN_DATABASE_URL` → `BRIVEN_DOLT_URL`, placeholder URLs updated
-- **`apps/api/src/env.ts`** — single `BRIVEN_DOLT_URL` replaces both `BRIVEN_DATABASE_URL` and `BRIVEN_DATA_PLANE_URL`
+- **4 test files** — `BRIVEN_DATABASE_URL` → `BRIVEN_URL`, placeholder URLs updated
+- **`apps/api/src/env.ts`** — single `BRIVEN_URL` replaces both `BRIVEN_DATABASE_URL` and `BRIVEN_DATA_PLANE_URL`
 - **`apps/runtime/src/db.ts`** — postgres → mysql2, `search_path` → `USE database`, transaction API
 - **`apps/runtime/src/query-builder.ts`** — `postgres.TransactionSql` → `PoolConnection`, `"..."` → `` `...` ``, `$N` → `?`, `RETURNING` removed (Phase 5 gap), vector search throws (Phase 5 gap)
 - **`apps/runtime/src/index.ts`** — health probe uses `mysql2/promise`
 - **`apps/runtime/src/runtime-bootstrap.ts`** — `tx.unsafe()` → `conn.query()`
-- **`apps/runtime/src/env.ts`** — `BRIVEN_DATA_PLANE_URL` → `BRIVEN_DOLT_URL`
+- **`apps/runtime/src/env.ts`** — `BRIVEN_DATA_PLANE_URL` → `BRIVEN_URL`
 - **`apps/realtime/src/index.ts`** — driver import swapped, LISTEN/NOTIFY → Phase 2 stubs, `dbNameFor` replaces `schemaNameFor`
 - **`apps/realtime/src/metrics.ts`** — help text updated for Dolt
-- **`apps/realtime/src/env.ts`** — `BRIVEN_DATA_PLANE_URL` → `BRIVEN_DOLT_URL`
+- **`apps/realtime/src/env.ts`** — `BRIVEN_DATA_PLANE_URL` → `BRIVEN_URL`
 - **3 `package.json`** (api, runtime, realtime) — `"postgres"` → `"mysql2"`, removed `@types/pg`
 
 **Known Phase 5 gaps (not blocking):**

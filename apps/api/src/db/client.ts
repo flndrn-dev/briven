@@ -11,7 +11,7 @@ import * as schema from './schema.js';
  *
  * Lazy-initialised: the API boots without a DB connection if one isn't
  * configured yet (Phase 0 dev), and `/ready` reports `not_configured`
- * until BRIVEN_DOLT_URL is set.
+ * until BRIVEN_URL is set.
  *
  * @README-DOLT ADR 0001 — migrated from postgres-js to mysql2.
  *   - `postgres(url, opts)` → `mysql.createPool(url)`
@@ -23,12 +23,12 @@ let _pool: mysql.Pool | null = null;
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
 export function getDb() {
-  if (!env.BRIVEN_DOLT_URL) {
-    throw new Error('BRIVEN_DOLT_URL is not configured');
+  if (!env.BRIVEN_URL) {
+    throw new Error('BRIVEN_URL is not configured');
   }
   if (!_db) {
     _pool = mysql.createPool({
-      uri: env.BRIVEN_DOLT_URL,
+      uri: env.BRIVEN_URL,
       connectionLimit: 10,
       idleTimeout: 30000,
       connectTimeout: 5000,
@@ -47,7 +47,7 @@ export function getSqlClient(): mysql.Pool {
 }
 
 export async function pingDb(): Promise<boolean> {
-  if (!env.BRIVEN_DOLT_URL) return false;
+  if (!env.BRIVEN_URL) return false;
   try {
     const pool = getSqlClient();
     await pool.query('SELECT 1');

@@ -8,12 +8,12 @@
 // imports below.
 
 const ORIGINAL_SECRET = process.env.BRIVEN_BETTER_AUTH_SECRET;
-const ORIGINAL_DB_URL = process.env.BRIVEN_DOLT_URL;
+const ORIGINAL_DB_URL = process.env.BRIVEN_URL;
 process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
 // auth.ts evaluates getDb() at module load — provide a syntactically valid
 // URL so the import doesn't throw. The actual postgres connection is lazy
 // (only opened when a query runs), and the bearer branch catches errors.
-process.env.BRIVEN_DOLT_URL = ORIGINAL_DB_URL ?? 'mysql://test:test@127.0.0.1:5/test';
+process.env.BRIVEN_URL = ORIGINAL_DB_URL ?? 'mysql://test:test@127.0.0.1:5/test';
 
 import { describe, expect, it, afterAll } from 'bun:test';
 import type { AppEnv } from '../types/app-env.js';
@@ -62,6 +62,6 @@ describe('requireAuth — Bearer JWT', () => {
 afterAll(() => {
   if (ORIGINAL_SECRET === undefined) delete process.env.BRIVEN_BETTER_AUTH_SECRET;
   else process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET;
-  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_DOLT_URL;
-  else process.env.BRIVEN_DOLT_URL = ORIGINAL_DB_URL;
+  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_URL;
+  else process.env.BRIVEN_URL = ORIGINAL_DB_URL;
 });

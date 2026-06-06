@@ -75,7 +75,7 @@ authServiceRouter.get('/v1/auth-service/health', (c) =>
  */
 authServiceRouter.get('/v1/auth-service/ready', (c) => {
   const masterKeyConfigured = Boolean(process.env.BRIVEN_AUTH_MASTER_KEY);
-  const doltConfigured = Boolean(env.BRIVEN_DOLT_URL);
+  const doltConfigured = Boolean(env.BRIVEN_URL);
   const ready = masterKeyConfigured && doltConfigured;
   return c.json(
     {

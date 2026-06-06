@@ -249,7 +249,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 export function startPolarMeterPush(): void {
   if (timer) return;
-  if (!env.BRIVEN_DOLT_URL) {
+  if (!env.BRIVEN_URL) {
     log.warn('polar_meter_push_skipped_no_db');
     return;
   }

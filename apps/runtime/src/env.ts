@@ -26,7 +26,7 @@ const envSchema = z.object({
   // @README-DOLT ADR 0001 — Dolt URL for the runtime's database pool.
   // The runtime opens pooled connections here and switches database
   // per invoke via `USE proj_<projectId>`.
-  BRIVEN_DOLT_URL: z.string().url().optional(),
+  BRIVEN_URL: z.string().url().optional(),
 
   // Redis URL — used to publish function invocation log envelopes as a
   // stream. Optional: when unset the publisher is a no-op and invocations

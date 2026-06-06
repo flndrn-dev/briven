@@ -7,7 +7,7 @@ import { env } from '../env.js';
  * PASSWORD EXPIRE clause — no manual revocation required.
  *
  * @README-DOLT ADR 0001 — migrated from Postgres `psql` DSN to MySQL DSN.
- *   - `BRIVEN_DATA_PLANE_URL` → `BRIVEN_DOLT_URL`
+ *   - `BRIVEN_DATA_PLANE_URL` → `BRIVEN_URL`
  *   - `schemaNameFor` → `dbNameFor`
  *   - `-csearch_path=<schema>` → `database` query param (MySQL)
  */
@@ -16,13 +16,13 @@ export async function issueShellToken(projectId: string): Promise<{
   role: string;
   expiresAt: Date;
 }> {
-  if (!env.BRIVEN_DOLT_URL) {
-    throw new Error('BRIVEN_DOLT_URL is not configured');
+  if (!env.BRIVEN_URL) {
+    throw new Error('BRIVEN_URL is not configured');
   }
   const { role, password, expiresAt } = await rotateProjectRolePassword(projectId, 15 * 60);
   const db = dbNameFor(projectId);
 
-  const base = new URL(env.BRIVEN_DOLT_URL);
+  const base = new URL(env.BRIVEN_URL);
   base.username = role;
   base.password = password;
   // MySQL clients use `database` query param to select the default

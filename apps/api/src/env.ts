@@ -17,7 +17,7 @@ const envSchema = z.object({
   // @README-DOLT ADR 0001 — single Dolt URL replaces both
   // BRIVEN_DATABASE_URL (control plane) and BRIVEN_DATA_PLANE_URL
   // (data plane / per-project databases).
-  BRIVEN_DOLT_URL: z.string().url().optional(),
+  BRIVEN_URL: z.string().url().optional(),
 
   // Redis — sessions, queues. Optional until auth lands.
   BRIVEN_REDIS_URL: z.string().url().optional(),
@@ -228,12 +228,12 @@ if (env.BRIVEN_ENV !== 'development') {
       'BRIVEN_ENCRYPTION_KEY must be set outside development (AES-256 KEK for customer env vars at rest)',
     );
   }
-  // @README-DOLT: BRIVEN_DOLT_URL serves as both control-plane and data-plane
+  // @README-DOLT: BRIVEN_URL serves as both control-plane and data-plane
   // URL. Failing here surfaces the misconfiguration at boot instead of on
   // the first request.
-  if (!env.BRIVEN_DOLT_URL) {
+  if (!env.BRIVEN_URL) {
     throw new Error(
-      'BRIVEN_DOLT_URL must be set outside development (Dolt serves both control-plane and per-project databases)',
+      'BRIVEN_URL must be set outside development (serves both control-plane and per-project databases)',
     );
   }
 }

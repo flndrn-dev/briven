@@ -37,12 +37,12 @@ healthRouter.get('/health', (c) =>
  * /ready — dependency readiness. Returns 200 only when every required
  * upstream is reachable.
  *
- * @README-DOLT: BRIVEN_DOLT_URL serves both control-plane queries and
+ * @README-DOLT: BRIVEN_URL serves both control-plane queries and
  * data-plane (per-project databases). A single ping covers both.
  */
 healthRouter.get('/ready', async (c) => {
   const [doltOk, runtimeOk, redisOk] = await Promise.all([
-    env.BRIVEN_DOLT_URL ? Promise.all([pingDb(), pingDataPlane()]).then(
+    env.BRIVEN_URL ? Promise.all([pingDb(), pingDataPlane()]).then(
       ([c, d]) => c && d,
     ) : Promise.resolve(false),
     probeRuntime(),
@@ -50,7 +50,7 @@ healthRouter.get('/ready', async (c) => {
   ]);
 
   const checks = {
-    dolt: env.BRIVEN_DOLT_URL
+    dolt: env.BRIVEN_URL
       ? doltOk
         ? 'ok'
         : 'unreachable'

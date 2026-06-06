@@ -152,10 +152,10 @@ function channelFor(projectId: string, table: string): string {
 // with Dolt commit-diff polling via PollManager.
 let _listenerPool: mysql.Pool | null = null;
 async function ensurePool(): Promise<mysql.Pool | null> {
-  if (!env.BRIVEN_DOLT_URL) return null;
+  if (!env.BRIVEN_URL) return null;
   if (_listenerPool) return _listenerPool;
   _listenerPool = mysql.createPool({
-    uri: env.BRIVEN_DOLT_URL,
+    uri: env.BRIVEN_URL,
     connectionLimit: 1,
     idleTimeout: 0,
     connectTimeout: 5000,
@@ -330,7 +330,7 @@ log.info('realtime_boot', {
   port: env.BRIVEN_REALTIME_PORT,
   apiUrl: env.BRIVEN_API_INTERNAL_URL,
   auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
-  listen: env.BRIVEN_DOLT_URL ? 'enabled' : 'disabled',
+  listen: env.BRIVEN_URL ? 'enabled' : 'disabled',
   phase: 1, // @README-DOLT: polling stub, Phase 2 delivers notifications
 });
 
@@ -345,8 +345,8 @@ export default {
     if (url.pathname === '/health') return Response.json({ status: 'ok', service: 'realtime' });
     if (url.pathname === '/ready') {
       return Response.json({
-        status: env.BRIVEN_DOLT_URL ? 'ready' : 'degraded',
-        listen: env.BRIVEN_DOLT_URL ? 'enabled' : 'disabled',
+        status: env.BRIVEN_URL ? 'ready' : 'degraded',
+        listen: env.BRIVEN_URL ? 'enabled' : 'disabled',
         phase: 1, // @README-DOLT: Phase 2 enables commit-diff polling
       });
     }
