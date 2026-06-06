@@ -14,9 +14,9 @@
 // shape the CLI's `existingBranch` consumes.
 
 const ORIGINAL_SECRET = process.env.BRIVEN_BETTER_AUTH_SECRET;
-const ORIGINAL_DB_URL = process.env.BRIVEN_DOLT_URL;
+const ORIGINAL_DB_URL = process.env.BRIVEN_URL;
 process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
-process.env.BRIVEN_DOLT_URL = ORIGINAL_DB_URL ?? 'mysql://test:test@127.0.0.1:5/test';
+process.env.BRIVEN_URL = ORIGINAL_DB_URL ?? 'mysql://test:test@127.0.0.1:5/test';
 
 import { afterAll, describe, expect, it } from 'bun:test';
 import type { AppEnv } from '../types/app-env.js';
@@ -53,6 +53,6 @@ describe('GET /v1/me/projects shape', () => {
 afterAll(() => {
   if (ORIGINAL_SECRET === undefined) delete process.env.BRIVEN_BETTER_AUTH_SECRET;
   else process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET;
-  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_DOLT_URL;
-  else process.env.BRIVEN_DOLT_URL = ORIGINAL_DB_URL;
+  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_URL;
+  else process.env.BRIVEN_URL = ORIGINAL_DB_URL;
 });

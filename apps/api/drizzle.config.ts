@@ -8,7 +8,7 @@ import type { Config } from 'drizzle-kit';
  *
  * @README-DOLT ADR 0001 — migrated from postgresql to mysql dialect.
  */
-const url = process.env.BRIVEN_DOLT_URL;
+const url = process.env.BRIVEN_URL;
 
 export default {
   schema: './src/db/schema.ts',

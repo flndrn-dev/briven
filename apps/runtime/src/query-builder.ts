@@ -296,7 +296,7 @@ class VectorSearchImpl implements VectorSearchQuery {
 
   private async execute(): Promise<unknown[]> {
     throw new Error(
-      'ctx.db().vectorSearch() is not available on Dolt. ' +
+      'ctx.db().vectorSearch() is not available yet. ' +
       'Vector search will ship with LanceDB in Phase 5. ' +
       'See docs/ADR/0001-dolt-migration.md § "Vector search".',
     );

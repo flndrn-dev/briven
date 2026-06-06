@@ -66,7 +66,7 @@ app.get('/ready', async (c) => {
       status: ready ? 'ready' : 'not_ready',
       checks: {
         api: apiOk ? 'ok' : 'unreachable',
-        data_plane_dolt: env.BRIVEN_DOLT_URL
+        data_plane_dolt: env.BRIVEN_URL
           ? dpOk
             ? 'ok'
             : 'unreachable'
@@ -89,14 +89,14 @@ async function probeApi(): Promise<boolean> {
 }
 
 async function probeDataPlane(): Promise<boolean> {
-  if (!env.BRIVEN_DOLT_URL) return false;
+  if (!env.BRIVEN_URL) return false;
   try {
     // @README-DOLT: migrated from dynamic `import('postgres')` to static
     // `import('mysql2/promise')` for the readiness probe. Opens a single
     // connection, pings, and closes — never leaves a connection in the pool.
     const mysql2 = await import('mysql2/promise');
     const conn = await mysql2.createConnection({
-      uri: env.BRIVEN_DOLT_URL,
+      uri: env.BRIVEN_URL,
       connectTimeout: 2000,
     });
     await conn.ping();

@@ -75,8 +75,8 @@ function authSecret(): string {
 }
 
 async function createAuthInstance(projectId: string) {
-  if (!env.BRIVEN_DOLT_URL) {
-    throw new Error('BRIVEN_DOLT_URL not configured — briven auth cannot bind a database');
+  if (!env.BRIVEN_URL) {
+    throw new Error('BRIVEN_URL not configured — briven auth cannot bind a database');
   }
   const db = dbNameFor(projectId);
 
@@ -86,7 +86,7 @@ async function createAuthInstance(projectId: string) {
   // Better Auth's Drizzle adapter outside our transaction boundaries,
   // land in the correct project database.
   const sql = mysql.createPool({
-    uri: env.BRIVEN_DOLT_URL,
+    uri: env.BRIVEN_URL,
     connectionLimit: 5,
     idleTimeout: 30000,
     connectTimeout: 5000,

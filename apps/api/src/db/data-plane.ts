@@ -5,7 +5,7 @@ import { log } from '../lib/logger.js';
 
 /**
  * Lazily-opened pool for the shared data-plane Dolt server
- * (`BRIVEN_DOLT_URL`). Every customer project gets a dedicated
+ * (`BRIVEN_URL`). Every customer project gets a dedicated
  * **database** (not schema) — `proj_<projectId>`.
  *
  * Phase 1 has a single shared Dolt server; Team-tier projects may graduate
@@ -27,12 +27,12 @@ import { log } from '../lib/logger.js';
 let _pool: mysql.Pool | null = null;
 
 function pool(): mysql.Pool {
-  if (!env.BRIVEN_DOLT_URL) {
-    throw new Error('BRIVEN_DOLT_URL is not configured');
+  if (!env.BRIVEN_URL) {
+    throw new Error('BRIVEN_URL is not configured');
   }
   if (!_pool) {
     _pool = mysql.createPool({
-      uri: env.BRIVEN_DOLT_URL,
+      uri: env.BRIVEN_URL,
       connectionLimit: 20,
       idleTimeout: 30000,
       connectTimeout: 5000,
@@ -239,7 +239,7 @@ export function dataPlaneClient(): mysql.Pool {
 }
 
 export async function pingDataPlane(): Promise<boolean> {
-  if (!env.BRIVEN_DOLT_URL) return false;
+  if (!env.BRIVEN_URL) return false;
   try {
     const conn = await pool().getConnection();
     await conn.ping();

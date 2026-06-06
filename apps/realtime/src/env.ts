@@ -18,7 +18,7 @@ const envSchema = z.object({
   // @README-DOLT ADR 0001 — single Dolt URL for connection pooling.
   // Phase 1 stubs out LISTEN/NOTIFY; Phase 2 PollManager uses this
   // for commit-diff polling.
-  BRIVEN_DOLT_URL: z.string().url().optional(),
+  BRIVEN_URL: z.string().url().optional(),
 
   // Per-WebSocket subscription cap. A single client opening more than
   // this many concurrent subs gets `error: subscription_limit_ws`. Sized

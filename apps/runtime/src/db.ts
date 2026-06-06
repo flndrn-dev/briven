@@ -5,12 +5,12 @@ import { env } from './env.js';
 let _pool: mysql.Pool | null = null;
 
 function pool(): mysql.Pool {
-  if (!env.BRIVEN_DOLT_URL) {
-    throw new Error('BRIVEN_DOLT_URL is not configured on the runtime');
+  if (!env.BRIVEN_URL) {
+    throw new Error('BRIVEN_URL is not configured on the runtime');
   }
   if (!_pool) {
     _pool = mysql.createPool({
-      uri: env.BRIVEN_DOLT_URL,
+      uri: env.BRIVEN_URL,
       connectionLimit: 20,
       idleTimeout: 30000,
       connectTimeout: 5000,
