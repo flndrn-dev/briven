@@ -49,7 +49,7 @@ export function getPostgrestClaims(projectRef: string, role: PostgrestImpersonat
   const nowTimestamp = Math.floor(Date.now() / 1000)
 
   if (role.role === 'authenticated') {
-    // Briven native auth case
+    // Supabase native auth case
     if (role.userType === 'native' && role.user) {
       const user = role.user
       return {
@@ -86,7 +86,7 @@ export function getPostgrestClaims(projectRef: string, role: PostgrestImpersonat
   }
 
   return {
-    iss: 'briven',
+    iss: 'supabase',
     ref: projectRef,
     role: role.role,
     iat: nowTimestamp,

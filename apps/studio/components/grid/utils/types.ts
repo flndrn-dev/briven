@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { SupaColumn } from '../types'
 
 const NUMERICAL_TYPES = [

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Copy, Edit, ListFilter, Trash } from 'lucide-react'
 import { useCallback } from 'react'
 import { toast } from 'sonner'

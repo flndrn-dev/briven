@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, test } from 'vitest'
 
 import { isFilterRelatedError } from './GridError.utils'

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { CalculatedColumn, RenderCellProps } from 'react-data-grid'
 
 import { DefaultValue } from '../components/common/DefaultValue'

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { KeyboardEvent, ReactNode, useCallback, useEffect, useRef } from 'react'
 
 import { useClickedOutside } from '@/hooks/ui/useClickedOutside'

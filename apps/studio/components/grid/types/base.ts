@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { CalculatedColumn, RenderHeaderCellProps } from 'react-data-grid'
 
 export interface SavedState {

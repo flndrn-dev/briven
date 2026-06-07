@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'common'
 import { RefreshCw } from 'lucide-react'

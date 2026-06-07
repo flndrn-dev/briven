@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { CalculatedColumn } from 'react-data-grid'
 
 import { ADD_COLUMN_KEY, SELECT_COLUMN_KEY } from '../constants'

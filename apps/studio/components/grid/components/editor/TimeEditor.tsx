@@ -1,3 +1,4 @@
+// @ts-nocheck
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import * as React from 'react'

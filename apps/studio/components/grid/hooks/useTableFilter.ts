@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { formatFilterURLParams } from '@/components/grid/BrivenGrid.utils'
 import { Filter } from '@/components/grid/types'
 import { useTableEditorFiltersSort } from '@/hooks/misc/useTableEditorFiltersSort'

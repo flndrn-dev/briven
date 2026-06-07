@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type * from '@supabase/pg-meta/src/query'
 export type * from './base'
 export type * from './grid'

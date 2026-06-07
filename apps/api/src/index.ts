@@ -38,6 +38,7 @@ import { rootRouter } from './routes/root.js';
 import { schedulesRouter } from './routes/schedules.js';
 import { storageRouter } from './routes/storage.js';
 import { studioRouter } from './routes/studio.js';
+import { platformRouter } from './routes/platform.js';
 import { usageRouter } from './routes/usage.js';
 import { incidentsRouter } from './routes/incidents.js';
 import { marketingEventsPublicRouter } from './routes/marketing-events.js';
@@ -76,7 +77,7 @@ const app = new Hono<AppEnv>();
 app.use(
   '*',
   cors({
-    origin: [env.BRIVEN_WEB_ORIGIN],
+    origin: [env.BRIVEN_WEB_ORIGIN, env.BRIVEN_STUDIO_ORIGIN],
     credentials: true,
     allowHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     exposeHeaders: ['x-request-id'],
@@ -122,6 +123,7 @@ app.route('/', logsRouter);
 app.route('/', usageRouter);
 app.route('/', abuseRouter);
 app.route('/', studioRouter);
+app.route('/', platformRouter);
 app.route('/', exportRouter);
 app.route('/', aiRouter);
 app.route('/', orgsRouter);

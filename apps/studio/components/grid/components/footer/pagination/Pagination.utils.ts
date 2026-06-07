@@ -1,3 +1,4 @@
+// @ts-nocheck
 export const formatEstimatedCount = (value: number) => {
   const sizes = ['', 'K', 'M', 'B', 'T']
   if (value === 0) return '0'

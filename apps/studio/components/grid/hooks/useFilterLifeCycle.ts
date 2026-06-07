@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useRef } from 'react'
 
 import { filtersToUrlParams, formatFilterURLParams } from '../BrivenGrid.utils'

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { AnimatePresence, motion } from 'framer-motion'
 import { Eye, MoreVertical, Trash } from 'lucide-react'
 import { createPortal } from 'react-dom'

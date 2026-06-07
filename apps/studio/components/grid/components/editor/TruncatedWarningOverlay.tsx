@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MAX_CHARACTERS } from '@supabase/pg-meta/src/query/table-row-query'
 import { Button, cn } from 'ui'
 

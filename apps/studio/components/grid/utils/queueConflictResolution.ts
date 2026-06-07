@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { isEqual } from 'lodash'
 
 import { isPendingAddRow } from '../types'

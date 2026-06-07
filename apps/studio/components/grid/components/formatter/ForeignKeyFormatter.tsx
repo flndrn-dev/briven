@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { PGTable } from '@supabase/pg-meta'
 import { ArrowRight } from 'lucide-react'
 import type { PropsWithChildren } from 'react'

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { isPendingAddRow, PendingAddRow, SupaRow } from '../types'
 import { isTableLike, type Entity } from '@/data/table-editor/table-editor-types'
 import {

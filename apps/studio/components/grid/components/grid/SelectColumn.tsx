@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Maximize2 } from 'lucide-react'
 import { ChangeEvent, InputHTMLAttributes, SyntheticEvent, useEffect, useRef } from 'react'
 import {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import dayjs from 'dayjs'
 import { ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'

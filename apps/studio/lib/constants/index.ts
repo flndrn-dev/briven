@@ -20,6 +20,8 @@ export const IS_STAGING_OR_LOCAL =
   process.env.NEXT_PUBLIC_ENVIRONMENT === 'local'
 
 export const API_URL = (() => {
+  // briven: prefer explicit BRIVEN_API_URL over platform detection
+  if (process.env.NEXT_PUBLIC_BRIVEN_API_URL) return process.env.NEXT_PUBLIC_BRIVEN_API_URL
   if (process.env.NODE_ENV === 'test') return 'http://localhost:3000/api'
   //  If running in platform, use API_URL from the env var
   if (IS_PLATFORM) return process.env.NEXT_PUBLIC_API_URL!
@@ -29,12 +31,13 @@ export const API_URL = (() => {
   if (!!process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api`
   // If running on self-hosted, use NEXT_PUBLIC_SITE_URL
   if (!!process.env.NEXT_PUBLIC_SITE_URL) return `${process.env.NEXT_PUBLIC_SITE_URL}/api`
-  return '/api'
+  // briven default: control plane on localhost:3001
+  return 'http://localhost:3001'
 })()
 
-export const PG_META_URL = IS_PLATFORM
-  ? process.env.PLATFORM_PG_META_URL
-  : process.env.STUDIO_PG_META_URL
+export const PG_META_URL = process.env.NEXT_PUBLIC_BRIVEN_API_URL
+  ? `${process.env.NEXT_PUBLIC_BRIVEN_API_URL}/platform/pg-meta`
+  : process.env.STUDIO_PG_META_URL || "http://localhost:3001/platform/pg-meta"
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 
 /**
@@ -56,11 +59,11 @@ export const POSTHOG_URL =
   process.env.NEXT_PUBLIC_ENVIRONMENT === 'staging' ||
   process.env.NEXT_PUBLIC_ENVIRONMENT === 'local'
     ? 'https://ph.briven.green'
-    : 'https://ph.supabase.com'
+    : 'https://ph.briven.tech'
 
 export const USAGE_APPROACHING_THRESHOLD = 0.75
 
-export const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL || 'https://supabase.com/docs'
+export const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.briven.tech'
 
 export const OPT_IN_TAGS = {
   AI_SQL: 'AI_SQL_GENERATOR_OPT_IN',

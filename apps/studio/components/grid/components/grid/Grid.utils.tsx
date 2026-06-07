@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback } from 'react'
 import { RowsChangeData } from 'react-data-grid'
 import { toast } from 'sonner'

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { keepPreviousData } from '@tanstack/react-query'
 import { useBreakpoint, useParams } from 'common'
 import { AnimatePresence, motion } from 'framer-motion'

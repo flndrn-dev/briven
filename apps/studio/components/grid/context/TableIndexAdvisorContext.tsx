@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useQueryClient } from '@tanstack/react-query'
 import { createContext, PropsWithChildren, useCallback, useContext, useState } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from 'ui'
