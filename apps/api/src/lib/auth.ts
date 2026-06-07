@@ -60,7 +60,7 @@ export const auth = betterAuth({
   // Map Better Auth's singular model names onto our pluralised tables
   // (CLAUDE.md §6.1: DB tables are snake_case + plural).
   database: drizzleAdapter(getDb(), {
-    provider: 'pg',
+    provider: 'mysql',
     schema: {
       user: users,
       session: sessions,

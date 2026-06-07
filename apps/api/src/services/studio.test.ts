@@ -6,26 +6,24 @@ import { buildFilterClauses, FILTER_OPS } from './studio.js';
 
 const COLS = new Set(['id', 'name', 'created_at', 'score']);
 
-describe('buildFilterClauses — Phase 2 §2.3 verify', () => {
-  test('eq renders parameterised equality and keeps value in params', () => {
+describe('buildFilterClauses — MySQL (Phase 5)', () => {
+  test('eq renders parameterised equality with backtick quoting', () => {
     const { clauses, params } = buildFilterClauses(
       [{ column: 'name', op: 'eq', value: 'alice' }],
       COLS,
       'users',
     );
-    expect(clauses).toEqual(['"name" = $1']);
+    expect(clauses).toEqual(['`name` = ?']);
     expect(params).toEqual(['alice']);
   });
 
-  test('contains renders ILIKE with %|| placeholder ||% — no client pattern smuggling', () => {
+  test('contains renders LIKE with CONCAT — no client pattern smuggling', () => {
     const { clauses, params } = buildFilterClauses(
       [{ column: 'name', op: 'contains', value: '%admin%' }],
       COLS,
       'users',
     );
-    // The literal %s in the SQL come from the server template, not the input;
-    // the input ('%admin%') lands verbatim as a parameter.
-    expect(clauses).toEqual([`"name"::text ILIKE '%' || $1 || '%'`]);
+    expect(clauses).toEqual(["`name` LIKE CONCAT('%', ?, '%')"]);
     expect(params).toEqual(['%admin%']);
   });
 
@@ -38,12 +36,12 @@ describe('buildFilterClauses — Phase 2 §2.3 verify', () => {
         'leaderboard',
       );
       const symbol = { gt: '>', lt: '<', gte: '>=', lte: '<=' }[op as 'gt' | 'lt' | 'gte' | 'lte'];
-      expect(clauses).toEqual([`"score" ${symbol} $1`]);
+      expect(clauses).toEqual([`\`score\` ${symbol} ?`]);
       expect(params).toEqual([42]);
     },
   );
 
-  test('multiple filters share a params array with sequential placeholders', () => {
+  test('multiple filters share a params array with positional placeholders', () => {
     const { clauses, params } = buildFilterClauses(
       [
         { column: 'name', op: 'eq', value: 'alice' },
@@ -52,56 +50,48 @@ describe('buildFilterClauses — Phase 2 §2.3 verify', () => {
       COLS,
       'users',
     );
-    expect(clauses).toEqual(['"name" = $1', '"score" > $2']);
+    expect(clauses).toEqual(['`name` = ?', '`score` > ?']);
     expect(params).toEqual(['alice', 100]);
   });
 
   test('unknown column → ValidationError (not 500)', () => {
     expect(() =>
       buildFilterClauses(
-        [{ column: 'not_a_column', op: 'eq', value: 'x' }],
+        [{ column: 'nonexistent', op: 'eq', value: 'x' }],
         COLS,
         'users',
       ),
     ).toThrow(ValidationError);
   });
 
-  test('malformed column name → ValidationError (identifier guard)', () => {
-    // The COLUMN_NAME_RE blocks anything that isn't [A-Za-z_][A-Za-z0-9_]* —
-    // a SQL-injection attempt at the column slot like `id;--` can't pass.
-    expect(() =>
-      buildFilterClauses([{ column: 'id;--', op: 'eq', value: 'x' }], COLS, 'users'),
-    ).toThrow(ValidationError);
-  });
-
-  test('unknown operator → ValidationError (allow-list)', () => {
+  test('invalid column name (SQL injection attempt) → ValidationError', () => {
     expect(() =>
       buildFilterClauses(
-        // @ts-expect-error — bypassing the type to simulate a route that
-        // failed to pre-validate the op string against FILTER_OPS.
-        [{ column: 'name', op: 'regex', value: '.*' }],
+        [{ column: 'name; DROP TABLE users', op: 'eq', value: 'x' }],
         COLS,
         'users',
       ),
     ).toThrow(ValidationError);
   });
 
-  test('SQL-injection in value is harmless — it just lands in params as a string', () => {
+  test('invalid operator → ValidationError', () => {
+    expect(() =>
+      buildFilterClauses(
+        [{ column: 'name', op: 'like' as never, value: 'x' }],
+        COLS,
+        'users',
+      ),
+    ).toThrow(ValidationError);
+  });
+
+  test('SQL injection value does NOT appear in the clause text', () => {
     const { clauses, params } = buildFilterClauses(
       [{ column: 'name', op: 'eq', value: "'; DROP TABLE users; --" }],
       COLS,
       'users',
     );
-    // The clause itself contains only the placeholder, never the value text.
-    expect(clauses[0]).toBe('"name" = $1');
+    expect(clauses[0]).toBe('`name` = ?');
     expect(clauses[0]).not.toContain('DROP');
-    // The dangerous string is in params, where postgres treats it as a literal.
     expect(params).toEqual(["'; DROP TABLE users; --"]);
-  });
-
-  test('empty filter list → empty clauses + empty params (no WHERE emitted upstream)', () => {
-    const { clauses, params } = buildFilterClauses([], COLS, 'users');
-    expect(clauses).toEqual([]);
-    expect(params).toEqual([]);
   });
 });

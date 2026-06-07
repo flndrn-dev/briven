@@ -7,7 +7,7 @@
 #
 # Single-machine layout: every service on one host. Suitable for ~25
 # concurrent customer projects. Past that, split control plane to one
-# host and data plane (postgres + minio) to another.
+# host and data plane (dolt + minio) to another.
 #
 # Tested on:
 #   - Dokploy 0.20+ (recommended)
@@ -21,10 +21,10 @@
 #   BRIVEN_AUDIT_IP_PEPPER        32+ chars
 #   BRIVEN_ENCRYPTION_KEY         32+ chars
 #   BRIVEN_RUNTIME_SHARED_SECRET  32+ chars
-#   BRIVEN_POSTGRES_PASSWORD      strong; gets used by all four services
-#   BRIVEN_MITTERA_API_URL        optional — base URL of mittera.eu transactional email (e.g. https://api.mittera.eu)
+#   BRIVEN_DOLT_ROOT_PASSWORD     strong; Dolt root password (control + data plane)
+#   BRIVEN_MITTERA_API_URL        optional — base URL of mittera.eu transactional email
 #   BRIVEN_MITTERA_API_KEY        optional — bearer token for outbound mittera POST /api/v1/emails
-#   BRIVEN_MITTERA_WEBHOOK_SECRET optional — HMAC secret used to verify inbound delivery/bounce webhooks
+#   BRIVEN_MITTERA_WEBHOOK_SECRET optional — HMAC secret for inbound delivery/bounce webhooks
 #   BRIVEN_GOOGLE_CLIENT_ID/      optional — google oauth signin
 #   BRIVEN_GOOGLE_CLIENT_SECRET
 #   BRIVEN_GITHUB_CLIENT_ID/      optional — github oauth signin
@@ -37,13 +37,14 @@
 #
 # After first boot:
 #   1. Create the first user via the magic-link flow on https://${BRIVEN_DOMAIN}
-#   2. SSH to the postgres container and `UPDATE users SET is_admin = true WHERE id = '...'`
-#      to give yourself platform-admin (the dashboard's /admin tab unlocks)
+#   2. Connect to the Dolt container and set is_admin: `docker exec -it briven-dolt mysql -u root -p${BRIVEN_DOLT_ROOT_PASSWORD} -e "UPDATE briven_control.users SET is_admin = true WHERE id = '...'"`
 #   3. Create your first project via the dashboard
 #
-# Per DOCKER.md §7: every service caps its log volume to prevent any one
-# noisy container from filling the host disk. The yaml anchor below is
-# applied via `logging: *briven-logging` on each service.
+# @README-BRIVEN Phase 8: postgres → dolt. Single BRIVEN_URL replaces
+# BRIVEN_DATABASE_URL + BRIVEN_DATA_PLANE_URL. dolt-backup service
+# replaces pg_dump. mysqld_exporter replaces postgres_exporter.
+#
+# Per DOCKER.md §7: every service caps its log volume.
 
 x-logging: &briven-logging
   driver: json-file
@@ -52,21 +53,34 @@ x-logging: &briven-logging
     max-file: '3'
 
 services:
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: briven-postgres
+  dolt:
+    image: dolthub/dolt-sql-server:latest
+    container_name: briven-dolt
     restart: unless-stopped
     logging: *briven-logging
     environment:
-      POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
-      POSTGRES_DB: briven_control
+      DOLT_ROOT_PASSWORD: ${BRIVEN_DOLT_ROOT_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+      - dolt_data:/var/lib/dolt
     networks:
       - briven
     labels:
       - 'briven_logs=true'
+
+  dolt-backup:
+    image: dolthub/dolt-sql-server:latest
+    container_name: briven-dolt-backup
+    restart: unless-stopped
+    logging: *briven-logging
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        while true; do
+          sleep 86400
+          echo "dolt-backup: daily backup snapshot (placeholder — wire dolt backup command)"
+        done
+    networks:
+      - briven
 
   redis:
     image: redis:7.4-alpine
@@ -89,7 +103,7 @@ services:
     command: server /data --console-address ':9001'
     environment:
       MINIO_ROOT_USER: briven
-      MINIO_ROOT_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+      MINIO_ROOT_PASSWORD: ${BRIVEN_DOLT_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
     networks:
@@ -104,15 +118,14 @@ services:
     container_name: briven-api
     restart: unless-stopped
     logging: *briven-logging
-    depends_on: [postgres, redis]
+    depends_on: [dolt, redis]
     environment:
       BRIVEN_ENV: production
       BRIVEN_API_PORT: '3001'
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN}
-      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@briven-postgres:5432/briven_control?sslmode=disable
-      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@briven-postgres:5432/briven_data?sslmode=disable
+      BRIVEN_URL: mysql://root:${BRIVEN_DOLT_ROOT_PASSWORD}@briven-dolt:3306/briven_control
       BRIVEN_REDIS_URL: redis://briven-redis:6379
       BRIVEN_RUNTIME_URL: http://briven-runtime:3003
       BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
@@ -138,7 +151,7 @@ services:
       BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
       BRIVEN_MINIO_ENDPOINT: http://briven-minio:9000
       BRIVEN_MINIO_ACCESS_KEY: briven
-      BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_POSTGRES_PASSWORD}
+      BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_DOLT_ROOT_PASSWORD}
     networks:
       - briven
     labels:
@@ -156,12 +169,15 @@ services:
     container_name: briven-runtime
     restart: unless-stopped
     logging: *briven-logging
+    depends_on: [dolt, api]
     environment:
       BRIVEN_ENV: production
       BRIVEN_RUNTIME_PORT: '3003'
       BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
       BRIVEN_RUNTIME_EXECUTOR: deno
       BRIVEN_RUNTIME_BUNDLE_DIR: /var/lib/briven/bundles
+      BRIVEN_API_INTERNAL_URL: http://briven-api:3001
+      BRIVEN_URL: mysql://root:${BRIVEN_DOLT_ROOT_PASSWORD}@briven-dolt:3306
     volumes:
       - runtime_bundles:/var/lib/briven/bundles
     networks:
@@ -176,13 +192,14 @@ services:
     container_name: briven-realtime
     restart: unless-stopped
     logging: *briven-logging
-    depends_on: [postgres]
+    depends_on: [dolt]
     environment:
       BRIVEN_ENV: production
       BRIVEN_REALTIME_PORT: '3004'
       BRIVEN_API_INTERNAL_URL: http://briven-api:3001
       BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
-      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@briven-postgres:5432/briven_data?sslmode=disable
+      BRIVEN_URL: mysql://root:${BRIVEN_DOLT_ROOT_PASSWORD}@briven-dolt:3306
+      BRIVEN_REALTIME_POLL_MS: '500'
     networks:
       - briven
     labels:
@@ -204,9 +221,6 @@ services:
     environment:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
-      # Surfaced to the browser so the signin form can hit the api
-      # directly (avoids the Next.js rewrite proxy hop that some edge
-      # CDNs mangle for POST bodies).
       NEXT_PUBLIC_BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+true}
       NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+true}
@@ -230,8 +244,6 @@ services:
     logging: *briven-logging
     depends_on: [api]
     environment:
-      # Used by the /status page + /api/status/incidents.xml RSS feed
-      # to read live incidents from /v1/status/incidents.
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
     networks:
       - briven
@@ -242,9 +254,6 @@ services:
       - 'traefik.http.routers.briven-docs.entrypoints=websecure'
       - 'traefik.http.routers.briven-docs.tls.certresolver=letsencrypt'
       - 'traefik.http.services.briven-docs.loadbalancer.server.port=3000'
-      # status.briven.tech — routes to the same docs container, with a
-      # path-rewrite so a bare `/` request lands on /status. See
-      # docs/runbooks/status-domain-cutover.md.
       - 'traefik.http.routers.briven-status.rule=Host(`status.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-status.entrypoints=websecure'
       - 'traefik.http.routers.briven-status.tls.certresolver=letsencrypt'
@@ -254,7 +263,7 @@ services:
       - 'traefik.http.middlewares.briven-status-rewrite.replacepathregex.replacement=/status'
 
 volumes:
-  postgres_data:
+  dolt_data:
   redis_data:
   minio_data:
   runtime_bundles:

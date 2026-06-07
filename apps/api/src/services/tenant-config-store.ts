@@ -179,11 +179,11 @@ const META_KEY = 'auth_config';
  * beyond the SET LOCAL.
  */
 export async function getAuthConfig(projectId: string): Promise<AuthConfig> {
-  const rows = await runInProjectSchema<{ value: unknown }[]>(projectId, async (tx) =>
-    (await tx.unsafe(
-      `SELECT value FROM "_briven_meta" WHERE key = $1 LIMIT 1`,
+  const [rows] = await runInProjectSchema<[Array<{ value: unknown }>, unknown]>(projectId, async (conn) =>
+    (await conn.query(
+      'SELECT value FROM `_briven_meta` WHERE `key` = ? LIMIT 1',
       [META_KEY],
-    )) as { value: unknown }[],
+    )) as [Array<{ value: unknown }>, unknown],
   );
   if (rows.length === 0) return DEFAULT_AUTH_CONFIG;
   const parsed = authConfigSchema.safeParse(rows[0]!.value);
@@ -206,11 +206,11 @@ export async function updateAuthConfig(
 ): Promise<AuthConfig> {
   const current = await getAuthConfig(projectId);
   const next = mergeAuthConfig(current, patch);
-  await runInProjectSchema(projectId, async (tx) => {
-    await tx.unsafe(
-      `INSERT INTO "_briven_meta" (key, value)
-       VALUES ($1, $2::jsonb)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+  await runInProjectSchema(projectId, async (conn) => {
+    await conn.query(
+      `INSERT INTO \`_briven_meta\` (\`key\`, value)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE value = VALUES(value)`,
       [META_KEY, JSON.stringify(next)],
     );
   });
@@ -224,10 +224,10 @@ export async function updateAuthConfig(
  * and the configured state.
  */
 export async function isAuthEnabled(projectId: string): Promise<boolean> {
-  const rows = await runInProjectSchema<{ value: unknown }[]>(projectId, async (tx) =>
-    (await tx.unsafe(
-      `SELECT value FROM "_briven_meta" WHERE key = 'auth_enabled' LIMIT 1`,
-    )) as { value: unknown }[],
+  const [rows] = await runInProjectSchema<[Array<{ value: unknown }>, unknown]>(projectId, async (conn) =>
+    (await conn.query(
+      "SELECT value FROM `_briven_meta` WHERE `key` = 'auth_enabled' LIMIT 1",
+    )) as [Array<{ value: unknown }>, unknown],
   );
   if (rows.length === 0) return false;
   return rows[0]!.value === true;

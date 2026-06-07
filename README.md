@@ -1,8 +1,8 @@
 # briven
 
-> the postgres backend you actually own
+> the version-controlled backend you own
 
-briven is an open-core, reactive backend platform for typescript developers. convex-style ergonomics (code-first schema, cli deploys, reactive queries, built-in auth/storage/scheduling) on top of standard postgres, multi-region worldwide, fully self-hostable.
+briven is an open-core, reactive backend platform for typescript developers. convex-style ergonomics (code-first schema, cli deploys, reactive queries, built-in auth/storage/scheduling) on a git-native sql database — branches, time-travel, commit history. worldwide multi-region. fully self-hostable.
 
 three surfaces:
 
@@ -69,9 +69,9 @@ see the internal build docs for the authoritative spec. headlines:
 - next.js 16 + tailwind v4 + shadcn/ui for every ui surface
 - hono on bun for the control plane
 - deno isolates for the customer function runtime
-- postgres 17 + pgvector + pg_cron + pgmq
+- git-native sql database (branches, commits, time-travel, diffs)
 - better auth (google + github + konnos + magic link), polar.sh, mittera.eu, minio, redis
-- grafana + loki + prometheus + postgres-exporter for observability
+- grafana + loki + prometheus + mysqld_exporter for observability
 
 ## brand
 

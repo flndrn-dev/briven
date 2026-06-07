@@ -30,7 +30,7 @@ source:  https://code.konnos.org/flndrn/briven
 `;
 
 export function printHelp(): void {
-  banner('ship typescript backends to your own postgres');
+  banner('ship typescript backends to your own version-controlled database');
   blankLine();
   process.stdout.write(HELP);
 }

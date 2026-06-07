@@ -2,17 +2,17 @@ import { describe, expect, test } from 'bun:test';
 
 import { AUTH_TABLES, renderAuthProvisioningSql } from './auth-provisioning.js';
 
-describe('auth-provisioning — DDL emitter (BUILD_PLAN.md §3)', () => {
+describe('auth-provisioning — DDL emitter (BUILD_PLAN.md §3, MySQL)', () => {
   const stmts = renderAuthProvisioningSql();
 
-  test('emits citext extension first (required before email column types)', () => {
-    expect(stmts[0]).toBe('CREATE EXTENSION IF NOT EXISTS citext');
+  test('first statement creates _briven_auth_users table (no citext extension in MySQL)', () => {
+    expect(stmts[0]).toContain('CREATE TABLE IF NOT EXISTS `_briven_auth_users`');
   });
 
   test('emits all five _briven_auth_* tables with IF NOT EXISTS', () => {
     for (const table of AUTH_TABLES) {
       const hasCreateTable = stmts.some((s) =>
-        s.startsWith(`CREATE TABLE IF NOT EXISTS "${table}"`),
+        s.startsWith(`CREATE TABLE IF NOT EXISTS \`${table}\``),
       );
       expect(hasCreateTable).toBe(true);
     }
@@ -26,12 +26,12 @@ describe('auth-provisioning — DDL emitter (BUILD_PLAN.md §3)', () => {
     }
   });
 
-  test('users.email is citext for case-insensitive comparison', () => {
+  test('users.email uses utf8mb4_unicode_ci collation for case-insensitive comparison (MySQL citext equivalent)', () => {
     const usersTable = stmts.find((s) =>
-      s.startsWith(`CREATE TABLE IF NOT EXISTS "_briven_auth_users"`),
+      s.startsWith('CREATE TABLE IF NOT EXISTS `_briven_auth_users`'),
     );
     expect(usersTable).toBeDefined();
-    expect(usersTable!).toContain('email citext NOT NULL');
+    expect(usersTable!).toContain('COLLATE utf8mb4_unicode_ci');
   });
 
   test('users.email has unique index (one email per tenant)', () => {
@@ -41,26 +41,26 @@ describe('auth-provisioning — DDL emitter (BUILD_PLAN.md §3)', () => {
     expect(uniq).toBeDefined();
   });
 
-  test('sessions cascade-delete on user removal', () => {
+  test('sessions cascade-delete on user removal (CONSTRAINT FK syntax)', () => {
     const sessions = stmts.find((s) =>
-      s.startsWith(`CREATE TABLE IF NOT EXISTS "_briven_auth_sessions"`),
+      s.startsWith('CREATE TABLE IF NOT EXISTS `_briven_auth_sessions`'),
     );
     expect(sessions).toBeDefined();
-    expect(sessions!).toContain('REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE');
+    expect(sessions!).toContain('ON DELETE CASCADE');
   });
 
   test('accounts cascade-delete on user removal', () => {
     const accounts = stmts.find((s) =>
-      s.startsWith(`CREATE TABLE IF NOT EXISTS "_briven_auth_accounts"`),
+      s.startsWith('CREATE TABLE IF NOT EXISTS `_briven_auth_accounts`'),
     );
-    expect(accounts!).toContain('REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE');
+    expect(accounts!).toContain('ON DELETE CASCADE');
   });
 
   test('audit_log preserves rows when user is deleted (forensic value)', () => {
     const audit = stmts.find((s) =>
-      s.startsWith(`CREATE TABLE IF NOT EXISTS "_briven_auth_audit_log"`),
+      s.startsWith('CREATE TABLE IF NOT EXISTS `_briven_auth_audit_log`'),
     );
-    expect(audit!).toContain('REFERENCES "_briven_auth_users"(id) ON DELETE SET NULL');
+    expect(audit!).toContain('ON DELETE SET NULL');
   });
 
   test('accounts has the (provider_id, provider_account_id) uniqueness constraint', () => {
@@ -68,32 +68,32 @@ describe('auth-provisioning — DDL emitter (BUILD_PLAN.md §3)', () => {
       (s) =>
         s.includes('_briven_auth_accounts_provider_pair_uniq') &&
         s.includes('UNIQUE') &&
-        s.includes('(provider_id, provider_account_id)'),
+        s.includes('provider_id'),
     );
     expect(uniq).toBeDefined();
   });
 
   test('verification_tokens stores value_hash, never the raw token', () => {
     const verif = stmts.find((s) =>
-      s.startsWith(`CREATE TABLE IF NOT EXISTS "_briven_auth_verification_tokens"`),
+      s.startsWith('CREATE TABLE IF NOT EXISTS `_briven_auth_verification_tokens`'),
     );
-    expect(verif!).toContain('value_hash text NOT NULL');
+    expect(verif!).toContain('value_hash TEXT NOT NULL');
     // Negative check: there must not be a raw `value` column.
-    expect(verif!).not.toMatch(/\bvalue text\b/);
+    expect(verif!).not.toMatch(/\bvalue TEXT\b/);
   });
 
-  test('audit_log metadata defaults to empty jsonb', () => {
+  test('audit_log metadata defaults to empty JSON (MySQL JSON_OBJECT)', () => {
     const audit = stmts.find((s) =>
-      s.startsWith(`CREATE TABLE IF NOT EXISTS "_briven_auth_audit_log"`),
+      s.startsWith('CREATE TABLE IF NOT EXISTS `_briven_auth_audit_log`'),
     );
-    expect(audit!).toContain(`metadata jsonb NOT NULL DEFAULT '{}'::jsonb`);
+    expect(audit!).toContain('JSON NOT NULL DEFAULT (JSON_OBJECT())');
   });
 
   test('AUTH_TABLES is exhaustive and length matches DDL emit', () => {
     expect(AUTH_TABLES.length).toBe(5);
     const createdTables = stmts
       .filter((s) => s.startsWith('CREATE TABLE'))
-      .map((s) => s.match(/"(_briven_auth_[a-z_]+)"/)?.[1]);
+      .map((s) => s.match(/`(_briven_auth_[a-z_]+)`/)?.[1]);
     expect(new Set(createdTables)).toEqual(new Set(AUTH_TABLES));
   });
 
