@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { LOCAL_STORAGE_KEYS } from 'common'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'

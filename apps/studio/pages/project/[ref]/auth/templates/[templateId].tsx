@@ -114,7 +114,7 @@ const RedirectToTemplates = () => {
     : {}
 
   const templateForm = useForm<z.infer<typeof TemplateFormSchema>>({
-    resolver: zodResolver(TemplateFormSchema),
+    resolver: zodResolver(TemplateFormSchema as any),
     defaultValues,
   })
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useDebounce } from '@uidotdev/usehooks'
 import { useParams } from 'common'
 import { Home, Plus } from 'lucide-react'

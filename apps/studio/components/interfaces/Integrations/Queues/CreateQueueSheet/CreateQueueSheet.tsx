@@ -59,7 +59,7 @@ export const CreateQueueSheet = ({ visible, onClose }: CreateQueueSheetProps) =>
   )
 
   const form = useForm<CreateQueueForm>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

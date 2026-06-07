@@ -1,7 +1,7 @@
 import { createMCPClient } from '@ai-sdk/mcp'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js' // .js required for esbuild ESM resolution
-import { createBrivenMcpServer } from '@supabase/mcp-server-supabase'
-import { createBrivenApiPlatform } from '@supabase/mcp-server-supabase/platform/api'
+import { createSupabaseMcpServer } from '@supabase/mcp-server-supabase'
+import { createSupabaseApiPlatform } from '@supabase/mcp-server-supabase/platform/api'
 
 import { API_URL } from '@/lib/constants'
 
@@ -16,8 +16,8 @@ export async function createBrivenMCPClient({
 
   // Instantiate the MCP server and connect to its transport
   const apiUrl = API_URL?.replace('/platform', '')
-  const server = createBrivenMcpServer({
-    platform: createBrivenApiPlatform({
+  const server = createSupabaseMcpServer({
+    platform: createSupabaseApiPlatform({
       accessToken,
       apiUrl,
     }),

@@ -57,7 +57,7 @@ const CreateUserModal = ({ visible, setVisible }: CreateUserModalProps) => {
   }
 
   const form = useForm<z.infer<typeof CreateUserFormSchema>>({
-    resolver: zodResolver(CreateUserFormSchema),
+    resolver: zodResolver(CreateUserFormSchema as any),
     defaultValues: { email: '', password: '', autoConfirmUser: true },
   })
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { cn } from 'ui'

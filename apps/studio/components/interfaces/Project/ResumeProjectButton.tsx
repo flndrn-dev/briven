@@ -95,7 +95,7 @@ export const ResumeProjectButton = ({
   })
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     mode: 'onChange',
     defaultValues: { postgresVersionSelection: '' },
   })

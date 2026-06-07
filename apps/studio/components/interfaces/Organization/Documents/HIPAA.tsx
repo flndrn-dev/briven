@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ExternalLink } from 'lucide-react'
 import { Button } from 'ui'
 

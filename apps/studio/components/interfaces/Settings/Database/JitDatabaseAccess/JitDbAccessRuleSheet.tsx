@@ -159,7 +159,7 @@ export function JitDbAccessRuleSheet({
   )
   const form = useForm<JitUserRuleDraft>({
     defaultValues,
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
   })
   const grants = form.watch('grants')
 

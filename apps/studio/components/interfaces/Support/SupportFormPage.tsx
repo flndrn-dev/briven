@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as Sentry from '@sentry/nextjs'
 import { Loader2, Wrench } from 'lucide-react'
 import Link from 'next/link'

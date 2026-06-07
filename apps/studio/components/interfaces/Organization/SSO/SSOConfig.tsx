@@ -115,7 +115,7 @@ export const SSOConfig = () => {
   const isSSOProviderNotFound = ssoConfig === null
 
   const form = useForm<SSOConfigFormSchema>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

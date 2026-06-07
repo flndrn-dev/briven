@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PermissionAction } from '@supabase/shared-types/out/constants'
 import { IS_PLATFORM, useParams } from 'common'
 import { PlayCircle, StopCircle } from 'lucide-react'

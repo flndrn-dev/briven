@@ -1,5 +1,5 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { createBrivenMcpServer, BrivenPlatform } from '@supabase/mcp-server-supabase'
+import { createSupabaseMcpServer, SupabasePlatform } from '@supabase/mcp-server-supabase'
 import { stripIndent } from 'common-tags'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
@@ -58,14 +58,14 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
   const { features, read_only } = data
   const headers = fromNodeHeaders(req.headers)
 
-  const platform: BrivenPlatform = {
+  const platform: SupabasePlatform = {
     database: getDatabaseOperations({ headers }),
     development: getDevelopmentOperations({ headers }),
     debugging: getDebuggingOperations({ headers }),
   }
 
   try {
-    const server = createBrivenMcpServer({
+    const server = createSupabaseMcpServer({
       platform,
       projectId: DEFAULT_PROJECT.ref,
       features,

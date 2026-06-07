@@ -48,7 +48,7 @@ export const DataApiEnableSwitch = () => {
   const isLoading = isLoadingConfig || !projectRef
 
   const form = useForm<DataApiFormValues>({
-    resolver: zodResolver(dataApiFormSchema),
+    resolver: zodResolver(dataApiFormSchema as any),
     mode: 'onChange',
     defaultValues: {
       enableDataApi: false,

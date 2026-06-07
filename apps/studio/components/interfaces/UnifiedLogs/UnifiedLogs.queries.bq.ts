@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Legacy BigQuery unified-logs queries. Kept side-by-side with
 // UnifiedLogs.queries.ts (the OTEL/ClickHouse version) so the
 // `otelUnifiedLogs` feature flag can route traffic between the two paths

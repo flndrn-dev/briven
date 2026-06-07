@@ -44,7 +44,7 @@ export const useAIOptInForm = (onSuccessCallback?: () => void) => {
   const { mutate: updateOrganization, isPending: isUpdating } = useOrganizationUpdateMutation()
 
   const form = useForm<AIOptInFormValues>({
-    resolver: zodResolver(AIOptInSchema),
+    resolver: zodResolver(AIOptInSchema as any),
     defaultValues: {
       aiOptInLevel: getAiOptInLevel(selectedOrganization?.opt_in_tags),
     },

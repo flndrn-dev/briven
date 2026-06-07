@@ -51,7 +51,7 @@ const VercelIntegrationConnectionForm = ({
   })
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       environmentVariablesProduction: envSyncTargets.includes('production'),
       environmentVariablesPreview: envSyncTargets.includes('preview'),

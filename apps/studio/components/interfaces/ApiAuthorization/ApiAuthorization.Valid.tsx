@@ -120,7 +120,7 @@ export function ApiAuthorizationValidScreen({
   const [approvalState, setApprovalState] = useState<ApprovalState>('indeterminate')
 
   const form = useForm<IApprovalFormSchema>({
-    resolver: zodResolver(approvalFormSchema),
+    resolver: zodResolver(approvalFormSchema as any),
     defaultValues: { selectedOrgSlug: '' },
     mode: 'onSubmit',
     reValidateMode: 'onBlur',

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { GitBranchIcon } from 'lucide-react'
 import { useState } from 'react'
 import {

@@ -23,7 +23,7 @@ const formId = 'invite-user-form'
 const InviteUserModal = ({ visible, setVisible }: InviteUserModalProps) => {
   const { ref: projectRef } = useParams()
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: {
       email: '',
     },

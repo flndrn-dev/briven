@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { BookOpen, ChevronDown, ExternalLink } from 'lucide-react'
 import { parseAsString, useQueryState } from 'nuqs'

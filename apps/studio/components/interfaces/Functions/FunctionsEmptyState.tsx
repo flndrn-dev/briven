@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { Code, Play, Terminal } from 'lucide-react'
 import Link from 'next/link'

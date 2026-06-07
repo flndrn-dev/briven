@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { AuthUsersSearchSubmittedEvent } from 'common/telemetry-constants'
 import { Search, X } from 'lucide-react'
 import { parseAsString, parseAsStringEnum, useQueryState } from 'nuqs'

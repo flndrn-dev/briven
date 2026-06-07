@@ -60,7 +60,7 @@ export const CreateTableSheet = ({ open, onOpenChange }: CreateTableSheetProps) 
     columns: [{ name: '', type: 'string' as any }],
   }
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
     mode: 'onChange',
   })

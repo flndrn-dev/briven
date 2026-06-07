@@ -37,7 +37,7 @@ export const SignInMfaForm = ({ context = 'sign-in' }: SignInMfaFormProps) => {
 
   const [selectedFactor, setSelectedFactor] = useState<Factor | null>(null)
   const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: { code: '' },
   })
 

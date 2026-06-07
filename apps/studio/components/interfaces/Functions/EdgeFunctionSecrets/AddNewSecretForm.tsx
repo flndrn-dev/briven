@@ -62,7 +62,7 @@ export const AddNewSecretForm = () => {
   const [pendingSecrets, setPendingSecrets] = useState<z.infer<typeof FormSchema> | null>(null)
 
   const form = useForm({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

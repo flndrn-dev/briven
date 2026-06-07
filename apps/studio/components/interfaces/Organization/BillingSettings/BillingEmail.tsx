@@ -55,7 +55,7 @@ const BillingEmail = () => {
     useOrganizationCustomerProfileQuery({ slug }, { enabled: canReadBillingEmail })
 
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: {
       billingEmail: billing_email ?? '',
       additionalBillingEmails: billingCustomer?.additional_emails ?? [],

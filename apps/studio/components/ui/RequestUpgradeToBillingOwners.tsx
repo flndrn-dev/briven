@@ -127,7 +127,7 @@ export const RequestUpgradeToBillingOwners = ({
       : `We'd like to upgrade to the ${plan} plan ${!!featureProposition ? `to ${featureProposition} ` : ''}${target}`,
   }
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
     values: defaultValues,
   })

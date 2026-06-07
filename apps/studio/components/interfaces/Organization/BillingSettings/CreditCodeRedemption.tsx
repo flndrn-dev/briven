@@ -76,7 +76,7 @@ export const CreditCodeRedemption = ({
     !canRedeemCode || !isPermissionsLoaded || isOrgLoading || isOrgBalanceLoading
 
   const form = useForm<CreditCodeRedemptionForm>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { code: '' },
   })
   const { isValid } = form.formState

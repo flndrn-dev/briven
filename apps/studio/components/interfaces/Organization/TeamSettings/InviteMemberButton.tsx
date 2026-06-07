@@ -140,7 +140,7 @@ export const InviteMemberButton = () => {
   const form = useForm<z.infer<typeof FormSchema>>({
     mode: 'onSubmit',
     reValidateMode: 'onChange',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

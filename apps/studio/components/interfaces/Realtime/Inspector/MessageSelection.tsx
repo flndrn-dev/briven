@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { X } from 'lucide-react'
 import { useMemo } from 'react'

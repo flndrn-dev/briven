@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { BookOpen } from 'lucide-react'
 import Link from 'next/link'

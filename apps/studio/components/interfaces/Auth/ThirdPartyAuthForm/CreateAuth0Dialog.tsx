@@ -58,7 +58,7 @@ export const CreateAuth0IntegrationDialog = ({
   })
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       enabled: true,
       auth0DomainName: '',

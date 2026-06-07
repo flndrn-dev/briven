@@ -126,7 +126,7 @@ export const CreateVectorTableSheet = ({ bucketName }: CreateVectorTableSheetPro
     metadataKeys: [],
   }
   const form = useForm<CreateVectorTableForm>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
     values: defaultValues as any,
   })

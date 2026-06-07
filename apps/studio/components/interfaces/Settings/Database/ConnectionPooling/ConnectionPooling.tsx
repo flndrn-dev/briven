@@ -107,7 +107,7 @@ export const ConnectionPooling = () => {
   const defaultMaxClientConn = poolingOptimizations.maxClientConn ?? 200
 
   const form = useForm<z.infer<typeof PoolingConfigurationFormSchema>>({
-    resolver: zodResolver(PoolingConfigurationFormSchema),
+    resolver: zodResolver(PoolingConfigurationFormSchema as any),
     defaultValues: {
       default_pool_size: undefined,
       max_client_conn: undefined,

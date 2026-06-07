@@ -50,7 +50,7 @@ export const ResetPasswordForm = () => {
   const [currentPasswordHidden, setCurrentPasswordHidden] = useState(true)
 
   const form = useForm<FormData>({
-    resolver: zodResolver(requireCurrentPassword ? passwordSchema : recoveryPasswordSchema),
+    resolver: zodResolver(requireCurrentPassword ? passwordSchema : recoveryPasswordSchema as any),
     defaultValues: { password: '', currentPassword: '' },
     mode: 'onChange',
   })

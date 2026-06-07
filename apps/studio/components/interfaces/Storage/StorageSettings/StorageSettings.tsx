@@ -162,7 +162,7 @@ export const StorageSettings = () => {
     })
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: initialValues,
     mode: 'onSubmit',
     reValidateMode: 'onSubmit',

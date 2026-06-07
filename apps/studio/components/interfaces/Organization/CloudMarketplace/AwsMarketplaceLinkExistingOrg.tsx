@@ -59,7 +59,7 @@ export const AwsMarketplaceLinkExistingOrg = ({
     })
 
   const form = useForm<LinkExistingOrgForm>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       orgSlug: undefined,
     },

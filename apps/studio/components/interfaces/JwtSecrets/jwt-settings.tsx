@@ -151,12 +151,12 @@ export const JWTSettings = () => {
 
   const form = useForm<z.infer<typeof formSchema>>({
     defaultValues: INITIAL_VALUES,
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
   })
 
   const customJwtSecretForm = useForm<z.infer<typeof customJwtSecretFormSchema>>({
     defaultValues: { customToken: '' },
-    resolver: zodResolver(customJwtSecretFormSchema),
+    resolver: zodResolver(customJwtSecretFormSchema as any),
   })
 
   const { reset, formState } = form

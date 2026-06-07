@@ -61,7 +61,7 @@ export const UpdateForeignSchemaDialog = ({
     schema: z.string().trim().min(1, 'Schema name is required'),
   })
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { schema: schemasAssociatedWithNamespace[0] },
     values: { schema: schemasAssociatedWithNamespace[0] },
   })

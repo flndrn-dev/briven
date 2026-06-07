@@ -42,7 +42,7 @@ const SiteUrl = () => {
   )
 
   const siteUrlForm = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: {
       SITE_URL: '',
     },

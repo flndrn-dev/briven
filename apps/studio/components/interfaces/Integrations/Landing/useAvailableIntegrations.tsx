@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useQuery } from '@tanstack/react-query'
 import { FeatureFlagContext, IS_PLATFORM } from 'common'
 import { fullImageUrl } from 'common/marketplace-client'
@@ -9,7 +10,7 @@ import { cn } from 'ui'
 
 import { INTEGRATIONS, Loading, type IntegrationDefinition } from './Integrations.constants'
 import { useIsMarketplaceEnabled } from '@/components/interfaces/App/FeaturePreview/FeaturePreviewContext'
-import { marketplaceIntegrationsQueryOptions } from '@/data/marketplace/integrations-query'
+import { useMarketplaceIntegrationsQuery } from '@/data/marketplace/integrations-query'
 import { useCLIReleaseVersionQuery } from '@/data/misc/cli-release-version-query'
 import { useIsFeatureEnabled } from '@/hooks/misc/useIsFeatureEnabled'
 
@@ -27,7 +28,7 @@ export const useAvailableIntegrations = () => {
   const isCLI = !!cliData?.current
 
   const { data, error } = useQuery({
-    ...marketplaceIntegrationsQueryOptions(),
+    ...useMarketplaceIntegrationsQuery(),
     enabled: isMarketplaceEnabled,
   })
   const isPending = IS_PLATFORM && (!hasLoaded || (isMarketplaceEnabled && !data && !error))

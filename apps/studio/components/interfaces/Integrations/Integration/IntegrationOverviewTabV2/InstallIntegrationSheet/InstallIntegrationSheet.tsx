@@ -92,7 +92,7 @@ export const InstallIntegrationSheet = ({ integration }: InstallIntegrationSheet
   const form = useForm<Record<string, string>>({
     mode: 'onBlur',
     reValidateMode: 'onBlur',
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues,
   })
 

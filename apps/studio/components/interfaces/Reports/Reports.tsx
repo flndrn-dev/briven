@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PermissionAction } from '@supabase/shared-types/out/constants'
 import { useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'common'

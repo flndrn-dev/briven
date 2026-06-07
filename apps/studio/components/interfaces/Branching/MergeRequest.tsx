@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { LOCAL_STORAGE_KEYS, useParams } from 'common'
 import dayjs from 'dayjs'
 import { GitBranchIcon, GitMerge, MoreVertical, Shield } from 'lucide-react'

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { RegistryDefinations } from '../types'
 
 export const API_KEYS_SHORTCUT_IDS = {

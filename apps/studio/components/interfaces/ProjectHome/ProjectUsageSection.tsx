@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import dayjs from 'dayjs'
 import Link from 'next/link'

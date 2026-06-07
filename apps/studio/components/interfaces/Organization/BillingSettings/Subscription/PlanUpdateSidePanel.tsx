@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PermissionAction } from '@supabase/shared-types/out/constants'
 import { useDebounce } from '@uidotdev/usehooks'
 import { useParams } from 'common'

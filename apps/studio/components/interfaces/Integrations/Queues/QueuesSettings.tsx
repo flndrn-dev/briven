@@ -43,7 +43,7 @@ export const QueuesSettings = () => {
 
   const formSchema = z.object({ enable: z.boolean() })
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     mode: 'onChange',
     defaultValues: { enable: false },
   })

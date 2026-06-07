@@ -48,7 +48,7 @@ export function EditSecretSheet({ secret, visible, onClose }: EditSecretSheetPro
   const [showSecretValue, setShowSecretValue] = useState(false)
 
   const form = useForm<FormSchemaType>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
   })
 
   const isValid = form.formState.isValid

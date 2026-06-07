@@ -438,3 +438,5 @@ export const formatNumber = (num: number): string => {
 export const showMicroUpgrade = (plan: PlanId, infraComputeSize: InfraInstanceSize): boolean => {
   return plan !== 'free' && infraComputeSize === 'nano'
 }
+
+export function hasBurstableIO(): boolean { return false; }

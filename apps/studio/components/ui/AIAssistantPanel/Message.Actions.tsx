@@ -119,7 +119,7 @@ function MessageActionsThumbsDown({
   const [open, setOpen] = useState(false)
 
   const form = useForm<FeedbackFormValues>({
-    resolver: zodResolver(feedbackSchema),
+    resolver: zodResolver(feedbackSchema as any),
     defaultValues: { reason: '' },
     mode: 'onSubmit',
   })

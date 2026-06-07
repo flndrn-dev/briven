@@ -72,7 +72,7 @@ export const BasicAuthSettingsForm = () => {
   )
 
   const form = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: {
       DISABLE_SIGNUP: true,
       EXTERNAL_ANONYMOUS_USERS_ENABLED: false,

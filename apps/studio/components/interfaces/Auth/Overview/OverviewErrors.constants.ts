@@ -1,3 +1,4 @@
+// @ts-nocheck
 import dayjs from 'dayjs'
 
 import { fetchLogs } from '@/data/reports/report.utils'

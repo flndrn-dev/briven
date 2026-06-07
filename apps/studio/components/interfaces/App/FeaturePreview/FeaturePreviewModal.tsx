@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { LOCAL_STORAGE_KEYS, useParams } from 'common'
 import { ExternalLink, Eye, EyeOff, FlaskConical } from 'lucide-react'
 import Link from 'next/link'

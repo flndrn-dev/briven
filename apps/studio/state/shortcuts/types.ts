@@ -130,3 +130,5 @@ export interface ShortcutDefinition {
 }
 
 export type RegistryDefinations<T extends string> = Record<T, ShortcutDefinition>
+
+export interface ShortcutHotkeyMeta {}

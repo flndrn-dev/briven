@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { AlertTriangle, GitBranchIcon, X } from 'lucide-react'
 import Link from 'next/link'

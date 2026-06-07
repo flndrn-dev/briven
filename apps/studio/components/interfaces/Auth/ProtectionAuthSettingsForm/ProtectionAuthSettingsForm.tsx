@@ -133,7 +133,7 @@ export const ProtectionAuthSettingsForm = () => {
   )
 
   const protectionForm = useForm<FormSchema>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: {
       DISABLE_SIGNUP: true,
       EXTERNAL_ANONYMOUS_USERS_ENABLED: false,

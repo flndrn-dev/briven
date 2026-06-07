@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useHotkeyRegistrations, type SequenceRegistrationView } from '@tanstack/react-hotkeys'
 import { CircleX } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'

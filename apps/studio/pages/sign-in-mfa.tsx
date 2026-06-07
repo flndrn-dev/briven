@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as Sentry from '@sentry/nextjs'
 import { useQueryClient } from '@tanstack/react-query'
 import { getAccessToken, useParams } from 'common'

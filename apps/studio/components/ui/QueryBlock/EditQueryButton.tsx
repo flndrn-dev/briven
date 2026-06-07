@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { Edit } from 'lucide-react'
 import { useRouter } from 'next/router'

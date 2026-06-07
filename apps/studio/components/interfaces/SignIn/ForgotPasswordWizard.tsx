@@ -39,7 +39,7 @@ const ConfirmResetCodeForm = ({ email }: { email: string }) => {
   const [isLoading, setIsLoading] = useState(false)
 
   const codeForm = useForm<CodeFormData>({
-    resolver: zodResolver(codeSchema),
+    resolver: zodResolver(codeSchema as any),
     defaultValues: { code: '' },
   })
 
@@ -111,7 +111,7 @@ const ForgotPasswordForm = ({ onSuccess }: { onSuccess: (email: string) => void 
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
 
   const forgotPasswordForm = useForm<ForgotPasswordFormData>({
-    resolver: zodResolver(forgotPasswordSchema),
+    resolver: zodResolver(forgotPasswordSchema as any),
     defaultValues: { email: '' },
   })
 

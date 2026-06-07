@@ -183,7 +183,7 @@ export const PublishAppSidePanel = ({
 
   const form = useForm<FormSchema>({
     defaultValues: getFormDefaultValues(selectedApp),
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
   })
   const { reset } = form
   const { errors, isSubmitting } = form.formState

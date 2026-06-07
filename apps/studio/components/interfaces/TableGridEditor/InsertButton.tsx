@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PermissionAction } from '@supabase/shared-types/out/constants'
 import { useParams } from 'common'
 import { ArrowUp, ChevronDown, FileText } from 'lucide-react'

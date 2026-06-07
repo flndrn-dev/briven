@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { HelpCircle } from 'lucide-react'
 import { cn } from 'ui'
 

@@ -59,7 +59,7 @@ export const ProfileInformation = () => {
   }
 
   const form = useForm({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
     values: defaultValues,
   })

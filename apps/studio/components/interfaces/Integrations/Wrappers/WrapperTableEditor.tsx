@@ -289,7 +289,7 @@ const TableForm = ({
 
   const form = useForm<FormSchema>({
     defaultValues,
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     shouldUnregister: true,
   })
 

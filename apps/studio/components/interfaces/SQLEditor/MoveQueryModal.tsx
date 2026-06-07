@@ -103,7 +103,7 @@ export const MoveQueryModal = ({ visible, snippets = [], onClose }: MoveQueryMod
   const form = useForm<z.infer<typeof FormSchema>>({
     mode: 'onSubmit',
     reValidateMode: 'onSubmit',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { name: '' },
   })
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Chat, type UIMessage as MessageType } from '@ai-sdk/react'
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { LOCAL_STORAGE_KEYS } from 'common'

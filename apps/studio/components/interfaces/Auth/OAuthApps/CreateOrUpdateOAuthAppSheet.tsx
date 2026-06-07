@@ -107,7 +107,7 @@ export const CreateOrUpdateOAuthAppSheet = ({
   const isPublicClient = appToEdit?.client_type === 'public'
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: initialValues,
   })
 

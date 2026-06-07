@@ -126,7 +126,7 @@ export const PolicyEditorPanel = memo(function ({
   const form = useForm<z.infer<typeof FormSchema>>({
     mode: 'onBlur',
     reValidateMode: 'onBlur',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

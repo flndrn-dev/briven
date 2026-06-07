@@ -90,7 +90,7 @@ export const SessionsAuthSettingsForm = () => {
   const promptProPlanUpgrade = IS_PLATFORM && !hasUserSessionsEntitlement
 
   const refreshTokenForm = useForm<z.infer<typeof RefreshTokenSchema>>({
-    resolver: zodResolver(RefreshTokenSchema),
+    resolver: zodResolver(RefreshTokenSchema as any),
     defaultValues: {
       REFRESH_TOKEN_ROTATION_ENABLED: false,
       SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: 0,
@@ -98,7 +98,7 @@ export const SessionsAuthSettingsForm = () => {
   })
 
   const userSessionsForm = useForm({
-    resolver: zodResolver(UserSessionsSchema),
+    resolver: zodResolver(UserSessionsSchema as any),
     defaultValues: {
       SESSIONS_TIMEBOX: 0,
       SESSIONS_INACTIVITY_TIMEOUT: 0,

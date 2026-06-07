@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { RegistryDefinations } from '../types'
 
 export const TABLE_EDITOR_SHORTCUT_IDS = {

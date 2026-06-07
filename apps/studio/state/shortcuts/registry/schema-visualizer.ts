@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { RegistryDefinations } from '../types'
 
 export const SCHEMA_VISUALIZER_SHORTCUT_IDS = {

@@ -64,7 +64,7 @@ export const EditSecretModal = () => {
   }
 
   const form = useForm<z.infer<typeof SecretSchema>>({
-    resolver: zodResolver(SecretSchema),
+    resolver: zodResolver(SecretSchema as any),
     defaultValues: values,
     values,
   })

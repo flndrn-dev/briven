@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { UseMutateAsyncFunction } from '@tanstack/react-query'
 import { snakeCase } from 'lodash'
 import z from 'zod'

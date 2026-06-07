@@ -49,7 +49,7 @@ export const SendMessageModal = ({ visible, onClose }: SendMessageModalProps) =>
   const { childId: queueName } = useParams()
   const { data: project } = useSelectedProjectQuery()
   const form = useForm<SendMessageForm>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       delay: 1,
       payload: '{}',

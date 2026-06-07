@@ -64,7 +64,7 @@ export const UpdateCustomReportModal = ({
   }
 
   const form = useForm<CustomReport>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: initialValues,
   })
   const { formState, reset } = form

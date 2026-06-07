@@ -93,7 +93,7 @@ export const CreateReportModal = ({ visible, onCancel, afterSubmit }: CreateRepo
   }
 
   const form = useForm<CustomReport>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: { name: '', description: '' },
   })
   const { isDirty } = form.formState

@@ -256,7 +256,7 @@ export const PasskeysSettingsForm = () => {
     isSuccess && authConfig ? buildPasskeysFormValues(authConfig, project) : undefined
 
   const form = useForm<PasskeysSettings>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: formValues ?? {
       PASSKEY_ENABLED: false,
       WEBAUTHN_RP_ID: '',

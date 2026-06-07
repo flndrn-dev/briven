@@ -35,7 +35,7 @@ export const OrganizationDetailsForm = () => {
     useOrganizationUpdateMutation()
 
   const orgDetailsForm = useForm<z.infer<typeof OrgDetailsSchema>>({
-    resolver: zodResolver(OrgDetailsSchema),
+    resolver: zodResolver(OrgDetailsSchema as any),
     defaultValues: { name: selectedOrganization?.name ?? '' },
   })
 

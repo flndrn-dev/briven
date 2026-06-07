@@ -95,7 +95,7 @@ export const CreateRuleSheet = ({ lint, open, onOpenChange }: CreateRuleSheetPro
   const form = useForm<z.infer<typeof FormSchema>>({
     mode: 'onBlur',
     reValidateMode: 'onChange',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

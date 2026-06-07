@@ -65,7 +65,7 @@ const FirstStep = ({ visible, isEnrolling, enroll, onClose }: FirstStepProps) =>
     name: z.string().min(1, 'Please provide a name to identify this app'),
   })
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { name: '' },
     mode: 'onChange',
   })
@@ -149,7 +149,7 @@ const SecondStep = ({
     code: z.string().min(1, 'Please provide a code from your authenticator app'),
   })
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { code: '' },
     mode: 'onChange',
   })
