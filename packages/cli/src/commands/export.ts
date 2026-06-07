@@ -25,7 +25,7 @@ interface ShellTokenResponse {
   expiresAt: string;
 }
 
-type ExportTarget = 'briven' | 'convex' | 'supabase' | 'postgres-sql';
+type ExportTarget = 'briven' | 'convex' | 'supabase' | 'mysql-sql';
 
 interface Args {
   out: string | null;
@@ -56,14 +56,14 @@ function printUsage(): void {
   blankLine();
   step('usage: briven export [--out <path>] [--with-data] [--target <name>]');
   step('  --out <path>     destination file (default: <projectId>-<timestamp>.briven-export.json)');
-  step('  --with-data      also stream pg_dump of the project schema to <out>.data.dump');
-  step('  --target <name>  output shape — briven (default) | convex | supabase | postgres-sql');
+  step('  --with-data      also stream mysqldump of the project database to <out>.data.dump');
+  step('  --target <name>  output shape — briven (default) | convex | supabase | mysql-sql');
   step('');
   step('targets:');
   step('  briven         briven-native bundle (json). this is the format briven import reads.');
   step('  convex         emit convex/schema.ts + convex/<name>.ts files in a directory.');
   step('  supabase       emit supabase/migrations/<ts>_init.sql + supabase/functions/<name>/.');
-  step('  postgres-sql   emit a single .sql file with CREATE TABLE statements only.');
+  step('  mysql-sql      emit a single .sql file with CREATE TABLE statements only.');
   step('');
   step('non-briven targets are reverse-direction parity — you can leave briven any day.');
   step('migrating TO briven? see https://briven.tech/migrate.');

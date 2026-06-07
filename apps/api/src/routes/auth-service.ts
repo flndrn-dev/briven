@@ -118,16 +118,16 @@ authServiceRouter.post(
 
     const statements = renderAuthProvisioningSql();
     try {
-      await runInProjectSchema(projectId, async (tx) => {
+      await runInProjectSchema(projectId, async (conn) => {
         for (const stmt of statements) {
-          await tx.unsafe(stmt);
+          await conn.query(stmt);
         }
         // Flip the meta flag so other code paths can probe "is auth on?"
-        // without inspecting pg_tables. ON CONFLICT keeps this idempotent.
-        await tx.unsafe(
-          `INSERT INTO "_briven_meta" (key, value)
-           VALUES ('auth_enabled', 'true'::jsonb)
-           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        // without a table scan. ON DUPLICATE KEY keeps this idempotent.
+        await conn.query(
+          `INSERT INTO \`_briven_meta\` (\`key\`, value)
+           VALUES ('auth_enabled', 'true')
+           ON DUPLICATE KEY UPDATE value = VALUES(value)`,
         );
       });
     } catch (err) {

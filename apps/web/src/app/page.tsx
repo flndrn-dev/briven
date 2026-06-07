@@ -17,14 +17,14 @@ export default async function HomePage() {
         <div className="flex max-w-3xl flex-col gap-6">
           <LiveBadge />
           <h1 className="font-sans font-medium leading-[1.05] tracking-[-0.03em] text-[var(--color-text)] text-[var(--text-display-3)] sm:text-[var(--text-display-2)]">
-            the postgres backend
+            the database
             <br />
-            you actually own.
+            that versions like git.
           </h1>
           <p className="max-w-2xl leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-            reactive queries, typed schema, one-command deploys — on vanilla postgres. worldwide
-            multi-region hosting. self-hostable. export your whole project with one command, any
-            day.
+            reactive queries, typed schema, one-command deploys — on a git-native sql database.
+            branches, time-travel, commit history. worldwide multi-region. self-hostable.
+            export everything.
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -52,22 +52,22 @@ export default async function HomePage() {
           body="cli or dashboard — build your schema by clicking through forms or by deploying schema.ts. typescript end-to-end, aha moment in under 60 seconds."
         />
         <Pillar
-          title="postgres underneath"
-          body="every table is a real table. every query is real sql. pg_dump is your escape hatch."
+          title="branches, commits, diffs"
+          body="git for your database. branch to experiment, merge to ship, time-travel to debug. every deploy is a commit."
         />
         <Pillar
           title="worldwide, owned, portable"
           body="multi-region from day one. agpl-licensed core. export everything, any time."
         />
         <Pillar
-          title="boring reliability"
-          body="daily backups, point-in-time recovery, monthly restore drills — from day one."
+          title="real sql, real database"
+          body="every table is a real table. every query is real sql. mysql-compatible — every client works."
         />
       </section>
 
       <section className="relative z-10 mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-h2)]">
-          two paths to the same Postgres schema
+          two paths to the same schema
         </h2>
         <div className="mt-6 grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-border-subtle)] md:grid-cols-2">
           <div className="flex flex-col gap-3 bg-[var(--color-bg)] p-6">
@@ -103,7 +103,7 @@ export default async function HomePage() {
           </div>
         </div>
         <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
-          both write to the same Postgres schema. mix freely.
+          both write to the same database. mix freely.
         </p>
       </section>
 

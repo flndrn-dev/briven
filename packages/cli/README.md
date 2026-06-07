@@ -1,6 +1,6 @@
 # @briven/cli
 
-> ship typescript backends to your own postgres
+> ship typescript backends to your own version-controlled database
 
 The developer CLI for [briven](https://briven.tech).
 

@@ -16,7 +16,7 @@ export async function runDb(argv: readonly string[]): Promise<number> {
   if (!sub || sub === '--help' || sub === '-h') {
     banner('db');
     blankLine();
-    step('briven db shell      open psql against your project schema');
+    step('briven db shell      open mysql against your project database');
     return sub ? 0 : 1;
   }
   if (sub !== 'shell') {
@@ -69,13 +69,13 @@ async function runShell(): Promise<number> {
   step(`expires   ${formatExpiry(token.expiresAt)}`);
   blankLine();
 
-  const result = spawnSync('psql', [token.dsn], { stdio: 'inherit' });
+  const result = spawnSync('mysql', [token.dsn], { stdio: 'inherit' });
   if (result.error) {
     const code = (result.error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
-      printError('psql not found — install the PostgreSQL client tools.');
-      step('macOS:  brew install libpq && brew link --force libpq');
-      step('Linux:  sudo apt install postgresql-client   (Debian/Ubuntu)');
+      printError('mysql not found — install the MySQL client tools.');
+      step('macOS:  brew install mysql-client');
+      step('Linux:  sudo apt install mysql-client   (Debian/Ubuntu)');
       return 1;
     }
     printError(result.error.message);

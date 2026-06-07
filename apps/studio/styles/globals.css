@@ -166,6 +166,27 @@
   ::file-selector-button {
     border-color: hsl(var(--border-default, currentColor));
   }
+
+  /* Global affordance: every interactive element shows pointer on hover.
+     Tailwind v4 no longer ships default cursor: pointer on buttons. */
+  button:not(:disabled),
+  a[href],
+  [role='button']:not([aria-disabled='true']),
+  summary,
+  label[for],
+  select:not(:disabled),
+  input[type='submit']:not(:disabled),
+  input[type='button']:not(:disabled),
+  input[type='reset']:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role='button'][aria-disabled='true'] {
+    cursor: not-allowed;
+  }
 }
 
 html,

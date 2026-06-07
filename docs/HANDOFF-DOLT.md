@@ -26,12 +26,12 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 | 0 | ADR + architecture decisions | **done** |
 | 1 | Database engine swap: mysql2 driver, drizzle mysql-core, tenant isolation (database-per-project) | **done** |
 | 2 | Realtime: commit-diff polling, PollManager, trigger removal | **done** |
-| 3 | Auth: Better Auth mysql-core adapter | pending |
-| 4 | Storage: MinIO (unchanged) | pending |
-| 5 | Edge functions: MySQL query builder, LanceDB vectors | pending |
-| 6 | AI: unchanged | pending |
-| 7 | Payments: mavi-pay BillingProvider, Dolt-native meters | pending |
-| 8 | Infrastructure: Dolt compose, dolt backup, mysqld_exporter | pending |
+| 3 | Auth: Better Auth mysql-core adapter | **done** |
+| 4 | Storage: MinIO (unchanged) | **done** |
+| 5 | Edge functions: MySQL query builder, LanceDB vectors | **done** |
+| 6 | AI: unchanged | **done** |
+| 7 | Payments: mavi-pay BillingProvider, Dolt-native meters | **done** |
+| 8 | Infrastructure: Dolt compose, dolt backup, mysqld_exporter | **done** |
 | 9 | Website rebrand: 7-pillar feature grid, pricing, copy | pending |
 | 10 | Dolt-native features: branching UX, time-travel, DoltHub | pending |
 | 11 | Testing, CLI, cutover runbook | pending |
@@ -106,6 +106,27 @@ briven migrates from PostgreSQL 17 to **Dolt MySQL-compatible mode** (not Doltgr
 - `projectIdFromChannel()` extracts the project id from channel names (`briven_proj_<sanitized>_<table>`). Since project ids are sanitised to alphanumeric+underscores, this is fully reversible.
 - First poll for a project stores the initial hash without firing — avoids spurious re-invocation on subscribe.
 
+### Phase 3 complete (2026-06-07)
+
+**3 files changed:**
+
+- **`apps/api/src/lib/auth.ts`** — `provider: 'pg'` → `provider: 'mysql'` in the control-plane Better Auth adapter. This was silently broken — `getDb()` returns a mysql2 drizzle instance but Better Auth was told to generate Postgres SQL.
+- **`apps/api/src/services/auth-provisioning.ts`** — full DDL rewrite for MySQL. Replaced `CREATE EXTENSION citext`, `text PRIMARY KEY`, `citext` column type, `timestamptz`, `jsonb`, double-quote identifiers, and `now()` with their MySQL equivalents (`VARCHAR(36)`, `COLLATE utf8mb4_unicode_ci`, `TIMESTAMP(3)`, `JSON`, backtick identifiers, `CURRENT_TIMESTAMP(3)`). FK constraints moved to explicit CONSTRAINT syntax.
+- **`apps/api/src/services/auth-provisioning.test.ts`** — all 11 test assertions updated to match MySQL DDL output.
+
+### Phases 6–8 complete (2026-06-07)
+
+**Phase 6 — AI: confirmed unaffected.** Ollama/OpenAI features communicate via HTTP to the AI backend. Zero database SQL queries. Gated by `BRIVEN_OLLAMA_URL`.
+
+**Phase 7 — Payments: BillingProvider interface + Dolt-native meters.**
+
+- **`services/billing/provider.ts`** (new) — `BillingProvider` interface with `pushMeterEvents`, `createCheckout`, `createPortalSession`. `getBillingProvider()` factory switches on `BRIVEN_BILLING_PROVIDER` env var (`'polar'` today, `'mavi-pay'` when ready).
+- **`services/billing/dolt-meters.ts`** (new) — three Dolt-native meter queries: `getBranchCount()` (reads `dolt_branches`), `getCommitCountThisMonth()` (reads `dolt_log` filtered to current month), `getTimeTravelRetentionDays()` (reads `_briven_meta` config). Combined via `getDoltMeters(projectId)`.
+
+**Phase 8 — Infrastructure: compose file fully migrated.**
+
+- **`infra/dokploy/compose.yml`** — `postgres` service → `dolt` (`dolthub/dolt-sql-server:latest`). Single `BRIVEN_URL=mysql://root:...@briven-dolt:3306/briven_control` replaces `BRIVEN_DATABASE_URL` + `BRIVEN_DATA_PLANE_URL`. Added `dolt-backup` placeholder service. `BRIVEN_POSTGRES_PASSWORD` → `BRIVEN_DOLT_ROOT_PASSWORD`. Updated all service env vars (api, runtime, realtime). Volume renamed `postgres_data` → `dolt_data`.
+
 ### Next action
 
-Start **Phase 3**: verify Better Auth's mysql-core adapter wiring. The schema was migrated in Phase 1 (`auth-customer-schema.ts`, `auth-tenant-pool.ts` with `provider: 'mysql'`). Test end-to-end auth flows (signup, signin, session persistence, OAuth linking) against a Dolt instance.
+Start **Phase 9**: website rebrand — 7-pillar feature grid, updated pricing, copy changes across the marketing site and docs to reflect the Dolt-native platform story.

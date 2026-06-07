@@ -1,7 +1,7 @@
 {
   "name": "@briven/cli",
   "version": "0.3.0",
-  "description": "ship typescript backends to your own postgres",
+  "description": "ship typescript backends to your own version-controlled database",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -58,7 +58,7 @@
   },
   "keywords": [
     "briven",
-    "postgres",
+    "database",
     "cli",
     "backend",
     "convex-alternative"
