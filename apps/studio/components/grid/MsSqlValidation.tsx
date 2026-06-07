@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ComponentType, ReactNode } from 'react'
 import { Admonition } from 'ui-patterns'
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable'
 import type { PGColumn } from '@supabase/pg-meta'

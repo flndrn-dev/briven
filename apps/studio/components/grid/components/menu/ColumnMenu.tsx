@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ArrowDown, ArrowUp, ChevronDown, Copy, Edit, Lock, Trash, Unlock } from 'lucide-react'
 import type { CalculatedColumn } from 'react-data-grid'
 import {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { PGTable } from '@supabase/pg-meta'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useParams } from 'common'

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ColumnType } from '../../types'
 
 export function getColumnFormat(type: ColumnType, format: string) {

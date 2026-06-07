@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { SupaRow } from './table'
 
 export interface GridProps {

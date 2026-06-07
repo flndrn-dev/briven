@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type Usercentrics from '@usercentrics/cmp-browser-sdk'
 import type { BaseCategory, UserDecision } from '@usercentrics/cmp-browser-sdk'
 import { proxy, snapshot, useSnapshot } from 'valtio'

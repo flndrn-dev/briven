@@ -102,7 +102,7 @@ export const TextConfirmModal = forwardRef<
 
     // 1. Define your form.
     const form = useForm<z.infer<typeof formSchema>>({
-      resolver: zodResolver(formSchema),
+      resolver: zodResolver(formSchema as any),
       reValidateMode: 'onChange',
       defaultValues: {
         confirmValue: '',

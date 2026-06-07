@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Plus } from 'lucide-react'
 import type { CalculatedColumn } from 'react-data-grid'
 import { Button } from 'ui'

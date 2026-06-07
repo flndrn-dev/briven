@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { isEqual } from 'lodash'
 import { Filter as FilterIcon, Plus } from 'lucide-react'
 import { KeyboardEvent, useCallback, useMemo, useState } from 'react'

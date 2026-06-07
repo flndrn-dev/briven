@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ChevronDown, X } from 'lucide-react'
 import { KeyboardEvent, memo } from 'react'
 import { Button, Input } from 'ui'

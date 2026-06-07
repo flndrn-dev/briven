@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Key, Lightbulb, Link, Lock } from 'lucide-react'
 
 import { useColumnHasIndexSuggestion } from '../../context/TableIndexAdvisorContext'

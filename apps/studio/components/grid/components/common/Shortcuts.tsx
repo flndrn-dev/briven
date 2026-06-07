@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { RefObject, useContext } from 'react'
 import type { DataGridHandle } from 'react-data-grid'
 

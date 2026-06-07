@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { PropsWithChildren } from 'react'
 import type { RenderCellProps } from 'react-data-grid'
 

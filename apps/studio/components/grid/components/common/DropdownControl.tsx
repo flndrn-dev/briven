@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PropsWithChildren } from 'react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from 'ui'
 

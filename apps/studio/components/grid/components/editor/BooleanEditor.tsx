@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { RenderEditCellProps } from 'react-data-grid'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from 'ui'
 

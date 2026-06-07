@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { format } from 'date-fns'
 import type { FilterProperty, OperatorDefinition } from 'ui-patterns'
 

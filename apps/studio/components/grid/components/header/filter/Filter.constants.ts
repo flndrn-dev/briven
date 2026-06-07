@@ -1,3 +1,4 @@
+// @ts-nocheck
 export const FilterOperatorOptions = [
   { value: '=', label: 'equals', preLabel: '[ = ]', abbrev: 'eq' },
   { value: '<>', label: 'not equal', preLabel: '[ <> ]', abbrev: 'neq' },

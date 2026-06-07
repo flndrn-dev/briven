@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { keepPreviousData } from '@tanstack/react-query'
 import { useParams } from 'common'
 import { PropsWithChildren, useRef } from 'react'

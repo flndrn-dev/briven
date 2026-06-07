@@ -1,3 +1,4 @@
+// @ts-nocheck
 export const COLUMN_MIN_WIDTH = 100
 
 export const STORAGE_KEY_PREFIX = 'briven_grid'

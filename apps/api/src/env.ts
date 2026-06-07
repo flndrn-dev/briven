@@ -145,6 +145,7 @@ const envSchema = z.object({
 
   // Web origin for email link callbacks.
   BRIVEN_WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
+  BRIVEN_STUDIO_ORIGIN: z.string().url().default('http://localhost:8082'),
 
   // Comma-separated list of origins Better Auth will accept as `callbackURL`.
   // Must include every public hostname that serves the dashboard.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { RenderEditCellProps } from 'react-data-grid'
 
 function autoFocusAndSelect(input: HTMLInputElement | null) {

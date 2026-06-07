@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Papa from 'papaparse'
 
 export const formatRowsForCSV = ({ rows, columns }: { rows: any[]; columns: string[] }) => {

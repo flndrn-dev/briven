@@ -1,4 +1,4 @@
-import type { BrivenClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { codeBlock, oneLine } from 'common-tags'
 import type OpenAI from 'openai'
 
@@ -16,7 +16,7 @@ interface PageSection {
 
 export async function clippy(
   openai: OpenAI,
-  brivenClient: BrivenClient<any, 'public', any>,
+  brivenClient: SupabaseClient<any, 'public', any>,
   messages: Message[],
   options?: { useAltSearchIndex?: boolean }
 ) {

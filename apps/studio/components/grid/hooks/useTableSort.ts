@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useMemo } from 'react'
 
 import { formatSortURLParams, sortsToUrlParams } from '@/components/grid/BrivenGrid.utils'

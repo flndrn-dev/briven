@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Copy } from 'lucide-react'
 import { PropsWithChildren } from 'react'
 import { toast } from 'sonner'

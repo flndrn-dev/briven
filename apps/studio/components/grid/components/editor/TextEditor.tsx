@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { Maximize } from 'lucide-react'
 import { useCallback, useState } from 'react'

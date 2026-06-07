@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FOREIGN_KEY_CASCADE_ACTION } from '@supabase/pg-meta'

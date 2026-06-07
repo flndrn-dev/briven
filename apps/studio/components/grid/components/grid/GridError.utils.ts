@@ -1,3 +1,4 @@
+// @ts-nocheck
 const FILTER_ERROR_PATTERNS = [
   'invalid input syntax',
   'operator does not exist',

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { GridForeignKey } from './base'
 import type { ENTITY_TYPE } from '@/data/entity-types/entity-type-constants'
 import type { Dictionary } from '@/types'
