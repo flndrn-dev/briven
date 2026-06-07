@@ -28,7 +28,7 @@ export const UpdateSavedQueryModal = ({
   initialValues,
 }: UpdateSavedQueryProps) => {
   const form = useForm<SavedQuery>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: { ...initialValues, description: initialValues.description ?? '' },
   })
   const { reset, formState } = form

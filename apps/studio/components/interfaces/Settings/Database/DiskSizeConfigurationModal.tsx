@@ -108,7 +108,7 @@ const DiskSizeConfigurationModal = ({
   }
 
   const form = useForm<z.infer<typeof diskSizeValidationSchema>>({
-    resolver: zodResolver(diskSizeValidationSchema),
+    resolver: zodResolver(diskSizeValidationSchema as any),
     defaultValues: INITIAL_VALUES,
   })
   const { reset, formState } = form

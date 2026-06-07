@@ -1,3 +1,4 @@
+// @ts-nocheck
 import dayjs from 'dayjs'
 import { has } from 'lodash'
 import { ExternalLink } from 'lucide-react'

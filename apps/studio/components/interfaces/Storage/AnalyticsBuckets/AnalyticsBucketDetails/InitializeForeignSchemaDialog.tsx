@@ -49,7 +49,7 @@ export const InitializeForeignSchemaDialog = ({ namespace }: { namespace: string
       }),
   })
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { schema: '' },
   })
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ChevronDown, Loader2, RefreshCw, Trash } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'

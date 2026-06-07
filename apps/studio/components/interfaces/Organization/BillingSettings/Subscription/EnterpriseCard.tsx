@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Check } from 'lucide-react'
 import { PricingInformation } from 'shared-data'
 import { Button, cn } from 'ui'

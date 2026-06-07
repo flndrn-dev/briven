@@ -93,7 +93,7 @@ export const EditWrapperSheet = ({
   type FormSchema = z.infer<typeof formSchema>
   const form = useForm<FormSchema>({
     defaultValues: initialValues,
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
   })
 
   const { getValues, resetField, setError } = form

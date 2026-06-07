@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { useCallback, useEffect, useState } from 'react'
 

@@ -58,7 +58,7 @@ export const SignUpForm = () => {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const router = useRouter()
   const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: { email: '', password: '' },
   })
 

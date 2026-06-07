@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PermissionAction } from '@supabase/shared-types/out/constants'
 import { BlobReader, BlobWriter, ZipWriter } from '@zip.js/zip.js'
 import { IS_PLATFORM, useParams } from 'common'

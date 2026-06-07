@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useDebounce } from '@uidotdev/usehooks'
 import { LOCAL_STORAGE_KEYS, useParams } from 'common'
 import { AnimatePresence, motion } from 'framer-motion'

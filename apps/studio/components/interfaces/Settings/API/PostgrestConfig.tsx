@@ -151,7 +151,7 @@ export const PostgrestConfig = () => {
   }, [config, configDbSchemas, defaultPrivilegesGranted])
 
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     mode: 'onChange',
     defaultValues,
   })

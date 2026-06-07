@@ -97,7 +97,7 @@ export const S3Connection = () => {
 
   const FormSchema = z.object({ s3ConnectionEnabled: z.boolean() })
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { s3ConnectionEnabled: false },
   })
 

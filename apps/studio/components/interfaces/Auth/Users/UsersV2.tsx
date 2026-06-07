@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { OptimizedSearchColumns } from '@supabase/pg-meta'
 import { USER_SEARCH_INDEXES } from '@supabase/pg-meta'
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query'

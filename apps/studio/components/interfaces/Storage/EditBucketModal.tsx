@@ -114,7 +114,7 @@ export const EditBucketModal = ({ visible, bucket, onClose }: EditBucketModalPro
   }
 
   const form = useForm<z.infer<typeof BucketSchema>>({
-    resolver: zodResolver(BucketSchema),
+    resolver: zodResolver(BucketSchema as any),
     defaultValues,
     values: defaultValues,
     mode: 'onSubmit',

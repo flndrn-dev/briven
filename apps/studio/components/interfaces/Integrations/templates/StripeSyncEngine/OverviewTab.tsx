@@ -66,7 +66,7 @@ export const StripeSyncEngineOverviewTab = () => {
 
   const formId = 'stripe-sync-install-form'
   const form = useForm<z.infer<typeof installFormSchema>>({
-    resolver: zodResolver(installFormSchema),
+    resolver: zodResolver(installFormSchema as any),
     defaultValues: { stripeSecretKey: '' },
     mode: 'onSubmit',
   })

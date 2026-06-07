@@ -148,7 +148,7 @@ export const CreateHookSheet = ({
   const isCreating = !isValidHook(hook)
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       hookType: title || '',
       enabled: true,

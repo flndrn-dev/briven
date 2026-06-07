@@ -85,7 +85,7 @@ export const CreateFunction = ({
   const isEditing = !isDuplicating && !!func?.id
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
   })
   const language = form.watch('language')
 

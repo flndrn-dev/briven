@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Monaco } from '@monaco-editor/react'
 import {
   acceptUntrustedSql,

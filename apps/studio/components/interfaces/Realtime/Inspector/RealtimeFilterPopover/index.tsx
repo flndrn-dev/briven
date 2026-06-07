@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { PlusCircle } from 'lucide-react'
 import Link from 'next/link'

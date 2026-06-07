@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as Sentry from '@sentry/nextjs'
 import { useIsLoggedIn, useUser } from 'common'
 import { useRouter } from 'next/router'

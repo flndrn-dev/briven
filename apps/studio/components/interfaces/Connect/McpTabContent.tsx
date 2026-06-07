@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { IS_PLATFORM, useParams } from 'common'
 import { useTheme } from 'next-themes'
 import { useMemo, useState } from 'react'

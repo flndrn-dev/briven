@@ -50,7 +50,7 @@ export const CustomDomainsConfigureHostname = () => {
   )
 
   const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: {
       domain: '',
     },

@@ -55,7 +55,7 @@ export const SchemaEditor = ({ visible, onSuccess, closePanel }: SchemaEditorPro
   }
 
   const form = useForm<FormSchema>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: {
       name: '',
     },

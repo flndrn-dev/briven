@@ -34,7 +34,7 @@ export const LinkSupportTicketForm = ({
   const { data: organizations, isSuccess } = useOrganizationsQuery()
 
   const form = useForm<LinkSupportTicketFormValues>({
-    resolver: zodResolver(LinkSupportTicketFormSchema),
+    resolver: zodResolver(LinkSupportTicketFormSchema as any),
     defaultValues: {
       conversation_id: conversationId,
       organizationSlug: NO_ORG_MARKER,

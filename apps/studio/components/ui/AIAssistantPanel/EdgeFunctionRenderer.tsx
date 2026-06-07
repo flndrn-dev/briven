@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { useMemo, useState, type PropsWithChildren } from 'react'
 

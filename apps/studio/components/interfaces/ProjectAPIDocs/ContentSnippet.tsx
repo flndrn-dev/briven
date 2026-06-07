@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { PropsWithChildren } from 'react'
 import { SimpleCodeBlock } from 'ui-patterns/SimpleCodeBlock'

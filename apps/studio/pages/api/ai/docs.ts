@@ -1,4 +1,4 @@
-import { BrivenClient } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
 import { ApplicationError, clippy, UserError } from 'ai-commands/edge'
 import { NextRequest } from 'next/server'
 import OpenAI from 'openai'
@@ -104,7 +104,7 @@ async function handlePost(request: NextRequest) {
     throw new UserError('Missing messages in request data')
   }
 
-  const brivenClient = new BrivenClient(brivenUrl!, brivenServiceKey!)
+  const brivenClient = new SupabaseClient(brivenUrl!, brivenServiceKey!)
 
   try {
     const response = await clippy(openai, brivenClient, messages)

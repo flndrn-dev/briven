@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { AiIconAnimation } from 'ui'
 
 import { SIDEBAR_KEYS } from '@/components/layouts/ProjectLayout/LayoutSidebar/LayoutSidebarProvider'

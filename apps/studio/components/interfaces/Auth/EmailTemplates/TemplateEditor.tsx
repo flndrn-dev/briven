@@ -107,7 +107,7 @@ export const TemplateEditor = ({ template }: TemplateEditorProps) => {
 
   const form = useForm({
     defaultValues: INITIAL_VALUES,
-    resolver: zodResolver(template.validationSchema),
+    resolver: zodResolver(template.validationSchema as any),
   })
 
   const onSubmit = (values: z.infer<typeof template.validationSchema>) => {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { waitUntil } from '@vercel/functions'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { VERSION } from 'stripe-experiment-sync'

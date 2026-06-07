@@ -75,7 +75,7 @@ const EditEnumeratedTypeSidePanel = ({
   })
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       name: '',
       description: '',

@@ -25,7 +25,7 @@ export const SignInSSOForm = () => {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [_, setLastSignInUsed] = useLastSignIn()
   const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: { email: '' },
   })
   const isSubmitting = form.formState.isSubmitting

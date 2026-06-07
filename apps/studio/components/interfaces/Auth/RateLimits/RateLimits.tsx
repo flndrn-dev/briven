@@ -80,7 +80,7 @@ export const RateLimits = () => {
   })
 
   const ipForwardingForm = useForm<z.infer<typeof IPForwardingFormSchema>>({
-    resolver: zodResolver(IPForwardingFormSchema),
+    resolver: zodResolver(IPForwardingFormSchema as any),
     defaultValues: {
       SECURITY_SB_FORWARDED_FOR_ENABLED: false,
     },
@@ -133,7 +133,7 @@ export const RateLimits = () => {
   })
 
   const rateLimitForm = useForm<z.infer<typeof RateLimitFormSchema>>({
-    resolver: zodResolver(RateLimitFormSchema),
+    resolver: zodResolver(RateLimitFormSchema as any),
     defaultValues: {
       RATE_LIMIT_TOKEN_REFRESH: 0,
       RATE_LIMIT_VERIFY: 0,

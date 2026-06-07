@@ -104,7 +104,7 @@ export const EditBranchModal = ({ branch, visible, onClose }: EditBranchModalPro
   const form = useForm<z.infer<typeof FormSchema>>({
     mode: 'onChange',
     reValidateMode: 'onChange',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { branchName: '', gitBranchName: '' },
   })
   const gitBranchName = useWatch({ control: form.control, name: 'gitBranchName' })

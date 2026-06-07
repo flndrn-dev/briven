@@ -54,7 +54,7 @@ export const NewScopedTokenSheet = ({
   const { organizations, projects } = useOrgAndProjectData()
 
   const form = useForm<TokenFormValues>({
-    resolver: zodResolver(TokenSchema),
+    resolver: zodResolver(TokenSchema as any),
     defaultValues: {
       tokenName: '',
       expiresAt: EXPIRES_AT_OPTIONS['month'].value,

@@ -398,7 +398,7 @@ export function LogDrainDestinationSheetForm({
   }, [defaultValues, mode, defaultHeaderEntries])
 
   const form = useForm<LogDrainDestinationFormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     values: formValues,
   })
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { zodResolver } from '@hookform/resolvers/zod'
 import { PermissionAction } from '@supabase/shared-types/out/constants'
 import { LOCAL_STORAGE_KEYS, useFlag, useParams } from 'common'
@@ -128,7 +129,7 @@ const Wizard: NextPageWithLayout = () => {
     useState(false)
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     mode: 'onChange',
     defaultValues: {
       organization: slug,

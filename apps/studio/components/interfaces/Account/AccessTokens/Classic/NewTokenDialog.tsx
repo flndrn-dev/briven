@@ -68,7 +68,7 @@ export const NewTokenDialog = ({
   const [isCustomExpiry, setIsCustomExpiry] = useState(false)
 
   const form = useForm<z.infer<typeof TokenSchema>>({
-    resolver: zodResolver(TokenSchema),
+    resolver: zodResolver(TokenSchema as any),
     defaultValues: { tokenName: '', expiresAt: EXPIRES_AT_OPTIONS['month'].value },
     mode: 'onChange',
   })

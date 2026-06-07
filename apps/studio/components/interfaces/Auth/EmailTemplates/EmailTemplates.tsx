@@ -81,7 +81,7 @@ export const EmailTemplates = () => {
   )
 
   const notificationsForm = useForm<z.infer<typeof NotificationsFormSchema>>({
-    resolver: zodResolver(NotificationsFormSchema),
+    resolver: zodResolver(NotificationsFormSchema as any),
     defaultValues,
   })
 

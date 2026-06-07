@@ -48,7 +48,7 @@ export const CreatePublishableAPIKeyDialog = () => {
   const defaultValues = { name: '', description: '' }
 
   const form = useForm<z.infer<typeof SCHEMA>>({
-    resolver: zodResolver(SCHEMA),
+    resolver: zodResolver(SCHEMA as any),
     defaultValues: {
       name: '',
       description: '',

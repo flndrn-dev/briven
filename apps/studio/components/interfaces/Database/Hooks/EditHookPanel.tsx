@@ -142,7 +142,7 @@ export const EditHookPanel = () => {
   const restUrlTld = restUrl ? new URL(restUrl).hostname.split('.').pop() : 'co'
 
   const form = useForm<WebhookFormValues>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       name: selectedHook?.name ?? '',
       table_id: selectedHook?.table_id?.toString() ?? '',

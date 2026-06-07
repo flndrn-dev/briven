@@ -48,7 +48,7 @@ export const RoleRow = ({ role, disabled = false, onSelectDelete }: RoleRowProps
   const [isExpanded, setIsExpanded] = useState(false)
   const { mutate: updateDatabaseRole, isPending: isUpdating } = useDatabaseRoleUpdateMutation()
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: role,
   })
 

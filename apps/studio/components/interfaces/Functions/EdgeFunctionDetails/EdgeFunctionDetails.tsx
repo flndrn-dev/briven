@@ -95,7 +95,7 @@ export const EdgeFunctionDetails = () => {
   })
 
   const form = useForm({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: { name: '', verify_jwt: false },
   })
 

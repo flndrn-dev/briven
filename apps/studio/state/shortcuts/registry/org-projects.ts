@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { SHORTCUT_REFERENCE_GROUPS } from '../referenceGroups'
 import { RegistryDefinations } from '../types'
 

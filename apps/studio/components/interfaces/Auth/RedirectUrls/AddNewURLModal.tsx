@@ -47,7 +47,7 @@ export const AddNewURLModal = ({ visible, allowList, onClose }: AddNewURLModalPr
 
   const initialValues = { urls: [{ value: '' }] }
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: initialValues,
   })
   const urls = form.watch('urls')

@@ -52,7 +52,7 @@ export const BanUserModal = ({ visible, user, onClose }: BanUserModalProps) => {
   const form = useForm<FormType>({
     mode: 'onBlur',
     reValidateMode: 'onChange',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

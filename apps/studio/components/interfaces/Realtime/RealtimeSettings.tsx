@@ -124,7 +124,7 @@ export const RealtimeSettings = () => {
   ])
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       ...REALTIME_DEFAULT_CONFIG,
       allow_public: !REALTIME_DEFAULT_CONFIG.private_only,

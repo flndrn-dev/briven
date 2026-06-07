@@ -41,7 +41,7 @@ export const General = () => {
 
   const defaultValues = { name: project?.name ?? '' }
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues,
     values: defaultValues,
     mode: 'onSubmit',

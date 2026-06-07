@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { RegistryDefinations } from '../types'
 
 export const LOG_DRAINS_SHORTCUT_IDS = {

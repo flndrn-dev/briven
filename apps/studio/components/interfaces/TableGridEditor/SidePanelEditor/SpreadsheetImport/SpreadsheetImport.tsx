@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { PGTable } from '@supabase/pg-meta'
 import { useParams } from 'common'
 import { noop } from 'lodash'

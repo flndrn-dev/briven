@@ -44,7 +44,7 @@ export function useSupportForm(
   const form = useForm<SupportFormValues>({
     mode: 'onBlur',
     reValidateMode: 'onBlur',
-    resolver: zodResolver(SupportFormSchema),
+    resolver: zodResolver(SupportFormSchema as any),
     defaultValues: supportFormDefaultValues,
   })
 

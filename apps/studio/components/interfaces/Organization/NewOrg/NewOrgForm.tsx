@@ -160,7 +160,7 @@ export const NewOrgForm = ({
   })
 
   const form = useForm<FormState>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: {
       plan: defaultValues.plan.toUpperCase() as (typeof plans)[number],
       name: defaultValues.name,

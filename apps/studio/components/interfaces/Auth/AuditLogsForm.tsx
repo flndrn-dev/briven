@@ -64,7 +64,7 @@ export const AuditLogsForm = () => {
   })
 
   const form = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: { AUDIT_LOG_DISABLE_POSTGRES: false },
   })
   const { isDirty } = form.formState

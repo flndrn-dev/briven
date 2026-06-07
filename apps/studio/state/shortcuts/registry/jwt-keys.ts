@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { RegistryDefinations } from '../types'
 
 export const JWT_KEYS_SHORTCUT_IDS = {

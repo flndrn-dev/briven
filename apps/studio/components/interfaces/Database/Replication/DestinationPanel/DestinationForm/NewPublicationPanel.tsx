@@ -57,7 +57,7 @@ export const NewPublicationPanel = ({ visible, sourceId, onClose }: NewPublicati
   const form = useForm<z.infer<typeof FormSchema>>({
     mode: 'onBlur',
     reValidateMode: 'onBlur',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
 

@@ -27,7 +27,7 @@ export const AnalyticsSettings = () => {
   const { mutate: sendReset } = useSendResetMutation()
 
   const form = useForm<z.infer<typeof AnalyticsSchema>>({
-    resolver: zodResolver(AnalyticsSchema),
+    resolver: zodResolver(AnalyticsSchema as any),
     values: { telemetryEnabled: hasAccepted },
   })
 

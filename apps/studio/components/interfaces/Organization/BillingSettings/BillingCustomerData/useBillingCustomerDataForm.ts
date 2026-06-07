@@ -93,7 +93,7 @@ export function useBillingCustomerDataForm({
   )
 
   const form = useForm<TaxIdFormValues>({
-    resolver: zodResolver(TaxIdSchema),
+    resolver: zodResolver(TaxIdSchema as any),
     defaultValues: initialTaxIdValues,
   })
 

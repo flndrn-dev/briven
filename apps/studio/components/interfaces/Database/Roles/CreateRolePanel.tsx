@@ -50,7 +50,7 @@ export const CreateRolePanel = ({ visible, onClose }: CreateRolePanelProps) => {
   const { data: project } = useSelectedProjectQuery()
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
   })
 
   const { mutate: createDatabaseRole, isPending: isCreating } = useDatabaseRoleCreateMutation({

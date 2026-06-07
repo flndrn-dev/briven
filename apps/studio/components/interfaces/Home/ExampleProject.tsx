@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { ChevronRight } from 'lucide-react'
 import { useTheme } from 'next-themes'

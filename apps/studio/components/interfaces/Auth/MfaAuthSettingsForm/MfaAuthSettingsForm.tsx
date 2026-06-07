@@ -153,7 +153,7 @@ export const MfaAuthSettingsForm = () => {
   const hasValidMFAProvider = hasValidMFAPhoneProvider || sendSMSHookIsEnabled
 
   const totpForm = useForm<TotpFormValues>({
-    resolver: zodResolver(totpSchema),
+    resolver: zodResolver(totpSchema as any),
     defaultValues: {
       MFA_TOTP: 'Enabled',
       MFA_MAX_ENROLLED_FACTORS: 10,
@@ -162,7 +162,7 @@ export const MfaAuthSettingsForm = () => {
   const { reset: resetTotpForm } = totpForm
 
   const phoneForm = useForm<PhoneFormValues>({
-    resolver: zodResolver(phoneSchema),
+    resolver: zodResolver(phoneSchema as any),
     defaultValues: {
       MFA_PHONE: 'Disabled',
       MFA_PHONE_OTP_LENGTH: 6,
@@ -172,7 +172,7 @@ export const MfaAuthSettingsForm = () => {
   const { reset: resetPhoneForm } = phoneForm
 
   const securityForm = useForm<SecurityFormValues>({
-    resolver: zodResolver(securitySchema),
+    resolver: zodResolver(securitySchema as any),
     defaultValues: {
       MFA_ALLOW_LOW_AAL: false,
     },

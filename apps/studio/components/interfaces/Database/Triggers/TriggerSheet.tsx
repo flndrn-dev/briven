@@ -130,7 +130,7 @@ export const TriggerSheet = ({
   const form = useForm<z.infer<typeof FormSchema>>({
     mode: 'onSubmit',
     reValidateMode: 'onSubmit',
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues,
   })
   const { function_name, function_schema } = form.watch()

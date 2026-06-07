@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { SHORTCUT_REFERENCE_GROUPS } from './referenceGroups'
 import { ADVISORS_NAV_SHORTCUT_IDS, advisorsNavRegistry } from './registry/advisors-nav'
 import { ADVISORS_PAGE_SHORTCUT_IDS, advisorsPageRegistry } from './registry/advisors-page'

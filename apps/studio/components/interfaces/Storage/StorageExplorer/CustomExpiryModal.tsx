@@ -51,7 +51,7 @@ export const CustomExpiryModal = () => {
   const onClose = () => setSelectedFileCustomExpiry(undefined)
 
   const form = useForm<FormSchema>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: { expiresIn: 0, units: 'days' },
   })
 

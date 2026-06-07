@@ -50,7 +50,7 @@ export type NewMarketplaceOrgForm = z.infer<typeof FormSchema>
 
 const NewAwsMarketplaceOrgForm = ({ onSubmit }: Props) => {
   const form = useForm<NewMarketplaceOrgForm>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       name: '',
       kind: ORG_KIND_DEFAULT,

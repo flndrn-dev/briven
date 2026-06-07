@@ -85,7 +85,7 @@ export const CreditTopUp = ({ slug }: { slug: string | undefined }) => {
   } = useOrganizationCreditTopUpMutation({})
 
   const form = useForm<CreditTopUpForm>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       amount: 300,
       paymentMethod: '',

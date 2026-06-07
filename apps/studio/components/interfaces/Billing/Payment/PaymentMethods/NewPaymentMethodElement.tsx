@@ -112,7 +112,7 @@ export const NewPaymentMethodElement = forwardRef(
     const elements = useElements()
 
     const form = useForm<BillingCustomerDataFormValues>({
-      resolver: zodResolver(BillingCustomerDataSchema),
+      resolver: zodResolver(BillingCustomerDataSchema as any),
       defaultValues: {
         tax_id_name: currentTaxId
           ? (resolveStoredTaxId(currentTaxId.type, currentTaxId.country, currentAddress?.country)

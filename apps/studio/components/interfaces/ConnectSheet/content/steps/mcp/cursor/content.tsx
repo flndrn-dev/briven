@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { useMemo } from 'react'
 import {

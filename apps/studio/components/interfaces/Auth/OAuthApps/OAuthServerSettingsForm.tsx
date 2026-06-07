@@ -122,7 +122,7 @@ export const OAuthServerSettingsForm = () => {
   )
 
   const form = useForm<OAuthServerSettings>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: {
       OAUTH_SERVER_ENABLED: true,
       OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION: false,

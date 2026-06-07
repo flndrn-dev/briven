@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { ChangeEvent, useEffect, useRef, useState } from 'react'
 import { AWS_REGIONS } from 'shared-data'

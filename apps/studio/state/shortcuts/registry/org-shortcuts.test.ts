@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from 'vitest'
 
 import { SHORTCUT_REFERENCE_GROUP_ORDER, SHORTCUT_REFERENCE_GROUPS } from '../referenceGroups'

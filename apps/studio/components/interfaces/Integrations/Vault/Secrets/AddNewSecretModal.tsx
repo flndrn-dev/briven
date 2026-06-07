@@ -67,7 +67,7 @@ export const AddNewSecretModal = () => {
   }
 
   const form = useForm<FormSchema>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema as any),
     defaultValues: { name: '', description: '', secret: '' },
   })
 

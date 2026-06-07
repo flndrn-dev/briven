@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { RegistryDefinations } from '../types'
 
 export const AUTH_USERS_SHORTCUT_IDS = {

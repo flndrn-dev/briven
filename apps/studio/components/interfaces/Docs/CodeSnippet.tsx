@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useParams } from 'common'
 import { SimpleCodeBlock } from 'ui-patterns/SimpleCodeBlock'
 

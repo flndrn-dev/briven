@@ -13,3 +13,5 @@ export * from './Providers'
 export * from './first-referrer-cookie'
 export * from './telemetry'
 export * from './telemetry-utils'
+
+export const safeLocalStorage = typeof window !== "undefined" ? window.localStorage : null;

@@ -173,7 +173,7 @@ export const PlatformWebhooksEndpointSheet = ({
   onSubmit,
 }: EndpointSheetProps) => {
   const form = useForm<EndpointFormValues>({
-    resolver: zodResolver(endpointFormSchema),
+    resolver: zodResolver(endpointFormSchema as any),
     defaultValues: {
       name: generateWebhookEndpointName(),
       url: '',

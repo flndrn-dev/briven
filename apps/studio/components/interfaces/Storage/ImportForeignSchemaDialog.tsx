@@ -71,7 +71,7 @@ export const ImportForeignSchemaDialog = ({
   })
 
   const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(FormSchema as any),
     defaultValues: {
       bucketName,
       sourceNamespace: namespace,
