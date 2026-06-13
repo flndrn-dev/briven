@@ -31,16 +31,17 @@ export async function applySchema(
   const result = diff(prev, next);
   const statements = result.changes.flatMap(renderChange);
 
-  await runInProjectSchema(projectId, async (conn) => {
+  await runInProjectSchema(projectId, async (tx) => {
     for (const stmt of statements) {
-      await conn.query(stmt);
+      await tx.unsafe(stmt);
     }
     // Bind every value — even though deploymentId is server-generated, raw
     // string interpolation here was a foot-gun if a future caller ever
     // routed user input through.
-    await conn.query(
-      `INSERT IGNORE INTO \`_briven_migrations\` (id, deployment_id, summary)
-       VALUES (?, ?, ?)`,
+    await tx.unsafe(
+      `INSERT INTO "_briven_migrations" (id, deployment_id, summary)
+       VALUES ($1, $2, $3::jsonb)
+       ON CONFLICT (id) DO NOTHING`,
       [deploymentId, deploymentId, JSON.stringify(summarise(result.changes))],
     );
   });

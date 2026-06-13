@@ -1,7 +1,7 @@
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { dataPlaneClient, dbNameFor } from '../db/data-plane.js';
+import { dataPlaneClient, schemaNameFor } from '../db/data-plane.js';
 import { functionLogs, usageEvents } from '../db/schema.js';
 import { log } from '../lib/logger.js';
 
@@ -135,7 +135,7 @@ export async function getConnectionSecondsUsage(
   const db = getDb();
   const [row] = await db
     .select({
-      seconds: sql<number>`COALESCE(SUM(CAST(${usageEvents.value} AS SIGNED)), 0)`,
+      seconds: sql<number>`coalesce(sum(${usageEvents.value}::bigint), 0)::bigint`,
     })
     .from(usageEvents)
     .where(
@@ -175,39 +175,35 @@ export async function getCurrentMonthConnectionSecondsUsage(
  * throwing — the dashboard renders this as "—" naturally.
  */
 export async function getStorageUsage(projectId: string): Promise<StorageUsage> {
-  const db = dbNameFor(projectId);
+  const schema = schemaNameFor(projectId);
   const sampledAt = new Date().toISOString();
   try {
-    const pool = dataPlaneClient();
-    const conn = await pool.getConnection();
-    try {
-      await conn.query(`USE \`${db}\``);
-      const [rows] = await conn.query(
-        `SELECT
-           COALESCE(SUM(DATA_LENGTH + INDEX_LENGTH), 0) AS bytes,
-           COUNT(*) AS table_count
-         FROM INFORMATION_SCHEMA.TABLES
-         WHERE TABLE_SCHEMA = ?
-           AND TABLE_TYPE = 'BASE TABLE'
-           AND TABLE_NAME NOT LIKE '_briven_%'`,
-        [db],
-      );
-      const row = (rows as Array<{ bytes: number; table_count: number }>)[0];
-      return {
-        bytes: row ? Number(row.bytes) : 0,
-        tableCount: row ? Number(row.table_count) : 0,
-        schema: db,
-        sampledAt,
-      };
-    } finally {
-      conn.release();
-    }
+    const sql = dataPlaneClient();
+    const rows = await sql<
+      { bytes: string; table_count: string }[]
+    >`
+      SELECT
+        COALESCE(SUM(pg_total_relation_size(format('%I.%I', n.nspname, c.relname)::regclass)), 0)::bigint AS bytes,
+        COUNT(*)::bigint AS table_count
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = ${schema}
+        AND c.relkind IN ('r', 'p')  -- ordinary + partitioned tables
+        AND c.relname NOT LIKE '_briven_%'
+    `;
+    const row = rows[0];
+    return {
+      bytes: row ? Number.parseInt(row.bytes, 10) : 0,
+      tableCount: row ? Number.parseInt(row.table_count, 10) : 0,
+      schema,
+      sampledAt,
+    };
   } catch (err) {
     log.warn('storage_usage_query_failed', {
       projectId,
-      schema: db,
+      schema,
       message: err instanceof Error ? err.message : String(err),
     });
-    return { bytes: 0, tableCount: 0, schema: db, sampledAt };
+    return { bytes: 0, tableCount: 0, schema, sampledAt };
   }
 }

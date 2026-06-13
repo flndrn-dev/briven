@@ -102,34 +102,39 @@ export async function listAuditEntries(
   if (opts.cursor) {
     const parsed = parseCursor(opts.cursor);
     params.push(parsed.occurredAt, parsed.id);
-    where.push('(occurred_at, id) < (?, ?)');
+    where.push(
+      `(occurred_at, id) < ($${params.length - 1}::timestamptz, $${params.length})`,
+    );
   }
   if (opts.action) {
     if (!/^[a-z0-9._-]{1,64}$/i.test(opts.action)) {
       throw new ValidationError('invalid action filter', { action: opts.action });
     }
     params.push(opts.action);
-    where.push('action = ?');
+    where.push(`action = $${params.length}`);
   }
   if (opts.userId) {
     if (!/^[a-zA-Z0-9_]{1,64}$/.test(opts.userId)) {
       throw new ValidationError('invalid user id filter', { userId: opts.userId });
     }
     params.push(opts.userId);
-    where.push('user_id = ?');
+    where.push(`user_id = $${params.length}`);
   }
 
   params.push(limit + 1);
+  const limitPlaceholder = `$${params.length}`;
 
-  const [rows] = await runInProjectSchema<[RawAuditRow[], unknown]>(projectId, async (conn) => {
-    return (await conn.query(
-      `SELECT id, user_id, action, ip_address_hash, user_agent, metadata, occurred_at
-       FROM \`_briven_auth_audit_log\`
-       WHERE ${where.join(' AND ')}
-       ORDER BY occurred_at DESC, id DESC
-       LIMIT ?`,
-      params,
-    )) as [RawAuditRow[], unknown];
+  const rows = await runInProjectSchema<RawAuditRow[]>(projectId, async (tx) => {
+    return (await tx.unsafe(
+      `
+        SELECT id, user_id, action, ip_address_hash, user_agent, metadata, occurred_at
+        FROM "_briven_auth_audit_log"
+        WHERE ${where.join(' AND ')}
+        ORDER BY occurred_at DESC, id DESC
+        LIMIT ${limitPlaceholder}
+      `,
+      params as never[],
+    )) as RawAuditRow[];
   });
 
   const hasMore = rows.length > limit;

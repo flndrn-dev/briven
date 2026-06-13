@@ -148,7 +148,7 @@ async function fireOne(
 
 export function startScheduleDispatcher(): void {
   if (timer) return;
-  if (!env.BRIVEN_URL) {
+  if (!env.BRIVEN_DATABASE_URL) {
     log.warn('schedule_dispatcher_skipped_no_db');
     return;
   }
