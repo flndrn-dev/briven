@@ -18,7 +18,16 @@ export function loadEnv<T extends z.ZodObject<z.ZodRawShape>>(schema: T): z.infe
     );
   }
 
-  const parsed = schema.safeParse(process.env);
+  // Treat empty-string env vars as unset. Docker Compose interpolation like
+  // `${BRIVEN_FOO:-}` injects "" for an unset var; an empty string would
+  // otherwise fail `.url()`/`.min()` on `.optional()` fields, which are meant
+  // to accept "absent". Strip empties so optional vars resolve to undefined.
+  const cleanedEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined && v !== '') cleanedEnv[k] = v;
+  }
+
+  const parsed = schema.safeParse(cleanedEnv);
   if (!parsed.success) {
     const missing = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
     throw new ValidationError(`missing or invalid env vars: ${missing}`);
