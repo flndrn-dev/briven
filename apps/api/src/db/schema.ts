@@ -2,58 +2,40 @@
  * Control-plane meta-DB schema.
  *
  * Per CLAUDE.md §8.1: every table has `id` (ULID PK), `created_at`,
- * `updated_at`, and `deleted_at` (soft-delete). The id column is
- * `varchar(36)` — briven-managed rows store prefixed ULIDs (28 chars),
- * Better Auth tables store its 32-char nanoids, both fit cleanly.
+ * `updated_at`, and `deleted_at` (soft-delete). The id column is `text` —
+ * briven-managed rows store prefixed ULIDs (28 chars), Better Auth tables
+ * store its 32-char nanoids, both fit cleanly without a length cap.
  *
  * Better Auth also reads / writes `users`, `accounts`, `sessions`, `verifications`
  * via its drizzle adapter; schema here matches Better Auth's expected shape so
  * the adapter works without translation.
- *
- * @README-BRIVEN ADR 0001 — migrated from pg-core to mysql-core.
- *
- *   - `text('id').primaryKey()` → `varchar('id', { length: 36 }).primaryKey()`
- *     MySQL cannot primary-key on TEXT.
- *   - `timestamp(..., { withTimezone: true, mode: 'date' })` →
- *     `timestamp(..., { mode: 'date', fsp: 3 })`
- *     MySQL TIMESTAMP is always UTC internally; `fsp: 3` = millisecond precision.
- *   - `jsonb` → `json` — MySQL has JSON, no JSONB.
- *   - `integer` → `int`
- *   - `uniqueIndex(...).where(sql\`...\`)` — MySQL does not support partial
- *     unique indexes. Dropped the `.where()` clause; uniqueness for
- *     soft-deleted rows is enforced at the application layer (see ADR §
- *     "Partial unique indexes").
- *   - `index(...).where(sql\`...\`)` — MySQL does not support partial
- *     indexes at all. Dropped the `.where()` clause; the index covers all
- *     rows. Acceptable for the control plane's modest row counts.
  */
 import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
   index,
-  int,
-  json,
-  mysqlTable,
+  integer,
+  jsonb,
+  pgTable,
   primaryKey,
   text,
   timestamp,
   uniqueIndex,
   varchar,
-} from 'drizzle-orm/mysql-core';
+} from 'drizzle-orm/pg-core';
 
 // Per CLAUDE.md §8.1 we use prefixed ULIDs (28 chars) for briven-managed
 // rows, but Better Auth-managed tables use its own 32-char nanoid scheme.
-// `varchar(36)` accommodates both with headroom. MySQL cannot PK on TEXT
-// so we cannot keep the old `text('id').primaryKey()` pattern.
-const id = () => varchar('id', { length: 36 }).primaryKey();
-const ts = (name: string) => timestamp(name, { mode: 'date', fsp: 3 });
+// Keep the column flexible: `text` accommodates both without truncation.
+const id = () => text('id').primaryKey();
+const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const createdAt = () => ts('created_at').defaultNow().notNull();
 const updatedAt = () => ts('updated_at').defaultNow().notNull();
 const deletedAt = () => ts('deleted_at');
 
 /* ─── users ──────────────────────────────────────────────────────── */
-export const users = mysqlTable(
+export const users = pgTable(
   'users',
   {
     id: id(),
@@ -122,11 +104,11 @@ export const users = mysqlTable(
 );
 
 /* ─── accounts (Better Auth: provider-linked credentials) ─────────── */
-export const accounts = mysqlTable(
+export const accounts = pgTable(
   'accounts',
   {
     id: id(),
-    userId: varchar('user_id', { length: 36 })
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     accountId: text('account_id').notNull(),
@@ -148,11 +130,11 @@ export const accounts = mysqlTable(
 );
 
 /* ─── sessions ────────────────────────────────────────────────────── */
-export const sessions = mysqlTable(
+export const sessions = pgTable(
   'sessions',
   {
     id: id(),
-    userId: varchar('user_id', { length: 36 })
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     token: text('token').notNull(),
@@ -169,7 +151,7 @@ export const sessions = mysqlTable(
 );
 
 /* ─── verifications (magic link tokens, email verification) ───────── */
-export const verifications = mysqlTable(
+export const verifications = pgTable(
   'verifications',
   {
     id: id(),
@@ -188,7 +170,7 @@ export const verifications = mysqlTable(
 export const orgRole = ['owner', 'admin', 'developer', 'viewer'] as const;
 export type OrgRole = (typeof orgRole)[number];
 
-export const organizations = mysqlTable(
+export const organizations = pgTable(
   'organizations',
   {
     id: id(),
@@ -197,7 +179,7 @@ export const organizations = mysqlTable(
     // True for the auto-created first org per user. Lets the UI keep a
     // single-org implicit UX until Phase 3 adds a switcher.
     personal: boolean('personal').notNull().default(false),
-    createdBy: varchar('created_by', { length: 36 })
+    createdBy: text('created_by')
       .notNull()
       .references(() => users.id),
     createdAt: createdAt(),
@@ -212,13 +194,13 @@ export const organizations = mysqlTable(
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
 
-export const orgMembers = mysqlTable(
+export const orgMembers = pgTable(
   'org_members',
   {
-    orgId: varchar('org_id', { length: 36 })
+    orgId: text('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
-    userId: varchar('user_id', { length: 36 })
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     // Stored but not enforced this project — Phase 3 wires RBAC.
@@ -236,13 +218,13 @@ export const orgMembers = mysqlTable(
 export const projectTier = ['free', 'pro', 'team'] as const;
 export type ProjectTier = (typeof projectTier)[number];
 
-export const projects = mysqlTable(
+export const projects = pgTable(
   'projects',
   {
     id: id(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
-    orgId: varchar('org_id', { length: 36 })
+    orgId: text('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
     region: text('region').notNull().default('eu-west-1'),
@@ -269,13 +251,13 @@ export const projects = mysqlTable(
 export const memberRole = ['owner', 'admin', 'developer', 'viewer'] as const;
 export type MemberRole = (typeof memberRole)[number];
 
-export const projectMembers = mysqlTable(
+export const projectMembers = pgTable(
   'project_members',
   {
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    userId: varchar('user_id', { length: 36 })
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').$type<MemberRole>().notNull().default('developer'),
@@ -291,11 +273,11 @@ export const projectMembers = mysqlTable(
 export const subscriptionStatus = ['trialing', 'active', 'past_due', 'canceled'] as const;
 export type SubscriptionStatus = (typeof subscriptionStatus)[number];
 
-export const subscriptions = mysqlTable(
+export const subscriptions = pgTable(
   'subscriptions',
   {
     id: id(),
-    orgId: varchar('org_id', { length: 36 })
+    orgId: text('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
     polarSubscriptionId: text('polar_subscription_id'),
@@ -316,11 +298,11 @@ export const subscriptions = mysqlTable(
 export type Subscription = typeof subscriptions.$inferSelect;
 
 /* ─── project_invitations ────────────────────────────────────────── */
-export const projectInvitations = mysqlTable(
+export const projectInvitations = pgTable(
   'project_invitations',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
@@ -328,7 +310,7 @@ export const projectInvitations = mysqlTable(
     // SHA-256 hash of the single-use accept token; plaintext only rides
     // in the invite email and the recipient's URL.
     tokenHash: text('token_hash').notNull(),
-    invitedBy: varchar('invited_by', { length: 36 }).references(() => users.id),
+    invitedBy: text('invited_by').references(() => users.id),
     expiresAt: ts('expires_at').notNull(),
     acceptedAt: ts('accepted_at'),
     revokedAt: ts('revoked_at'),
@@ -348,17 +330,19 @@ export type ProjectInvitation = typeof projectInvitations.$inferSelect;
  * scoped to an org id + carries an OrgRole instead of MemberRole.
  * Acceptance creates the org_members row and marks accepted_at.
  */
-export const orgInvitations = mysqlTable(
+export const orgInvitations = pgTable(
   'org_invitations',
   {
     id: id(),
-    orgId: varchar('org_id', { length: 36 })
+    orgId: text('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     role: text('role').$type<OrgRole>().notNull().default('developer'),
+    // SHA-256 hash of the single-use accept token; plaintext only rides
+    // in the invite email and the recipient's URL.
     tokenHash: text('token_hash').notNull(),
-    invitedBy: varchar('invited_by', { length: 36 }).references(() => users.id),
+    invitedBy: text('invited_by').references(() => users.id),
     expiresAt: ts('expires_at').notNull(),
     acceptedAt: ts('accepted_at'),
     revokedAt: ts('revoked_at'),
@@ -371,28 +355,52 @@ export const orgInvitations = mysqlTable(
 );
 
 export type OrgInvitation = typeof orgInvitations.$inferSelect;
+export type NewOrgInvitation = typeof orgInvitations.$inferInsert;
 
-/* ─── api_keys ─────────────────────────────────────────────────────── */
-export const apiKeys = mysqlTable(
+/* ─── project_env_vars ────────────────────────────────────────────── */
+export const projectEnvVars = pgTable(
+  'project_env_vars',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    // AES-256-GCM ciphertext of the value, base64. Never read directly —
+    // always through services/project-env.ts which wraps decrypt.
+    encryptedValue: text('encrypted_value').notNull(),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    projectKeyIdx: uniqueIndex('project_env_vars_project_key_idx').on(t.projectId, t.key),
+  }),
+);
+
+export type ProjectEnvVar = typeof projectEnvVars.$inferSelect;
+
+/* ─── api_keys / deploy keys ──────────────────────────────────────── */
+export const apiKeys = pgTable(
   'api_keys',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    createdBy: varchar('created_by', { length: 36 })
+    createdBy: text('created_by')
       .notNull()
       .references(() => users.id),
     name: text('name').notNull(),
-    // sha-256 hex digest of the plaintext token. The plaintext is
-    // returned exactly once at create time and never persisted.
+    // SHA-256 of the plaintext key — we never store the plaintext after creation.
     hash: text('hash').notNull(),
-    // Plaintext prefix — currently always `pk_briven_`. Stored so we
-    // can render `<prefix>•••<suffix>` in the dashboard without baking
-    // the constant into every UI layer.
-    prefix: text('prefix').notNull(),
-    // Last 4 chars of the plaintext — safe to display.
+    // Last 4 chars of the plaintext — safe to show in the dashboard as a hint.
     suffix: varchar('suffix', { length: 4 }).notNull(),
+    // Effective role this key carries when authenticating a request. Default
+    // is 'admin' for backward compat with keys minted before per-key role
+    // scoping landed; new keys can be issued with any of the standard roles
+    // (viewer / developer / admin) — owner is never assignable to a key.
+    role: text('role').$type<MemberRole>().notNull().default('admin'),
     lastUsedAt: ts('last_used_at'),
     expiresAt: ts('expires_at'),
     createdAt: createdAt(),
@@ -404,133 +412,32 @@ export const apiKeys = mysqlTable(
   }),
 );
 
-export type ApiKey = typeof apiKeys.$inferSelect;
-export type NewApiKey = typeof apiKeys.$inferInsert;
-
-/* ─── project_schedules ────────────────────────────────────────────── */
-export const scheduleStatus = ['active', 'paused', 'disabled'] as const;
-export type ScheduleStatus = (typeof scheduleStatus)[number];
-
-/**
- * @README-BRIVEN Partial unique index removed.
- *
- * The original pg-core schema had:
- *   uniqueIndex('project_schedules_project_name_idx')
- *     .on(t.projectId, t.slug)
- *     .where(sql`deleted_at is null`)
- *
- * MySQL does not support partial unique indexes. The unique constraint
- * now covers all rows (including soft-deleted ones). Application-level
- * enforcement must prevent duplicate (projectId, slug) among non-deleted
- * rows — see ADR 0001 § "Partial unique indexes".
- */
-export const projectSchedules = mysqlTable(
-  'project_schedules',
-  {
-    id: id(),
-    projectId: varchar('project_id', { length: 36 })
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    slug: text('slug').notNull(),
-    // cron expression (5-field quartz format).
-    cronExpression: text('cron_expression').notNull(),
-    // The function this schedule invokes.
-    functionName: text('function_name').notNull(),
-    // JSON payload POSTed to the function.
-    payload: json('payload').$type<Record<string, unknown>>().default({}),
-    status: text('status').$type<ScheduleStatus>().notNull().default('active'),
-    lastInvokedAt: ts('last_invoked_at'),
-    nextInvocationAt: ts('next_invocation_at'),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-    deletedAt: deletedAt(),
-  },
-  (t) => ({
-    // @README-BRIVEN: was partial unique (WHERE deleted_at IS NULL).
-    // Now full unique — app must enforce soft-delete uniqueness.
-    projectNameIdx: uniqueIndex('project_schedules_project_name_idx').on(t.projectId, t.slug),
-    projectIdx: index('project_schedules_project_idx').on(t.projectId),
-    nextIdx: index('project_schedules_next_idx').on(t.nextInvocationAt),
-  }),
-);
-
-export type ProjectSchedule = typeof projectSchedules.$inferSelect;
-export type NewProjectSchedule = typeof projectSchedules.$inferInsert;
-
-/* ─── platform_settings ────────────────────────────────────────────── */
-export const platformSettings = mysqlTable(
-  'platform_settings',
-  {
-    key: varchar('key', { length: 128 }).primaryKey(),
-    value: json('value').notNull(),
-    updatedBy: varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-);
-
-export type PlatformSetting = typeof platformSettings.$inferSelect;
-export type NewPlatformSetting = typeof platformSettings.$inferInsert;
-
-/* ─── deploy_history ───────────────────────────────────────────────── */
-export const deploymentStatus = [
-  'pending',
-  'schema_applied',
-  'schema_failed',
-  'complete',
-  'failed',
-] as const;
+/* ─── deployments ─────────────────────────────────────────────────── */
+export const deploymentStatus = ['pending', 'running', 'succeeded', 'failed', 'cancelled'] as const;
 export type DeploymentStatus = (typeof deploymentStatus)[number];
 
-export const deployHistory = mysqlTable(
-  'deploy_history',
-  {
-    id: id(),
-    projectId: varchar('project_id', { length: 36 })
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    deploymentId: text('deployment_id'),
-    status: text('status').$type<DeploymentStatus>().notNull().default('pending'),
-    schemaDiffSummary: json('schema_diff_summary'),
-    startedAt: ts('started_at'),
-    finishedAt: ts('finished_at'),
-    errorMessage: text('error_message'),
-    createdAt: createdAt(),
-    deletedAt: deletedAt(),
-  },
-  (t) => ({
-    // @README-BRIVEN: was partial index WHERE deleted_at IS NULL.
-    // MySQL doesn't support partial indexes; full index is acceptable.
-    projectCreatedIdx: index('deploy_history_project_created_idx').on(t.projectId, t.createdAt),
-  }),
-);
-
-export type DeployHistoryEntry = typeof deployHistory.$inferSelect;
-export type NewDeployHistoryEntry = typeof deployHistory.$inferInsert;
-
-/* ─── deployments ──────────────────────────────────────────────────── */
-export const deployments = mysqlTable(
+export const deployments = pgTable(
   'deployments',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    triggeredBy: varchar('triggered_by', { length: 36 }).references(() => users.id),
-    apiKeyId: varchar('api_key_id', { length: 36 }).references(() => apiKeys.id),
+    triggeredBy: text('triggered_by').references(() => users.id),
+    apiKeyId: text('api_key_id').references(() => apiKeys.id),
     status: text('status').$type<DeploymentStatus>().notNull().default('pending'),
-    schemaDiffSummary: json('schema_diff_summary'),
+    schemaDiffSummary: jsonb('schema_diff_summary'),
     // Full schema definition as declared by the user at deploy time. Every
     // deployment is a self-contained snapshot so rollbacks and diffs don't
     // depend on reconstructing from a chain of migrations.
-    schemaSnapshot: json('schema_snapshot'),
+    schemaSnapshot: jsonb('schema_snapshot'),
     functionCount: varchar('function_count', { length: 12 }),
-    functionNames: json('function_names'),
+    functionNames: jsonb('function_names'),
     // Map of `<relative path under briven/functions/>` → TS source. Runtime
     // fetches this via the internal bundle endpoint and writes the files to
     // a temp dir before importing. Phase 1 stores raw source; Phase 2 moves
     // to a content-addressed tarball in MinIO once bundles exceed a few MB.
-    bundle: json('bundle'),
+    bundle: jsonb('bundle'),
     errorCode: text('error_code'),
     errorMessage: text('error_message'),
     startedAt: ts('started_at'),
@@ -554,22 +461,22 @@ export const deployments = mysqlTable(
  * pass through unmodified — they are the user's own data about their own
  * project, surfaced only to the account owner.
  */
-export const functionLogs = mysqlTable(
+export const functionLogs = pgTable(
   'function_logs',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    deploymentId: varchar('deployment_id', { length: 36 })
+    deploymentId: text('deployment_id')
       .notNull()
       .references(() => deployments.id, { onDelete: 'cascade' }),
     invocationId: text('invocation_id').notNull(),
     functionName: varchar('function_name', { length: 128 }).notNull(),
     status: varchar('status', { length: 8 }).notNull(),
     durationMs: varchar('duration_ms', { length: 12 }).notNull(),
-    touchedTables: json('touched_tables').notNull(),
-    userLogsJson: json('user_logs_json').notNull(),
+    touchedTables: jsonb('touched_tables').notNull(),
+    userLogsJson: jsonb('user_logs_json').notNull(),
     errCode: text('err_code'),
     errMessage: text('err_message'),
     createdAt: createdAt(),
@@ -580,17 +487,17 @@ export const functionLogs = mysqlTable(
 );
 
 /* ─── audit_logs ──────────────────────────────────────────────────── */
-export const auditLogs = mysqlTable(
+export const auditLogs = pgTable(
   'audit_logs',
   {
     id: id(),
-    actorId: varchar('actor_id', { length: 36 }).references(() => users.id),
-    projectId: varchar('project_id', { length: 36 }).references(() => projects.id),
+    actorId: text('actor_id').references(() => users.id),
+    projectId: text('project_id').references(() => projects.id),
     action: text('action').notNull(),
     // SHA-256 hash of the caller IP — we never store raw IPs (CLAUDE.md §5.1).
     ipHash: varchar('ip_hash', { length: 64 }),
     userAgent: text('user_agent'),
-    metadata: json('metadata'),
+    metadata: jsonb('metadata'),
     createdAt: createdAt(),
   },
   (t) => ({
@@ -611,7 +518,7 @@ export const suppressionReason = [
   'manual',
 ] as const;
 
-export const emailSuppressions = mysqlTable(
+export const emailSuppressions = pgTable(
   'email_suppressions',
   {
     id: id(),
@@ -655,7 +562,7 @@ export const usageMetric = [
 ] as const;
 export type UsageMetric = (typeof usageMetric)[number];
 
-export const usageEvents = mysqlTable(
+export const usageEvents = pgTable(
   'usage_events',
   {
     id: id(),
@@ -677,39 +584,99 @@ export const usageEvents = mysqlTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    projectPeriodIdx: uniqueIndex('usage_events_project_period_idx').on(
+    projectPeriodIdx: uniqueIndex('usage_events_project_period_metric_idx').on(
       t.projectId,
-      t.metric,
       t.periodStart,
+      t.metric,
     ),
-    pushStatusIdx: index('usage_events_push_status_idx').on(t.polarPushStatus),
+    pendingIdx: index('usage_events_pending_idx')
+      .on(t.polarPushStatus, t.periodStart)
+      .where(sql`polar_push_status = 'pending'`),
   }),
 );
 
-export type UsageEvent = typeof usageEvents.$inferSelect;
-export type NewUsageEvent = typeof usageEvents.$inferInsert;
+/* ─── deploy history ─────────────────────────────────────────────── */
+/**
+ * One row per api boot — the audit trail behind /info.buildSha. Drives
+ * the admin "Deploys" widget (last N rollouts: which sha, when, which
+ * env) so operators can correlate "the bug appeared at 14:32" with
+ * "deploy abc1234 went live at 14:30".
+ *
+ * Written from src/index.ts after migrations succeed; failure to insert
+ * is logged but not fatal (the api still boots — observability is not
+ * load-bearing for the request path).
+ */
+export const deployHistory = pgTable(
+  'deploy_history',
+  {
+    id: id(),
+    service: text('service').notNull(),
+    buildSha: text('build_sha').notNull(),
+    buildAt: text('build_at'),
+    env: text('env').notNull(),
+    // Explicit "booted_at" column name — semantically clearer than the
+    // generic createdAt() helper for a row that records the moment of
+    // process boot. (Also: the helper maps to "created_at" which would
+    // mismatch the SQL migration.)
+    bootedAt: ts('booted_at').defaultNow().notNull(),
+  },
+  (t) => ({
+    serviceBootedIdx: index('deploy_history_service_booted_idx').on(t.service, t.bootedAt),
+    buildShaIdx: index('deploy_history_build_sha_idx').on(t.buildSha),
+  }),
+);
 
-/* ─── webhook_endpoints (customer-inbound webhooks) ────────────────── */
-export const webhookDeliveryStatus = [
-  'ok',
-  'invoke_error',
-  'signature_mismatch',
-  'timeout',
-] as const;
+/* ─── project_schedules (cron-triggered function invocations) ─────── */
+export const scheduleRunStatus = ['pending', 'ok', 'error', 'skipped'] as const;
+export type ScheduleRunStatus = (typeof scheduleRunStatus)[number];
+
+export const projectSchedules = pgTable(
+  'project_schedules',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    functionName: text('function_name').notNull(),
+    // 5-field UTC cron expression (minute hour day month dow). The
+    // service validates on write so we don't store anything the
+    // dispatcher can't parse.
+    cronExpression: text('cron_expression').notNull(),
+    args: jsonb('args').$type<Record<string, unknown>>().notNull().default({}),
+    enabled: boolean('enabled').notNull().default(true),
+    // Dispatcher claims rows by checking next_run_at <= now() and
+    // bumping it forward in the same transaction. Indexing the partial
+    // (enabled = true) subset keeps the claim query cheap as the table
+    // grows.
+    nextRunAt: ts('next_run_at').notNull(),
+    lastRunAt: ts('last_run_at'),
+    lastRunStatus: text('last_run_status').$type<ScheduleRunStatus>(),
+    lastRunError: text('last_run_error'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => ({
+    projectNameIdx: uniqueIndex('project_schedules_project_name_idx')
+      .on(t.projectId, t.name)
+      .where(sql`deleted_at is null`),
+    dueIdx: index('project_schedules_due_idx')
+      .on(t.nextRunAt)
+      .where(sql`enabled = true and deleted_at is null`),
+  }),
+);
+
+/* ─── webhook_endpoints (customer-defined inbound webhooks) ───────── */
+export const webhookDeliveryStatus = ['ok', 'rejected_signature', 'rejected_replay', 'invoke_error', 'disabled'] as const;
 export type WebhookDeliveryStatus = (typeof webhookDeliveryStatus)[number];
 
-/**
- * @README-BRIVEN Partial unique + partial regular indexes removed.
- *
- * MySQL does not support partial indexes. The unique constraint on
- * (projectId, name) now covers soft-deleted rows too — application-layer
- * enforcement must prevent name collisions among non-deleted endpoints.
- */
-export const webhookEndpoints = mysqlTable(
+export const webhookEndpoints = pgTable(
   'webhook_endpoints',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
@@ -726,31 +693,33 @@ export const webhookEndpoints = mysqlTable(
     enabled: boolean('enabled').notNull().default(true),
     lastDeliveryAt: ts('last_delivery_at'),
     lastDeliveryStatus: text('last_delivery_status').$type<WebhookDeliveryStatus>(),
-    createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-BRIVEN: was partial unique (WHERE deleted_at IS NULL).
-    projectNameIdx: uniqueIndex('webhook_endpoints_project_name_idx').on(t.projectId, t.name),
-    // @README-BRIVEN: was partial index (WHERE deleted_at IS NULL).
-    projectIdx: index('webhook_endpoints_project_idx').on(t.projectId),
+    projectNameIdx: uniqueIndex('webhook_endpoints_project_name_idx')
+      .on(t.projectId, t.name)
+      .where(sql`deleted_at is null`),
+    projectIdx: index('webhook_endpoints_project_idx')
+      .on(t.projectId)
+      .where(sql`deleted_at is null`),
   }),
 );
 
 /* ─── webhook_deliveries (per-request audit log) ──────────────────── */
-export const webhookDeliveries = mysqlTable(
+export const webhookDeliveries = pgTable(
   'webhook_deliveries',
   {
     id: id(),
-    endpointId: varchar('endpoint_id', { length: 36 })
+    endpointId: text('endpoint_id')
       .notNull()
       .references(() => webhookEndpoints.id, { onDelete: 'cascade' }),
     // Denormalised — saves a join when the dashboard's per-project
     // "recent deliveries" view loads, and lets the per-project retention
     // cron prune rows without walking the endpoints table.
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     status: text('status').$type<WebhookDeliveryStatus>().notNull(),
@@ -783,7 +752,7 @@ export type AbuseStatusValue = (typeof abuseStatus)[number];
 export const abuseResolution = ['no_action', 'warned', 'suspended', 'banned'] as const;
 export type AbuseResolutionValue = (typeof abuseResolution)[number];
 
-export const abuseReports = mysqlTable(
+export const abuseReports = pgTable(
   'abuse_reports',
   {
     id: id(),
@@ -800,12 +769,12 @@ export const abuseReports = mysqlTable(
     // Populated by the resolver when the report maps to a real project.
     // FK is `set null` rather than `cascade` — if the project gets hard
     // deleted later we keep the report's history intact for audit.
-    projectId: varchar('project_id', { length: 36 }).references(() => projects.id, { onDelete: 'set null' }),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
     triagedAt: ts('triaged_at'),
-    triagedBy: varchar('triaged_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+    triagedBy: text('triaged_by').references(() => users.id, { onDelete: 'set null' }),
     triageNotes: text('triage_notes'),
     resolvedAt: ts('resolved_at'),
-    resolvedBy: varchar('resolved_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+    resolvedBy: text('resolved_by').references(() => users.id, { onDelete: 'set null' }),
     resolveNotes: text('resolve_notes'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -813,8 +782,7 @@ export const abuseReports = mysqlTable(
   (t) => ({
     statusIdx: index('abuse_reports_status_idx').on(t.status, t.createdAt),
     severityIdx: index('abuse_reports_severity_idx').on(t.severity, t.createdAt),
-    // @README-BRIVEN: was partial index (WHERE project_id IS NOT NULL).
-    projectIdx: index('abuse_reports_project_idx').on(t.projectId),
+    projectIdx: index('abuse_reports_project_idx').on(t.projectId).where(sql`project_id is not null`),
   }),
 );
 
@@ -827,7 +795,7 @@ export const abuseReports = mysqlTable(
 export const incidentSeverity = ['critical', 'major', 'minor', 'maintenance'] as const;
 export type IncidentSeverity = (typeof incidentSeverity)[number];
 
-export const incidents = mysqlTable(
+export const incidents = pgTable(
   'incidents',
   {
     id: id(),
@@ -835,66 +803,126 @@ export const incidents = mysqlTable(
     resolvedAt: ts('resolved_at'),
     severity: text('severity').$type<IncidentSeverity>().notNull(),
     // List of affected services: 'api' | 'realtime' | 'runtime' | 'web'
-    // | 'docs' | 'all'. Stored as json so we can grow the vocabulary
+    // | 'docs' | 'all'. Stored as jsonb so we can grow the vocabulary
     // without a migration.
-    services: json('services').$type<readonly string[]>().notNull(),
+    services: jsonb('services').$type<readonly string[]>().notNull(),
     summary: text('summary').notNull(),
     postmortem: text('postmortem').notNull().default(''),
-    createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => ({
     startedIdx: index('incidents_started_idx').on(t.startedAt),
-    // @README-BRIVEN: was partial index (WHERE resolved_at IS NULL).
-    activeIdx: index('incidents_active_idx').on(t.startedAt),
+    activeIdx: index('incidents_active_idx').on(t.startedAt).where(sql`resolved_at is null`),
   }),
 );
 
 /* ─── migration_requests (customer-initiated platform import intake) ── */
 // One row per dashboard-wizard submission. The wizard at
-// /dashboard/projects/new/migrate collects the target platform, source
-// URL, and contact email, then the api writes one row here. An operator
-// later triages the row and reaches out via the contact email.
+// /dashboard/projects/new/migrate collects source platform + scale +
+// credentials/notes; this row is then triaged by an operator via
+// /dashboard/admin/migrations and either auto-migrated (once the
+// adapter for the source ships) or hand-migrated for free during beta.
+export const migrationSources = [
+  'convex',
+  'supabase',
+  'firebase',
+  'mongodb',
+  'drizzle',
+  'prisma',
+  'postgres',
+  'hasura',
+  'nextauth',
+  'other',
+] as const;
+export type MigrationSource = (typeof migrationSources)[number];
 
-export const migrationRequestStatus = ['new', 'contacted', 'scheduled', 'completed', 'declined'] as const;
-export type MigrationRequestStatus = (typeof migrationRequestStatus)[number];
+export const migrationUrgencies = [
+  'direct',
+  'this_week',
+  'this_month',
+  'this_quarter',
+  'exploring',
+] as const;
+export type MigrationUrgency = (typeof migrationUrgencies)[number];
 
-export const migrationRequests = mysqlTable(
+export const migrationStatuses = [
+  'new',
+  'contacted',
+  'scheduled',
+  'in_progress',
+  'completed',
+  'cancelled',
+] as const;
+export type MigrationStatus = (typeof migrationStatuses)[number];
+
+export const migrationRequests = pgTable(
   'migration_requests',
   {
     id: id(),
-    sourcePlatform: text('source_platform').notNull(),
+    // Nullable to support unauthenticated leads submitted via the
+    // /migrate marketing form. When the operator promotes a lead (or
+    // the customer signs up later), the operator patches user_id from
+    // the admin triage row.
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    orgId: text('org_id').references(() => organizations.id, { onDelete: 'set null' }),
+    source: text('source').$type<MigrationSource>().notNull(),
     sourceUrl: text('source_url'),
+    sourceNotes: text('source_notes').notNull().default(''),
+    estimatedTables: integer('estimated_tables'),
+    // bigint serialized as string in the wire format; jsonb-style number
+    // is unsafe for >2^53. We accept up to ~10^15 rows (no real customer
+    // hits that, but the column shouldn't artificially cap it).
+    estimatedRows: bigint('estimated_rows', { mode: 'bigint' }),
+    estimatedFunctions: integer('estimated_functions'),
+    urgency: text('urgency').$type<MigrationUrgency>().notNull().default('exploring'),
+    status: text('status').$type<MigrationStatus>().notNull().default('new'),
     contactEmail: text('contact_email').notNull(),
-    notes: text('notes'),
-    status: text('status').$type<MigrationRequestStatus>().notNull().default('new'),
-    triagedBy: varchar('triaged_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-    triagedAt: ts('triaged_at'),
-    triageNotes: text('triage_notes'),
+    assignedTo: text('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+    operatorNotes: text('operator_notes').notNull().default(''),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => ({
-    statusIdx: index('migration_requests_status_idx').on(t.status, t.createdAt),
+    createdIdx: index('migration_requests_created_idx').on(t.createdAt),
+    userIdx: index('migration_requests_user_idx').on(t.userId, t.createdAt),
+    openIdx: index('migration_requests_open_idx')
+      .on(t.createdAt)
+      .where(sql`status not in ('completed', 'cancelled')`),
   }),
 );
 
-export type MigrationRequest = typeof migrationRequests.$inferSelect;
-export type NewMigrationRequest = typeof migrationRequests.$inferInsert;
+/* ─── platform_settings (single-row dashboard-controllable flags) ─── */
+// Key/value JSONB store for platform-level flags an admin needs to flip
+// without a container restart. Today: `openSignups` (boolean). Future:
+// rate-limit overrides, maintenance-mode toggle, feature flags.
+//
+// Reads cache in-process for 60s — the auth signup hot path touches
+// this on every signup attempt and we don't want a DB roundtrip there
+// per request. Writes invalidate the cache (single-process; on multi-
+// instance the next read picks up the change within the TTL window).
 
-/* ─── signup_allowlist ─────────────────────────────────────────────── */
-// Operator-level gating for the private phase. An invited email may
-// create an account once; non-allowlisted signups get a "private
-// preview" message. The dashboard admin panel CRUDs these; the operator
+export const platformSettings = pgTable('platform_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').$type<unknown>().notNull(),
+  updatedAt: updatedAt(),
+  updatedBy: text('updated_by').references(() => users.id, { onDelete: 'set null' }),
+});
+
+/* ─── signup_allowlist (invite-only beta gate) ────────────────────── */
+// When BRIVEN_OPEN_SIGNUPS=false (the default for the private beta),
+// Better Auth's user.create hook rejects any email not on this list. An
+// admin manages entries via /dashboard/admin/allowlist. accepted_at is
+// stamped once the email signs in for the first time so the operator
 // can see who's claimed their invite vs who's still pending.
 
-export const signupAllowlist = mysqlTable(
+export const signupAllowlist = pgTable(
   'signup_allowlist',
   {
     id: id(),
     email: text('email').notNull(),
-    invitedBy: varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+    invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
     invitedAt: createdAt(),
     acceptedAt: ts('accepted_at'),
     notes: text('notes'),
@@ -919,16 +947,11 @@ export const webhookOutboundStatus = [
 ] as const;
 export type WebhookOutboundStatus = (typeof webhookOutboundStatus)[number];
 
-/**
- * @README-BRIVEN Partial unique + partial regular indexes removed.
- * Application-layer enforcement for (projectId, name) uniqueness among
- * non-deleted subscribers.
- */
-export const webhookSubscribers = mysqlTable(
+export const webhookSubscribers = pgTable(
   'webhook_subscribers',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
@@ -943,28 +966,30 @@ export const webhookSubscribers = mysqlTable(
     enabled: boolean('enabled').notNull().default(true),
     lastDeliveryAt: ts('last_delivery_at'),
     lastDeliveryStatus: text('last_delivery_status').$type<WebhookOutboundStatus>(),
-    createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-BRIVEN: was partial unique (WHERE deleted_at IS NULL).
-    projectNameIdx: uniqueIndex('webhook_subscribers_project_name_idx').on(t.projectId, t.name),
-    // @README-BRIVEN: was partial index (WHERE deleted_at IS NULL).
-    projectIdx: index('webhook_subscribers_project_idx').on(t.projectId),
+    projectNameIdx: uniqueIndex('webhook_subscribers_project_name_idx')
+      .on(t.projectId, t.name)
+      .where(sql`deleted_at is null`),
+    projectIdx: index('webhook_subscribers_project_idx')
+      .on(t.projectId)
+      .where(sql`deleted_at is null`),
   }),
 );
 
 /* ─── webhook_outbound_deliveries (per-attempt retry log) ─────────── */
-export const webhookOutboundDeliveries = mysqlTable(
+export const webhookOutboundDeliveries = pgTable(
   'webhook_outbound_deliveries',
   {
     id: id(),
-    subscriberId: varchar('subscriber_id', { length: 36 })
+    subscriberId: text('subscriber_id')
       .notNull()
       .references(() => webhookSubscribers.id, { onDelete: 'cascade' }),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     // Stable event id — survives across retry rows. The customer's
@@ -973,7 +998,7 @@ export const webhookOutboundDeliveries = mysqlTable(
     eventType: text('event_type').notNull(),
     // The serialised JSON we POST. Stored once at publish so retries
     // send identical bytes even if upstream state has moved on.
-    payload: json('payload').$type<Record<string, unknown>>().notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     status: text('status').$type<WebhookOutboundStatus>().notNull().default('pending'),
     attemptCount: text('attempt_count').notNull().default('0'),
     // Set on every state transition. Dispatcher claims rows where
@@ -986,8 +1011,9 @@ export const webhookOutboundDeliveries = mysqlTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    // @README-BRIVEN: was partial index (WHERE status = 'pending').
-    dueIdx: index('webhook_outbound_deliveries_due_idx').on(t.nextAttemptAt),
+    dueIdx: index('webhook_outbound_deliveries_due_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`status = 'pending'`),
     subscriberIdx: index('webhook_outbound_deliveries_subscriber_idx').on(
       t.subscriberId,
       t.createdAt,
@@ -998,11 +1024,11 @@ export const webhookOutboundDeliveries = mysqlTable(
 );
 
 /* ─── project_files (S3-compatible object storage metadata) ──────── */
-export const projectFiles = mysqlTable(
+export const projectFiles = pgTable(
   'project_files',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     // Human-facing name (the original filename when known). Not unique
@@ -1017,14 +1043,13 @@ export const projectFiles = mysqlTable(
     // sha256 of the object body, populated on confirm. Null while the
     // upload is mid-flight. Stays null when we don't compute it.
     checksumSha256: text('checksum_sha256'),
-    uploadedBy: varchar('uploaded_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+    uploadedBy: text('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
   (t) => ({
-    // @README-BRIVEN: was partial index (WHERE deleted_at IS NULL).
-    projectIdx: index('project_files_project_idx').on(t.projectId),
+    projectIdx: index('project_files_project_idx').on(t.projectId).where(sql`deleted_at is null`),
     objectKeyIdx: uniqueIndex('project_files_object_key_idx').on(t.objectKey),
   }),
 );
@@ -1078,7 +1103,7 @@ export const marketingEventTypes = [
 ] as const;
 export type MarketingEventType = (typeof marketingEventTypes)[number];
 
-export const marketingEvents = mysqlTable(
+export const marketingEvents = pgTable(
   'marketing_events',
   {
     id: id(),
@@ -1111,14 +1136,14 @@ export type NewMarketingEvent = typeof marketingEvents.$inferInsert;
 export const brivenAuthSdkKeyScope = ['read', 'read-write', 'admin'] as const;
 export type BrivenAuthSdkKeyScope = (typeof brivenAuthSdkKeyScope)[number];
 
-export const brivenAuthSdkKeys = mysqlTable(
+export const brivenAuthSdkKeys = pgTable(
   'briven_auth_sdk_keys',
   {
     id: id(),
-    projectId: varchar('project_id', { length: 36 })
+    projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    createdBy: varchar('created_by', { length: 36 })
+    createdBy: text('created_by')
       .notNull()
       .references(() => users.id),
     name: text('name').notNull(),

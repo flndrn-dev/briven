@@ -5,9 +5,9 @@
 // so mutate it first and then dynamic-import everything below.
 
 const ORIGINAL_SECRET = process.env.BRIVEN_BETTER_AUTH_SECRET;
-const ORIGINAL_DB_URL = process.env.BRIVEN_URL;
+const ORIGINAL_DB_URL = process.env.BRIVEN_DATABASE_URL;
 process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET ?? 'a'.repeat(32);
-process.env.BRIVEN_URL = ORIGINAL_DB_URL ?? 'mysql://test:test@127.0.0.1:5/test';
+process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL ?? 'postgres://test:test@127.0.0.1:5/test';
 
 import { describe, expect, it, afterAll } from 'bun:test';
 import type { AppEnv } from '../types/app-env.js';
@@ -45,6 +45,6 @@ describe('requireProjectAuth — CLI JWT branch', () => {
 afterAll(() => {
   if (ORIGINAL_SECRET === undefined) delete process.env.BRIVEN_BETTER_AUTH_SECRET;
   else process.env.BRIVEN_BETTER_AUTH_SECRET = ORIGINAL_SECRET;
-  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_URL;
-  else process.env.BRIVEN_URL = ORIGINAL_DB_URL;
+  if (ORIGINAL_DB_URL === undefined) delete process.env.BRIVEN_DATABASE_URL;
+  else process.env.BRIVEN_DATABASE_URL = ORIGINAL_DB_URL;
 });

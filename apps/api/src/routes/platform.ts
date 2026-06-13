@@ -16,6 +16,7 @@ import {
   createTable,
   dropTable,
 } from "../services/studio.js";
+import type { StudioColumnSpec } from "../services/studio.js";
 import { audit, hashIp } from "../services/audit.js";
 import { log } from "../lib/logger.js";
 
@@ -143,7 +144,7 @@ platformRouter.post(
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
     const body = await c.req.json<Record<string, unknown>>();
-    const result = await insertRow(projectId, tableName, body);
+    const result = await insertRow({ projectId, tableName, values: body });
     return c.json(result, 201);
   }
 );
@@ -159,7 +160,10 @@ platformRouter.patch(
     if (!body.primaryKey || !body.values) {
       return c.json({ code: "validation_failed", message: "expected { primaryKey, values }" }, 400);
     }
-    await updateCell(projectId, tableName, body.primaryKey[0].column, body.primaryKey[0].value, body.values);
+    // Postgres updateCell sets one column at a time; apply each value in the patch.
+    for (const [column, value] of Object.entries(body.values)) {
+      await updateCell({ projectId, tableName, primaryKey: body.primaryKey, column, value });
+    }
     return c.json({ ok: true });
   }
 );
@@ -175,9 +179,7 @@ platformRouter.delete(
     if (!body.primaryKey) {
       return c.json({ code: "validation_failed", message: "expected { primaryKey }" }, 400);
     }
-    // deleteRow takes a single PK column/value pair
-    const pkCol = body.primaryKey[0];
-    await deleteRow(projectId, tableName, pkCol.column, pkCol.value);
+    await deleteRow({ projectId, tableName, primaryKey: body.primaryKey });
     return c.json({ ok: true });
   }
 );
@@ -190,12 +192,17 @@ platformRouter.post(
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
-    const body = await c.req.json<{ name: string; schema?: string; comment?: string }>();
+    const body = await c.req.json<{ name: string; schema?: string; comment?: string; columns?: StudioColumnSpec[] }>();
     if (!body.name) {
       return c.json({ code: "validation_failed", message: "expected { name }" }, 400);
     }
-    // createTable expects name + optional columns
-    await createTable(projectId, body.name);
+    // Postgres requires at least one column + a primary key; default to a
+    // uuid `id` PK when the caller didn't specify columns.
+    const columns: StudioColumnSpec[] =
+      body.columns && body.columns.length > 0
+        ? body.columns
+        : [{ name: "id", type: "uuid", primaryKey: true, notNull: true, defaultExpr: "gen_random_uuid()" }];
+    await createTable({ projectId, tableName: body.name, columns });
     return c.json({ name: body.name }, 201);
   }
 );

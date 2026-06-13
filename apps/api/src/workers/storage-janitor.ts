@@ -230,7 +230,7 @@ async function purgeObject(cfg: StorageEnv, objectKey: string): Promise<boolean>
 
 export function startStorageJanitor(): void {
   if (timer) return;
-  if (!env.BRIVEN_URL) {
+  if (!env.BRIVEN_DATABASE_URL) {
     log.warn('storage_janitor_skipped_no_db');
     return;
   }

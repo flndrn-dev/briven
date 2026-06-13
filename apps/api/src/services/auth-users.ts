@@ -173,29 +173,40 @@ export async function listProjectUsers(
 
   if (opts.cursor) {
     const parsed = parseCursor(opts.cursor);
-    cursorClause = 'AND (u.created_at, u.id) < (?, ?)';
+    cursorClause = 'AND (u.created_at, u.id) < ($1::timestamptz, $2)';
     params.push(parsed.createdAt, parsed.id);
   }
 
   // Pull `limit + 1` to detect "has more" without a separate count.
   params.push(limit + 1);
+  const limitPlaceholder = `$${params.length}`;
 
-  const [rows] = await runInProjectSchema<[RawUserJoinRow[], unknown]>(projectId, async (conn) => {
-    return (await conn.query(
-      `SELECT
-         u.id, u.email, u.name, u.created_at,
-         (SELECT MAX(s.created_at) FROM \`_briven_auth_sessions\` s WHERE s.user_id = u.id) AS last_seen_at,
-         COALESCE(
-           (SELECT JSON_ARRAYAGG(DISTINCT a.provider_id)
-            FROM \`_briven_auth_accounts\` a WHERE a.user_id = u.id),
-           JSON_ARRAY()
-         ) AS provider_ids
-       FROM \`_briven_auth_users\` u
-       WHERE 1=1 ${cursorClause}
-       ORDER BY u.created_at DESC, u.id DESC
-       LIMIT ?`,
-      params,
-    )) as [RawUserJoinRow[], unknown];
+  const rows = await runInProjectSchema<RawUserJoinRow[]>(projectId, async (tx) => {
+    return (await tx.unsafe(
+      `
+        SELECT
+          u.id,
+          u.email,
+          u.name,
+          u.created_at,
+          (
+            SELECT MAX(s.created_at)
+            FROM "_briven_auth_sessions" s
+            WHERE s.user_id = u.id
+          ) AS last_seen_at,
+          ARRAY(
+            SELECT DISTINCT a.provider_id
+            FROM "_briven_auth_accounts" a
+            WHERE a.user_id = u.id
+            ORDER BY a.provider_id
+          ) AS provider_ids
+        FROM "_briven_auth_users" u
+        WHERE 1=1 ${cursorClause}
+        ORDER BY u.created_at DESC, u.id DESC
+        LIMIT ${limitPlaceholder}
+      `,
+      params as never[],
+    )) as RawUserJoinRow[];
   });
 
   const hasMore = rows.length > limit;
@@ -241,29 +252,44 @@ export async function getProjectUserDetail(
     throw new ValidationError('invalid user id', { userId });
   }
 
-  return runInProjectSchema<UserDetail | null>(projectId, async (conn) => {
-    const [userRows] = (await conn.query(
-      'SELECT id, email, name, created_at FROM `_briven_auth_users` WHERE id = ? LIMIT 1',
-      [userId],
-    )) as [RawUserRow[], unknown];
+  return runInProjectSchema<UserDetail | null>(projectId, async (tx) => {
+    const userRows = (await tx.unsafe(
+      `SELECT id, email, name, created_at
+       FROM "_briven_auth_users"
+       WHERE id = $1
+       LIMIT 1`,
+      [userId] as never[],
+    )) as RawUserRow[];
 
     const user = userRows[0];
     if (!user) return null;
 
-    const [sessionRows] = (await conn.query(
-      'SELECT id, created_at, expires_at, ip_address_hash, user_agent FROM `_briven_auth_sessions` WHERE user_id = ? AND expires_at > NOW() ORDER BY created_at DESC LIMIT ?',
-      [userId, SESSIONS_CAP],
-    )) as [RawSessionRow[], unknown];
+    const sessionRows = (await tx.unsafe(
+      `SELECT id, created_at, expires_at, ip_address_hash, user_agent
+       FROM "_briven_auth_sessions"
+       WHERE user_id = $1
+         AND expires_at > now()
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, SESSIONS_CAP] as never[],
+    )) as RawSessionRow[];
 
-    const [accountRows] = (await conn.query(
-      'SELECT id, provider_id, provider_account_id, created_at FROM `_briven_auth_accounts` WHERE user_id = ? ORDER BY created_at DESC',
-      [userId],
-    )) as [RawAccountRow[], unknown];
+    const accountRows = (await tx.unsafe(
+      `SELECT id, provider_id, provider_account_id, created_at
+       FROM "_briven_auth_accounts"
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId] as never[],
+    )) as RawAccountRow[];
 
-    const [auditRows] = (await conn.query(
-      'SELECT id, action, occurred_at, metadata FROM `_briven_auth_audit_log` WHERE user_id = ? ORDER BY occurred_at DESC LIMIT ?',
-      [userId, AUDIT_CAP],
-    )) as [RawAuditRow[], unknown];
+    const auditRows = (await tx.unsafe(
+      `SELECT id, action, occurred_at, metadata
+       FROM "_briven_auth_audit_log"
+       WHERE user_id = $1
+       ORDER BY occurred_at DESC
+       LIMIT $2`,
+      [userId, AUDIT_CAP] as never[],
+    )) as RawAuditRow[];
 
     return {
       id: user.id,

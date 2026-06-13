@@ -75,8 +75,8 @@ authServiceRouter.get('/v1/auth-service/health', (c) =>
  */
 authServiceRouter.get('/v1/auth-service/ready', (c) => {
   const masterKeyConfigured = Boolean(process.env.BRIVEN_AUTH_MASTER_KEY);
-  const doltConfigured = Boolean(env.BRIVEN_URL);
-  const ready = masterKeyConfigured && doltConfigured;
+  const dataPlaneConfigured = Boolean(env.BRIVEN_DATA_PLANE_URL);
+  const ready = masterKeyConfigured && dataPlaneConfigured;
   return c.json(
     {
       status: ready ? 'ready' : 'degraded',
@@ -118,16 +118,16 @@ authServiceRouter.post(
 
     const statements = renderAuthProvisioningSql();
     try {
-      await runInProjectSchema(projectId, async (conn) => {
+      await runInProjectSchema(projectId, async (tx) => {
         for (const stmt of statements) {
-          await conn.query(stmt);
+          await tx.unsafe(stmt);
         }
         // Flip the meta flag so other code paths can probe "is auth on?"
-        // without a table scan. ON DUPLICATE KEY keeps this idempotent.
-        await conn.query(
-          `INSERT INTO \`_briven_meta\` (\`key\`, value)
-           VALUES ('auth_enabled', 'true')
-           ON DUPLICATE KEY UPDATE value = VALUES(value)`,
+        // without inspecting pg_tables. ON CONFLICT keeps this idempotent.
+        await tx.unsafe(
+          `INSERT INTO "_briven_meta" (key, value)
+           VALUES ('auth_enabled', 'true'::jsonb)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
         );
       });
     } catch (err) {

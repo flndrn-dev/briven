@@ -130,7 +130,7 @@ export async function importAuthUsers(
   let inserted = 0;
   let skipped = 0;
 
-  await runInProjectSchema(projectId, async (conn) => {
+  await runInProjectSchema(projectId, async (tx) => {
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i]!;
       if (!EMAIL_RE.test(row.email)) {
@@ -149,10 +149,12 @@ export async function importAuthUsers(
 
       // Skip when an account with this email already exists. Idempotent
       // re-runs of a CSV against the same tenant don't double-insert.
-      const [existing] = (await conn.query(
-        'SELECT COUNT(*) AS count FROM `_briven_auth_users` WHERE email = ?',
-        [row.email],
-      )) as [RawCountRow[], unknown];
+      const existing = (await tx.unsafe(
+        `SELECT COUNT(*)::int AS count
+         FROM "_briven_auth_users"
+         WHERE email = $1`,
+        [row.email] as never[],
+      )) as RawCountRow[];
       const rawCount = existing[0]?.count ?? 0;
       // postgres.js may return BIGINT as string by default; coerce so the
       // typecheck doesn't see `string | number > number`.
@@ -164,9 +166,15 @@ export async function importAuthUsers(
 
       const userId = newId('u');
       try {
-        await conn.query(
-          'INSERT INTO `_briven_auth_users` (id, email, name, email_verified) VALUES (?, ?, ?, ?)',
-          [userId, row.email, row.name ?? null, row.emailVerified ? new Date() : null],
+        await tx.unsafe(
+          `INSERT INTO "_briven_auth_users" (id, email, name, email_verified)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            userId,
+            row.email,
+            row.name ?? null,
+            row.emailVerified ? new Date() : null,
+          ] as never[],
         );
 
         if (row.passwordHash && algo) {
@@ -174,9 +182,17 @@ export async function importAuthUsers(
           // with provider_id='credential'. The `scope` column is reused
           // here to record the hash algorithm — string-typed already
           // and only meaningful per-provider.
-          await conn.query(
-            'INSERT INTO `_briven_auth_accounts` (id, user_id, provider_id, provider_account_id, access_token_encrypted, scope) VALUES (?, ?, ?, ?, ?, ?)',
-            [newId('a'), userId, 'credential', row.email, row.passwordHash, `hash_algo=${algo}`],
+          await tx.unsafe(
+            `INSERT INTO "_briven_auth_accounts"
+               (id, user_id, provider_id, provider_account_id, access_token_encrypted, scope)
+             VALUES ($1, $2, 'credential', $3, $4, $5)`,
+            [
+              newId('a'),
+              userId,
+              row.email,
+              row.passwordHash,
+              `hash_algo=${algo}`,
+            ] as never[],
           );
         }
         inserted += 1;

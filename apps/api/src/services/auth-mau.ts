@@ -42,15 +42,15 @@ export async function getAuthMauStats(projectId: string): Promise<AuthMauStats> 
   // Distinct user_id across sessions in the window. We could read users +
   // last_seen but distinct-from-sessions is the spec'd definition (an MAU
   // is someone who *used* the app in the window).
-  const [rows] = await runInProjectSchema<[CountRow[], unknown]>(projectId, async (conn) => {
-    return (await conn.query(
-      `SELECT COUNT(DISTINCT user_id) AS count
-       FROM \`_briven_auth_sessions\`
-       WHERE created_at > NOW() - INTERVAL ${WINDOW_DAYS} DAY`,
-    )) as [CountRow[], unknown];
+  const rows = await runInProjectSchema<CountRow[]>(projectId, async (tx) => {
+    return (await tx.unsafe(
+      `SELECT COUNT(DISTINCT user_id)::bigint AS count
+       FROM "_briven_auth_sessions"
+       WHERE created_at > now() - interval '${WINDOW_DAYS} days'`,
+    )) as CountRow[];
   });
 
-  // mysql2 returns BIGINT as number by default. Parse defensively in
+  // postgres.js returns BIGINT as string by default. Parse defensively in
   // case the driver config flips.
   const raw = rows[0]?.count ?? 0;
   const count = typeof raw === 'string' ? Number.parseInt(raw, 10) : raw;
