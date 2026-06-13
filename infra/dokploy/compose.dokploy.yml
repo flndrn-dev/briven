@@ -299,6 +299,13 @@ services:
   # briven's api. The table editor + SQL editor + schema browser only
   # need STUDIO_PG_META_URL, so the original demo flow (#19) is unblocked.
   studio:
+    # DISABLED 2026-06-13 (Jarvis): studio's Supabase-fork CSS theme files
+    # (packages/studio/ui/build/css/themes/*.css) are never generated/committed, so its
+    # `next build` fails and aborts the WHOLE compose -> briven.tech 404s. Gating it behind a
+    # profile makes `docker compose up` SKIP studio, so the rest (web/api/runtime/realtime/docs)
+    # deploys and briven.tech goes live. Nothing depends_on studio. Re-enable with
+    # `--profile studio` once the ui theme-CSS build step is added to apps/studio/Dockerfile.
+    profiles: ["studio"]
     build:
       context: ../..
       dockerfile: apps/studio/Dockerfile
