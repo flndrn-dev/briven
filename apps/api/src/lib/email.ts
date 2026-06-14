@@ -671,13 +671,19 @@ function shell(title: string, body: string): string {
     <tr><td align="center" style="padding:32px 16px">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#13151a;border:1px solid #2a2e36;border-radius:14px;padding:32px">
         <tr><td>
-          <h1 style="font-family:system-ui,sans-serif;font-size:20px;font-weight:500;margin:0 0 16px 0;letter-spacing:-0.02em">briven</h1>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0">
+            <tr>
+              <td style="padding-right:10px;vertical-align:middle"><img src="https://${domain}/icon-email.png" alt="" width="32" height="32" style="display:block;border:0;outline:none" /></td>
+              <td style="vertical-align:middle"><span style="font-family:system-ui,sans-serif;font-size:20px;font-weight:500;letter-spacing:-0.02em;color:#f5f7fa">briven</span></td>
+            </tr>
+          </table>
           <h2 style="font-family:system-ui,sans-serif;font-size:18px;font-weight:500;margin:0 0 16px 0">${title}</h2>
           <div style="color:#9ba3af;font-size:15px">${body}</div>
           <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
             briven · <a style="color:#9ba3af" href="https://${domain}">${domain}</a><br/>
-            built with <span style="color:#e8344a">&#9829;</span> in Flanders
-            &nbsp;·&nbsp; flndrn Limited, Limassol, Cyprus
+            made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn
+            &nbsp;·&nbsp; 100% self-funded, sustainable &amp; independent
+            <br/>flndrn Limited, Limassol, Cyprus
           </p>
         </td></tr>
       </table>
