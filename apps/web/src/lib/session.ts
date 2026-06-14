@@ -32,6 +32,7 @@ export interface SessionUser {
   createdAt: string;
   lastSignIn: {
     at: string;
+    ipAddress: string | null;
     userAgent: string | null;
     nearBy: {
       city: string | null;

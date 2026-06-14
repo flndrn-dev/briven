@@ -165,6 +165,9 @@ export default async function SettingsPage() {
           <dt className="text-[var(--color-text-subtle)]">near by</dt>
           <dd>{formatNearBy(user.lastSignIn?.nearBy ?? null)}</dd>
 
+          <dt className="text-[var(--color-text-subtle)]">ip address</dt>
+          <dd>{user.lastSignIn?.ipAddress ?? '—'}</dd>
+
           <dt className="text-[var(--color-text-subtle)]">user agent</dt>
           <dd className="break-words text-xs text-[var(--color-text-muted)]">
             {user.lastSignIn?.userAgent ?? '—'}
