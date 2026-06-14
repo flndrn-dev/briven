@@ -107,6 +107,21 @@ export default async function HomePage() {
         </p>
       </section>
 
+      <section className="relative z-10 mx-auto w-full max-w-3xl px-6 py-16 text-center">
+        <p className="font-mono text-xs uppercase tracking-[0.12em] text-[var(--color-primary)]">
+          not a big-tech company
+        </p>
+        <p className="mt-4 font-sans text-[var(--text-body)] leading-[1.6] text-[var(--color-text-muted)]">
+          briven isn&apos;t built by a giant with a churn dashboard and a pivot-to-ads roadmap.
+          it&apos;s made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn —{' '}
+          <strong className="text-[var(--color-text)]">
+            100% self-funded, sustainable, and independent
+          </strong>
+          . no investors to appease, no rug-pulls, no acquisition fire-sale. just a tool we run
+          ourselves, built to outlast the hype.
+        </p>
+      </section>
+
       <PricingSection />
 
       <SiteFooter />

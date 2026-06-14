@@ -148,7 +148,7 @@ export default async function BillingPage({
       <header>
         <h1 className="font-mono text-lg text-[var(--color-text)]">billing</h1>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          plan, usage allowance, payments, invoices. cards, refunds, and cancellation are handled
+          plan, usage allowance, payments, invoices, cards, and cancellation are handled
           through the polar.sh customer portal.
         </p>
       </header>
