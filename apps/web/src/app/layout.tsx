@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistMono } from 'geist/font/mono';
 import { GeistSans } from 'geist/font/sans';
+import Script from 'next/script';
 
 import './globals.css';
 
@@ -39,7 +40,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* umami analytics — analytics.flndrn.com */}
+        <Script
+          defer
+          src="https://analytics.flndrn.com/script.js"
+          data-website-id="0b497796-2cd7-4663-bafc-d35d69bd2cf3"
+          strategy="afterInteractive"
+        />
+      </body>
     </html>
   );
 }
