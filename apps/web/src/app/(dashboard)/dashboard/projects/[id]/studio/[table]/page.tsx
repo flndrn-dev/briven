@@ -5,6 +5,7 @@ import { apiFetch, apiJson } from '../../../../../../../lib/api';
 import { DeleteRowButton } from './delete-row-button';
 import { EditableCell } from './editable-cell';
 import { FilterBar } from './filter-bar';
+import { AutoRefresh } from './auto-refresh';
 import { InsertRowForm } from './insert-row-form';
 import { SchemaPanel } from './schema-panel';
 
@@ -210,7 +211,10 @@ export default async function TablePage({
             ) : null}
           </p>
         </div>
-        <InsertRowForm columns={data.columns} action={insertRowAction} />
+        <div className="flex items-center gap-3">
+          <AutoRefresh />
+          <InsertRowForm columns={data.columns} action={insertRowAction} />
+        </div>
       </header>
 
       <FilterBar
