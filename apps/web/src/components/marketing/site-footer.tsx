@@ -71,7 +71,8 @@ export function SiteFooter() {
             <span>agpl-3.0 core · mit cli + sdks</span>
           </div>
           <span>
-            built with <span className="text-[#e8344a]">♥</span> in Flanders
+            made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn · 100%
+            self-funded, sustainable &amp; independent
           </span>
         </div>
       </div>
