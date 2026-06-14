@@ -99,6 +99,7 @@ export async function getProfile(userId: string) {
     lastSignIn: last
       ? {
           at: last.createdAt,
+          ipAddress: last.ipAddress,
           userAgent: last.userAgent,
           nearBy,
         }
