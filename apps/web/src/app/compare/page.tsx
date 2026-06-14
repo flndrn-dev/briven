@@ -32,7 +32,7 @@ const COMPARISONS: Comparison[] = [
     name: 'supabase',
     oneline: 'postgres + auth + storage + row-level security',
     blurb:
-      'both are postgres-first. supabase exposes the database directly through postgrest + row-level security; briven puts a typed function layer in front and adds convex-style reactive subscriptions that supabase doesn&apos;t have.',
+      'both are postgres-first. supabase exposes the database directly through postgrest + row-level security; briven puts a typed function layer in front and adds convex-style reactive subscriptions that supabase doesn\'t have.',
   },
   {
     slug: 'firebase',

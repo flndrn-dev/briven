@@ -89,10 +89,10 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
               dashboard
             </Link>
             <Link
-              href="https://code.konnos.org/flndrn/briven"
+              href="https://codeberg.org/flndrn/briven"
               className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             >
-              konnos
+              Codeberg
             </Link>
           </nav>
         </div>
@@ -126,7 +126,7 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
           briven · open-core reactive postgres · ©{' '}
           {new Date().getFullYear()} flndrn Limited ·{' '}
           <Link
-            href="https://code.konnos.org/flndrn/briven"
+            href="https://codeberg.org/flndrn/briven"
             className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
           >
             source

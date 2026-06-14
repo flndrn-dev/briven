@@ -7,7 +7,6 @@ import { FcGoogle } from 'react-icons/fc';
 export interface Providers {
   google: boolean;
   github: boolean;
-  konnos: boolean;
   discord: boolean;
 }
 
@@ -19,30 +18,10 @@ interface Props {
 }
 
 /**
- * Konnos brand mark — the official two-tone icon shipped under
- * /assets/konnos by the konnos team. Serving from /konnos.svg so it
- * gets cached + compressed alongside the other static assets.
+ * Google, GitHub + Discord are first-class in Better Auth's socialProviders
+ * config, so they all go through /v1/auth/sign-in/social.
  */
-function KonnosMark() {
-  return (
-    <img
-      src="/konnos.svg"
-      alt=""
-      aria-hidden
-      width={20}
-      height={20}
-      className="h-5 w-5"
-    />
-  );
-}
-
-/**
- * `social` vs `oauth2`: Google + GitHub are first-class in Better Auth's
- * socialProviders config, so they go through /v1/auth/sign-in/social.
- * Konnos (Forgejo) is registered via the genericOAuth plugin, which
- * exposes /v1/auth/sign-in/oauth2 with a `providerId` field.
- */
-type ProviderKind = 'google' | 'github' | 'konnos' | 'discord';
+type ProviderKind = 'google' | 'github' | 'discord';
 
 export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
   const [email, setEmail] = useState('');
@@ -90,13 +69,8 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
       // denied, etc.) we want the user to land back on /signin with
       // a friendly error chip, not the api origin's JSON.
       const errorCallbackURL = `${window.location.origin}/signin?error=oauth_${kind}`;
-      const endpoint =
-        kind === 'konnos' ? '/v1/auth/sign-in/oauth2' : '/v1/auth/sign-in/social';
-      const body =
-        kind === 'konnos'
-          ? { providerId: 'konnos', callbackURL, errorCallbackURL }
-          : { provider: kind, callbackURL, errorCallbackURL };
-      const res = await fetch(`${apiOrigin}${endpoint}`, {
+      const body = { provider: kind, callbackURL, errorCallbackURL };
+      const res = await fetch(`${apiOrigin}/v1/auth/sign-in/social`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
@@ -117,7 +91,7 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
 
   const anyPending = pending || oauthPending !== null;
   const anyOAuth =
-    providers.google || providers.github || providers.konnos || providers.discord;
+    providers.google || providers.github || providers.discord;
 
   if (sent) {
     const isOutlookFamily = /@(hotmail|outlook|live|msn)\./i.test(email);
@@ -185,18 +159,6 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
                 <FaGithub />
               </span>
               {oauthPending === 'github' ? 'redirecting...' : 'continue with github'}
-            </button>
-          ) : null}
-
-          {providers.konnos ? (
-            <button
-              type="button"
-              onClick={() => onOAuth('konnos')}
-              disabled={disabled || anyPending}
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
-            >
-              <KonnosMark />
-              {oauthPending === 'konnos' ? 'redirecting...' : 'continue with konnos'}
             </button>
           ) : null}
 

@@ -240,10 +240,10 @@ function SelfHostCommercialBand() {
         <p>
           source available at{' '}
           <Link
-            href="https://code.konnos.org/flndrn/briven"
+            href="https://codeberg.org/flndrn/briven"
             className="hover:text-[var(--color-text-muted)]"
           >
-            code.konnos.org/flndrn/briven
+            codeberg.org/flndrn/briven
           </Link>{' '}
           · sla details at{' '}
           <Link

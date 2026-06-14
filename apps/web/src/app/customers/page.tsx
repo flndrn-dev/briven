@@ -7,9 +7,9 @@ import { SiteHeader } from '../../components/marketing/site-header';
 import { getSessionUser } from '../../lib/session';
 
 export const metadata: Metadata = {
-  title: 'customers — dogfood projects running on briven',
+  title: 'projects — what we\'re building on briven',
   description:
-    'the production projects that briven runs in 2026: handlr, isy, mavi. real workloads, not demos.',
+    'the flndrn projects lined up to run on briven: web down, isy, mavi finans. honest dogfood — not external customers yet.',
 };
 
 interface Customer {
@@ -26,36 +26,28 @@ interface Customer {
 
 const CUSTOMERS: Customer[] = [
   {
-    slug: 'handlr',
-    name: 'handlr',
-    tagline: 'business-process automation for cyprus accountants',
-    url: 'https://handlr.io',
-    category: 'saas · b2b',
-    using: ['schema', 'functions', 'realtime', 'auth', 'storage'],
+    slug: 'web-down',
+    name: 'web down',
+    tagline: 'website uptime monitoring & alerts',
+    url: 'https://web-down.com',
+    category: 'saas · monitoring',
+    using: ['schema', 'functions', 'scheduled', 'auth'],
     blurb:
-      'handlr was the convex-on-postgres test case. moved from convex+supabase to briven in june 2026 — same reactive ergonomics, but the schema is plain postgres and a pg_dump moves the whole product to another host in minutes.',
-    metrics: [
-      { label: 'deploys / week', value: '12-25' },
-      { label: 'p95 query', value: '< 40ms' },
-      { label: 'realtime subs', value: '~600 peak' },
-    ],
-    status: 'live',
+      'web down watches websites and alerts the moment one goes down. its scheduled checks, time-series writes, and alert state map cleanly onto briven\'s postgres + functions + scheduled jobs.',
+    metrics: [],
+    status: 'planned',
   },
   {
     slug: 'isy',
     name: 'isy',
-    tagline: 'project + invoice management for small belgian studios',
+    tagline: 'modern icq-style chat app',
     url: 'https://isy.work',
-    category: 'saas · solo + duo studios',
-    using: ['schema', 'functions', 'realtime', 'auth', 'scheduled (planned)'],
+    category: 'saas · b2c messaging',
+    using: ['schema', 'functions', 'realtime', 'auth'],
     blurb:
-      'isy ran on a hand-rolled bun + drizzle + postgres stack since 2025. migrated to briven in september 2026 so the auth + audit + backups layer is one less thing to maintain. schema unchanged — briven imported the live postgres without rewrites.',
-    metrics: [
-      { label: 'tables', value: '38' },
-      { label: 'monthly invocations', value: '~210k' },
-      { label: 'time to migrate', value: '4 hours' },
-    ],
-    status: 'live',
+      'isy is a modern take on the classic icq messenger — real-time chat with presence and message history. its realtime + auth + postgres needs map directly onto briven, making it an early build target on the platform.',
+    metrics: [],
+    status: 'planned',
   },
   {
     slug: 'mavi',
@@ -65,13 +57,9 @@ const CUSTOMERS: Customer[] = [
     category: 'fintech · b2c',
     using: ['schema', 'functions', 'auth', 'audit log'],
     blurb:
-      'mavi is the strict-compliance test. every mutation is an audit row, every read is project-scoped, every secret is encrypted at rest. mavi is migrating to briven in q4 2026 once point-in-time recovery lands — until then it runs on a sibling postgres with the same operator playbook.',
-    metrics: [
-      { label: 'compliance audits passed', value: '1 + 1 pending' },
-      { label: 'data residency', value: 'eu-only' },
-      { label: 'sensitive tables', value: 'all aes-256 at rest' },
-    ],
-    status: 'migrating',
+      'mavi finans is the strict-compliance case: audit log on every mutation, project-scoped reads, secrets encrypted at rest, eu-only data residency. those needs are exactly why briven\'s auth + audit + encryption layer exists — which makes mavi a natural build target as briven matures.',
+    metrics: [],
+    status: 'planned',
   },
 ];
 
@@ -84,17 +72,17 @@ export default async function CustomersPage() {
 
       <section className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-12 pt-16 sm:pt-24">
         <p className="font-mono uppercase tracking-[0.12em] text-[var(--color-primary)] text-[var(--text-xs)]">
-          customers
+          dogfood
         </p>
         <h1 className="mt-4 max-w-3xl font-sans font-medium leading-[1.05] tracking-[-0.03em] text-[var(--color-text)] text-[var(--text-display-3)] sm:text-[var(--text-display-2)]">
-          the projects briven runs.
+          the projects we&apos;re
           <br />
-          not demos.
+          building on briven.
         </h1>
         <p className="mt-6 max-w-2xl leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-          briven was built dogfood-first through the first half of 2026. these are the production
-          workloads on the platform right now — the same instance the public beta opens to on{' '}
-          <strong>2026-05-21</strong>.
+          briven is built dogfood-first. these are flndrn&apos;s own projects — the ones lined up to
+          run on briven as the platform matures. honest about where each stands: build targets, not
+          external customers (yet).
         </p>
       </section>
 
@@ -162,16 +150,18 @@ function CustomerCard({ customer }: { customer: Customer }) {
         {customer.blurb}
       </p>
 
-      <dl className="grid grid-cols-1 gap-3 border-t border-[var(--color-border-subtle)] pt-4 sm:grid-cols-3">
-        {customer.metrics.map((m) => (
-          <div key={m.label} className="flex flex-col gap-0.5">
-            <dt className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
-              {m.label}
-            </dt>
-            <dd className="font-mono text-sm text-[var(--color-text)]">{m.value}</dd>
-          </div>
-        ))}
-      </dl>
+      {customer.metrics.length > 0 ? (
+        <dl className="grid grid-cols-1 gap-3 border-t border-[var(--color-border-subtle)] pt-4 sm:grid-cols-3">
+          {customer.metrics.map((m) => (
+            <div key={m.label} className="flex flex-col gap-0.5">
+              <dt className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                {m.label}
+              </dt>
+              <dd className="font-mono text-sm text-[var(--color-text)]">{m.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
 
       <div className="flex flex-wrap gap-1.5 pt-1">
         {customer.using.map((u) => (

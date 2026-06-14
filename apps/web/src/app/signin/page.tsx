@@ -14,7 +14,7 @@ function describeError(code: string | undefined): string | null {
   // a regression can grep it.
   if (code.startsWith('oauth_')) {
     const provider = code.slice('oauth_'.length);
-    return `the ${provider} sign-in didn't complete. this is usually a temporary issue — try again. if it keeps failing, check that your ${provider} app's authorized redirect URI matches https://api.briven.tech/v1/auth/${provider === 'konnos' ? 'oauth2/callback/konnos' : `callback/${provider}`}.`;
+    return `the ${provider} sign-in didn't complete. this is usually a temporary issue — try again. if it keeps failing, check that your ${provider} app's authorized redirect URI matches https://api.briven.tech/v1/auth/callback/${provider}.`;
   }
   if (code === 'state_mismatch') {
     return 'the sign-in didn\'t complete because your browser blocked a cookie. try again in a private window, or check your browser settings.';
@@ -41,7 +41,6 @@ export default async function SignInPage({
   const providers = {
     google: process.env.NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH === 'true',
     github: process.env.NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH === 'true',
-    konnos: process.env.NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH === 'true',
     discord: process.env.NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH === 'true',
   };
 
