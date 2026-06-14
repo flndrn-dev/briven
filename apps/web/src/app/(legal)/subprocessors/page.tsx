@@ -50,12 +50,12 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
       'Encryption keys remain on briven infrastructure; B2 receives only ciphertext. EU mirror selected when activated.',
   },
   {
-    name: 'Konnos (Gitea instance at code.konnos.org)',
+    name: 'Codeberg (codeberg.org)',
     purpose: 'Source code hosting; CI artifact storage',
     location: 'EU (operator-controlled)',
     status: 'active',
     notes:
-      'No customer data flows to konnos. Public source only. Listed for transparency about where the briven codebase lives.',
+      'No customer data flows to Codeberg. Public source only. Listed for transparency about where the briven codebase lives.',
   },
   {
     name: 'Google Cloud (Google LLC)',

@@ -17,7 +17,7 @@ export function SiteFooter() {
           </p>
           <div className="flex items-center gap-3 font-mono text-[10px] text-[var(--color-text-subtle)]">
             <Link
-              href="https://code.konnos.org/flndrn/briven"
+              href="https://codeberg.org/flndrn/briven"
               className="hover:text-[var(--color-text-muted)]"
             >
               source

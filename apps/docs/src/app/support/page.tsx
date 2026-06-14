@@ -25,10 +25,10 @@ export default function SupportPage() {
           <li>
             <strong>github issues</strong>{' '}
             <Link
-              href="https://code.konnos.org/flndrn/briven/issues"
+              href="https://codeberg.org/flndrn/briven/issues"
               className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
             >
-              code.konnos.org/flndrn/briven
+              codeberg.org/flndrn/briven
             </Link>{' '}
             — bug reports + reproducible defects. include the build sha from the dashboard
             footer and the relevant audit-log entries (sanitised — see below).

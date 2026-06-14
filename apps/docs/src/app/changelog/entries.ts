@@ -155,8 +155,8 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-11',
     tags: ['feat'],
-    title: 'github + konnos OAuth credentials live on briven.tech',
-    body: 'all three OAuth providers (Google + GitHub + Konnos) now have their credentials configured in the production env. signin page shows all three buttons; existing magic-link flow continues to work in parallel.',
+    title: 'github + google OAuth credentials live on briven.tech',
+    body: 'the OAuth providers (Google + GitHub) now have their credentials configured in the production env. signin page shows both buttons; existing magic-link flow continues to work in parallel.',
   },
   {
     date: '2026-05-11',
@@ -191,8 +191,8 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-11',
     tags: ['feat'],
-    title: 'github + konnos OAuth alongside google + magic link',
-    body: 'sign-in page now wires four auth methods: magic-link via email, Google OAuth, GitHub OAuth, and Konnos OAuth (Forgejo at code.konnos.org via the generic-oauth plugin). Each button is gated by NEXT_PUBLIC_BRIVEN_HAS_*_OAUTH so the UI hides providers whose creds aren\'t configured.',
+    title: 'github OAuth alongside google + magic link',
+    body: 'sign-in page now wires three auth methods: magic-link via email, Google OAuth, and GitHub OAuth. Each button is gated by NEXT_PUBLIC_BRIVEN_HAS_*_OAUTH so the UI hides providers whose creds aren\'t configured.',
   },
   {
     date: '2026-05-11',
