@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
 import { ConfirmButton } from './confirm-button';
+import { DiffPanel, type SnapshotDiff } from './diff-panel';
 
 interface Snapshot {
   id: string;
@@ -49,6 +50,12 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
       throw new Error(body || `restore failed: ${res.status}`);
     }
     revalidatePath(`/dashboard/projects/${id}/snapshots`);
+  }
+
+  async function compare(snapId: string): Promise<SnapshotDiff> {
+    'use server';
+    const { id } = await params;
+    return apiJson<SnapshotDiff>(`/v1/projects/${id}/studio/snapshots/${snapId}/diff`);
   }
 
   async function remove(formData: FormData) {
@@ -107,35 +114,38 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
             {snapshots.map((s) => (
               <li
                 key={s.id}
-                className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-sm text-[var(--color-text)]">{s.name}</p>
-                  <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
-                    {s.tableCount} {s.tableCount === 1 ? 'table' : 'tables'} ·{' '}
-                    {new Date(s.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
-                  </p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-sm text-[var(--color-text)]">{s.name}</p>
+                    <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
+                      {s.tableCount} {s.tableCount === 1 ? 'table' : 'tables'} ·{' '}
+                      {new Date(s.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <form action={restore}>
+                      <input type="hidden" name="snapId" value={s.id} />
+                      <ConfirmButton
+                        message="Restore will REPLACE all your current data with this snapshot. Continue?"
+                        className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
+                      >
+                        restore
+                      </ConfirmButton>
+                    </form>
+                    <form action={remove}>
+                      <input type="hidden" name="snapId" value={s.id} />
+                      <ConfirmButton
+                        message="Delete this snapshot permanently?"
+                        className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-error)] hover:text-[var(--color-error)]"
+                      >
+                        delete
+                      </ConfirmButton>
+                    </form>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <form action={restore}>
-                    <input type="hidden" name="snapId" value={s.id} />
-                    <ConfirmButton
-                      message="Restore will REPLACE all your current data with this snapshot. Continue?"
-                      className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
-                    >
-                      restore
-                    </ConfirmButton>
-                  </form>
-                  <form action={remove}>
-                    <input type="hidden" name="snapId" value={s.id} />
-                    <ConfirmButton
-                      message="Delete this snapshot permanently?"
-                      className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-error)] hover:text-[var(--color-error)]"
-                    >
-                      delete
-                    </ConfirmButton>
-                  </form>
-                </div>
+                <DiffPanel snapshotName={s.name} loadDiff={compare.bind(null, s.id)} />
               </li>
             ))}
           </ul>
