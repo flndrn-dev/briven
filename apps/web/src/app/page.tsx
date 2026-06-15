@@ -41,8 +41,6 @@ export default async function HomePage() {
               read the docs
             </Link>
           </div>
-
-          <InstallBlock />
         </div>
       </section>
 
@@ -67,38 +65,35 @@ export default async function HomePage() {
 
       <section className="relative z-10 mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-h2)]">
-          two paths to the same schema
+          click it, or code it
         </h2>
         <div className="mt-6 grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-border-subtle)] md:grid-cols-2">
           <div className="flex flex-col gap-3 bg-[var(--color-bg)] p-6">
-            <h3 className="font-mono text-sm text-[var(--color-primary)]">cli + git</h3>
+            <h3 className="font-mono text-sm text-[var(--color-primary)]">click — no code</h3>
             <p className="font-sans text-[var(--text-body)] text-[var(--color-text-muted)]">
-              for engineers who want their schema in version control. write{' '}
-              <code>briven/schema.ts</code>, <code>briven deploy</code>, the cli diffs against the
-              live schema and applies the migration transactionally. functions live in{' '}
-              <code>briven/functions/</code> as plain TypeScript files.
-            </p>
-            <Link
-              href="https://docs.briven.tech/quickstart"
-              className="self-start font-mono text-xs text-[var(--color-text-link)] underline-offset-2 hover:underline"
-            >
-              quickstart →
-            </Link>
-          </div>
-          <div className="flex flex-col gap-3 bg-[var(--color-bg)] p-6">
-            <h3 className="font-mono text-sm text-[var(--color-primary)]">dashboard / studio</h3>
-            <p className="font-sans text-[var(--text-body)] text-[var(--color-text-muted)]">
-              for prototyping, one-off changes, and anyone who&apos;d rather click than write
-              TypeScript. studio gives you the full DDL surface (create / rename / drop
-              table, column, index, FK), an inline SQL editor scoped to your schema, and a
-              data browser with edit-in-place. <em>copy as schema.ts</em> graduates a
-              click-built database back to git.
+              start from a template or a blank database, then build it by clicking: add tables,
+              edit rows like a spreadsheet, link things together. save a snapshot before any big
+              change and undo it in one click. you never have to see code.
             </p>
             <Link
               href="https://briven.tech/signin"
               className="self-start font-mono text-xs text-[var(--color-text-link)] underline-offset-2 hover:underline"
             >
               open the dashboard →
+            </Link>
+          </div>
+          <div className="flex flex-col gap-3 bg-[var(--color-bg)] p-6">
+            <h3 className="font-mono text-sm text-[var(--color-primary)]">code — for developers</h3>
+            <p className="font-sans text-[var(--text-body)] text-[var(--color-text-muted)]">
+              prefer code? keep your schema in version control: write{' '}
+              <code>briven/schema.ts</code>, run <code>briven deploy</code>, and the CLI applies the
+              migration. real SQL, real tables — every standard client works.
+            </p>
+            <Link
+              href="https://docs.briven.tech/quickstart"
+              className="self-start font-mono text-xs text-[var(--color-text-link)] underline-offset-2 hover:underline"
+            >
+              developer quickstart →
             </Link>
           </div>
         </div>
@@ -136,29 +131,7 @@ function LiveBadge() {
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-primary)] opacity-60" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-primary)]" />
       </span>
-      phase 4 · public beta · launching may 2026
-    </div>
-  );
-}
-
-function InstallBlock() {
-  return (
-    <div className="mt-8 w-full max-w-xl overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-code-bg)]">
-      <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-2 font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]">
-        <span>terminal</span>
-        <span>zsh</span>
-      </div>
-      <pre className="overflow-x-auto p-4 font-mono leading-[1.7] text-[var(--color-code-text)] text-[var(--text-small)]">
-        <span className="text-[var(--color-text-subtle)]">{'# scaffold a new project'}</span>
-        {'\n'}
-        <span className="text-[var(--color-primary)]">npx</span>
-        {' briven init'}
-        {'\n\n'}
-        <span className="text-[var(--color-text-subtle)]">{'# deploy to briven.tech'}</span>
-        {'\n'}
-        <span className="text-[var(--color-primary)]">npx</span>
-        {' briven deploy'}
-      </pre>
+      public beta · live now · made in Flanders
     </div>
   );
 }
