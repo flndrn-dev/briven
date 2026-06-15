@@ -2,7 +2,7 @@ import { brivenError } from '@briven/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { projects, subscriptions, type SubscriptionStatus } from '../db/schema.js';
+import { orgMembers, projects, subscriptions, users, type SubscriptionStatus } from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import type { ProjectTier } from '../db/schema.js';
@@ -210,8 +210,29 @@ export async function upsertSubscriptionFromPolar(input: {
   });
 }
 
+/**
+ * Founder comp: orgs owned by one of these emails run on the Team tier for
+ * free — flndrn doesn't pay for flndrn's own apps. Keyed on the owner's
+ * email (not org/project id) so the comp survives org or project
+ * re-creation. Applied inside getTierForOrg so it flows to BOTH the
+ * /billing "current plan" display AND the tier stamped onto newly-created
+ * projects (services/projects.ts reads getTierForOrg at create time).
+ */
+const COMPED_OWNER_EMAILS = new Set(['flndrn@hotmail.com']);
+
 export async function getTierForOrg(orgId: string): Promise<ProjectTier> {
   const db = getDb();
+  if (COMPED_OWNER_EMAILS.size > 0) {
+    const [owner] = await db
+      .select({ email: users.email })
+      .from(orgMembers)
+      .innerJoin(users, eq(users.id, orgMembers.userId))
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.role, 'owner')))
+      .limit(1);
+    if (owner && COMPED_OWNER_EMAILS.has(owner.email.toLowerCase())) {
+      return 'team';
+    }
+  }
   const [row] = await db
     .select({ tier: subscriptions.tier, status: subscriptions.status })
     .from(subscriptions)
@@ -232,6 +253,10 @@ export interface SubscriptionSummary {
 
 export async function getSubscriptionForOrg(orgId: string): Promise<SubscriptionSummary> {
   const db = getDb();
+  // Effective tier folds in the founder comp (see getTierForOrg) so a comped
+  // org without a paid Polar subscription still surfaces its real tier on the
+  // /billing "current plan" panel, not just on the rate-limit path.
+  const effectiveTier = await getTierForOrg(orgId);
   const [row] = await db
     .select()
     .from(subscriptions)
@@ -239,15 +264,15 @@ export async function getSubscriptionForOrg(orgId: string): Promise<Subscription
     .limit(1);
   if (!row) {
     return {
-      tier: 'free',
-      status: 'free',
+      tier: effectiveTier,
+      status: effectiveTier === 'free' ? 'free' : 'active',
       currentPeriodEnd: null,
       canceledAt: null,
       polarCustomerId: null,
     };
   }
   return {
-    tier: row.status === 'canceled' || row.status === 'past_due' ? 'free' : row.tier,
+    tier: row.status === 'canceled' || row.status === 'past_due' ? effectiveTier : row.tier,
     status: row.status,
     currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
     canceledAt: row.canceledAt?.toISOString() ?? null,

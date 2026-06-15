@@ -70,7 +70,7 @@ export async function getHourlyInvocations(
   const rows = (await db.execute(sql`
     WITH hours AS (
       SELECT generate_series(
-        date_trunc('hour', ${since}),
+        date_trunc('hour', ${since}::timestamptz),
         date_trunc('hour', now()),
         interval '1 hour'
       ) AS hour
@@ -82,7 +82,7 @@ export async function getHourlyInvocations(
         count(*) FILTER (WHERE status = 'err')::int AS err_count
       FROM function_logs
       WHERE project_id = ${projectId}
-        AND created_at >= ${since}
+        AND created_at >= ${since}::timestamptz
       GROUP BY 1
     )
     SELECT

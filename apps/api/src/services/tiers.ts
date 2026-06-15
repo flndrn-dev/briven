@@ -89,18 +89,26 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
  * generator. Pro is 10× free, Team is 100× free — same pattern as the
  * structural caps above.
  */
-export type RateLimitScope = 'invoke' | 'deploy' | 'mutate';
+export type RateLimitScope = 'invoke' | 'deploy' | 'mutate' | 'read';
 
 /**
  * `mutate` is the catch-all scope for state-changing project routes that
  * aren't already covered by `invoke` or `deploy` — env writes, member
  * mutations, invitation create/revoke. Numbers are tighter than `invoke`
  * because these are admin-tier human ops, not hot-path RPCs.
+ *
+ * `read` covers read-only dashboard queries (studio table/row/column
+ * listings, schema views). These are GETs that change nothing, so they get
+ * a much higher cap than `mutate` — a human browsing studio, or the table
+ * view's auto-refresh poll, fires several reads per view and must not be
+ * throttled into the write budget. (Pre-fix these were on `mutate`, so the
+ * free tier's 30/min exhausted in seconds and Studio 500'd.)
  */
 export const RATE_LIMITS_BY_TIER: Record<RateLimitScope, Record<ProjectTier, number>> = {
   invoke: { free: 60, pro: 600, team: 6_000 },
   deploy: { free: 5, pro: 30, team: 100 },
   mutate: { free: 30, pro: 300, team: 3_000 },
+  read: { free: 300, pro: 3_000, team: 30_000 },
 };
 
 export const RATE_LIMIT_WINDOW_MS = 60_000;
