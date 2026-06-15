@@ -7,18 +7,29 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'briven — the postgres backend you actually own',
-    template: '%s · briven',
+    default: 'Briven — the database anyone can use, no coding needed',
+    template: '%s · Briven',
   },
   description:
-    'reactive postgres, worldwide, fully portable. convex ergonomics without the lock-in.',
+    'Create and run a real database without writing code. Start from a template, edit your data like a spreadsheet, and undo any mistake in one click. Honest pricing, no surprise bills — made in Flanders.',
+  keywords: [
+    'no-code database',
+    'database without coding',
+    'database for non-coders',
+    'easy online database',
+    'database builder',
+    'database with undo',
+    'neon alternative',
+    'supabase alternative',
+  ],
   icons: {
     icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
     shortcut: '/favicon.svg',
   },
   openGraph: {
-    title: 'briven',
-    description: 'the postgres backend you actually own',
+    title: 'Briven — the database anyone can use',
+    description:
+      'A real database without writing code. Templates, spreadsheet-style editing, one-click undo. Honest pricing, made in Flanders.',
     url: 'https://briven.tech',
     siteName: 'briven',
     locale: 'en_US',
@@ -26,8 +37,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'briven',
-    description: 'the postgres backend you actually own',
+    title: 'Briven — the database anyone can use',
+    description:
+      'A real database without writing code. Templates, spreadsheet-style editing, one-click undo.',
   },
   metadataBase: new URL('https://briven.tech'),
 };
