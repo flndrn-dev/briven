@@ -225,6 +225,13 @@
       "when": 1779430000000,
       "tag": "0031_user_company_registration_number",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1779500000000,
+      "tag": "0032_project_auto_snapshot_settings",
+      "breakpoints": true
     }
   ]
 }

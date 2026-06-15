@@ -6,6 +6,7 @@ import { getDeployment, getDeploymentBundle } from '../services/deployments.js';
 import { invoke } from '../services/invoke.js';
 import { getPlainEnvForProject } from '../services/project-env.js';
 import { getProjectTier, TIERS } from '../services/tiers.js';
+import { runDueAutoSnapshots } from '../workers/auto-snapshot.js';
 
 /**
  * Internal endpoints — only the runtime host calls these, authenticated via
@@ -88,6 +89,23 @@ internalRouter.post('/v1/internal/projects/:projectId/functions/:functionName', 
   });
   const status = result.ok ? 200 : 500;
   return c.json(result, status);
+});
+
+/**
+ * Drive the auto-snapshot worker once on demand. The in-process timer
+ * (workers/auto-snapshot.ts, armed at boot) is the primary trigger; this
+ * endpoint lets an external scheduler (e.g. a system cron hitting the API
+ * over the internal network with BRIVEN_RUNTIME_SHARED_SECRET) run the due
+ * scan in deployments that prefer cron over the in-process timer. Idempotent
+ * and safe to call alongside the timer — the per-project claim guard prevents
+ * any project being snapshotted twice for the same slot.
+ *
+ *   curl -XPOST -H "authorization: Bearer $BRIVEN_RUNTIME_SHARED_SECRET" \
+ *     https://api.internal/v1/internal/auto-snapshots/run
+ */
+internalRouter.post('/v1/internal/auto-snapshots/run', async (c) => {
+  const summary = await runDueAutoSnapshots(new Date());
+  return c.json({ ok: true, ...summary });
 });
 
 /**

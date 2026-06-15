@@ -1169,3 +1169,53 @@ export const brivenAuthSdkKeys = pgTable(
 
 export type BrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferSelect;
 export type NewBrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferInsert;
+
+/* ─── project_auto_snapshot_settings (automatic scheduled snapshots) ─ */
+// One row per project that has automatic save-points configured. Drives
+// the auto-snapshot worker: a project is "due" when enabled = true and
+// next_run_at <= now(). The worker takes an `auto` snapshot (see
+// services/snapshots.ts), then prunes auto snapshots beyond
+// retention_count — manual snapshots are never touched. Storing the
+// schedule state here (not in the per-project data-plane schema) keeps
+// the due-scan a single cheap control-plane query.
+export const autoSnapshotFrequency = ['daily', 'twice_daily'] as const;
+export type AutoSnapshotFrequency = (typeof autoSnapshotFrequency)[number];
+
+export const autoSnapshotRunStatus = ['ok', 'error', 'skipped'] as const;
+export type AutoSnapshotRunStatus = (typeof autoSnapshotRunStatus)[number];
+
+export const projectAutoSnapshotSettings = pgTable(
+  'project_auto_snapshot_settings',
+  {
+    id: id(),
+    // One settings row per project. Unique so upsert-on-project is safe.
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    enabled: boolean('enabled').notNull().default(false),
+    frequency: text('frequency').$type<AutoSnapshotFrequency>().notNull().default('daily'),
+    // Keep the last N automatic snapshots; older auto snapshots are pruned
+    // after each successful run. Manual snapshots are out of scope and
+    // never counted or pruned.
+    retentionCount: integer('retention_count').notNull().default(7),
+    // The worker claims rows by checking next_run_at <= now() and bumping
+    // it forward in the same transaction. Indexed on the enabled subset so
+    // the due-scan stays cheap as the table grows.
+    nextRunAt: ts('next_run_at').notNull(),
+    lastRunAt: ts('last_run_at'),
+    lastRunStatus: text('last_run_status').$type<AutoSnapshotRunStatus>(),
+    lastRunError: text('last_run_error'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    projectIdx: uniqueIndex('project_auto_snapshot_settings_project_idx').on(t.projectId),
+    dueIdx: index('project_auto_snapshot_settings_due_idx')
+      .on(t.nextRunAt)
+      .where(sql`enabled = true`),
+  }),
+);
+
+export type ProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferSelect;
+export type NewProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferInsert;
