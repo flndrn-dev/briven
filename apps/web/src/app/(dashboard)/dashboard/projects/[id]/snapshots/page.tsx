@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { apiFetch, apiJson } from '../../../../../../lib/api';
 import { ConfirmButton } from './confirm-button';
 import { DiffPanel, type SnapshotDiff } from './diff-panel';
+import { RestorePreview } from './restore-preview';
 
 interface Snapshot {
   id: string;
@@ -125,15 +126,6 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <form action={restore}>
-                      <input type="hidden" name="snapId" value={s.id} />
-                      <ConfirmButton
-                        message="Restore will REPLACE all your current data with this snapshot. Continue?"
-                        className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
-                      >
-                        restore
-                      </ConfirmButton>
-                    </form>
                     <form action={remove}>
                       <input type="hidden" name="snapId" value={s.id} />
                       <ConfirmButton
@@ -145,14 +137,20 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
                     </form>
                   </div>
                 </div>
+                {/* Restore-preview: shows what restoring WILL do (in plain words)
+                    before the final confirm actually runs the restore action. */}
+                <form action={restore}>
+                  <input type="hidden" name="snapId" value={s.id} />
+                  <RestorePreview snapshotName={s.name} loadDiff={compare.bind(null, s.id)} />
+                </form>
                 <DiffPanel snapshotName={s.name} loadDiff={compare.bind(null, s.id)} />
               </li>
             ))}
           </ul>
         )}
         <p className="mt-1 font-mono text-[11px] text-[var(--color-text-subtle)]">
-          restore replaces your current data with the snapshot. tip: save a fresh snapshot first if
-          you&apos;re unsure.
+          click restore to preview exactly what will change before anything is overwritten. tip:
+          save a fresh snapshot first if you&apos;re unsure.
         </p>
       </section>
     </div>
