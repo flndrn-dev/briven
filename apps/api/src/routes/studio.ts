@@ -35,6 +35,7 @@ import {
   type StudioColumnType,
 } from '../services/studio.js';
 import { seedTemplate } from '../services/templates.js';
+import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from '../services/snapshots.js';
 
 /**
  * Shape-validate the `primaryKey` array a client sent. Returns the typed
@@ -451,6 +452,83 @@ studioRouter.post(
       },
     });
     return c.json(result, 201);
+  },
+);
+
+/**
+ * Snapshots — the non-coder "undo button" (lite git-for-data on Postgres).
+ * Save / list / restore / delete point-in-time copies of a project's data.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/snapshots',
+  projectRateLimit('read'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const snapshots = await listSnapshots(c.req.param('id'));
+    return c.json({ snapshots });
+  },
+);
+
+studioRouter.post(
+  '/v1/projects/:id/studio/snapshots',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const body = (await c.req.json().catch(() => null)) as { name?: string } | null;
+    const result = await createSnapshot(projectId, body?.name ?? 'snapshot');
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.snapshot.create',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { snapshotId: result.id, tableCount: result.tableCount },
+    });
+    return c.json(result, 201);
+  },
+);
+
+studioRouter.post(
+  '/v1/projects/:id/studio/snapshots/:snapId/restore',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const snapId = c.req.param('snapId');
+    const result = await restoreSnapshot(projectId, snapId);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.snapshot.restore',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { snapshotId: snapId, restored: result.restored },
+    });
+    return c.json(result);
+  },
+);
+
+studioRouter.delete(
+  '/v1/projects/:id/studio/snapshots/:snapId',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const snapId = c.req.param('snapId');
+    await deleteSnapshot(projectId, snapId);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.snapshot.delete',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { snapshotId: snapId },
+    });
+    return c.json({ ok: true });
   },
 );
 
