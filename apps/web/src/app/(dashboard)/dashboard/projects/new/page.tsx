@@ -74,6 +74,15 @@ const SOURCES: readonly SourceCard[] = [
   },
 ];
 
+// Starter templates (non-coder hero path). ids MUST match apps/api's
+// template registry (src/templates/index.ts).
+const TEMPLATE_CARDS = [
+  { id: 'contacts-crm', icon: '👥', name: 'contacts / crm', blurb: 'people, companies and deals.' },
+  { id: 'inventory', icon: '📦', name: 'inventory / stock', blurb: 'products, stock and suppliers.' },
+  { id: 'bookings', icon: '📅', name: 'bookings', blurb: 'clients, services and appointments.' },
+  { id: 'tasks', icon: '✅', name: 'tasks', blurb: 'projects, tasks and due dates.' },
+] as const;
+
 export default function NewProjectPickerPage() {
   return (
     <section className="max-w-4xl">
@@ -103,6 +112,29 @@ export default function NewProjectPickerPage() {
           </p>
         </div>
       </Link>
+
+      <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+        start from a template
+      </h2>
+      <p className="mb-4 font-mono text-xs text-[var(--color-text-subtle)]">
+        no coding needed — briven builds the tables and example rows for you, ready to use in
+        seconds.
+      </p>
+      <ul className="mb-10 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {TEMPLATE_CARDS.map((t) => (
+          <li key={t.id}>
+            <Link
+              href={`/dashboard/projects/new/template?t=${t.id}`}
+              className="flex h-full flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-primary)]"
+            >
+              <span className="font-mono text-sm text-[var(--color-text)]">
+                <span aria-hidden>{t.icon}</span> {t.name}
+              </span>
+              <span className="font-mono text-xs text-[var(--color-text-muted)]">{t.blurb}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
 
       <h2 className="mb-1 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
         bring your project
