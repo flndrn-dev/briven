@@ -79,11 +79,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </div>
 
       <footer className="shrink-0 border-t border-[var(--color-border-subtle)]">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-2 font-mono text-[10px] text-[var(--color-text-subtle)]">
-          <span>
-            built with <span className="text-[#e8344a]">♥</span> in Flanders
-            <span className="ml-3">flndrn Limited, Limassol, Cyprus</span>
-          </span>
+        <div className="mx-auto flex w-full max-w-6xl items-end justify-between px-6 py-3 font-mono text-[10px] text-[var(--color-text-subtle)]">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[var(--color-text-muted)]">briven · briven.tech</span>
+            <span>
+              made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn
+            </span>
+            <span>100% self-funded, sustainable &amp; independent</span>
+            <span>flndrn Limited, Limassol, Cyprus</span>
+          </div>
           <div className="flex items-center gap-3">
             <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">
               docs

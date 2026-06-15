@@ -681,9 +681,9 @@ function shell(title: string, body: string): string {
           <div style="color:#9ba3af;font-size:15px">${body}</div>
           <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
             briven · <a style="color:#9ba3af" href="https://${domain}">${domain}</a><br/>
-            made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn
-            &nbsp;·&nbsp; 100% self-funded, sustainable &amp; independent
-            <br/>flndrn Limited, Limassol, Cyprus
+            made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn<br/>
+            100% self-funded, sustainable &amp; independent<br/>
+            flndrn Limited, Limassol, Cyprus
           </p>
         </td></tr>
       </table>

@@ -3,11 +3,7 @@ import { and, inArray, isNotNull, lt } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { projectFiles } from '../db/schema.js';
 import { env } from '../env.js';
-import {
-  parseListObjectsV2Response,
-  presignS3ListObjectsV2,
-  presignS3Url,
-} from '../lib/s3-presign.js';
+import { listObjects, presignS3Url } from '../lib/s3-presign.js';
 import { log } from '../lib/logger.js';
 
 /**
@@ -136,7 +132,7 @@ async function softDeletePass(cfg: StorageEnv): Promise<void> {
 async function orphanReconcilePass(cfg: StorageEnv): Promise<void> {
   const orphanCutoff = new Date(Date.now() - ORPHAN_GRACE_MS);
   const db = getDb();
-  let continuationToken: string | undefined;
+  let startAfter: string | undefined;
   let pagesWalked = 0;
   let totalOrphans = 0;
 
@@ -145,28 +141,24 @@ async function orphanReconcilePass(cfg: StorageEnv): Promise<void> {
       log.warn('storage_janitor_orphan_page_cap_hit', { pagesWalked, totalOrphans });
       break;
     }
-    const listUrl = presignS3ListObjectsV2({
-      endpoint: cfg.endpoint,
-      region: cfg.region,
-      bucket: cfg.bucket,
-      prefix: 'projects/',
-      maxKeys: ORPHAN_PAGE_SIZE,
-      continuationToken,
-      accessKey: cfg.accessKey,
-      secretKey: cfg.secretKey,
-      expiresIn: 60,
-    });
-    const res = await fetch(listUrl, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
+    let result;
+    try {
+      result = await listObjects({
+        endpoint: cfg.endpoint,
+        region: cfg.region,
+        bucket: cfg.bucket,
+        prefix: 'projects/',
+        maxKeys: ORPHAN_PAGE_SIZE,
+        startAfter,
+        accessKey: cfg.accessKey,
+        secretKey: cfg.secretKey,
+      });
+    } catch (err) {
       log.warn('storage_janitor_orphan_list_failed', {
-        status: res.status,
-        body: body.slice(0, 200),
+        err: err instanceof Error ? err.message : String(err),
       });
       return;
     }
-    const xml = await res.text();
-    const result = parseListObjectsV2Response(xml);
     pagesWalked += 1;
 
     // Only consider objects past the grace window — fresh uploads
@@ -194,8 +186,8 @@ async function orphanReconcilePass(cfg: StorageEnv): Promise<void> {
       }
     }
 
-    if (!result.isTruncated || !result.nextContinuationToken) break;
-    continuationToken = result.nextContinuationToken;
+    if (!result.isTruncated || !result.nextStartAfter) break;
+    startAfter = result.nextStartAfter;
   }
 
   if (totalOrphans > 0) {

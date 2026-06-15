@@ -22,7 +22,7 @@ interface Schedule {
 }
 
 interface FunctionNames {
-  functions: string[];
+  names: string[];
 }
 
 export const dynamic = 'force-dynamic';
@@ -44,11 +44,11 @@ export default async function CronPage({ params }: { params: Promise<{ id: strin
       schedules: [] as Schedule[],
     })),
     apiJson<FunctionNames>(`/v1/projects/${id}/function-names`).catch(() => ({
-      functions: [] as string[],
+      names: [] as string[],
     })),
   ]);
   const schedules = schedulesResult.schedules;
-  const functionNames = fnNamesResult.functions;
+  const functionNames = fnNamesResult.names;
 
   async function create(formData: FormData) {
     'use server';

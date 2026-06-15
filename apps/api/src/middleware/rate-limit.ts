@@ -39,13 +39,18 @@ export interface RateLimitOptions {
 
 export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
   return async (c, next) => {
-    // why: outside dev, every request must arrive via Cloudflare, which
-    // sets cf-connecting-ip to the real client IP. A request without that
-    // header means either CF is misconfigured or someone is hitting the
-    // origin directly to bypass IP-based limits. Reject before any work.
+    // why: outside dev, requests must arrive via the edge proxy, which
+    // stamps the real client IP. Historically that was Cloudflare's
+    // `cf-connecting-ip`; this deployment now runs its own DNS straight to
+    // Traefik, which sets the standard `x-forwarded-for` instead. Accept
+    // either — a request carrying NEITHER is hitting the origin directly
+    // (bypassing the proxy to dodge IP-based limits), so reject it before
+    // any work. Project-keyed limits don't depend on this header; IP-keyed
+    // ones fall back to x-forwarded-for's first hop via `ipKey`.
     if (env.BRIVEN_ENV !== 'development') {
       const cf = c.req.raw.headers.get('cf-connecting-ip');
-      if (!cf || !cf.trim()) {
+      const fwd = c.req.raw.headers.get('x-forwarded-for');
+      if ((!cf || !cf.trim()) && (!fwd || !fwd.trim())) {
         return c.json({ code: 'origin_direct_rejected' }, 403);
       }
     }
@@ -105,11 +110,12 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
 
 /**
  * Resolve the client IP for rate-limit keying. Prefers `cf-connecting-ip`
- * (set by Cloudflare to the real client IP, not spoofable by clients);
- * falls back to `x-forwarded-for`'s first hop in development for local
- * tunnels / docker proxies. Outside dev, the rateLimit middleware itself
- * rejects requests without cf-connecting-ip, so this function only sees
- * the trusted header in production.
+ * (set by Cloudflare when fronted by it; not spoofable by clients), then
+ * falls back to `x-forwarded-for`'s first hop — which is what Traefik sets
+ * in the current self-hosted (no-Cloudflare) deployment, and what local
+ * tunnels / docker proxies set in development. Returns null when neither
+ * is present (the rateLimit middleware then skips IP keying rather than
+ * bucketing every anonymous request together).
  */
 export function ipKey(c: Parameters<MiddlewareHandler>[0]): string | null {
   const cf = c.req.raw.headers.get('cf-connecting-ip');

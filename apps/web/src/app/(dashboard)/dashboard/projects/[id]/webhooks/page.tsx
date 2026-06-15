@@ -38,7 +38,7 @@ interface Subscriber {
 }
 
 interface FunctionNames {
-  functions: string[];
+  names: string[];
 }
 
 export const dynamic = 'force-dynamic';
@@ -55,14 +55,14 @@ export default async function WebhooksPage({ params }: { params: Promise<{ id: s
       endpoints: [] as Endpoint[],
     })),
     apiJson<FunctionNames>(`/v1/projects/${id}/function-names`).catch(() => ({
-      functions: [] as string[],
+      names: [] as string[],
     })),
     apiJson<{ subscribers: Subscriber[]; knownEventTypes: string[] }>(
       `/v1/projects/${id}/outbound-webhooks`,
     ).catch(() => ({ subscribers: [] as Subscriber[], knownEventTypes: [] as string[] })),
   ]);
   const endpoints = endpointsResult.endpoints;
-  const functionNames = fnNamesResult.functions;
+  const functionNames = fnNamesResult.names;
   const subscribers = subscribersResult.subscribers;
   const knownEventTypes = subscribersResult.knownEventTypes;
 

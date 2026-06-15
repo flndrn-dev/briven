@@ -121,6 +121,11 @@ services:
       BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_data?sslmode=disable
       BRIVEN_REDIS_URL: redis://redis:6379
       BRIVEN_RUNTIME_URL: http://runtime:3003
+      # Reach the realtime service by its compose service name on the
+      # internal docker network. Without this the api falls back to the
+      # env default (localhost:3004) and can't reach realtime — surfacing
+      # as realtime_stats_failed "Unable to connect" in the logs.
+      BRIVEN_REALTIME_URL: http://realtime:3004
       BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
       BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
       BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}

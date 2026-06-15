@@ -62,18 +62,13 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-[var(--color-border-subtle)]">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-2 px-6 py-4 font-mono text-[10px] text-[var(--color-text-subtle)] sm:flex-row sm:items-center">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-            <span>© {new Date().getFullYear()} flndrn Limited, Limassol, Cyprus</span>
-            <span className="hidden sm:inline" aria-hidden>
-              ·
-            </span>
-            <span>agpl-3.0 core · mit cli + sdks</span>
-          </div>
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-1 px-6 py-6 text-center font-mono text-[10px] leading-relaxed text-[var(--color-text-subtle)]">
+          <span className="text-[var(--color-text-muted)]">briven · briven.tech</span>
           <span>
-            made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn · 100%
-            self-funded, sustainable &amp; independent
+            made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn
           </span>
+          <span>100% self-funded, sustainable &amp; independent</span>
+          <span>flndrn Limited, Limassol, Cyprus</span>
         </div>
       </div>
     </footer>
