@@ -19,12 +19,12 @@ export default async function HomePage() {
           <h1 className="font-sans font-medium leading-[1.05] tracking-[-0.03em] text-[var(--color-text)] text-[var(--text-display-3)] sm:text-[var(--text-display-2)]">
             the database
             <br />
-            that versions like git.
+            anyone can use.
           </h1>
           <p className="max-w-2xl leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-            reactive queries, typed schema, one-command deploys — on a git-native sql database.
-            branches, time-travel, commit history. worldwide multi-region. self-hostable.
-            export everything.
+            create and run a real database — no coding required. start from a template, edit your
+            data like a spreadsheet, and undo any mistake with one click. honest pricing, no
+            surprise bills. made in Flanders, independent.
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -48,20 +48,20 @@ export default async function HomePage() {
 
       <section className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 gap-px border-t border-[var(--color-border-subtle)] bg-[var(--color-border-subtle)] sm:grid-cols-2 lg:grid-cols-4">
         <Pillar
-          title="convex ergonomics"
-          body="cli or dashboard — build your schema by clicking through forms or by deploying schema.ts. typescript end-to-end, aha moment in under 60 seconds."
+          title="no code needed"
+          body="build your database by clicking, not coding. add tables and edit rows like a spreadsheet — your first working database in under a minute."
         />
         <Pillar
-          title="branches, commits, diffs"
-          body="git for your database. branch to experiment, merge to ship, time-travel to debug. every deploy is a commit."
+          title="start from a template"
+          body="pick what you want to track — contacts, inventory, bookings, tasks — and get ready-made tables with example data, instantly."
         />
         <Pillar
-          title="worldwide, owned, portable"
-          body="multi-region from day one. agpl-licensed core. export everything, any time."
+          title="an undo button for your data"
+          body="save a snapshot before any big change, restore it in one click if something goes wrong. experiment without fear."
         />
         <Pillar
-          title="real sql, real database"
-          body="every table is a real table. every query is real sql. mysql-compatible — every client works."
+          title="honest & independent"
+          body="generous limits, no surprise bills. a real Postgres database underneath. made in Flanders, self-funded — not big-tech."
         />
       </section>
 
