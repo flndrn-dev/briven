@@ -17,30 +17,36 @@ interface Tier {
 /**
  * Pricing copy for briven.tech.
  *
- * Model: every tier includes a monthly allowance, then meters beyond it.
- * Phase 2/3 enforces hard caps at the included limits; Phase 4 (public beta)
- * turns the overage rates into live pay-per-use billing via Polar meters.
- * Copy reflects the Phase 4 target so customers understand the direction.
+ * Model: PREPAID, never metered. Each tier has hard caps at the included
+ * limits; hit a limit and we ask you to upgrade — we never bill beyond what
+ * you've loaded (no surprise bills). Paid top-ups run through mavi-pay.
+ * Limits are tuned to beat Neon/Supabase on room-per-euro (see pricing research
+ * 2026-06-15): Briven free = 1 GB + never pauses (Supabase free pauses at 1 wk,
+ * gives 500 MB); Briven Pro = 50 GB db vs Supabase Pro 8 GB; Team €99 vs $599.
  */
-// NOTE: tier prices (€0/29/99) + limits are placeholders carried over — confirm
-// with Jürgen; paid billing is prepaid via mavi-pay (parked until mavi-pay ships).
+// NOTE: tier prices (€0/29/99) approved by Jürgen 2026-06-15; limits competitor-
+// tuned. Paid billing activates when mavi-pay ships (parked until then).
 const TIERS: readonly Tier[] = [
   {
     id: 'free',
     name: 'free',
     price: '€0',
     cadence: '/month',
-    pitch: 'real projects, no credit card. perfect for trying briven or a small database.',
+    pitch: 'real projects, no credit card, never pauses. perfect for trying briven or a small database.',
     included: [
-      { label: 'projects', value: '1' },
+      { label: 'projects', value: '3' },
       { label: 'database size', value: '1 gb' },
       { label: 'file storage', value: '1 gb' },
-      { label: 'snapshots (undo)', value: '3' },
-      { label: 'logins / users', value: '1,000' },
+      { label: 'history / undo', value: '7 days' },
+      { label: 'logins / users', value: '50,000' },
       { label: 'live updates', value: '10 at once' },
     ],
     overage: [],
-    features: ['no credit card needed', 'community support (discord, github)'],
+    features: [
+      'no credit card needed',
+      'never pauses (unlike the big names)',
+      'community support (discord, github)',
+    ],
     cta: { label: 'get started free', href: '/signin' },
     highlight: false,
   },
@@ -49,20 +55,20 @@ const TIERS: readonly Tier[] = [
     name: 'pro',
     price: '€29',
     cadence: '/month',
-    pitch: 'growing apps. bigger database, more room, more projects.',
+    pitch: 'growing apps. 50 gb database — over 6× what Supabase Pro gives you.',
     included: [
       { label: 'projects', value: '10' },
       { label: 'database size', value: '50 gb' },
-      { label: 'file storage', value: '50 gb' },
-      { label: 'snapshots (undo)', value: '50' },
-      { label: 'logins / users', value: '50,000' },
+      { label: 'file storage', value: '100 gb' },
+      { label: 'history / undo', value: '30 days' },
+      { label: 'logins / users', value: '100,000' },
       { label: 'live updates', value: '100 at once' },
     ],
     overage: [],
     features: [
       'point-and-click + spreadsheet editing',
       'custom domains per project',
-      'daily backups',
+      'daily backups (30-day history)',
       'email support (48h)',
     ],
     cta: { label: 'upgrade to pro', href: '/dashboard/billing/upgrade?tier=pro' },
@@ -73,12 +79,12 @@ const TIERS: readonly Tier[] = [
     name: 'team',
     price: '€99',
     cadence: '/month',
-    pitch: 'teams + bigger workloads. lots of room, more seats, priority support.',
+    pitch: 'teams + bigger workloads. €99 where Supabase charges $599 for their team plan.',
     included: [
       { label: 'projects', value: 'unlimited' },
       { label: 'database size', value: '500 gb' },
       { label: 'file storage', value: '500 gb' },
-      { label: 'snapshots (undo)', value: 'unlimited' },
+      { label: 'history / undo', value: '1 year' },
       { label: 'logins / users', value: 'unlimited' },
       { label: 'live updates', value: '500 at once' },
     ],
@@ -102,9 +108,10 @@ export function PricingSection() {
           pricing
         </h2>
         <p className="max-w-2xl font-sans leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-          simple, honest pricing. the free tier needs no card. paid plans are prepaid — you load
-          credit and only spend what you put in, so there are no surprise bills. cancel any time,
-          and export your data whenever you like — it&apos;s your database.
+          simple, honest pricing — far more room than Neon or Supabase, at a fraction of the price.
+          the free tier needs no card and never pauses. paid plans are prepaid — you load credit and
+          only spend what you put in, so there are no surprise bills. cancel any time, and export
+          your data whenever you like — it&apos;s your database.
         </p>
       </div>
 
