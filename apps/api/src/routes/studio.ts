@@ -35,7 +35,14 @@ import {
   type StudioColumnType,
 } from '../services/studio.js';
 import { seedTemplate } from '../services/templates.js';
-import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from '../services/snapshots.js';
+import {
+  createSnapshot,
+  deleteSnapshot,
+  diffSnapshot,
+  listSnapshots,
+  restoreSnapshot,
+  SNAP_ID_RE,
+} from '../services/snapshots.js';
 import { applyPlan, planDatabase } from '../services/assistant.js';
 import { assistantConfigured } from '../services/ollama.js';
 
@@ -537,6 +544,41 @@ studioRouter.post(
       metadata: { snapshotId: result.id, tableCount: result.tableCount },
     });
     return c.json(result, 201);
+  },
+);
+
+/**
+ * Snapshot diff — "what changed since this save point". Read-only: compares
+ * the live schema against the snapshot's copy and reports tables/columns
+ * added or removed plus per-table row deltas (added/removed/changed, matched
+ * by primary key, capped per table). Drives the dashboard "compare" view.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/snapshots/:snapId/diff',
+  projectRateLimit('read'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const snapId = c.req.param('snapId');
+    if (!SNAP_ID_RE.test(snapId)) {
+      return c.json({ code: 'validation_failed', message: 'invalid snapshot id' }, 400);
+    }
+    const diff = await diffSnapshot(projectId, snapId);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.snapshot.diff',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        snapshotId: snapId,
+        tablesAdded: diff.tablesAdded.length,
+        tablesRemoved: diff.tablesRemoved.length,
+        tablesCompared: diff.tables.length,
+      },
+    });
+    return c.json(diff);
   },
 );
 
