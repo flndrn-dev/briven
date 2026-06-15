@@ -15,6 +15,19 @@ const TYPES = [
 ] as const;
 type ColType = (typeof TYPES)[number];
 
+// Friendly, non-coder labels for the raw Postgres types (value stays the
+// real type; only the displayed text changes).
+const TYPE_LABELS: Record<ColType, string> = {
+  text: 'text',
+  integer: 'whole number',
+  bigint: 'whole number (large)',
+  boolean: 'yes / no',
+  timestamptz: 'date & time',
+  jsonb: 'json data',
+  uuid: 'unique id',
+  numeric: 'decimal number',
+};
+
 const FK_ON_DELETE = ['noAction', 'cascade', 'setNull', 'restrict'] as const;
 type FkOnDelete = (typeof FK_ON_DELETE)[number];
 
@@ -173,11 +186,14 @@ export function NewTableForm({
               >
                 {TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t}
+                    {TYPE_LABELS[t]}
                   </option>
                 ))}
               </select>
-              <label className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+              <label
+                title="Primary key — the unique identifier for each row (e.g. the 'id')"
+                className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]"
+              >
                 <input
                   type="checkbox"
                   checked={c.primaryKey}
@@ -188,16 +204,19 @@ export function NewTableForm({
                     })
                   }
                 />
-                pk
+                key
               </label>
-              <label className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+              <label
+                title="Required — this field can't be left empty"
+                className="flex items-center gap-1 font-mono text-[10px] text-[var(--color-text-muted)]"
+              >
                 <input
                   type="checkbox"
                   checked={c.notNull}
                   disabled={c.primaryKey}
                   onChange={(e) => setCol(c.id, { notNull: e.target.checked })}
                 />
-                not null
+                required
               </label>
               <input
                 type="text"
