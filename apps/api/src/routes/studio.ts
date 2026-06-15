@@ -34,6 +34,7 @@ import {
   type StudioColumnSpec,
   type StudioColumnType,
 } from '../services/studio.js';
+import { seedTemplate } from '../services/templates.js';
 
 /**
  * Shape-validate the `primaryKey` array a client sent. Returns the typed
@@ -69,7 +70,7 @@ studioRouter.use('/v1/projects/:id/studio/*', requireProjectAuth());
 
 studioRouter.get(
   '/v1/projects/:id/studio/tables',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const tables = await listProjectTables(c.req.param('id'));
@@ -123,7 +124,7 @@ studioRouter.post(
  */
 studioRouter.get(
   '/v1/projects/:id/studio/schema',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const projectId = c.req.param('id');
@@ -138,7 +139,7 @@ studioRouter.get(
  */
 studioRouter.get(
   '/v1/projects/:id/studio/relationships',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const projectId = c.req.param('id');
@@ -155,7 +156,7 @@ studioRouter.get(
  */
 studioRouter.get(
   '/v1/projects/:id/studio/schema-export',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const projectId = c.req.param('id');
@@ -170,7 +171,7 @@ studioRouter.get(
  */
 studioRouter.get(
   '/v1/projects/:id/studio/schema.ts',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const projectId = c.req.param('id');
@@ -184,7 +185,7 @@ studioRouter.get(
 
 studioRouter.get(
   '/v1/projects/:id/studio/tables/:table/columns',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const projectId = c.req.param('id');
@@ -199,7 +200,7 @@ studioRouter.get(
 
 studioRouter.get(
   '/v1/projects/:id/studio/tables/:table/rows',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const projectId = c.req.param('id');
@@ -415,6 +416,39 @@ studioRouter.post(
       ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
       userAgent: c.req.header('user-agent') ?? null,
       metadata: { table: result.name, columnCount: cols.length },
+    });
+    return c.json(result, 201);
+  },
+);
+
+/**
+ * Apply a starter template to a (freshly created, empty) project: creates the
+ * template's tables in FK order and seeds sample rows, so a non-coder lands on
+ * a working database instead of a blank screen. Body: `{ templateId }`.
+ */
+studioRouter.post(
+  '/v1/projects/:id/studio/apply-template',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const body = (await c.req.json().catch(() => null)) as { templateId?: string } | null;
+    if (!body || typeof body.templateId !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'expected { templateId }' }, 400);
+    }
+    const result = await seedTemplate(projectId, body.templateId);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.template.apply',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        templateId: result.templateId,
+        tablesCreated: result.tablesCreated,
+        rowsInserted: result.rowsInserted,
+      },
     });
     return c.json(result, 201);
   },
@@ -642,7 +676,7 @@ studioRouter.delete(
  */
 studioRouter.get(
   '/v1/projects/:id/studio/tables/:table/indexes',
-  projectRateLimit('mutate'),
+  projectRateLimit('read'),
   requireProjectRole('admin'),
   async (c) => {
     const projectId = c.req.param('id');
