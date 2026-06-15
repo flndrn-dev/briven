@@ -193,6 +193,14 @@ const envSchema = z.object({
   BRIVEN_OLLAMA_MODEL_EXPLAIN: z.string().optional(),
   BRIVEN_OLLAMA_MODEL_DOCS: z.string().optional(),
 
+  // admin.flndrn.com dashboard API key. Single shared bearer secret the
+  // cross-product operator console at admin.flndrn.com sends on every
+  // probe of briven's /api/admin/* endpoints. Must equal the key
+  // registered for briven in admin.flndrn.com. Optional: when unset, the
+  // /api/admin/* routes return 503 admin_not_configured (fail-safe — the
+  // dashboard shows "not configured" rather than the process crashing).
+  BRIVEN_ADMIN_API_KEY: z.string().optional(),
+
   // Public-signups gate. Default false — invite-only beta. Flip to `true`
   // when public open-signups land per BUILD_PLAN Phase 4. Affects every
   // first-time auth path (email+password, magic link, Google OAuth);
