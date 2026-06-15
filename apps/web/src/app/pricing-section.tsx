@@ -22,31 +22,26 @@ interface Tier {
  * turns the overage rates into live pay-per-use billing via Polar meters.
  * Copy reflects the Phase 4 target so customers understand the direction.
  */
+// NOTE: tier prices (€0/29/99) + limits are placeholders carried over — confirm
+// with Jürgen; paid billing is prepaid via mavi-pay (parked until mavi-pay ships).
 const TIERS: readonly Tier[] = [
   {
     id: 'free',
     name: 'free',
     price: '€0',
     cadence: '/month',
-    pitch: 'real projects. git-native database. no credit card required.',
+    pitch: 'real projects, no credit card. perfect for trying briven or a small database.',
     included: [
-      { label: 'database branches', value: '1' },
-      { label: 'time-travel', value: '24 hours' },
-      { label: 'commits / mo', value: '10,000' },
-      { label: 'function invocations', value: '100k / mo' },
-      { label: 'database', value: '1 gb' },
+      { label: 'projects', value: '1' },
+      { label: 'database size', value: '1 gb' },
       { label: 'file storage', value: '1 gb' },
-      { label: 'realtime subs', value: '10 concurrent' },
-      { label: 'auth users', value: '1,000' },
-      { label: 'log retention', value: '7 days' },
+      { label: 'snapshots (undo)', value: '3' },
+      { label: 'logins / users', value: '1,000' },
+      { label: 'live updates', value: '10 at once' },
     ],
-    overage: [
-      { label: '+1m invocations', value: '€0.30' },
-      { label: '+1 gb database', value: '€1.50 / mo' },
-      { label: '+1 gb file storage', value: '€0.05 / mo' },
-    ],
-    features: ['community support (discord, github)', 'ai tokens: 10k / mo', 'vector rows: 10k'],
-    cta: { label: 'get started', href: '/signin' },
+    overage: [],
+    features: ['no credit card needed', 'community support (discord, github)'],
+    cta: { label: 'get started free', href: '/signin' },
     highlight: false,
   },
   {
@@ -54,30 +49,21 @@ const TIERS: readonly Tier[] = [
     name: 'pro',
     price: '€29',
     cadence: '/month',
-    pitch: 'production apps. more branches, deeper history, bigger buckets.',
+    pitch: 'growing apps. bigger database, more room, more projects.',
     included: [
-      { label: 'database branches', value: '3' },
-      { label: 'time-travel', value: '30 days' },
-      { label: 'commits / mo', value: '1,000,000' },
-      { label: 'function invocations', value: '1M / mo' },
-      { label: 'database', value: '50 gb' },
+      { label: 'projects', value: '10' },
+      { label: 'database size', value: '50 gb' },
       { label: 'file storage', value: '50 gb' },
-      { label: 'realtime subs', value: '100 concurrent' },
-      { label: 'auth users', value: '50,000' },
-      { label: 'log retention', value: '30 days' },
+      { label: 'snapshots (undo)', value: '50' },
+      { label: 'logins / users', value: '50,000' },
+      { label: 'live updates', value: '100 at once' },
     ],
-    overage: [
-      { label: '+1m invocations', value: '€0.20' },
-      { label: '+1 gb database', value: '€1.00 / mo' },
-      { label: '+1 gb file storage', value: '€0.04 / mo' },
-    ],
+    overage: [],
     features: [
-      '`briven db shell` + data browser (write)',
+      'point-and-click + spreadsheet editing',
       'custom domains per project',
-      'daily backups, 7-day retention',
-      'email support (48h response)',
-      'ai tokens: 100k / mo',
-      'vector rows: 500k',
+      'daily backups',
+      'email support (48h)',
     ],
     cta: { label: 'upgrade to pro', href: '/dashboard/billing/upgrade?tier=pro' },
     highlight: true,
@@ -87,30 +73,21 @@ const TIERS: readonly Tier[] = [
     name: 'team',
     price: '€99',
     cadence: '/month',
-    pitch: 'growing teams. unlimited branches, year-deep history, dedicated infra.',
+    pitch: 'teams + bigger workloads. lots of room, more seats, priority support.',
     included: [
-      { label: 'database branches', value: 'unlimited' },
-      { label: 'time-travel', value: '1 year' },
-      { label: 'commits / mo', value: 'unlimited' },
-      { label: 'function invocations', value: '10M / mo' },
-      { label: 'database', value: '500 gb' },
+      { label: 'projects', value: 'unlimited' },
+      { label: 'database size', value: '500 gb' },
       { label: 'file storage', value: '500 gb' },
-      { label: 'realtime subs', value: '500 concurrent' },
-      { label: 'auth users', value: 'unlimited' },
-      { label: 'log retention', value: '90 days' },
+      { label: 'snapshots (undo)', value: 'unlimited' },
+      { label: 'logins / users', value: 'unlimited' },
+      { label: 'live updates', value: '500 at once' },
     ],
-    overage: [
-      { label: '+1m invocations', value: '€0.15' },
-      { label: '+1 gb database', value: '€0.50 / mo' },
-      { label: '+1 gb file storage', value: '€0.03 / mo' },
-    ],
+    overage: [],
     features: [
-      '5 team seats included (+€15 / seat)',
-      'audit log UI',
-      'hourly backups, 30-day retention',
-      'priority support, 99.5% SLA',
-      'ai tokens: 500k / mo',
-      'vector rows: 5M',
+      '5 team seats included',
+      'hourly backups',
+      'priority support',
+      'audit log',
     ],
     cta: { label: 'upgrade to team', href: '/dashboard/billing/upgrade?tier=team' },
     highlight: false,
@@ -125,9 +102,9 @@ export function PricingSection() {
           pricing
         </h2>
         <p className="max-w-2xl font-sans leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-          every tier includes database branches, time-travel history, commits, invocations,
-          storage, and realtime. go past the bucket and the meter runs — no surprise-upgrade walls.
-          cancel any time. export your data anytime — it&apos;s your database.
+          simple, honest pricing. the free tier needs no card. paid plans are prepaid — you load
+          credit and only spend what you put in, so there are no surprise bills. cancel any time,
+          and export your data whenever you like — it&apos;s your database.
         </p>
       </div>
 
@@ -140,11 +117,11 @@ export function PricingSection() {
       <div className="flex flex-col gap-1 pt-6 font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]">
         <p>
           prices in EUR · vat added at checkout for EU customers (reverse-charge for valid vat id) ·
-          card required on every tier including free
+          free tier needs no card · paid is prepaid — no surprise bills
         </p>
         <p>
-          self-hosting is free forever under agpl-3.0 · overage metering launches with public beta;
-          private beta uses hard caps at the included limits
+          self-hosting is free forever under agpl-3.0 · hit a plan limit and we ask you to upgrade —
+          we never bill you beyond what you&apos;ve loaded
         </p>
       </div>
 
@@ -350,21 +327,23 @@ function TierCard({ tier }: { tier: Tier }) {
         </dl>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
-          past the bucket
-        </p>
-        <dl className="grid grid-cols-1 gap-1.5 font-mono text-[var(--text-xs)]">
-          {tier.overage.map((row) => (
-            <div key={row.label} className="flex justify-between gap-3">
-              <dt className="text-[var(--color-text-subtle)]">{row.label}</dt>
-              <dd className="whitespace-nowrap text-right text-[var(--color-text-muted)]">
-                {row.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </div>
+      {tier.overage.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
+            past the bucket
+          </p>
+          <dl className="grid grid-cols-1 gap-1.5 font-mono text-[var(--text-xs)]">
+            {tier.overage.map((row) => (
+              <div key={row.label} className="flex justify-between gap-3">
+                <dt className="text-[var(--color-text-subtle)]">{row.label}</dt>
+                <dd className="whitespace-nowrap text-right text-[var(--color-text-muted)]">
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
 
       {tier.features.length > 0 ? (
         <ul className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-5">
