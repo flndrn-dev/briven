@@ -1,6 +1,7 @@
+import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 
-import { ApiError, apiJson } from '../../../../../../lib/api';
+import { ApiError, apiFetch, apiJson } from '../../../../../../lib/api';
 import { CopySchemaButton } from './copy-schema-button';
 import { NewTableForm } from './new-table-form';
 
@@ -40,6 +41,22 @@ export default async function StudioPage({
   const tables = tablesResult.tables;
   const forbidden = 'forbidden' in tablesResult && tablesResult.forbidden;
   const edges = relResult.edges;
+
+  async function applyTemplate(formData: FormData) {
+    'use server';
+    const { id } = await params;
+    const templateId = String(formData.get('templateId') ?? '');
+    const res = await apiFetch(`/v1/projects/${id}/studio/apply-template`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ templateId }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(body || `template failed: ${res.status}`);
+    }
+    revalidatePath(`/dashboard/projects/${id}/studio`);
+  }
 
   return (
     <section className="flex flex-col gap-6">
@@ -92,6 +109,33 @@ export default async function StudioPage({
               name your first table below to start. you can also deploy a{' '}
               <code>briven/schema.ts</code> from the CLI — both paths land in the same
               postgres schema for this project.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+              start from a template
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: 'contacts-crm', label: '👥 contacts / crm' },
+                { id: 'inventory', label: '📦 inventory' },
+                { id: 'bookings', label: '📅 bookings' },
+                { id: 'tasks', label: '✅ tasks' },
+              ].map((tpl) => (
+                <form key={tpl.id} action={applyTemplate}>
+                  <input type="hidden" name="templateId" value={tpl.id} />
+                  <button
+                    type="submit"
+                    className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
+                  >
+                    {tpl.label}
+                  </button>
+                </form>
+              ))}
+            </div>
+            <p className="font-mono text-[11px] text-[var(--color-text-subtle)]">
+              instantly fills your database with ready-made tables + example rows. you can edit or
+              delete anything afterwards.
             </p>
           </div>
           <NewTableForm projectId={id} existingTables={tables.map((t) => t.name)} />
