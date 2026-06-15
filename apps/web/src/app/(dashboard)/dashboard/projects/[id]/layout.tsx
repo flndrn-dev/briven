@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -22,6 +23,7 @@ export default async function ProjectLayout({
   children: React.ReactNode;
 }) {
   const { id } = await params;
+  const developerMode = (await cookies()).get('briven_dev')?.value === '1';
 
   let project: Project;
   try {
@@ -46,7 +48,7 @@ export default async function ProjectLayout({
           {project.slug} · {project.region} · {project.tier}
         </p>
       </header>
-      <ProjectTabs projectId={project.id} />
+      <ProjectTabs projectId={project.id} developerMode={developerMode} />
       <section>{children}</section>
     </div>
   );
