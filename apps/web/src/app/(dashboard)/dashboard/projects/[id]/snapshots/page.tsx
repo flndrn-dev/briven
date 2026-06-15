@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { ConfirmButton } from './confirm-button';
 
 interface Snapshot {
   id: string;
@@ -118,22 +119,21 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
                 <div className="flex items-center gap-2">
                   <form action={restore}>
                     <input type="hidden" name="snapId" value={s.id} />
-                    <button
-                      type="submit"
-                      title="Replaces all current data with this snapshot"
+                    <ConfirmButton
+                      message="Restore will REPLACE all your current data with this snapshot. Continue?"
                       className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
                     >
                       restore
-                    </button>
+                    </ConfirmButton>
                   </form>
                   <form action={remove}>
                     <input type="hidden" name="snapId" value={s.id} />
-                    <button
-                      type="submit"
+                    <ConfirmButton
+                      message="Delete this snapshot permanently?"
                       className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-error)] hover:text-[var(--color-error)]"
                     >
                       delete
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </div>
               </li>
