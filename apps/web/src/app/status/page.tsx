@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { BackgroundGrid } from '../../components/marketing/background-grid';
-import { SiteFooter } from '../../components/marketing/site-footer';
+import { SiteFooter, WebDownLink } from '../../components/marketing/site-footer';
 import { SiteHeader } from '../../components/marketing/site-header';
 import { getSessionUser } from '../../lib/session';
 
@@ -131,6 +131,10 @@ export default async function StatusPage() {
             full status page
           </Link>{' '}
           on docs.
+        </p>
+        <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
+          every briven server &amp; domain is guarded around the clock by{' '}
+          <WebDownLink>web down</WebDownLink> — our independent uptime watchdog.
         </p>
       </section>
 
