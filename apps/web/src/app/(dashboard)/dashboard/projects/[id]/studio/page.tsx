@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 
 import { ApiError, apiFetch, apiJson } from '../../../../../../lib/api';
+import { AssistantPanel } from './assistant-panel';
 import { CopySchemaButton } from './copy-schema-button';
 import { NewTableForm } from './new-table-form';
 
@@ -88,6 +89,8 @@ export default async function StudioPage({
           </div>
         ) : null}
       </header>
+
+      {!forbidden ? <AssistantPanel projectId={id} /> : null}
 
       {forbidden ? (
         <div className="rounded-md border border-dashed border-[var(--color-border)] p-6">

@@ -36,6 +36,8 @@ import {
 } from '../services/studio.js';
 import { seedTemplate } from '../services/templates.js';
 import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from '../services/snapshots.js';
+import { applyPlan, planDatabase } from '../services/assistant.js';
+import { assistantConfigured } from '../services/ollama.js';
 
 /**
  * Shape-validate the `primaryKey` array a client sent. Returns the typed
@@ -76,6 +78,54 @@ studioRouter.get(
   async (c) => {
     const tables = await listProjectTables(c.req.param('id'));
     return c.json({ tables });
+  },
+);
+
+/**
+ * AI assistant — "describe it and Briven builds it". Powered by flndrn's
+ * self-hosted Ollama. Two steps so the user is never surprised:
+ *   POST .../assistant/plan   → JSON build plan (writes nothing)
+ *   POST .../assistant/apply  → runs the reviewed plan through createTable/insertRow
+ * Admin-tier only (it creates tables + data).
+ */
+studioRouter.post(
+  '/v1/projects/:id/studio/assistant/plan',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    if (!assistantConfigured()) {
+      return c.json({ code: 'assistant_unconfigured', message: 'the assistant is resting — try again soon' }, 503);
+    }
+    const body = (await c.req.json().catch(() => null)) as { prompt?: string } | null;
+    if (!body || typeof body.prompt !== 'string' || body.prompt.trim() === '') {
+      return c.json({ code: 'validation_failed', message: 'expected { prompt: string }' }, 400);
+    }
+    const plan = await planDatabase(c.req.param('id'), body.prompt.slice(0, 2000));
+    return c.json({ plan });
+  },
+);
+
+studioRouter.post(
+  '/v1/projects/:id/studio/assistant/apply',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const body = (await c.req.json().catch(() => null)) as { plan?: unknown } | null;
+    if (!body || !body.plan) {
+      return c.json({ code: 'validation_failed', message: 'expected { plan }' }, 400);
+    }
+    const result = await applyPlan(projectId, body.plan);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.assistant.apply',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { created: result.created.map((x) => x.table), skipped: result.skipped },
+    });
+    return c.json(result);
   },
 );
 
