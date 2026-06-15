@@ -50,6 +50,7 @@ import { webhooksAdminRouter } from './routes/webhooks-admin.js';
 import { webhooksPublicRouter } from './routes/webhooks-public.js';
 import { recordDeploy } from './services/deploy-history.js';
 import { startAccountDeletionGc } from './workers/account-deletion-gc.js';
+import { startAutoSnapshotWorker } from './workers/auto-snapshot.js';
 import { startScheduleDispatcher } from './workers/schedule-dispatcher.js';
 import {
   startAuditRetentionCron,
@@ -165,6 +166,7 @@ startWebhookDeliveriesRetentionCron();
 startOutboundWebhookDispatcher();
 startOutboundWebhookDeliveriesRetentionCron();
 startStorageJanitor();
+startAutoSnapshotWorker();
 
 // Audit-trail behind /info — one row per boot. recordDeploy itself
 // short-circuits when buildSha is the "dev" sentinel and never throws,

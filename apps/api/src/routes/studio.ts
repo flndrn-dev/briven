@@ -43,6 +43,11 @@ import {
   restoreSnapshot,
   SNAP_ID_RE,
 } from '../services/snapshots.js';
+import {
+  getAutoSnapshotSettings,
+  upsertAutoSnapshotSettings,
+} from '../services/auto-snapshots.js';
+import { autoSnapshotFrequency, type AutoSnapshotFrequency } from '../db/schema.js';
 import { applyPlan, planDatabase } from '../services/assistant.js';
 import { assistantConfigured } from '../services/ollama.js';
 
@@ -621,6 +626,67 @@ studioRouter.delete(
       metadata: { snapshotId: snapId },
     });
     return c.json({ ok: true });
+  },
+);
+
+/**
+ * Automatic snapshots — read + update the per-project schedule that takes
+ * save-points for the customer on a cadence (daily / twice-daily) and keeps
+ * the last N. Admin-tier like the rest of studio. The actual runs happen in
+ * the auto-snapshot worker; these routes only configure it.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/auto-snapshots',
+  projectRateLimit('read'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const settings = await getAutoSnapshotSettings(c.req.param('id'));
+    return c.json(settings);
+  },
+);
+
+studioRouter.put(
+  '/v1/projects/:id/studio/auto-snapshots',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const body = (await c.req.json().catch(() => null)) as {
+      enabled?: unknown;
+      frequency?: unknown;
+      retentionCount?: unknown;
+    } | null;
+    if (!body) {
+      return c.json({ code: 'validation_failed', message: 'request body required' }, 400);
+    }
+    const frequency = body.frequency;
+    if (typeof frequency !== 'string' || !autoSnapshotFrequency.includes(frequency as AutoSnapshotFrequency)) {
+      return c.json(
+        { code: 'validation_failed', message: `frequency must be one of: ${autoSnapshotFrequency.join(', ')}` },
+        400,
+      );
+    }
+    const retentionCount = Number(body.retentionCount);
+    const user = c.get('user');
+    const settings = await upsertAutoSnapshotSettings(projectId, {
+      enabled: body.enabled === true,
+      frequency: frequency as AutoSnapshotFrequency,
+      retentionCount,
+      updatedBy: user?.id ?? null,
+    });
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.snapshot.auto.configure',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        enabled: settings.enabled,
+        frequency: settings.frequency,
+        retentionCount: settings.retentionCount,
+      },
+    });
+    return c.json(settings);
   },
 );
 

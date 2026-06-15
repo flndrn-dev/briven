@@ -29,9 +29,20 @@ export interface SnapshotSummary {
   readonly name: string;
   readonly tableCount: number;
   readonly createdAt: string;
+  /**
+   * True for snapshots taken automatically by the scheduled auto-snapshot
+   * worker; false for ones a person saved by hand. Only `auto` snapshots
+   * are ever pruned by retention — manual ones are kept until deleted.
+   */
+  readonly auto: boolean;
 }
 
-/** Lazily create the per-project snapshot registry table. */
+/**
+ * Lazily create (and forward-migrate) the per-project snapshot registry
+ * table. The `auto` column distinguishes worker-created save-points from
+ * manual ones; it's added idempotently so registries created before the
+ * auto-snapshot feature gain it on first touch.
+ */
 async function ensureRegistry(sql: ReturnType<typeof dataPlaneClient>, schema: string): Promise<void> {
   await sql.unsafe(`
     CREATE TABLE IF NOT EXISTS "${schema}"."_briven_snapshots" (
@@ -39,8 +50,14 @@ async function ensureRegistry(sql: ReturnType<typeof dataPlaneClient>, schema: s
       name text NOT NULL,
       snap_schema text NOT NULL,
       table_count integer NOT NULL DEFAULT 0,
-      created_at timestamptz NOT NULL DEFAULT now()
+      created_at timestamptz NOT NULL DEFAULT now(),
+      auto boolean NOT NULL DEFAULT false
     )
+  `);
+  // Forward-migrate registries created before the `auto` column existed.
+  await sql.unsafe(`
+    ALTER TABLE "${schema}"."_briven_snapshots"
+      ADD COLUMN IF NOT EXISTS auto boolean NOT NULL DEFAULT false
   `);
 }
 
@@ -49,7 +66,12 @@ async function ensureRegistry(sql: ReturnType<typeof dataPlaneClient>, schema: s
  * structure + rows into a fresh `snap_<id>` schema. Foreign keys are NOT
  * copied by `LIKE`, so the snapshot tables are independent data holders.
  */
-export async function createSnapshot(projectId: string, name: string): Promise<SnapshotSummary> {
+export async function createSnapshot(
+  projectId: string,
+  name: string,
+  options: { auto?: boolean } = {},
+): Promise<SnapshotSummary> {
+  const auto = options.auto ?? false;
   const cleanName = (name ?? '').trim().slice(0, 80) || 'snapshot';
   const schema = schemaNameFor(projectId);
   const sql = dataPlaneClient();
@@ -67,12 +89,12 @@ export async function createSnapshot(projectId: string, name: string): Promise<S
 
   const createdAt = new Date().toISOString();
   await sql.unsafe(
-    `INSERT INTO "${schema}"."_briven_snapshots" (id, name, snap_schema, table_count, created_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [snapId, cleanName, snap, tables.length, createdAt],
+    `INSERT INTO "${schema}"."_briven_snapshots" (id, name, snap_schema, table_count, created_at, auto)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [snapId, cleanName, snap, tables.length, createdAt, auto],
   );
 
-  return { id: snapId, name: cleanName, tableCount: tables.length, createdAt };
+  return { id: snapId, name: cleanName, tableCount: tables.length, createdAt, auto };
 }
 
 /** List a project's snapshots, newest first. */
@@ -81,15 +103,55 @@ export async function listSnapshots(projectId: string): Promise<SnapshotSummary[
   const sql = dataPlaneClient();
   await ensureRegistry(sql, schema);
   const rows = (await sql.unsafe(
-    `SELECT id, name, table_count, created_at
+    `SELECT id, name, table_count, created_at, auto
      FROM "${schema}"."_briven_snapshots" ORDER BY created_at DESC`,
-  )) as Array<{ id: string; name: string; table_count: number | string; created_at: Date | string }>;
+  )) as Array<{
+    id: string;
+    name: string;
+    table_count: number | string;
+    created_at: Date | string;
+    auto: boolean;
+  }>;
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     tableCount: Number(r.table_count) || 0,
     createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    auto: r.auto === true,
   }));
+}
+
+/**
+ * Prune automatic snapshots beyond a retention count, oldest first. Only
+ * rows with `auto = true` are ever considered — manual snapshots are never
+ * counted or deleted. Returns the ids of the snapshots that were pruned.
+ *
+ * Idempotent: when there are <= keepCount auto snapshots this is a no-op.
+ * Deletion reuses deleteSnapshot, so each pruned snapshot's schema is
+ * dropped and its registry row removed in the same way a manual delete
+ * would do it.
+ */
+export async function pruneAutoSnapshots(
+  projectId: string,
+  keepCount: number,
+): Promise<{ pruned: string[] }> {
+  const keep = Math.max(0, Math.floor(keepCount));
+  const schema = schemaNameFor(projectId);
+  const sql = dataPlaneClient();
+  await ensureRegistry(sql, schema);
+
+  // Auto snapshots, newest first. We keep the first `keep` and drop the rest.
+  const rows = (await sql.unsafe(
+    `SELECT id FROM "${schema}"."_briven_snapshots"
+      WHERE auto = true
+      ORDER BY created_at DESC`,
+  )) as Array<{ id: string }>;
+
+  const doomed = rows.slice(keep).map((r) => r.id);
+  for (const id of doomed) {
+    await deleteSnapshot(projectId, id);
+  }
+  return { pruned: doomed };
 }
 
 /**
