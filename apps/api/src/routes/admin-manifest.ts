@@ -4,6 +4,8 @@ import { Hono } from 'hono';
 import { env } from '../env.js';
 import { BUILD_AT, BUILD_SHA } from './health.js';
 import { adminStats, listProjects, listUsers } from '../services/admin.js';
+import { listUsageEvents } from '../services/usage-admin.js';
+import { listRecentSnapshotsAcrossProjects } from '../services/snapshots.js';
 
 /**
  * admin.flndrn.com dashboard API. This is the cross-product operator
@@ -34,10 +36,13 @@ export const adminManifestRouter = new Hono();
 /**
  * Sections the manifest advertises. Every entry here is backed by a list
  * (or summary) endpoint implemented below with a REAL query — no
- * placeholders. Snapshots/usage are intentionally absent: briven stores
- * snapshots per-project inside each tenant's data-plane schema and has
- * no cross-project recent-snapshots query to back a single list endpoint,
- * so advertising one would mean faking data.
+ * placeholders.
+ *
+ * `usage` reads the global `usage_events` table (one indexed query) and
+ * `snapshots` composes a bounded cross-project scan of the per-tenant
+ * `_briven_snapshots` registries (two capped round-trips, see
+ * services/snapshots.ts:listRecentSnapshotsAcrossProjects). Both are
+ * served by real queries.
  */
 const SECTIONS = [
   {
@@ -63,6 +68,22 @@ const SECTIONS = [
     description: 'Active briven projects with tier and owning org.',
     permission: 'dev.briven.read',
     endpoints: [{ kind: 'list', method: 'GET', path: '/api/admin/v1/projects' }],
+  },
+  {
+    key: 'usage',
+    title: 'Usage',
+    icon: 'bar_chart',
+    description: 'Recent hourly usage rollups across projects with Polar push status.',
+    permission: 'dev.briven.read',
+    endpoints: [{ kind: 'list', method: 'GET', path: '/api/admin/v1/usage' }],
+  },
+  {
+    key: 'snapshots',
+    title: 'Snapshots',
+    icon: 'history',
+    description: 'Most recent data snapshots taken across all projects.',
+    permission: 'dev.briven.read',
+    endpoints: [{ kind: 'list', method: 'GET', path: '/api/admin/v1/snapshots' }],
   },
 ] as const;
 
@@ -128,4 +149,36 @@ adminManifestRouter.get('/api/admin/v1/users', async (c) => {
 adminManifestRouter.get('/api/admin/v1/projects', async (c) => {
   const rows = await listProjects(500);
   return c.json({ projects: rows });
+});
+
+/**
+ * Usage events — recent hourly rollups across every project, newest
+ * first. Reuses listUsageEvents() (the same query the in-product admin
+ * "Usage" page runs), so the shape (id, projectId, metric, periodStart,
+ * value, polarPushStatus, polarPushedAt, createdAt) matches exactly.
+ * `?limit=` (1-1000, default 200) and `?status=` (pending|pushed|skipped)
+ * are honoured; the unique index covers the order-by + filter.
+ */
+adminManifestRouter.get('/api/admin/v1/usage', async (c) => {
+  const limitRaw = c.req.query('limit');
+  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 200;
+  const status = c.req.query('status');
+  const rows = await listUsageEvents({ limit: Number.isNaN(limit) ? 200 : limit, status });
+  return c.json({ events: rows });
+});
+
+/**
+ * Snapshots — the most recent data snapshots taken across all projects,
+ * newest first. Snapshots have no global table (each project owns a
+ * `_briven_snapshots` registry inside its own data-plane schema), so this
+ * reuses listRecentSnapshotsAcrossProjects(): a bounded, catalog-driven
+ * UNION over those registries — two capped round-trips, no fan-out loop.
+ * `?limit=` (1-1000, default 200). Each row carries its owning `schema`
+ * (`proj_<id>`) so the operator can see which project it belongs to.
+ */
+adminManifestRouter.get('/api/admin/v1/snapshots', async (c) => {
+  const limitRaw = c.req.query('limit');
+  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 200;
+  const rows = await listRecentSnapshotsAcrossProjects(Number.isNaN(limit) ? 200 : limit);
+  return c.json({ snapshots: rows });
 });

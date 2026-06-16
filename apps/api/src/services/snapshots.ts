@@ -121,6 +121,84 @@ export async function listSnapshots(projectId: string): Promise<SnapshotSummary[
   }));
 }
 
+/** A snapshot row tagged with the project (schema) it belongs to. */
+export interface CrossProjectSnapshot extends SnapshotSummary {
+  /** The data-plane schema (`proj_<id>`) the snapshot was found in. */
+  readonly schema: string;
+}
+
+/**
+ * Operator-facing read of recent snapshots ACROSS every project, newest
+ * first. Snapshots have no global table — each project keeps its own
+ * `_briven_snapshots` registry inside its `proj_<id>` data-plane schema —
+ * so this composes one bounded query instead of an unbounded fan-out:
+ *
+ *   1. One catalog read enumerates the schemas that actually own a
+ *      `_briven_snapshots` table (only `proj_*` schemas qualify; the
+ *      pattern is anchored so a customer table can't masquerade as one).
+ *   2. A single `UNION ALL` reads at most `limit` rows from each, then a
+ *      global ORDER BY + LIMIT trims to the most recent `limit` overall.
+ *
+ * That's two round-trips total, both capped — no per-project loop, no
+ * unbounded scan. Identifiers come straight from `pg_catalog`, never from
+ * user input, so interpolating them is safe. When the data plane isn't
+ * configured (local dev) or no project has ever taken a snapshot, returns
+ * an empty list rather than throwing.
+ */
+export async function listRecentSnapshotsAcrossProjects(
+  limit = 200,
+): Promise<CrossProjectSnapshot[]> {
+  const cap = Math.min(Math.max(limit, 1), 1000);
+  const sql = dataPlaneClient();
+
+  // Schemas that own a `_briven_snapshots` registry. Restricted to our
+  // provisioned `proj_*` namespaces so nothing else can be swept in.
+  const schemaRows = (await sql.unsafe(
+    `SELECT n.nspname AS schema
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname = '_briven_snapshots'
+        AND c.relkind = 'r'
+        AND n.nspname LIKE 'proj\\_%' ESCAPE '\\'`,
+  )) as Array<{ schema: string }>;
+
+  if (schemaRows.length === 0) return [];
+
+  // One capped SELECT per schema, UNION ALL'd, then trimmed globally. Each
+  // leg is bounded by `cap` so a single large project can't dominate the
+  // scan; the outer LIMIT keeps the response itself bounded.
+  const legs = schemaRows.map(
+    (r) =>
+      `(SELECT '${r.schema}'::text AS schema, id, name, table_count, created_at, auto
+          FROM "${r.schema}"."_briven_snapshots"
+         ORDER BY created_at DESC
+         LIMIT ${cap})`,
+  );
+  const unioned = legs.join('\nUNION ALL\n');
+  const rows = (await sql.unsafe(
+    `SELECT schema, id, name, table_count, created_at, auto
+       FROM (${unioned}) all_snaps
+      ORDER BY created_at DESC
+      LIMIT ${cap}`,
+  )) as Array<{
+    schema: string;
+    id: string;
+    name: string;
+    table_count: number | string;
+    created_at: Date | string;
+    auto: boolean;
+  }>;
+
+  return rows.map((r) => ({
+    schema: r.schema,
+    id: r.id,
+    name: r.name,
+    tableCount: Number(r.table_count) || 0,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    auto: r.auto === true,
+  }));
+}
+
 /**
  * Prune automatic snapshots beyond a retention count, oldest first. Only
  * rows with `auto = true` are ever considered — manual snapshots are never
