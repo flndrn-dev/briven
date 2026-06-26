@@ -24,6 +24,18 @@ export const attachSession = (): MiddlewareHandler => async (c, next) => {
  * structured error so the CLI/dashboard can redirect to sign-in.
  */
 export const requireAuth = (): MiddlewareHandler => async (c, next) => {
+  // If an upstream project-scoped guard (requireProjectAuth) already
+  // authenticated this request via a project API key (Bearer brk_…), accept
+  // it: the key is not a CLI JWT and the Bearer check below would otherwise
+  // reject it as "invalid cli token". Sessions and CLI JWTs still verify
+  // through the logic that follows. This is what lets `briven deploy` /
+  // SDK calls (which carry brk_ keys) reach project routes that sit behind
+  // both this broad guard and a route-level requireProjectAuth.
+  if (c.get('apiKeyId')) {
+    await next();
+    return;
+  }
+
   const authHeader = c.req.header('authorization');
   if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
     const token = authHeader.slice(7).trim();
