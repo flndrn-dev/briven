@@ -64,6 +64,20 @@ projectsRouter.get('/v1/projects/:id/info', async (c) => {
   return c.json({ project: info });
 });
 
+// CLI- and SDK-facing routes accept a project-scoped API key (Bearer brk_…)
+// in addition to a session / CLI JWT, via requireProjectAuth. Like /info
+// above, they MUST be registered before the broad `/v1/projects/*`
+// requireAuth so the session-only guard doesn't reject the API key first.
+// The handlers themselves live in deploymentsRouter / invokeRouter; the
+// requireProjectAuth here authenticates and sets apiKeyId, which the broad
+// requireAuth below then honours (see session.ts). Without these carve-outs
+// `briven deploy` and SDK function calls authenticated by API key 401 with
+// "invalid cli token".
+projectsRouter.use('/v1/projects/:id/schema/current', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/deployments', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/deployments/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/functions/:name', requireProjectAuth());
+
 projectsRouter.use('/v1/projects', requireAuth());
 projectsRouter.use('/v1/projects/*', requireAuth());
 
