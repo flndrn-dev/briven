@@ -21,6 +21,11 @@ ENV NODE_ENV=production
 ENV BRIVEN_RUNTIME_PORT=3003
 RUN groupadd -r app && useradd -r -g app app
 COPY --from=build --chown=app:app /repo /app
+# The runtime executes each user function inside a locked-down Deno isolate
+# (BRIVEN_RUNTIME_EXECUTOR=deno — the multi-tenant security boundary). The base
+# image is Bun, so the `deno` binary is copied in from Deno's official image.
+# Without it the executor fails with: Executable not found in $PATH: "deno".
+COPY --from=denoland/deno:bin-2.8.3 /deno /usr/local/bin/deno
 # Create the bundle dir and chown it BEFORE switching to the non-root user.
 # compose mounts the `runtime_bundles` named volume at /var/lib/briven/bundles;
 # a fresh named volume inherits the ownership of this image directory on first
