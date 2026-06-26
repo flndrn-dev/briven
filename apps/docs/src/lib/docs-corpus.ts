@@ -30,6 +30,29 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     keywords: ['overview', 'introduction', 'getting started', 'about', 'what is briven'],
   },
   {
+    slug: '/undo',
+    title: 'undo + snapshots · version history (doltgres / git-for-data)',
+    summary:
+      'briven runs on doltgres (postgres-wire git-for-data). plain-language undo and snapshots for non-coders, plus the developer SQL behind it: dolt_log, DOLT_HASHOF, DOLT_COMMIT, DOLT_TAG, dolt_tags, dolt_diff, dolt_diff_summary, DOLT_RESET, DOLT_BRANCH / DOLT_CHECKOUT / DOLT_MERGE. explains the dolt vs doltgres vs doltlab ecosystem and which one briven actually uses.',
+    keywords: [
+      'undo',
+      'snapshot',
+      'snapshots',
+      'version history',
+      'rollback',
+      'restore',
+      'time travel',
+      'doltgres',
+      'dolt',
+      'doltlab',
+      'git for data',
+      'branch',
+      'diff',
+      'commit',
+      'backup',
+    ],
+  },
+  {
     slug: '/quickstart',
     title: 'quickstart · five minutes from clone to first invoke',
     summary:
