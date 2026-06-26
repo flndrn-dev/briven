@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED (2026-06-26) — describes an abandoned architecture (MySQL-mode Dolt detour and/or full Supabase-services stack). Current truth: SPEC.md + docs/BUILD_PLAN.md + docs/ADR/0002.
+
 # HANDOFF.md — backend-fork remaining work
 
 Successor doc to `BACKEND_FORK_BRIEF.md` + `VERIFICATION_AUDIT.md`. Captures what is **not yet working** end-to-end after the 10-phase backend fork, and the minimum sequence to make a real "create a database with tables and data" demo possible.

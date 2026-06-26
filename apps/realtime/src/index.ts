@@ -44,8 +44,8 @@ const log = createLogger({
  *   4. Unsubscribe / disconnect → drop the subscription, decrement channel
  *      refcounts, stop polling the project when its last channel is removed
  *
- * @README-BRIVEN Phase 2: Postgres LISTEN/NOTIFY replaced with Dolt
- * commit-diff polling. The PollManager queries `BRIVEN_HASHOF('HEAD')`
+ * @README-BRIVEN Phase 2: Postgres LISTEN/NOTIFY replaced with DoltGres
+ * commit-diff polling. The PollManager queries `DOLT_HASHOF('HEAD')`
  * for each active project at the configured interval; when the hash
  * changes it fires every channel belonging to that project.
  */
@@ -349,11 +349,12 @@ registerGauge('briven_realtime_connection_seconds_total', () => {
   return out;
 });
 
-// Eagerly open the PollManager pool so the first subscription doesn't
-// block on pool creation. When BRIVEN_URL is unset the init is a no-op;
-// PollManager handles the null pool gracefully.
-if (env.BRIVEN_URL) {
-  pollManager.init(env.BRIVEN_URL).catch((err) => {
+// Record the data-plane DSN so the first subscription doesn't block on
+// setup. When BRIVEN_DATA_PLANE_URL is unset the init is a no-op;
+// PollManager opens per-project clients lazily and handles the absent
+// DSN gracefully (polling stays disabled).
+if (env.BRIVEN_DATA_PLANE_URL) {
+  pollManager.init(env.BRIVEN_DATA_PLANE_URL).catch((err) => {
     log.error('realtime_poll_manager_init_failed', {
       message: err instanceof Error ? err.message : String(err),
     });
@@ -364,7 +365,7 @@ log.info('realtime_boot', {
   port: env.BRIVEN_REALTIME_PORT,
   apiUrl: env.BRIVEN_API_INTERNAL_URL,
   auth: env.BRIVEN_RUNTIME_SHARED_SECRET ? 'shared_secret' : 'rejecting_all',
-  poll: env.BRIVEN_URL ? 'enabled' : 'disabled',
+  poll: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
   pollIntervalMs: env.BRIVEN_REALTIME_POLL_MS,
   phase: 2, // @README-BRIVEN Phase 2: commit-diff polling live
 });
@@ -380,8 +381,8 @@ export default {
     if (url.pathname === '/health') return Response.json({ status: 'ok', service: 'realtime' });
     if (url.pathname === '/ready') {
       return Response.json({
-        status: env.BRIVEN_URL ? 'ready' : 'degraded',
-        poll: env.BRIVEN_URL ? 'enabled' : 'disabled',
+        status: env.BRIVEN_DATA_PLANE_URL ? 'ready' : 'degraded',
+        poll: env.BRIVEN_DATA_PLANE_URL ? 'enabled' : 'disabled',
         pollIntervalMs: env.BRIVEN_REALTIME_POLL_MS,
         activeProjects: pollManager.projectCount,
       });

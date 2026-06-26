@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED (2026-06-26) — describes an abandoned architecture (MySQL-mode Dolt detour and/or full Supabase-services stack). Current truth: SPEC.md + docs/BUILD_PLAN.md + docs/ADR/0002.
+
 # Briven Backend Fork — Canonical Brief
 
 > **For Claude Code:** Read this file in full at the start of every session. Read it before any other repo file. Follow the rules in `CLAUDE.md` Build Protocol section as well. This brief is the single source of truth for the backend fork project. Do not deviate. Do not propose alternative architectures. Do not refactor scope outside this brief.

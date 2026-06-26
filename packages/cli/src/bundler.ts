@@ -26,7 +26,22 @@ export async function loadProjectSchema(cwd: string): Promise<SchemaDef | null> 
   if (!mod.default || typeof mod.default !== 'object') {
     throw new Error('briven/schema.ts must have a default export produced by `schema(...)`');
   }
-  const candidate = mod.default as Partial<SchemaDef>;
+
+  // CJS/ESM interop unwrap: when the user's project is CommonJS, tsx loads
+  // `export default schema({...})` through the interop layer and the value
+  // gets double-wrapped as `mod.default.default` (the inner `.default` is the
+  // real schema, the outer one is the synthetic ESM namespace default). Accept
+  // both the plain `mod.default` shape and the double-wrapped one.
+  let candidate = mod.default as Partial<SchemaDef> & { default?: Partial<SchemaDef> };
+  if (
+    candidate.version !== 1 &&
+    candidate.default &&
+    typeof candidate.default === 'object' &&
+    candidate.default.version === 1
+  ) {
+    candidate = candidate.default;
+  }
+
   if (candidate.version !== 1 || typeof candidate.tables !== 'object') {
     throw new Error('default export is not a valid briven schema');
   }

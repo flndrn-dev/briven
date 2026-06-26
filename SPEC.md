@@ -5,13 +5,26 @@
 
 ---
 
+> ## 🔄 UPDATE 2026-06-26 — Engine decision: converge the whole platform on **DoltGres**
+>
+> A full re-audit (four parallel reviews) of the current code (`feat/admin-manifest`) found the platform is **split-brained across two databases**: the control plane (`apps/api` — sign-in, project provisioning, snapshots) speaks **Postgres**, while the engine room (`apps/runtime`, `apps/realtime`) was switched to **MySQL-style Dolt** in an abandoned migration (the deleted `docs/ADR/0001`). They point at different databases, so **nothing works end-to-end** — and *neither half is actually DoltGres yet*.
+>
+> **Decision (Jürgen, 2026-06-26): converge everything on DoltGres** (Postgres-wire, git-for-data). DoltGres speaks the Postgres wire protocol, so the large `apps/api` code keeps working with little change; we **rip out the MySQL detour** in runtime/realtime (the "old version" cruft) and point all services at one DoltGres. The git-for-data "Undo/Snapshots" promise then comes from DoltGres natively.
+>
+> - **Working copy:** `/Users/flndrn/projects/briven` (Mac internal SSD — the Time Capsule network drive is far too slow; see gotchas in `CLAUDE.md`).
+> - **Repo of record:** Codeberg `https://codeberg.org/flndrn/briven.git` (not GitHub). Newest branch `feat/admin-manifest` = `main` + admin-dashboard commits.
+> - **Staged build plan:** `docs/BUILD_PLAN.md`.
+> - The "Dolt (MySQL-compatible)" wording below is **superseded** — read it as **DoltGres** everywhere.
+
+---
+
 ## 1. One-line headline
 
 **Briven — the database anyone can use, with a full undo button. Git for your data, no coding required.**
 
 ## 2. What it is
 
-A hosted, version-controlled SQL database service. Built on **Dolt** (open-source, MySQL-compatible, github.com/dolthub/dolt) — which gives every customer's data git-style superpowers: commit, branch, diff, and **undo**. Briven wraps that in a point-and-click experience so non-technical people can create, fill, manage, and safely experiment with a real database.
+A hosted, version-controlled SQL database service. Built on **DoltGres** (open-source, **Postgres-wire-compatible**, github.com/dolthub/doltgresql) — which gives every customer's data git-style superpowers: commit, branch, diff, and **undo**. Briven wraps that in a point-and-click experience so non-technical people can create, fill, manage, and safely experiment with a real database. (DoltGres speaks the Postgres protocol, so our existing Postgres-based control plane keeps working — see the 2026-06-26 update above.)
 
 Think: **Neon/Supabase power, but for people who can't code — with an undo button those products don't offer.**
 
@@ -112,7 +125,7 @@ Concretely missing for the non-coder audience:
 - **Audience framing default:** keep all the developer features that already exist (SQL editor, functions) but **hide them behind a "Developer mode" toggle** so non-coders never see them. Default surface = simple.
 - **Onboarding default:** signup → pick a template (or blank) → land on a database with demo data + a guided first edit.
 - **Version history default:** rename/reskin "branches & merges" → "Snapshots & Undo" in the non-coder UI; keep full Dolt power under the hood.
-- **Engine default:** stay on Dolt for v1 (a Dolt→Postgres path is documented in `HANDOFF-DOLT.md` but not needed now).
+- **Engine default — ✅ DECIDED (2026-06-26): converge on DoltGres** (Postgres-wire git-for-data). Supersedes the earlier "stay on Dolt-MySQL" default and the abandoned MySQL detour in `docs/archive/HANDOFF-DOLT.md` (archived). See the 2026-06-26 update banner at the top, `docs/BUILD_PLAN.md`, and `docs/ADR/0002-converge-on-doltgres.md`.
 
 ## 12. 🔴 Hot zones (verify-before-build — see protocol)
 
@@ -132,4 +145,4 @@ Before changing anything in these, **state how I'll verify it, ask Jürgen first
 
 ---
 
-*Foundation: Dolt (open-source, self-hosted). Apps: `api` (Hono/Bun control plane), `studio` (dashboard), `web` (marketing), `docs`, `runtime` (Deno functions), `realtime` (websockets). Billing: Polar today → mavi-pay later. Storage: MinIO/S3. Auth: better-auth.*
+*Foundation: DoltGres (open-source, Postgres-wire, self-hosted). Apps: `api` (Hono/Bun control plane), `studio` (dashboard), `web` (marketing), `docs`, `runtime` (Deno functions), `realtime` (websockets). Billing: Polar today → mavi-pay later. Storage: MinIO/S3. Auth: better-auth.*

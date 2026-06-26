@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED (2026-06-26) — describes an abandoned architecture (MySQL-mode Dolt detour and/or full Supabase-services stack). Current truth: SPEC.md + docs/BUILD_PLAN.md + docs/ADR/0002.
+
 ## Session handoff — briven → Dolt migration
 
 You are continuing a multi-session architecture + planning thread for migrating briven's database platform from PostgreSQL 17 to Dolt (https://github.com/dolthub/dolt). The decision is locked. Phase 0 is done. Here is the full state.

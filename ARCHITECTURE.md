@@ -4,6 +4,8 @@
 **Audience:** anyone adding a new briven service (briven auth = service #2, briven pay = service #3)
 **Companion:** `BUILD_PLAN.md` (briven auth spec) · `docs/BUILD_PLAN.md` (platform spec)
 
+> **Engine note (2026-06-26):** the Layer-1 data-plane engine is **DoltGres (Postgres-wire git-for-data)**, not stock Postgres or MySQL-mode Dolt. The control plane remains stock Postgres. See `docs/ADR/0002-converge-on-doltgres.md`. Where this document says "postgres" as the Layer-1 engine, read it as DoltGres on the customer data plane.
+
 This document captures the decisions that make briven a **platform** rather than a stack of one-off services. Every service after the database (briven auth, then briven pay) reuses the machinery described here. The forward-compat hooks for briven pay are explicit at the end.
 
 ---

@@ -7,7 +7,7 @@ import {
   type TableDef,
 } from '@briven/schema';
 
-import { runInProjectSchema } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 import { log } from '../lib/logger.js';
 
 /**
@@ -31,7 +31,7 @@ export async function applySchema(
   const result = diff(prev, next);
   const statements = result.changes.flatMap(renderChange);
 
-  await runInProjectSchema(projectId, async (tx) => {
+  await runInProjectDatabase(projectId, async (tx) => {
     for (const stmt of statements) {
       await tx.unsafe(stmt);
     }

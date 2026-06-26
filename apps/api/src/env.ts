@@ -17,8 +17,10 @@ const envSchema = z.object({
   // Control-plane meta-DB — required once Phase 1 week 1 services are wired.
   BRIVEN_DATABASE_URL: z.string().url().optional(),
 
-  // Data-plane: shared postgres cluster where each project gets its own
-  // schema. CLAUDE.md §3.4 — schema-per-tenant up to Team tier, then
+  // Data-plane: shared DoltGres (Postgres-wire git-for-data) cluster where
+  // each project gets its own DATABASE (`proj_<id>`) — not a schema — so it
+  // has an independent commit history / branch namespace. Reached via
+  // postgres.js. CLAUDE.md §3.4 — database-per-tenant up to Team tier, then
   // dedicated cluster per tenant. Phase 1 has one cluster.
   BRIVEN_DATA_PLANE_URL: z.string().url().optional(),
 

@@ -4,7 +4,7 @@ import { newId, NotFoundError, ValidationError } from '@briven/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { dropProjectSchema, provisionProjectSchema, schemaNameFor } from '../db/data-plane.js';
+import { dropProjectDatabase, provisionProjectDatabase, schemaNameFor } from '../db/data-plane.js';
 import {
   projects,
   projectMembers,
@@ -77,22 +77,23 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     role: 'owner',
   });
 
-  // Provision the data-plane schema. If this fails we roll back the meta
-  // rows so the user can retry with the same slug — leaving the meta row
-  // behind would orphan the project (no schema, name/slug taken).
+  // Provision the data-plane DATABASE (database-per-project on DoltGres).
+  // If this fails we roll back the meta rows so the user can retry with the
+  // same slug — leaving the meta row behind would orphan the project (no
+  // database, name/slug taken).
   try {
-    await provisionProjectSchema(created.id);
+    await provisionProjectDatabase(created.id);
   } catch (err) {
-    log.error('project_schema_provision_failed', {
+    log.error('project_database_provision_failed', {
       projectId: created.id,
       message: err instanceof Error ? err.message : String(err),
     });
     // Best-effort cleanup. Each step is independent; we don't want a
     // secondary failure to mask the original cause.
     try {
-      await dropProjectSchema(created.id);
+      await dropProjectDatabase(created.id);
     } catch (dropErr) {
-      log.warn('project_rollback_schema_drop_failed', {
+      log.warn('project_rollback_database_drop_failed', {
         projectId: created.id,
         message: dropErr instanceof Error ? dropErr.message : String(dropErr),
       });

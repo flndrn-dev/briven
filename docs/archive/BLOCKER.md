@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED (2026-06-26) — describes an abandoned architecture (MySQL-mode Dolt detour and/or full Supabase-services stack). Current truth: SPEC.md + docs/BUILD_PLAN.md + docs/ADR/0002.
+
 # BLOCKER — Phase 2 (studio fork into briven repo)
 
 **Phase**: 2 — copy `_reference/supabase/apps/studio/` → `apps/studio/`, register in pnpm workspace, make `pnpm install` succeed.

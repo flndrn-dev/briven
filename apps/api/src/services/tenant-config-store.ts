@@ -1,7 +1,7 @@
 import { ValidationError } from '@briven/shared';
 import { z } from 'zod';
 
-import { runInProjectSchema } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 
 /**
  * Non-secret per-tenant auth config (BUILD_PLAN.md §6 Providers panel +
@@ -174,12 +174,11 @@ const META_KEY = 'auth_config';
  * row exists yet (project enabled auth but hasn't visited the providers
  * panel).
  *
- * Reads run inside a `runInProjectSchema` transaction so `search_path`
- * is set correctly. Single-statement read; no extra round-trip cost
- * beyond the SET LOCAL.
+ * Reads run inside a `runInProjectDatabase` transaction against the
+ * project's own DoltGres database. Single-statement read.
  */
 export async function getAuthConfig(projectId: string): Promise<AuthConfig> {
-  const rows = await runInProjectSchema<{ value: unknown }[]>(projectId, async (tx) =>
+  const rows = await runInProjectDatabase<{ value: unknown }[]>(projectId, async (tx) =>
     (await tx.unsafe(
       `SELECT value FROM "_briven_meta" WHERE key = $1 LIMIT 1`,
       [META_KEY],
@@ -206,7 +205,7 @@ export async function updateAuthConfig(
 ): Promise<AuthConfig> {
   const current = await getAuthConfig(projectId);
   const next = mergeAuthConfig(current, patch);
-  await runInProjectSchema(projectId, async (tx) => {
+  await runInProjectDatabase(projectId, async (tx) => {
     await tx.unsafe(
       `INSERT INTO "_briven_meta" (key, value)
        VALUES ($1, $2::jsonb)
@@ -224,7 +223,7 @@ export async function updateAuthConfig(
  * and the configured state.
  */
 export async function isAuthEnabled(projectId: string): Promise<boolean> {
-  const rows = await runInProjectSchema<{ value: unknown }[]>(projectId, async (tx) =>
+  const rows = await runInProjectDatabase<{ value: unknown }[]>(projectId, async (tx) =>
     (await tx.unsafe(
       `SELECT value FROM "_briven_meta" WHERE key = 'auth_enabled' LIMIT 1`,
     )) as { value: unknown }[],

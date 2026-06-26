@@ -4,8 +4,8 @@
 
 ---
 
-## Pillar ② — "Snapshots & Undo" (reskin Dolt versioning)
-**Approach:** Dolt already exposes version tables (`dolt_log`, `dolt_diff`, `dolt_commits`). Add new API endpoints `GET/POST /v1/projects/:id/studio/snapshots` (+ `/restore`, `/changes`) backed by Dolt SQL (`DOLT_COMMIT`, `DOLT_CHECKOUT`), and a new studio "Snapshots" page that reskins git words → plain language (branch→snapshot, merge→apply, commit→auto-saved, restore→undo).
+## Pillar ② — "Snapshots & Undo" (reskin DoltGres versioning)
+**Approach:** DoltGres (Postgres-wire) already exposes version tables (`dolt_log`, `dolt_diff`, `dolt_commits`). Add new API endpoints `GET/POST /v1/projects/:id/studio/snapshots` (+ `/restore`, `/changes`) backed by DoltGres SQL (`DOLT_COMMIT`, `DOLT_CHECKOUT`), and a new studio "Snapshots" page that reskins git words → plain language (branch→snapshot, merge→apply, commit→auto-saved, restore→undo). (Engine: see docs/ADR/0002.)
 **Files:** new `apps/api/src/services/snapshot.ts` + routes in `studio.ts`; new `apps/studio/.../SnapshotManagement/*` + `pages/project/[ref]/snapshots/`. Additive, ~1000 lines, no breaking changes.
 **Must verify on running stack:** that `DOLT_COMMIT`/`DOLT_CHECKOUT` actually commit + revert data (insert row → does `dolt_log` record it? does checkout revert?). This is the make-or-break assumption.
 

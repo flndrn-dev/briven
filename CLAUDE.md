@@ -4,6 +4,25 @@
 
 ---
 
+## ⭐ Current direction & hard-won gotchas (updated 2026-06-26)
+
+**Who Jürgen (flndrn) is:** the operator/owner, and **not a coder** — explain in plain words, no jargon, step-by-step for anything hands-on. Briven is *his own product* (open-core reactive backend platform); treat every bug found here as real product feedback.
+
+**Engine decision — converge on DoltGres.** The platform is mid-migration and split-brained: `apps/api` speaks Postgres; `apps/runtime` + `apps/realtime` were switched to MySQL-mode Dolt (abandoned detour). **We are converging everything on DoltGres (Postgres-wire git-for-data)** — the API's Postgres code stays, the MySQL detour gets removed. Authoritative plan: **`docs/BUILD_PLAN.md`**; product spec: **`SPEC.md`** (see its 2026-06-26 banner).
+
+**Working method (Jürgen's rules — apply by default):** (1) delegate by default — fan out subagents for non-trivial research/build; (2) **spec before build** — agree the spec first; (3) interview one question at a time for new work; (4) **verify before & after with real evidence** — a passing typecheck/200 is *not* proof a feature works, functionally test it; (5) **hot zones → ask first + explain blast radius** (consent doesn't carry to the next action); (6) capture gotchas here; (7) batch deploys.
+
+**Gotchas (don't relearn the hard way):**
+- **Work on the SSD copy `/Users/flndrn/projects/briven`, NOT the Time Capsule network folder** (`/Volumes/Data/.../briven`) — the network drive is so slow a bare `ls` takes ~2 min and locks fail.
+- **Repo of record is Codeberg** `https://codeberg.org/flndrn/briven.git` (not GitHub). Newest branch `feat/admin-manifest` = `main` + admin-dashboard commits.
+- **`pnpm install` fails** on native `libpg-query@15.2.0` (macOS SDK `strchrnul` clash); pnpm 9 ignores the v10-style `ignoredBuiltDependencies` gate. Workaround: `pnpm install --ignore-scripts`. Proper fix tracked in `docs/BUILD_PLAN.md` §3.
+- **`BRIVEN_HASHOF` is not a real SQL function** — stock Dolt/DoltGres uses `DOLT_HASHOF`/`HASHOF`. The realtime poller silently swallows the resulting error, so "no live updates" looks like nothing is wrong.
+- **CLI `briven deploy` rejects a valid schema** unless the schema folder is ESM (`briven/package.json` = `{"type":"module"}`) — tsx double-wraps the default export under CommonJS. Fix in `packages/cli` loader.
+- **`docs/ADR/0001` was deleted but is still referenced** in code (`apps/runtime/.../query-builder.ts`) — evidence of the half-done revert. Author `docs/ADR/0002-converge-on-doltgres.md`.
+- **DoltGres driver (VERIFIED 2026-06-26): use `pg` (node-postgres) for the data plane, NOT postgres.js.** postgres.js's extended-protocol pipelining desyncs against `dolthub/doltgresql:latest` (`unhandled message "&{}"` even on `SELECT 1`); `pg` works for everything incl. the full git-for-data loop. Control plane (`BRIVEN_DATABASE_URL`) stays stock **Postgres** + postgres.js/drizzle and must NOT point at DoltGres. Data plane (`BRIVEN_DATA_PLANE_URL`, per-project `proj_<id>` DoltGres DBs) uses `pg`, with `SET dolt_transaction_commit=1` per write-tx so each write becomes an undoable commit AND advances `DOLT_HASHOF('HEAD')` for realtime.
+
+---
+
 ## 0. Before touching anything — the three docs you must respect
 
 - **`docs/CLAUDE.md`** — full project spec (tech stack, conventions, security, architecture). Always wins on code-level decisions.

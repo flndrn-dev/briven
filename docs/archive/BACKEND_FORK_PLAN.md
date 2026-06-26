@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED (2026-06-26) — describes an abandoned architecture (MySQL-mode Dolt detour and/or full Supabase-services stack). Current truth: SPEC.md + docs/BUILD_PLAN.md + docs/ADR/0002.
+
 # briven backend fork — phase 1 plan
 
 > **Status**: Phase 1 deliverable per `BACKEND_FORK_BRIEF.md`. Research-only output. No code in `apps/`, `packages/`, or `infra/` was modified. All facts cited from `_reference/supabase/` (snapshot of `github.com/supabase/supabase`), `_reference/supabase-cli/` (snapshot of `github.com/supabase/cli`), and the existing briven control plane at `apps/web/` + `apps/api/`. Read-only.

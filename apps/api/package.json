@@ -27,6 +27,7 @@
     "ioredis": "^5.10.1",
     "jose": "^6.2.3",
     "maxmind": "^5.0.6",
+    "pg": "^8.13.0",
     "postgres": "^3.4.9",
     "standardwebhooks": "^1.0.0",
     "zod": "^4.3.6"
