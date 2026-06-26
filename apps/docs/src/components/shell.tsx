@@ -26,6 +26,7 @@ const GROUPS: readonly NavGroup[] = [
     label: 'build',
     items: [
       { href: '/schema', label: 'schema dsl' },
+      { href: '/undo', label: 'undo + snapshots' },
       { href: '/examples', label: 'examples' },
       { href: '/functions', label: 'functions' },
       { href: '/realtime', label: 'realtime' },
