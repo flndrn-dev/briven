@@ -7,12 +7,16 @@ node_modules
 dist
 **/dist
 # apps/studio is the large (~660MB) broken Supabase fork. It is gated out
-# of the production stack (no studio service in dokploy/compose.yml), and
-# every app Dockerfile uses `context: ../..` + `COPY . .`, so leaving it in
-# would bloat the build context sent to the daemon on every service build.
-apps/studio
-# (re-enable by removing this line if/when the studio build is fixed and a
-#  studio service is added back to the compose.)
+# of the production stack (no studio service in dokploy/compose.yml), so we
+# keep its ~660MB of SOURCE out of the build context that every app
+# Dockerfile sends to the daemon (`context: ../..` + `COPY . .`).
+# BUT: apps/studio is a workspace member in pnpm-lock.yaml (importer entry),
+# so `pnpm install --frozen-lockfile` aborts if its package.json is missing.
+# Therefore exclude the contents but KEEP package.json so the frozen install
+# still resolves the workspace. (Re-include the whole dir by deleting these
+# two lines if the studio build is ever fixed + a studio service added back.)
+apps/studio/*
+!apps/studio/package.json
 # .git is intentionally NOT ignored — apps/api/src/routes/health.ts reads
 # .git/HEAD at boot to populate /info.buildSha when a docker build doesn't
 # pass BRIVEN_BUILD_SHA as a build-arg (e.g. Dokploy auto-deploys).
