@@ -1,50 +1,50 @@
-# briven-core — self-hosted compose template (build-from-source mode).
+# briven — canonical self-host compose (build-from-source).
 #
-# Dokploy clones the repo from code.konnos.org/flndrn/briven and runs
-# `docker compose build` against the local Dockerfiles. No external
-# container registry, no GHCR, no auth tokens for image pulls — the
-# only thing the host needs is git + docker.
+# Post ADR-0002 (docs/ADR/0002-converge-on-doltgres.md): the platform
+# runs on TWO database engines, on purpose:
 #
-# Single-machine layout: every service on one host. Suitable for ~25
-# concurrent customer projects. Past that, split control plane to one
-# host and data plane (dolt + minio) to another.
+#   - control plane  = stock Postgres (pgvector image), env BRIVEN_DATABASE_URL.
+#       sign-in, orgs, projects, billing, secrets, auth. drizzle migrations
+#       run at api boot. NEVER points at DoltGres.
+#   - data plane     = DoltGres (dolthub/doltgresql), env BRIVEN_DATA_PLANE_URL.
+#       Postgres-wire, accessed with the `pg` driver, one DATABASE per
+#       customer project. Realtime polls DOLT_HASHOF('HEAD') (no LISTEN/NOTIFY).
 #
-# Tested on:
-#   - Dokploy 0.20+ (recommended)
-#   - Coolify 4.x
-#   - Plain `docker compose up -d` on Ubuntu 24.04
+# This file supersedes the two earlier conflicting composes:
+#   - the old Dolt-MySQL build (dolthub/dolt-sql-server + BRIVEN_URL mysql) —
+#     wrong engine, broke the api. REMOVED.
+#   - the all-pgvector build (data plane as a 2nd Postgres DB) — wrong data
+#     plane. REPLACED by the real DoltGres service below.
 #
-# Required env (drop a `.env` next to this file):
+# Dokploy clones the repo and runs `docker compose build` against the local
+# Dockerfiles — no external registry, no GHCR, no docker.sock. Per
+# docs/DOCKER.md §7 / infra/CLAUDE.md: every long-running service caps its
+# log volume via the *briven-logging anchor; no watchtower, no docker_sd,
+# no registry polling on the host.
+#
+# Single-machine layout, ~25 concurrent customer projects. Past that, split
+# the control plane onto one host and the data plane (doltgres + minio) onto
+# another.
+#
+# Required env (drop a `.env` next to this file — see .env.example):
 #
 #   BRIVEN_DOMAIN                  e.g. briven.example.com
-#   BRIVEN_BETTER_AUTH_SECRET     32+ chars, openssl rand -hex 32
-#   BRIVEN_AUDIT_IP_PEPPER        32+ chars
-#   BRIVEN_ENCRYPTION_KEY         32+ chars
-#   BRIVEN_RUNTIME_SHARED_SECRET  32+ chars
-#   BRIVEN_DOLT_ROOT_PASSWORD     strong; Dolt root password (control + data plane)
-#   BRIVEN_MITTERA_API_URL        optional — base URL of mittera.eu transactional email
-#   BRIVEN_MITTERA_API_KEY        optional — bearer token for outbound mittera POST /api/v1/emails
-#   BRIVEN_MITTERA_WEBHOOK_SECRET optional — HMAC secret for inbound delivery/bounce webhooks
-#   BRIVEN_GOOGLE_CLIENT_ID/      optional — google oauth signin
-#   BRIVEN_GOOGLE_CLIENT_SECRET
-#   BRIVEN_GITHUB_CLIENT_ID/      optional — github oauth signin
-#   BRIVEN_GITHUB_CLIENT_SECRET
-#   BRIVEN_KONNOS_CLIENT_ID/      optional — konnos (forgejo) oauth signin
-#   BRIVEN_KONNOS_CLIENT_SECRET
-#   BRIVEN_KONNOS_ISSUER          optional — forgejo issuer base url (default https://code.konnos.org)
-#   BRIVEN_POLAR_*                optional — billing (skip for self-host)
-#   BRIVEN_OPEN_SIGNUPS           true | false (default false; flip for public instance)
+#   BRIVEN_BETTER_AUTH_SECRET      openssl rand -hex 32
+#   BRIVEN_AUDIT_IP_PEPPER         openssl rand -hex 32
+#   BRIVEN_ENCRYPTION_KEY          openssl rand -hex 32
+#   BRIVEN_RUNTIME_SHARED_SECRET   openssl rand -hex 32
+#   BRIVEN_POSTGRES_PASSWORD       control-plane Postgres superuser password
+#   BRIVEN_DOLTGRES_PASSWORD       data-plane DoltGres superuser password
+#   BRIVEN_MINIO_ROOT_PASSWORD     MinIO root / S3 secret key
+#   (optional) BRIVEN_MITTERA_*, BRIVEN_*_CLIENT_ID/SECRET, BRIVEN_POLAR_*,
+#              BRIVEN_OLLAMA_*, BRIVEN_MINIO_BUCKET/REGION, BRIVEN_OPEN_SIGNUPS
 #
 # After first boot:
 #   1. Create the first user via the magic-link flow on https://${BRIVEN_DOMAIN}
-#   2. Connect to the Dolt container and set is_admin: `docker exec -it briven-dolt mysql -u root -p${BRIVEN_DOLT_ROOT_PASSWORD} -e "UPDATE briven_control.users SET is_admin = true WHERE id = '...'"`
-#   3. Create your first project via the dashboard
-#
-# @README-BRIVEN Phase 8: postgres → dolt. Single BRIVEN_URL replaces
-# BRIVEN_DATABASE_URL + BRIVEN_DATA_PLANE_URL. dolt-backup service
-# replaces pg_dump. mysqld_exporter replaces postgres_exporter.
-#
-# Per DOCKER.md §7: every service caps its log volume.
+#   2. Promote to admin in the control plane:
+#      docker exec -it briven-postgres psql -U postgres -d briven_control \
+#        -c "UPDATE users SET is_admin = true WHERE id = '...';"
+#   3. Create your first project via the dashboard (provisions a DoltGres DB).
 
 x-logging: &briven-logging
   driver: json-file
@@ -53,35 +53,133 @@ x-logging: &briven-logging
     max-file: '3'
 
 services:
-  dolt:
-    image: dolthub/dolt-sql-server:latest
-    container_name: briven-dolt
+  # ─── control plane ────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: briven-postgres
     restart: unless-stopped
     logging: *briven-logging
     environment:
-      DOLT_ROOT_PASSWORD: ${BRIVEN_DOLT_ROOT_PASSWORD}
+      POSTGRES_PASSWORD: ${BRIVEN_POSTGRES_PASSWORD}
+      POSTGRES_DB: briven_control
     volumes:
-      - dolt_data:/var/lib/dolt
+      - postgres_data:/var/lib/postgresql/data
+      # Control-plane init only: enables pgvector + pg_trgm on briven_control.
+      # No data-plane DB is created here — the data plane is the doltgres
+      # service, with a database per project (see ADR-0002).
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d briven_control']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - briven
     labels:
       - 'briven_logs=true'
 
+  # ─── data plane ───────────────────────────────────────────────────────
+  # DoltGres = Postgres-wire, git-for-data. Each customer project is its own
+  # DATABASE here, created by the api over the `pg` driver. The default
+  # superuser/database is `postgres`/`postgres` (DOLTGRES_* envs override the
+  # password). Data dir is /var/lib/doltgresql (per the image docs).
+  doltgres:
+    image: dolthub/doltgresql:latest
+    container_name: briven-doltgres
+    restart: unless-stopped
+    logging: *briven-logging
+    environment:
+      DOLTGRES_USER: postgres
+      DOLTGRES_PASSWORD: ${BRIVEN_DOLTGRES_PASSWORD}
+    volumes:
+      - doltgres_data:/var/lib/doltgresql
+      # Dolt-native backups land here (written by the server itself); the
+      # dolt-backup service triggers them. See that service for details.
+      - doltgres_backups:/backups
+    healthcheck:
+      # pg_isready ships in the doltgresql image and needs no password.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 5432 -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - briven
+    labels:
+      - 'briven_logs=true'
+
+  # ─── data-plane backup ──────────────────────────────────────────────────
+  # REAL DoltGres backup (replaces the old placeholder sleep loop).
+  #
+  # Why NOT pg_dump: tested 2026-06-26 against dolthub/doltgresql:latest
+  # (v0.56.6) — `pg_dump` aborts immediately with
+  #   "ERROR: SET TRANSACTION is not yet supported"
+  # because pg_dump opens a REPEATABLE READ READ ONLY snapshot transaction
+  # that DoltGres does not implement. So pg_dump CANNOT back up the data
+  # plane. (The control plane is real Postgres and is dumped separately by
+  # the host timers in infra/backups/.)
+  #
+  # What works (verified same day): Dolt's own backup, invoked over the
+  # Postgres wire with `SELECT dolt_backup('sync-url', '<file-url>')`. It
+  # writes a full, version-history-preserving Dolt archive (manifest +
+  # .darc) — re-running it re-syncs in place, so one backup dir per database
+  # already contains every commit (time-travel restore, not just a snapshot).
+  #
+  # This sidecar reuses the doltgresql image (it has `psql`), enumerates the
+  # data-plane databases each run, and asks the doltgres SERVER to back each
+  # one up into the shared `doltgres_backups` volume.
+  #
+  # OFF-SITE follow-up: mirroring the `doltgres_backups` volume to MinIO/B2/R2
+  # is done today by the host systemd timers in infra/backups/ (mc-based, see
+  # briven-backup.sh). Folding an `mc mirror /backups -> minio` step into this
+  # service needs an image carrying both psql and mc; tracked as a follow-up.
   dolt-backup:
-    image: dolthub/dolt-sql-server:latest
+    image: dolthub/doltgresql:latest
     container_name: briven-dolt-backup
     restart: unless-stopped
     logging: *briven-logging
+    depends_on:
+      doltgres:
+        condition: service_healthy
+    environment:
+      PGHOST: doltgres
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: ${BRIVEN_DOLTGRES_PASSWORD}
+      BRIVEN_BACKUP_INTERVAL_SECONDS: ${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - doltgres_backups:/backups
     entrypoint: ['/bin/sh', '-c']
     command:
       - |
+        set -eu
+        echo "dolt-backup: starting (interval=${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}s)"
         while true; do
-          sleep 86400
-          echo "dolt-backup: daily backup snapshot (placeholder — wire dolt backup command)"
+          ts="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "[dolt-backup $$ts] enumerating data-plane databases"
+          # All non-template databases on the doltgres server (one per project,
+          # plus the default `postgres`). -tA = tuples only, unaligned.
+          dbs="$$(psql -tA -d postgres -c \
+            "SELECT datname FROM pg_database WHERE datname NOT IN ('template0','template1')")"
+          for db in $$dbs; do
+            echo "[dolt-backup $$ts] backing up $$db -> file:///backups/$$db"
+            if psql -d "$$db" -c \
+                 "SELECT dolt_backup('sync-url', 'file:///backups/$$db');" >/dev/null; then
+              echo "[dolt-backup $$ts] ok $$db"
+            else
+              echo "[dolt-backup $$ts] WARN backup failed for $$db"
+            fi
+          done
+          echo "[dolt-backup $$ts] run complete; sleeping"
+          sleep "$${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}"
         done
     networks:
       - briven
+    labels:
+      - 'briven_logs=true'
 
+  # ─── shared infra ─────────────────────────────────────────────────────
   redis:
     image: redis:7.4-alpine
     container_name: briven-redis
@@ -90,6 +188,12 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - briven
     labels:
@@ -103,14 +207,50 @@ services:
     command: server /data --console-address ':9001'
     environment:
       MINIO_ROOT_USER: briven
-      MINIO_ROOT_PASSWORD: ${BRIVEN_DOLT_ROOT_PASSWORD}
+      MINIO_ROOT_PASSWORD: ${BRIVEN_MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:9000/minio/health/live || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - briven
     labels:
       - 'briven_logs=true'
+      - 'traefik.enable=true'
+      # Public S3 endpoint — browsers PUT/GET with sigv4-presigned URLs the
+      # api mints. The api also reaches MinIO internally at http://minio:9000.
+      - 'traefik.http.routers.briven-s3.rule=Host(`s3.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-s3.entrypoints=websecure'
+      - 'traefik.http.routers.briven-s3.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-s3.service=briven-s3'
+      - 'traefik.http.services.briven-s3.loadbalancer.server.port=9000'
 
+  # One-shot bucket creator. `mc mb --ignore-existing` is idempotent, so this
+  # runs every deploy and no-ops after the first. restart: 'no' = one-shot, so
+  # per infra/CLAUDE.md it does NOT need the logging cap.
+  minio-init:
+    image: minio/mc:latest
+    container_name: briven-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        until /usr/bin/mc alias set minio http://minio:9000 briven ${BRIVEN_MINIO_ROOT_PASSWORD} >/dev/null 2>&1; do
+          echo 'waiting for minio...'; sleep 2;
+        done;
+        /usr/bin/mc mb --ignore-existing minio/${BRIVEN_MINIO_BUCKET:-briven};
+        echo 'minio bucket ready: ${BRIVEN_MINIO_BUCKET:-briven}';
+      "
+    restart: 'no'
+    networks:
+      - briven
+
+  # ─── application services ─────────────────────────────────────────────
   api:
     build:
       context: ../..
@@ -118,16 +258,30 @@ services:
     container_name: briven-api
     restart: unless-stopped
     logging: *briven-logging
-    depends_on: [dolt, redis]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      doltgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       BRIVEN_ENV: production
       BRIVEN_API_PORT: '3001'
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN}
-      BRIVEN_URL: mysql://root:${BRIVEN_DOLT_ROOT_PASSWORD}@briven-dolt:3306/briven_control
-      BRIVEN_REDIS_URL: redis://briven-redis:6379
-      BRIVEN_RUNTIME_URL: http://briven-runtime:3003
+      # Control plane — stock Postgres, postgres.js/drizzle.
+      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable
+      # Data plane — DoltGres, `pg` driver, database-per-project. The api
+      # connects to the default `postgres` database and CREATEs per-project
+      # databases on this server.
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_DOLTGRES_PASSWORD}@doltgres:5432/postgres?sslmode=disable
+      BRIVEN_REDIS_URL: redis://redis:6379
+      BRIVEN_RUNTIME_URL: http://runtime:3003
+      # Without this the api falls back to localhost:3004 and can't reach
+      # realtime — surfaces as realtime_stats_failed "Unable to connect".
+      BRIVEN_REALTIME_URL: http://realtime:3004
       BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
       BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
       BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
@@ -142,6 +296,8 @@ services:
       BRIVEN_KONNOS_CLIENT_ID: ${BRIVEN_KONNOS_CLIENT_ID:-}
       BRIVEN_KONNOS_CLIENT_SECRET: ${BRIVEN_KONNOS_CLIENT_SECRET:-}
       BRIVEN_KONNOS_ISSUER: ${BRIVEN_KONNOS_ISSUER:-https://code.konnos.org}
+      BRIVEN_DISCORD_CLIENT_ID: ${BRIVEN_DISCORD_CLIENT_ID:-}
+      BRIVEN_DISCORD_CLIENT_SECRET: ${BRIVEN_DISCORD_CLIENT_SECRET:-}
       BRIVEN_POLAR_API_BASE: ${BRIVEN_POLAR_API_BASE:-https://api.polar.sh}
       BRIVEN_POLAR_ACCESS_TOKEN: ${BRIVEN_POLAR_ACCESS_TOKEN:-}
       BRIVEN_POLAR_WEBHOOK_SECRET: ${BRIVEN_POLAR_WEBHOOK_SECRET:-}
@@ -149,9 +305,23 @@ services:
       BRIVEN_POLAR_TEAM_PRODUCT_ID: ${BRIVEN_POLAR_TEAM_PRODUCT_ID:-}
       BRIVEN_DOMAIN: ${BRIVEN_DOMAIN}
       BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
-      BRIVEN_MINIO_ENDPOINT: http://briven-minio:9000
+      BRIVEN_OLLAMA_URL: ${BRIVEN_OLLAMA_URL:-}
+      BRIVEN_OLLAMA_API_KEY: ${BRIVEN_OLLAMA_API_KEY:-}
+      BRIVEN_OLLAMA_MODEL: ${BRIVEN_OLLAMA_MODEL:-qwen2.5-coder:32b}
+      BRIVEN_MINIO_ENDPOINT: http://minio:9000
+      BRIVEN_MINIO_PUBLIC_ENDPOINT: https://s3.${BRIVEN_DOMAIN}
       BRIVEN_MINIO_ACCESS_KEY: briven
-      BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_DOLT_ROOT_PASSWORD}
+      BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_MINIO_ROOT_PASSWORD}
+      BRIVEN_MINIO_BUCKET: ${BRIVEN_MINIO_BUCKET:-briven}
+      BRIVEN_MINIO_REGION: ${BRIVEN_MINIO_REGION:-us-east-1}
+    healthcheck:
+      # /info is documented to never 500 (apps/api/Dockerfile). bun ships in
+      # the api image and has a built-in fetch.
+      test: ['CMD-SHELL', "bun -e \"fetch('http://localhost:3001/info').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     networks:
       - briven
     labels:
@@ -169,17 +339,29 @@ services:
     container_name: briven-runtime
     restart: unless-stopped
     logging: *briven-logging
-    depends_on: [dolt, api]
+    depends_on:
+      api:
+        condition: service_started
+      doltgres:
+        condition: service_healthy
     environment:
       BRIVEN_ENV: production
       BRIVEN_RUNTIME_PORT: '3003'
       BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
       BRIVEN_RUNTIME_EXECUTOR: deno
       BRIVEN_RUNTIME_BUNDLE_DIR: /var/lib/briven/bundles
-      BRIVEN_API_INTERNAL_URL: http://briven-api:3001
-      BRIVEN_URL: mysql://root:${BRIVEN_DOLT_ROOT_PASSWORD}@briven-dolt:3306
+      BRIVEN_API_INTERNAL_URL: http://api:3001
+      # Data plane — DoltGres (the old BRIVEN_URL mysql:// was wrong, removed).
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_DOLTGRES_PASSWORD}@doltgres:5432/postgres?sslmode=disable
     volumes:
       - runtime_bundles:/var/lib/briven/bundles
+    healthcheck:
+      # Any HTTP response = process is up (port serving).
+      test: ['CMD-SHELL', "bun -e \"fetch('http://localhost:3003/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     networks:
       - briven
     labels:
@@ -192,14 +374,24 @@ services:
     container_name: briven-realtime
     restart: unless-stopped
     logging: *briven-logging
-    depends_on: [dolt]
+    depends_on:
+      doltgres:
+        condition: service_healthy
     environment:
       BRIVEN_ENV: production
       BRIVEN_REALTIME_PORT: '3004'
-      BRIVEN_API_INTERNAL_URL: http://briven-api:3001
+      BRIVEN_API_INTERNAL_URL: http://api:3001
       BRIVEN_RUNTIME_SHARED_SECRET: ${BRIVEN_RUNTIME_SHARED_SECRET}
-      BRIVEN_URL: mysql://root:${BRIVEN_DOLT_ROOT_PASSWORD}@briven-dolt:3306
+      # Data plane — DoltGres. Realtime polls DOLT_HASHOF('HEAD') per project
+      # (no LISTEN/NOTIFY on DoltGres). The old BRIVEN_URL mysql:// was wrong.
+      BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_DOLTGRES_PASSWORD}@doltgres:5432/postgres?sslmode=disable
       BRIVEN_REALTIME_POLL_MS: '500'
+    healthcheck:
+      test: ['CMD-SHELL', "bun -e \"fetch('http://localhost:3004/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     networks:
       - briven
     labels:
@@ -217,7 +409,9 @@ services:
     container_name: briven-web
     restart: unless-stopped
     logging: *briven-logging
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_started
     environment:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
@@ -225,6 +419,14 @@ services:
       NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+true}
       NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+true}
       NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH: ${BRIVEN_KONNOS_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH: ${BRIVEN_DISCORD_CLIENT_ID:+true}
+    healthcheck:
+      # web runs `next start` on node — use node's built-in fetch.
+      test: ['CMD-SHELL', "node -e \"fetch('http://localhost:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     networks:
       - briven
     labels:
@@ -242,9 +444,18 @@ services:
     container_name: briven-docs
     restart: unless-stopped
     logging: *briven-logging
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_started
     environment:
+      # Used by /status + /api/status/incidents.xml to read live incidents.
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
+    healthcheck:
+      test: ['CMD-SHELL', "node -e \"fetch('http://localhost:3002/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     networks:
       - briven
     labels:
@@ -253,7 +464,9 @@ services:
       - 'traefik.http.routers.briven-docs.rule=Host(`docs.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-docs.entrypoints=websecure'
       - 'traefik.http.routers.briven-docs.tls.certresolver=letsencrypt'
-      - 'traefik.http.services.briven-docs.loadbalancer.server.port=3000'
+      - 'traefik.http.services.briven-docs.loadbalancer.server.port=3002'
+      # status.${BRIVEN_DOMAIN} — same docs container; bare `/` rewrites to
+      # /status. Other paths pass through (so /api/status/incidents.xml works).
       - 'traefik.http.routers.briven-status.rule=Host(`status.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-status.entrypoints=websecure'
       - 'traefik.http.routers.briven-status.tls.certresolver=letsencrypt'
@@ -263,7 +476,9 @@ services:
       - 'traefik.http.middlewares.briven-status-rewrite.replacepathregex.replacement=/status'
 
 volumes:
-  dolt_data:
+  postgres_data:
+  doltgres_data:
+  doltgres_backups:
   redis_data:
   minio_data:
   runtime_bundles:
