@@ -91,9 +91,11 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
             </Link>
             <Link
               href="https://codeberg.org/flndrn/briven"
-              className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              className="inline-flex items-center opacity-80 transition-opacity hover:opacity-100"
+              aria-label="Codeberg"
             >
-              Codeberg
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/codeberg.svg" alt="Codeberg" className="h-5 w-auto" />
             </Link>
           </nav>
         </div>
