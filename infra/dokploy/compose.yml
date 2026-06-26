@@ -218,9 +218,11 @@ services:
       start_period: 20s
     networks:
       - briven
+      - dokploy-network
     labels:
       - 'briven_logs=true'
       - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
       # Public S3 endpoint — browsers PUT/GET with sigv4-presigned URLs the
       # api mints. The api also reaches MinIO internally at http://minio:9000.
       - 'traefik.http.routers.briven-s3.rule=Host(`s3.${BRIVEN_DOMAIN}`)'
@@ -324,9 +326,11 @@ services:
       start_period: 40s
     networks:
       - briven
+      - dokploy-network
     labels:
       - 'briven_logs=true'
       - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
       - 'traefik.http.routers.briven-api.rule=Host(`api.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-api.entrypoints=websecure'
       - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
@@ -394,9 +398,11 @@ services:
       start_period: 40s
     networks:
       - briven
+      - dokploy-network
     labels:
       - 'briven_logs=true'
       - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
       - 'traefik.http.routers.briven-realtime.rule=Host(`realtime.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-realtime.entrypoints=websecure'
       - 'traefik.http.routers.briven-realtime.tls.certresolver=letsencrypt'
@@ -429,9 +435,11 @@ services:
       start_period: 40s
     networks:
       - briven
+      - dokploy-network
     labels:
       - 'briven_logs=true'
       - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
       - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`) || Host(`app.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-web.entrypoints=websecure'
       - 'traefik.http.routers.briven-web.tls.certresolver=letsencrypt'
@@ -458,9 +466,11 @@ services:
       start_period: 40s
     networks:
       - briven
+      - dokploy-network
     labels:
       - 'briven_logs=true'
       - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
       - 'traefik.http.routers.briven-docs.rule=Host(`docs.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-docs.entrypoints=websecure'
       - 'traefik.http.routers.briven-docs.tls.certresolver=letsencrypt'
@@ -487,3 +497,8 @@ networks:
   briven:
     driver: bridge
     name: briven
+  # Dokploy's ingress network — Traefik watches this for routing + TLS.
+  # Routed services (api, realtime, web, docs, s3) attach to it in addition
+  # to the internal `briven` network; DBs/redis/runtime stay internal-only.
+  dokploy-network:
+    external: true
