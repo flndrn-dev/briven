@@ -2,7 +2,7 @@ import { brivenError, NotFoundError } from '@briven/shared';
 
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
-import { getCurrentDeployment } from './deployments.js';
+import { getCurrentDeployment, stripFunctionExt } from './deployments.js';
 import { getPlainEnvForProject } from './project-env.js';
 
 export interface InvokeInput {
@@ -42,8 +42,13 @@ export async function invoke(input: InvokeInput): Promise<InvokeResult> {
   const deployment = await getCurrentDeployment(input.projectId);
   if (!deployment) throw new NotFoundError('deployment', input.projectId);
 
+  // New deployments register bare names. Older ones may have stored the name
+  // with its source extension (e.g. `listNotes.ts`), so normalise BOTH sides
+  // before comparing — this lets an already-deployed `listNotes.ts` resolve
+  // when invoked as `listNotes` without forcing an immediate redeploy.
   const functionNames = (deployment.functionNames as string[] | null) ?? [];
-  if (!functionNames.includes(input.functionName)) {
+  const requestedName = stripFunctionExt(input.functionName);
+  if (!functionNames.some((n) => stripFunctionExt(n) === requestedName)) {
     throw new NotFoundError('function', input.functionName);
   }
 
@@ -67,7 +72,7 @@ export async function invoke(input: InvokeInput): Promise<InvokeResult> {
       headers,
       body: JSON.stringify({
         projectId: input.projectId,
-        functionName: input.functionName,
+        functionName: requestedName,
         deploymentId: deployment.id,
         requestId: input.requestId,
         args: input.args,

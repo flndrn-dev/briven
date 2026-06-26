@@ -1,6 +1,6 @@
 import { brivenError, ValidationError } from '@briven/shared';
 
-import { dataPlaneClient, roleNameFor, schemaNameFor } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 
 /**
  * Studio read-mode services. Phase 2 first slice — table listing only.
@@ -31,27 +31,27 @@ export interface TableSummary {
  * future view needs exact counts it can issue `count(*)` per table.
  */
 export async function listProjectTables(projectId: string): Promise<TableSummary[]> {
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  const rows = (await sql<
-    Array<{ table_name: string; reltuples: number; bytes: number }>
-  >`
-    SELECT
-      c.relname AS table_name,
-      c.reltuples::bigint AS reltuples,
-      pg_total_relation_size(c.oid)::bigint AS bytes
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = ${schema}
-      AND c.relkind = 'r'
-      AND c.relname NOT LIKE '\\_briven\\_%' ESCAPE '\\'
-    ORDER BY c.relname
-  `) as Array<{ table_name: string; reltuples: string | number; bytes: string | number }>;
-  return rows.map((row) => ({
-    name: row.table_name,
-    approxRowCount: Number(row.reltuples) || 0,
-    bytes: Number(row.bytes) || 0,
-  }));
+  return runInProjectDatabase(projectId, async (tx) => {
+    const rows = (await tx.unsafe(
+      `
+      SELECT
+        c.relname AS table_name,
+        c.reltuples::bigint AS reltuples,
+        pg_total_relation_size(c.oid)::bigint AS bytes
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relkind = 'r'
+        AND c.relname NOT LIKE '\\_briven\\_%' ESCAPE '\\'
+      ORDER BY c.relname
+    `,
+    )) as Array<{ table_name: string; reltuples: string | number; bytes: string | number }>;
+    return rows.map((row) => ({
+      name: row.table_name,
+      approxRowCount: Number(row.reltuples) || 0,
+      bytes: Number(row.bytes) || 0,
+    }));
+  });
 }
 
 export interface ColumnInfo {
@@ -91,17 +91,21 @@ async function assertTableExists(projectId: string, tableName: string): Promise<
       tableName,
     });
   }
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  const [row] = await sql<Array<{ exists: boolean }>>`
-    SELECT EXISTS(
-      SELECT 1 FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = ${schema}
-        AND c.relname = ${tableName}
-        AND c.relkind = 'r'
-    ) AS exists
-  `;
+  const row = await runInProjectDatabase(projectId, async (tx) => {
+    const [r] = (await tx.unsafe(
+      `
+      SELECT EXISTS(
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = $1
+          AND c.relkind = 'r'
+      ) AS exists
+    `,
+      [tableName],
+    )) as Array<{ exists: boolean }>;
+    return r;
+  });
   if (!row?.exists) {
     throw new brivenError('not_found', `table not found: ${tableName}`, { status: 404 });
   }
@@ -112,24 +116,13 @@ export async function getTableColumns(
   tableName: string,
 ): Promise<readonly ColumnInfo[]> {
   await assertTableExists(projectId, tableName);
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
   // Single query: information_schema.columns LEFT JOINed against the
   // table's PK column set sourced from pg_index, plus a LEFT JOIN against
   // information_schema's FK metadata so each column row can carry its
   // (table.column) reference if there is one.
-  const rows = (await sql<
-    Array<{
-      column_name: string;
-      data_type: string;
-      is_nullable: 'YES' | 'NO';
-      column_default: string | null;
-      ordinal_position: number;
-      is_primary_key: boolean;
-      fk_table: string | null;
-      fk_column: string | null;
-    }>
-  >`
+  const rows = (await runInProjectDatabase(projectId, async (tx) =>
+    tx.unsafe(
+      `
     WITH pk_cols AS (
       SELECT a.attname AS column_name
       FROM pg_index i
@@ -137,8 +130,8 @@ export async function getTableColumns(
       JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
       WHERE i.indisprimary
-        AND n.nspname = ${schema}
-        AND c.relname = ${tableName}
+        AND n.nspname = 'public'
+        AND c.relname = $1
     ),
     fk_cols AS (
       SELECT
@@ -153,8 +146,8 @@ export async function getTableColumns(
         ON ccu.constraint_name = tc.constraint_name
        AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = ${schema}
-        AND tc.table_name = ${tableName}
+        AND tc.table_schema = 'public'
+        AND tc.table_name = $1
     )
     SELECT
       c.column_name,
@@ -168,9 +161,12 @@ export async function getTableColumns(
     FROM information_schema.columns c
     LEFT JOIN pk_cols pk ON pk.column_name = c.column_name
     LEFT JOIN fk_cols fk ON fk.column_name = c.column_name
-    WHERE c.table_schema = ${schema} AND c.table_name = ${tableName}
+    WHERE c.table_schema = 'public' AND c.table_name = $1
     ORDER BY c.ordinal_position
-  `) as Array<{
+  `,
+      [tableName],
+    ),
+  )) as Array<{
     column_name: string;
     data_type: string;
     is_nullable: string;
@@ -294,7 +290,6 @@ export async function getTableRows(
   await assertTableExists(projectId, tableName);
   const limit = clamp(opts.limit ?? DEFAULT_LIMIT, 1, MAX_LIMIT);
   const offset = Math.max(0, opts.offset ?? 0);
-  const schema = schemaNameFor(projectId);
   const columns = await getTableColumns(projectId, tableName);
   const colNames = new Set(columns.map((c) => c.name));
 
@@ -326,10 +321,11 @@ export async function getTableRows(
   params.push(offset);
   const limitOffset = `LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
-  const sql = dataPlaneClient();
-  const rows = (await sql.unsafe(
-    `SELECT * FROM "${schema}"."${tableName}" ${where} ${orderBy} ${limitOffset}`.replace(/\s+/g, ' ').trim(),
-    params as never[],
+  const rows = (await runInProjectDatabase(projectId, async (tx) =>
+    tx.unsafe(
+      `SELECT * FROM "${tableName}" ${where} ${orderBy} ${limitOffset}`.replace(/\s+/g, ' ').trim(),
+      params as never[],
+    ),
   )) as Array<Record<string, unknown>>;
   const hasMore = rows.length > limit;
   const trimmed = hasMore ? rows.slice(0, limit) : rows;
@@ -432,8 +428,6 @@ export async function updateCell(input: UpdateCellInput): Promise<UpdateCellResu
   }
   assertPrimaryKeyMatches(cols, input.primaryKey);
 
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
   // Param positions: $1 is the SET value, $2..$N+1 are the WHERE clauses.
   // Building the WHERE this way keeps every identifier inside backticks
   // and every value parameter-bound.
@@ -444,11 +438,16 @@ export async function updateCell(input: UpdateCellInput): Promise<UpdateCellResu
     input.value as never,
     ...input.primaryKey.map((p) => p.value as never),
   ];
-  const result = (await sql.unsafe(
-    `UPDATE "${schema}"."${input.tableName}" SET "${input.column}" = $1 WHERE ${whereSql}`,
-    params as unknown as never[],
-  )) as { count?: number } & ReadonlyArray<unknown>;
-  return { affected: typeof result.count === 'number' ? result.count : 0 };
+  // The pg ProjectTx adapter returns the rows array (not a result object with
+  // `.count`), so `RETURNING 1` lets us recover the affected-row count.
+  const rows = await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    return tx.unsafe(
+      `UPDATE "${input.tableName}" SET "${input.column}" = $1 WHERE ${whereSql} RETURNING 1`,
+      params as unknown as never[],
+    );
+  });
+  return { affected: rows.length };
 }
 
 export interface InsertRowInput {
@@ -488,15 +487,16 @@ export async function insertRow(input: InsertRowInput): Promise<InsertRowResult>
     throw new ValidationError('insert requires at least one column', {});
   }
 
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
   const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
   const cols_sql = keys.map((k) => `"${k}"`).join(', ');
   const params = keys.map((k) => input.values[k] as never);
-  const rows = (await sql.unsafe(
-    `INSERT INTO "${schema}"."${input.tableName}" (${cols_sql}) VALUES (${placeholders}) RETURNING *`,
-    params,
-  )) as Array<Record<string, unknown>>;
+  const rows = (await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    return tx.unsafe(
+      `INSERT INTO "${input.tableName}" (${cols_sql}) VALUES (${placeholders}) RETURNING *`,
+      params,
+    );
+  })) as Array<Record<string, unknown>>;
   return { inserted: rows[0] ?? null };
 }
 
@@ -519,18 +519,21 @@ export interface QueryResult {
 }
 
 /**
- * Run an arbitrary SQL statement against the project's schema. Scoped via
- * `SET LOCAL ROLE` to the per-project owner role so the user can only touch
- * their own tables — same isolation the shell-token DSN already enforces.
+ * Run an arbitrary SQL statement against the project's OWN DoltGres database.
+ * Isolation now comes from the database boundary itself — the connection is
+ * bound to `proj_<id>`, so the user can only ever touch their own tables (the
+ * legacy per-project SET LOCAL ROLE scoping is obsolete in the
+ * database-per-project model).
  *
  *  - 5s statement_timeout
- *  - search_path pinned to the project schema + public
- *  - transactional: rolls back if the statement errors
+ *  - search_path pinned to public (the project's own database)
+ *  - transactional via `runInProjectDatabase`: rolls back if the statement
+ *    errors, and `dolt_transaction_commit` makes the COMMIT a real Dolt commit
+ *    for any writes
  *  - audit-logged by the route handler (sql text + elapsed)
  *
  * NB: trusting the user with their own data is fine; this lets them DROP
- * their own tables if they want to. Platform-owned `_briven_*` tables are
- * REVOKEd at provision time so the project role can't touch them.
+ * their own tables if they want to.
  */
 export async function executeQuery(projectId: string, sqlText: string): Promise<QueryResult> {
   if (typeof sqlText !== 'string' || sqlText.trim() === '') {
@@ -539,28 +542,27 @@ export async function executeQuery(projectId: string, sqlText: string): Promise<
   if (sqlText.length > 16 * 1024) {
     throw new ValidationError('sql payload too large', { max: 16 * 1024 });
   }
-  const role = roleNameFor(projectId);
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
   const t0 = Date.now();
 
-  // postgres.js exposes `.begin()` which gives a tagged template + .unsafe
-  // bound to the same physical connection. Everything inside runs in one
-  // tx; throwing rolls it back.
-  const out = (await sql.begin(async (tx) => {
-    await tx.unsafe(`SET LOCAL ROLE "${role}"`);
-    await tx.unsafe(`SET LOCAL search_path TO "${schema}", public`);
+  // `runInProjectDatabase` opens one BEGIN/COMMIT transaction on a connection
+  // bound to the project's own database. `dolt_transaction_commit = 1` is the
+  // first statement so any write the user runs becomes a real Dolt commit
+  // (mirrors apps/runtime/src/db.ts:withProjectTx).
+  const out = (await runInProjectDatabase(projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(`SET LOCAL search_path TO public`);
     await tx.unsafe(`SET LOCAL statement_timeout = '5s'`);
-    const result = (await tx.unsafe(sqlText)) as Array<Record<string, unknown>> & {
-      count?: number;
-      command?: string;
-      columns?: Array<{ name: string; type?: number; parser?: unknown }>;
-    };
+    const result = (await tx.unsafe(sqlText)) as Array<Record<string, unknown>>;
+    const rows = Array.isArray(result) ? [...result] : [];
+    const first = rows[0];
     return {
-      rows: Array.isArray(result) ? [...result] : [],
-      count: typeof result.count === 'number' ? result.count : result.length ?? 0,
-      command: result.command ?? 'UNKNOWN',
-      columns: Array.isArray(result.columns) ? result.columns : [],
+      rows,
+      // The pg ProjectTx adapter returns only the rows array — there is no
+      // `.count`/`.command`/`.columns` like postgres.js exposed. Derive what
+      // we can: row count and column names from the first row's keys.
+      count: rows.length,
+      command: 'UNKNOWN',
+      columns: first ? Object.keys(first).map((name) => ({ name })) : [],
     };
   })) as {
     rows: Array<Record<string, unknown>>;
@@ -571,9 +573,9 @@ export async function executeQuery(projectId: string, sqlText: string): Promise<
 
   const elapsedMs = Date.now() - t0;
 
-  // postgres.js gives us column oids; we don't have the type-name lookup
-  // cheap here. Surface the column name and leave dataType as 'unknown' so
-  // the UI can still render a table. Future slice: join against pg_type.
+  // We don't have a cheap type-name lookup here. Surface the column name and
+  // leave dataType as 'unknown' so the UI can still render a table. Future
+  // slice: join against pg_type.
   const columns = out.columns.map((c) => ({ name: c.name, dataType: 'unknown' }));
 
   return {
@@ -765,7 +767,6 @@ const ON_DELETE_SQL: Record<NonNullable<StudioColumnReference['onDelete']>, stri
 
 function columnDdl(
   spec: StudioColumnSpec,
-  schemaName?: string,
   opts: { suppressInlinePk?: boolean } = {},
 ): string {
   const parts = [`"${spec.name}" ${spec.type}`];
@@ -779,10 +780,12 @@ function columnDdl(
   if (spec.defaultExpr != null && spec.defaultExpr !== '') {
     parts.push(`DEFAULT ${spec.defaultExpr}`);
   }
-  if (spec.references && schemaName) {
+  if (spec.references) {
+    // FK target lives in the same project database — unqualified identifier
+    // resolves to `public`, so no schema prefix is needed.
     const onDelete = ON_DELETE_SQL[spec.references.onDelete ?? 'noAction'];
     parts.push(
-      `REFERENCES "${schemaName}"."${spec.references.table}" ("${spec.references.column}") ON DELETE ${onDelete}`,
+      `REFERENCES "${spec.references.table}" ("${spec.references.column}") ON DELETE ${onDelete}`,
     );
   }
   return parts.join(' ');
@@ -796,16 +799,20 @@ async function assertFkTarget(
   // Self-reference is allowed (e.g. parent_id on comments) — skip the
   // existence probe so brand-new tables can FK to themselves.
   if (ref.table === selfTable) return;
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  const [row] = await sql<Array<{ exists: boolean }>>`
-    SELECT EXISTS(
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = ${schema}
-        AND table_name = ${ref.table}
-        AND column_name = ${ref.column}
-    ) AS exists
-  `;
+  const row = await runInProjectDatabase(projectId, async (tx) => {
+    const [r] = (await tx.unsafe(
+      `
+      SELECT EXISTS(
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = $1
+          AND column_name = $2
+      ) AS exists
+    `,
+      [ref.table, ref.column],
+    )) as Array<{ exists: boolean }>;
+    return r;
+  });
   if (!row?.exists) {
     throw new ValidationError('referenced table.column does not exist', {
       table: ref.table,
@@ -852,13 +859,11 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
     }
   }
 
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
   // Composite PK → table-level constraint; single PK stays inline so the
   // SQL output is unchanged for every non-M2M shape.
   const isComposite = pkCount > 1;
   const colsSql = input.columns
-    .map((c) => columnDdl(c, schema, { suppressInlinePk: isComposite }))
+    .map((c) => columnDdl(c, { suppressInlinePk: isComposite }))
     .join(', ');
   const pkClause = isComposite
     ? `, PRIMARY KEY (${input.columns
@@ -866,7 +871,10 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
         .map((c) => `"${c.name}"`)
         .join(', ')})`
     : '';
-  await sql.unsafe(`CREATE TABLE "${schema}"."${input.tableName}" (${colsSql}${pkClause})`);
+  await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(`CREATE TABLE "${input.tableName}" (${colsSql}${pkClause})`);
+  });
   return { name: input.tableName };
 }
 
@@ -876,9 +884,10 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
  */
 export async function dropTable(projectId: string, tableName: string): Promise<void> {
   await assertTableExists(projectId, tableName);
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  await sql.unsafe(`DROP TABLE "${schema}"."${tableName}"`);
+  await runInProjectDatabase(projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(`DROP TABLE "${tableName}"`);
+  });
 }
 
 /**
@@ -893,12 +902,11 @@ export async function truncateTable(
   cascade = false,
 ): Promise<void> {
   await assertTableExists(projectId, tableName);
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
   const cascadeClause = cascade ? 'CASCADE' : '';
-  await sql.unsafe(
-    `TRUNCATE TABLE "${schema}"."${tableName}" RESTART IDENTITY ${cascadeClause}`,
-  );
+  await runInProjectDatabase(projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(`TRUNCATE TABLE "${tableName}" RESTART IDENTITY ${cascadeClause}`);
+  });
 }
 
 /**
@@ -922,11 +930,12 @@ export async function addColumn(input: {
   if (input.column.references) {
     await assertFkTarget(input.projectId, input.column.references, input.tableName);
   }
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
-  await sql.unsafe(
-    `ALTER TABLE "${schema}"."${input.tableName}" ADD COLUMN ${columnDdl(input.column, schema)}`,
-  );
+  await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(
+      `ALTER TABLE "${input.tableName}" ADD COLUMN ${columnDdl(input.column)}`,
+    );
+  });
 }
 
 export interface RelationshipEdge {
@@ -973,16 +982,8 @@ export async function getFullSchema(projectId: string): Promise<FullSchema> {
 }
 
 export async function listRelationships(projectId: string): Promise<readonly RelationshipEdge[]> {
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  const rows = (await sql<
-    Array<{
-      from_table: string;
-      from_column: string;
-      to_table: string;
-      to_column: string;
-    }>
-  >`
+  const rows = (await runInProjectDatabase(projectId, async (tx) =>
+    tx.unsafe(`
     SELECT
       tc.table_name AS from_table,
       kcu.column_name AS from_column,
@@ -996,9 +997,10 @@ export async function listRelationships(projectId: string): Promise<readonly Rel
       ON ccu.constraint_name = tc.constraint_name
      AND ccu.table_schema = tc.table_schema
     WHERE tc.constraint_type = 'FOREIGN KEY'
-      AND tc.table_schema = ${schema}
+      AND tc.table_schema = 'public'
     ORDER BY tc.table_name, kcu.column_name
-  `) as Array<{
+  `),
+  )) as Array<{
     from_table: string;
     from_column: string;
     to_table: string;
@@ -1034,16 +1036,9 @@ export async function listIndexes(
   tableName: string,
 ): Promise<readonly IndexSummary[]> {
   await assertTableExists(projectId, tableName);
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  const rows = (await sql<
-    Array<{
-      index_name: string;
-      columns: string[];
-      is_unique: boolean;
-      is_primary: boolean;
-    }>
-  >`
+  const rows = (await runInProjectDatabase(projectId, async (tx) =>
+    tx.unsafe(
+      `
     SELECT
       ic.relname AS index_name,
       ARRAY(
@@ -1059,10 +1054,13 @@ export async function listIndexes(
     JOIN pg_class c ON c.oid = i.indrelid
     JOIN pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = ${schema}
-      AND c.relname = ${tableName}
+    WHERE n.nspname = 'public'
+      AND c.relname = $1
     ORDER BY i.indisprimary DESC, ic.relname
-  `) as Array<{
+  `,
+      [tableName],
+    ),
+  )) as Array<{
     index_name: string;
     columns: string[];
     is_unique: boolean;
@@ -1116,13 +1114,14 @@ export async function createIndex(input: CreateIndexInput): Promise<{ name: stri
     throw new ValidationError('invalid index name', { name: indexName });
   }
 
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
   const uniqueClause = input.unique ? 'UNIQUE' : '';
   const colsList = input.columns.map((c) => `"${c}"`).join(', ');
-  await sql.unsafe(
-    `CREATE ${uniqueClause} INDEX "${indexName}" ON "${schema}"."${input.tableName}" (${colsList})`,
-  );
+  await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(
+      `CREATE ${uniqueClause} INDEX "${indexName}" ON "${input.tableName}" (${colsList})`,
+    );
+  });
   return { name: indexName };
 }
 
@@ -1148,9 +1147,10 @@ export async function dropIndex(
   if (target.isPrimary) {
     throw new ValidationError('cannot drop the primary-key index', { index: indexName });
   }
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  await sql.unsafe(`DROP INDEX "${schema}"."${indexName}"`);
+  await runInProjectDatabase(projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(`DROP INDEX "${indexName}"`);
+  });
 }
 
 /**
@@ -1172,11 +1172,10 @@ export async function renameTable(args: {
     });
   }
   if (args.oldName === args.newName) return;
-  const schema = schemaNameFor(args.projectId);
-  const sql = dataPlaneClient();
-  await sql.unsafe(
-    `ALTER TABLE "${schema}"."${args.oldName}" RENAME TO "${args.newName}"`,
-  );
+  await runInProjectDatabase(args.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(`ALTER TABLE "${args.oldName}" RENAME TO "${args.newName}"`);
+  });
 }
 
 /**
@@ -1209,11 +1208,12 @@ export async function renameColumn(args: {
       newName: args.newName,
     });
   }
-  const schema = schemaNameFor(args.projectId);
-  const sql = dataPlaneClient();
-  await sql.unsafe(
-    `ALTER TABLE "${schema}"."${args.tableName}" RENAME COLUMN "${args.oldName}" TO "${args.newName}"`,
-  );
+  await runInProjectDatabase(args.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(
+      `ALTER TABLE "${args.tableName}" RENAME COLUMN "${args.oldName}" TO "${args.newName}"`,
+    );
+  });
 }
 
 export interface AlterColumnInput {
@@ -1262,23 +1262,24 @@ export async function alterColumn(input: AlterColumnInput): Promise<void> {
     });
   }
 
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
-  if (typeof input.notNull === 'boolean' && input.notNull !== !target.nullable) {
-    const clause = input.notNull ? 'SET NOT NULL' : 'DROP NOT NULL';
-    await sql.unsafe(
-      `ALTER TABLE "${schema}"."${input.tableName}" ALTER COLUMN "${input.column}" ${clause}`,
-    );
-  }
-  if (input.defaultExpr === null && target.defaultExpr !== null) {
-    await sql.unsafe(
-      `ALTER TABLE "${schema}"."${input.tableName}" ALTER COLUMN "${input.column}" DROP DEFAULT`,
-    );
-  } else if (typeof input.defaultExpr === 'string' && input.defaultExpr !== '') {
-    await sql.unsafe(
-      `ALTER TABLE "${schema}"."${input.tableName}" ALTER COLUMN "${input.column}" SET DEFAULT ${input.defaultExpr}`,
-    );
-  }
+  await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    if (typeof input.notNull === 'boolean' && input.notNull !== !target.nullable) {
+      const clause = input.notNull ? 'SET NOT NULL' : 'DROP NOT NULL';
+      await tx.unsafe(
+        `ALTER TABLE "${input.tableName}" ALTER COLUMN "${input.column}" ${clause}`,
+      );
+    }
+    if (input.defaultExpr === null && target.defaultExpr !== null) {
+      await tx.unsafe(
+        `ALTER TABLE "${input.tableName}" ALTER COLUMN "${input.column}" DROP DEFAULT`,
+      );
+    } else if (typeof input.defaultExpr === 'string' && input.defaultExpr !== '') {
+      await tx.unsafe(
+        `ALTER TABLE "${input.tableName}" ALTER COLUMN "${input.column}" SET DEFAULT ${input.defaultExpr}`,
+      );
+    }
+  });
 }
 
 /**
@@ -1305,9 +1306,10 @@ export async function dropColumn(input: {
   if (target.isPrimaryKey) {
     throw new ValidationError('cannot drop a primary-key column', { column: input.column });
   }
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
-  await sql.unsafe(`ALTER TABLE "${schema}"."${input.tableName}" DROP COLUMN "${input.column}"`);
+  await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    await tx.unsafe(`ALTER TABLE "${input.tableName}" DROP COLUMN "${input.column}"`);
+  });
 }
 
 /**
@@ -1321,15 +1323,18 @@ export async function deleteRow(input: DeleteRowInput): Promise<DeleteRowResult>
   const cols = await getTableColumns(input.projectId, input.tableName);
   assertPrimaryKeyMatches(cols, input.primaryKey);
 
-  const schema = schemaNameFor(input.projectId);
-  const sql = dataPlaneClient();
   const whereSql = input.primaryKey
     .map((p, i) => `"${p.column}" = $${i + 1}`)
     .join(' AND ');
   const params: ReadonlyArray<never> = input.primaryKey.map((p) => p.value as never);
-  const result = (await sql.unsafe(
-    `DELETE FROM "${schema}"."${input.tableName}" WHERE ${whereSql}`,
-    params as unknown as never[],
-  )) as { count?: number } & ReadonlyArray<unknown>;
-  return { affected: typeof result.count === 'number' ? result.count : 0 };
+  // The pg ProjectTx adapter returns the rows array (not a result object with
+  // `.count`), so `RETURNING 1` lets us recover the affected-row count.
+  const rows = await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    return tx.unsafe(
+      `DELETE FROM "${input.tableName}" WHERE ${whereSql} RETURNING 1`,
+      params as unknown as never[],
+    );
+  });
+  return { affected: rows.length };
 }

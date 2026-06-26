@@ -11,6 +11,29 @@ import {
 } from '../db/schema.js';
 import { publishEvent } from './outbound-webhooks.js';
 
+/**
+ * Source-file extensions a function file may carry. A deployed function's
+ * identity is its bare basename, but callers historically sent (and the
+ * bundle still keys by) the on-disk filename with one of these extensions.
+ */
+const SOURCE_EXTENSIONS = ['.tsx', '.ts', '.mjs', '.cjs', '.js'] as const;
+
+/**
+ * Strip a single trailing source extension from a function name so the
+ * stored/registered name is the bare basename:
+ *   `listNotes.ts`  → `listNotes`
+ *   `my.helper.ts`  → `my.helper`   (only the known extension is removed)
+ *   `listNotes`     → `listNotes`   (already bare — unchanged)
+ * Bundle keys are intentionally NOT run through this — the runtime reads
+ * source from `functions/<name>.ts` and relies on the extension staying.
+ */
+export function stripFunctionExt(name: string): string {
+  for (const ext of SOURCE_EXTENSIONS) {
+    if (name.endsWith(ext)) return name.slice(0, -ext.length);
+  }
+  return name;
+}
+
 export interface CreateDeploymentInput {
   projectId: string;
   triggeredBy: string | null;
@@ -32,7 +55,10 @@ export async function createDeployment(input: CreateDeploymentInput): Promise<De
     schemaDiffSummary: input.schemaDiffSummary ?? null,
     schemaSnapshot: input.schemaSnapshot ?? null,
     functionCount: input.functionCount != null ? String(input.functionCount) : null,
-    functionNames: input.functionNames ? [...input.functionNames] : null,
+    // Register the bare basename as the function's identity. This normalises
+    // every write path (CLI deploy + PATCH /deployments/latest, which derives
+    // names from bundle keys) so an invoke for `listNotes` matches.
+    functionNames: input.functionNames ? input.functionNames.map(stripFunctionExt) : null,
     bundle: input.bundle ? { ...input.bundle } : null,
   };
   const db = getDb();
