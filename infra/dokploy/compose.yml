@@ -46,6 +46,13 @@
 #        -c "UPDATE users SET is_admin = true WHERE id = '...';"
 #   3. Create your first project via the dashboard (provisions a DoltGres DB).
 
+# Explicit project name so compose resources are deterministically `briven_*`
+# (containers already pin container_name: briven-*). Without this, the project
+# name defaults to the parent directory ("dokploy"), which would create
+# `dokploy_*` volumes — confusingly close to the Dokploy platform's own naming
+# and a trap for host-maintenance tooling. Build AND up must share this name.
+name: briven
+
 x-logging: &briven-logging
   driver: json-file
   options:
