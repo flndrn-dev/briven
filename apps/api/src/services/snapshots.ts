@@ -1,19 +1,42 @@
 import { brivenError, ValidationError } from '@briven/shared';
+import pg from 'pg';
 
-import { dataPlaneClient, schemaNameFor } from '../db/data-plane.js';
-
-import { listProjectTables } from './studio.js';
+import { dbNameFor } from '../db/data-plane.js';
+import { env } from '../env.js';
+import { log } from '../lib/logger.js';
 
 /**
- * Snapshots — the non-coder "undo button" on Postgres (the lite stand-in for
- * Dolt's git-for-data until Dolt is production-ready). A snapshot is a
- * point-in-time COPY of every user table in a project's schema, kept in a
- * dedicated `snap_<id>` schema in the same data-plane database. Restore swaps
- * the live data back to the snapshot's.
+ * Snapshots — the non-coder "undo button", now built on DoltGres-native
+ * version control instead of the old schema-clone hack.
  *
- * Pure SQL via the (superuser) data-plane client — no shell, no extra infra.
- * Registry lives in a platform-owned `_briven_snapshots` table inside the
- * project schema (same `_briven_` reserved prefix as migrations/meta).
+ * Each project is its own DoltGres DATABASE (`proj_<id>`) with an independent
+ * commit history. A snapshot is a **Dolt tag** — a stable, named pointer at a
+ * commit — created over a `DOLT_COMMIT` of the project's current state:
+ *
+ *   - create  → ensure a commit of the working set, then `DOLT_TAG` it.
+ *   - list    → read `dolt_tags` (one row per snapshot).
+ *   - restore → `DOLT_RESET('--hard', tag)` rolls the working data back to the
+ *               snapshot. Tags survive resets, so restoring to a *different*
+ *               snapshot afterwards ("undo of the undo") always works.
+ *   - diff    → `DOLT_DIFF_SUMMARY` / `DOLT_DIFF` between the snapshot and the
+ *               current (WORKING) data.
+ *   - delete  → `DOLT_TAG('-d', tag)`.
+ *
+ * Why tags and not a registry table: a `_briven_snapshots` table would itself
+ * be versioned data inside the project's branch, so `DOLT_RESET('--hard', …)`
+ * would roll the registry back too and lose snapshot rows. `dolt_tags` is Dolt
+ * system metadata — it is NOT affected by a hard reset (verified against the
+ * live DoltGres build) — so all snapshot bookkeeping lives there. Per-snapshot
+ * metadata (the human label, the auto/manual flag, the table count) is stored
+ * as a small JSON blob in the tag's message.
+ *
+ * Connection model: DOLT_* procedures are run in autocommit on a dedicated
+ * per-project `pg` pool (NOT `runInProjectDatabase`, which wraps everything in
+ * one BEGIN/COMMIT). The reason is `DOLT_COMMIT` raises "nothing to commit"
+ * when the working set is clean; in Postgres a raised statement aborts the
+ * whole surrounding transaction, so we must pre-check `dolt_status` and run
+ * each procedure as its own implicitly-committed statement. The `pg` driver is
+ * required here (postgres.js desyncs against DoltGres — see ADR 0001).
  */
 
 export const SNAP_ID_RE = /^s[0-9a-f]{24}$/;
@@ -22,6 +45,16 @@ function newSnapId(): string {
   const buf = new Uint8Array(12);
   crypto.getRandomValues(buf);
   return 's' + Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Per-snapshot metadata we encode into the Dolt tag message as JSON. */
+interface TagMeta {
+  /** Human label. */
+  readonly l: string;
+  /** Auto (worker-created) vs manual. */
+  readonly a: boolean;
+  /** User-table count captured at create time. */
+  readonly t: number;
 }
 
 export interface SnapshotSummary {
@@ -35,36 +68,120 @@ export interface SnapshotSummary {
    * are ever pruned by retention — manual ones are kept until deleted.
    */
   readonly auto: boolean;
+  /** The Dolt commit hash this snapshot's tag points at. */
+  readonly commitHash: string;
+}
+
+// ---------------------------------------------------------------------------
+// Per-project DoltGres connection (autocommit) — see file header for why this
+// is a dedicated pool rather than runInProjectDatabase.
+// ---------------------------------------------------------------------------
+
+const _pools = new Map<string, pg.Pool>();
+
+function poolForDb(dbName: string): pg.Pool {
+  const url = env.BRIVEN_DATA_PLANE_URL;
+  if (!url) {
+    throw new Error('BRIVEN_DATA_PLANE_URL is not configured');
+  }
+  let pool = _pools.get(dbName);
+  if (!pool) {
+    const base = new URL(url);
+    pool = new pg.Pool({
+      host: base.hostname,
+      port: Number(base.port || 5432),
+      user: decodeURIComponent(base.username),
+      password: decodeURIComponent(base.password),
+      database: dbName,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+    _pools.set(dbName, pool);
+    log.info('snapshot_db_pool_opened', { dbName });
+  }
+  return pool;
+}
+
+/** Run one autocommit statement against a project's DoltGres database. */
+async function q(
+  dbName: string,
+  text: string,
+  params?: readonly unknown[],
+): Promise<Record<string, unknown>[]> {
+  const pool = poolForDb(dbName);
+  const res = await pool.query(text, params ? [...params] : undefined);
+  return res.rows as Record<string, unknown>[];
+}
+
+/** Close every cached snapshot pool (call on shutdown if wired). */
+export async function closeSnapshotPools(): Promise<void> {
+  const pools = Array.from(_pools.values());
+  _pools.clear();
+  await Promise.all(pools.map((p) => p.end()));
+}
+
+/** The first column value of the first row (DOLT_* funcs return one scalar). */
+function scalar(rows: Record<string, unknown>[]): string {
+  const row = rows[0];
+  if (!row) return '';
+  const v = Object.values(row)[0];
+  return v == null ? '' : String(v);
+}
+
+/** Some DOLT_* funcs wrap their result like `{hash}`; strip the braces. */
+function unwrap(v: string): string {
+  return v.startsWith('{') && v.endsWith('}') ? v.slice(1, -1) : v;
+}
+
+/** Count the project's user tables (public schema, excluding `_briven_*`). */
+async function countUserTables(dbName: string): Promise<number> {
+  const rows = await q(
+    dbName,
+    `SELECT count(*)::int AS n
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        AND table_name NOT LIKE '_briven_%'`,
+  );
+  return Number(rows[0]?.n) || 0;
+}
+
+/** True when the working set has uncommitted changes (`dolt_status` rows). */
+async function isDirty(dbName: string): Promise<boolean> {
+  const rows = await q(dbName, `SELECT count(*)::int AS n FROM dolt_status`);
+  return (Number(rows[0]?.n) || 0) > 0;
+}
+
+function parseMeta(message: string, fallbackLabel: string): TagMeta {
+  try {
+    const m = JSON.parse(message) as Partial<TagMeta>;
+    if (m && typeof m === 'object') {
+      return {
+        l: typeof m.l === 'string' ? m.l : fallbackLabel,
+        a: m.a === true,
+        t: Number(m.t) || 0,
+      };
+    }
+  } catch {
+    // Not our JSON (e.g. a hand-made tag) — fall through to defaults.
+  }
+  return { l: fallbackLabel, a: false, t: 0 };
+}
+
+function toIso(v: unknown): string {
+  if (v instanceof Date) return v.toISOString();
+  // DoltGres returns tag dates as 'YYYY-MM-DD HH:MM:SS.mmm' (UTC).
+  const s = String(v ?? '');
+  const d = new Date(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  return Number.isNaN(d.getTime()) ? s : d.toISOString();
 }
 
 /**
- * Lazily create (and forward-migrate) the per-project snapshot registry
- * table. The `auto` column distinguishes worker-created save-points from
- * manual ones; it's added idempotently so registries created before the
- * auto-snapshot feature gain it on first touch.
- */
-async function ensureRegistry(sql: ReturnType<typeof dataPlaneClient>, schema: string): Promise<void> {
-  await sql.unsafe(`
-    CREATE TABLE IF NOT EXISTS "${schema}"."_briven_snapshots" (
-      id text PRIMARY KEY,
-      name text NOT NULL,
-      snap_schema text NOT NULL,
-      table_count integer NOT NULL DEFAULT 0,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      auto boolean NOT NULL DEFAULT false
-    )
-  `);
-  // Forward-migrate registries created before the `auto` column existed.
-  await sql.unsafe(`
-    ALTER TABLE "${schema}"."_briven_snapshots"
-      ADD COLUMN IF NOT EXISTS auto boolean NOT NULL DEFAULT false
-  `);
-}
-
-/**
- * Take a snapshot of every user table in the project. Copies each table's
- * structure + rows into a fresh `snap_<id>` schema. Foreign keys are NOT
- * copied by `LIKE`, so the snapshot tables are independent data holders.
+ * Take a snapshot of the project's current data: commit the working set (if
+ * dirty), then create a Dolt tag pointing at HEAD. The tag name is the
+ * snapshot id (`s` + 24 hex, matching SNAP_ID_RE); the label/auto/tableCount
+ * are stored in the tag's message.
  */
 export async function createSnapshot(
   projectId: string,
@@ -73,170 +190,152 @@ export async function createSnapshot(
 ): Promise<SnapshotSummary> {
   const auto = options.auto ?? false;
   const cleanName = (name ?? '').trim().slice(0, 80) || 'snapshot';
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  await ensureRegistry(sql, schema);
+  const dbName = dbNameFor(projectId);
 
-  const tables = await listProjectTables(projectId);
-  const snapId = newSnapId();
-  const snap = `snap_${snapId}`;
+  const tableCount = await countUserTables(dbName);
 
-  await sql.unsafe(`CREATE SCHEMA "${snap}"`);
-  for (const t of tables) {
-    await sql.unsafe(`CREATE TABLE "${snap}"."${t.name}" (LIKE "${schema}"."${t.name}")`);
-    await sql.unsafe(`INSERT INTO "${snap}"."${t.name}" SELECT * FROM "${schema}"."${t.name}"`);
+  // Only commit when there is something to commit — DOLT_COMMIT raises
+  // "nothing to commit" on a clean working set, which would otherwise surface
+  // as an error to the caller.
+  if (await isDirty(dbName)) {
+    await q(dbName, `SELECT DOLT_COMMIT('-A', '-m', $1)`, [`snapshot: ${cleanName}`]);
   }
 
-  const createdAt = new Date().toISOString();
-  await sql.unsafe(
-    `INSERT INTO "${schema}"."_briven_snapshots" (id, name, snap_schema, table_count, created_at, auto)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [snapId, cleanName, snap, tables.length, createdAt, auto],
-  );
+  const commitHash = unwrap(scalar(await q(dbName, `SELECT DOLT_HASHOF('HEAD')`)));
 
-  return { id: snapId, name: cleanName, tableCount: tables.length, createdAt, auto };
+  const snapId = newSnapId();
+  const meta: TagMeta = { l: cleanName, a: auto, t: tableCount };
+  await q(dbName, `SELECT DOLT_TAG($1, '-m', $2, 'HEAD')`, [snapId, JSON.stringify(meta)]);
+
+  return {
+    id: snapId,
+    name: cleanName,
+    tableCount,
+    createdAt: new Date().toISOString(),
+    auto,
+    commitHash,
+  };
+}
+
+/** Read a project's snapshot tags (our `s…` ids only), newest first. */
+async function readSnapshotTags(dbName: string): Promise<SnapshotSummary[]> {
+  const rows = await q(
+    dbName,
+    `SELECT tag_name, tag_hash, message, date FROM dolt_tags ORDER BY date DESC`,
+  );
+  const out: SnapshotSummary[] = [];
+  for (const r of rows) {
+    const id = String(r.tag_name ?? '');
+    if (!SNAP_ID_RE.test(id)) continue; // ignore non-snapshot tags
+    const meta = parseMeta(String(r.message ?? ''), id);
+    out.push({
+      id,
+      name: meta.l,
+      tableCount: meta.t,
+      createdAt: toIso(r.date),
+      auto: meta.a,
+      commitHash: String(r.tag_hash ?? ''),
+    });
+  }
+  return out;
 }
 
 /** List a project's snapshots, newest first. */
 export async function listSnapshots(projectId: string): Promise<SnapshotSummary[]> {
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  await ensureRegistry(sql, schema);
-  const rows = (await sql.unsafe(
-    `SELECT id, name, table_count, created_at, auto
-     FROM "${schema}"."_briven_snapshots" ORDER BY created_at DESC`,
-  )) as Array<{
-    id: string;
-    name: string;
-    table_count: number | string;
-    created_at: Date | string;
-    auto: boolean;
-  }>;
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    tableCount: Number(r.table_count) || 0,
-    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-    auto: r.auto === true,
-  }));
+  return readSnapshotTags(dbNameFor(projectId));
 }
 
-/** A snapshot row tagged with the project (schema) it belongs to. */
+/** A snapshot row tagged with the project (database) it belongs to. */
 export interface CrossProjectSnapshot extends SnapshotSummary {
-  /** The data-plane schema (`proj_<id>`) the snapshot was found in. */
+  /** The data-plane database (`proj_<id>`) the snapshot was found in. */
   readonly schema: string;
 }
 
 /**
+ * Open an admin connection to the data plane's default database so we can
+ * enumerate `proj_*` databases. Reuses the per-db pool cache keyed by the
+ * URL's own database name.
+ */
+function adminDbName(): string {
+  const url = env.BRIVEN_DATA_PLANE_URL;
+  if (!url) throw new Error('BRIVEN_DATA_PLANE_URL is not configured');
+  const path = new URL(url).pathname.replace(/^\//, '');
+  return path || 'postgres';
+}
+
+/**
  * Operator-facing read of recent snapshots ACROSS every project, newest
- * first. Snapshots have no global table — each project keeps its own
- * `_briven_snapshots` registry inside its `proj_<id>` data-plane schema —
- * so this composes one bounded query instead of an unbounded fan-out:
- *
- *   1. One catalog read enumerates the schemas that actually own a
- *      `_briven_snapshots` table (only `proj_*` schemas qualify; the
- *      pattern is anchored so a customer table can't masquerade as one).
- *   2. A single `UNION ALL` reads at most `limit` rows from each, then a
- *      global ORDER BY + LIMIT trims to the most recent `limit` overall.
- *
- * That's two round-trips total, both capped — no per-project loop, no
- * unbounded scan. Identifiers come straight from `pg_catalog`, never from
- * user input, so interpolating them is safe. When the data plane isn't
- * configured (local dev) or no project has ever taken a snapshot, returns
- * an empty list rather than throwing.
+ * first. Under database-per-project each project keeps its own `dolt_tags`,
+ * so this enumerates the `proj_*` databases (one catalog read) then reads
+ * each project's snapshot tags. Per-database failures are skipped so one bad
+ * project can't sink the whole list. When the data plane isn't configured
+ * (local dev), returns an empty list rather than throwing.
  */
 export async function listRecentSnapshotsAcrossProjects(
   limit = 200,
 ): Promise<CrossProjectSnapshot[]> {
   const cap = Math.min(Math.max(limit, 1), 1000);
-  const sql = dataPlaneClient();
+  if (!env.BRIVEN_DATA_PLANE_URL) return [];
 
-  // Schemas that own a `_briven_snapshots` registry. Restricted to our
-  // provisioned `proj_*` namespaces so nothing else can be swept in.
-  const schemaRows = (await sql.unsafe(
-    `SELECT n.nspname AS schema
-       FROM pg_class c
-       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE c.relname = '_briven_snapshots'
-        AND c.relkind = 'r'
-        AND n.nspname LIKE 'proj\\_%' ESCAPE '\\'`,
-  )) as Array<{ schema: string }>;
+  let dbRows: Record<string, unknown>[];
+  try {
+    dbRows = await q(
+      adminDbName(),
+      `SELECT datname FROM pg_database WHERE left(datname, 5) = 'proj_' ORDER BY datname`,
+    );
+  } catch (err) {
+    log.warn('snapshot_cross_project_enumerate_failed', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
 
-  if (schemaRows.length === 0) return [];
+  const all: CrossProjectSnapshot[] = [];
+  for (const row of dbRows) {
+    const dbName = String(row.datname ?? '');
+    if (!dbName) continue;
+    try {
+      const snaps = await readSnapshotTags(dbName);
+      for (const s of snaps) all.push({ ...s, schema: dbName });
+    } catch (err) {
+      // Skip projects whose DB can't be read (e.g. mid-teardown).
+      log.warn('snapshot_cross_project_read_failed', {
+        dbName,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
-  // One capped SELECT per schema, UNION ALL'd, then trimmed globally. Each
-  // leg is bounded by `cap` so a single large project can't dominate the
-  // scan; the outer LIMIT keeps the response itself bounded.
-  const legs = schemaRows.map(
-    (r) =>
-      `(SELECT '${r.schema}'::text AS schema, id, name, table_count, created_at, auto
-          FROM "${r.schema}"."_briven_snapshots"
-         ORDER BY created_at DESC
-         LIMIT ${cap})`,
-  );
-  const unioned = legs.join('\nUNION ALL\n');
-  const rows = (await sql.unsafe(
-    `SELECT schema, id, name, table_count, created_at, auto
-       FROM (${unioned}) all_snaps
-      ORDER BY created_at DESC
-      LIMIT ${cap}`,
-  )) as Array<{
-    schema: string;
-    id: string;
-    name: string;
-    table_count: number | string;
-    created_at: Date | string;
-    auto: boolean;
-  }>;
-
-  return rows.map((r) => ({
-    schema: r.schema,
-    id: r.id,
-    name: r.name,
-    tableCount: Number(r.table_count) || 0,
-    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-    auto: r.auto === true,
-  }));
+  all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  return all.slice(0, cap);
 }
 
 /**
  * Prune automatic snapshots beyond a retention count, oldest first. Only
- * rows with `auto = true` are ever considered — manual snapshots are never
+ * snapshots flagged `auto` are ever considered — manual ones are never
  * counted or deleted. Returns the ids of the snapshots that were pruned.
- *
- * Idempotent: when there are <= keepCount auto snapshots this is a no-op.
- * Deletion reuses deleteSnapshot, so each pruned snapshot's schema is
- * dropped and its registry row removed in the same way a manual delete
- * would do it.
  */
 export async function pruneAutoSnapshots(
   projectId: string,
   keepCount: number,
 ): Promise<{ pruned: string[] }> {
   const keep = Math.max(0, Math.floor(keepCount));
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  await ensureRegistry(sql, schema);
-
-  // Auto snapshots, newest first. We keep the first `keep` and drop the rest.
-  const rows = (await sql.unsafe(
-    `SELECT id FROM "${schema}"."_briven_snapshots"
-      WHERE auto = true
-      ORDER BY created_at DESC`,
-  )) as Array<{ id: string }>;
-
-  const doomed = rows.slice(keep).map((r) => r.id);
+  const dbName = dbNameFor(projectId);
+  const snaps = (await readSnapshotTags(dbName)).filter((s) => s.auto);
+  // readSnapshotTags is newest-first; keep the first `keep`, drop the rest.
+  const doomed = snaps.slice(keep).map((s) => s.id);
   for (const id of doomed) {
-    await deleteSnapshot(projectId, id);
+    await q(dbName, `SELECT DOLT_TAG('-d', $1)`, [id]);
   }
   return { pruned: doomed };
 }
 
 /**
- * Restore the project's data to a snapshot. For every table captured in the
- * snapshot that still exists live, TRUNCATE + re-INSERT from the snapshot.
- * Runs in one transaction with FK/trigger checks disabled (superuser) so
- * table order doesn't matter and the restore is atomic.
+ * Restore the project's data to a snapshot via `DOLT_RESET('--hard', tag)`.
+ * Because every write to the project auto-commits, the next change after a
+ * restore commits forward from here; and since the snapshot tags themselves
+ * survive the reset, restoring to a different snapshot afterwards ("undo of
+ * the undo") always works. Returns the user-table count after the restore.
  */
 export async function restoreSnapshot(
   projectId: string,
@@ -245,52 +344,23 @@ export async function restoreSnapshot(
   if (!SNAP_ID_RE.test(snapId)) {
     throw new ValidationError('invalid snapshot id', { snapId });
   }
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
+  const dbName = dbNameFor(projectId);
 
-  const meta = (await sql.unsafe(
-    `SELECT snap_schema FROM "${schema}"."_briven_snapshots" WHERE id = $1`,
-    [snapId],
-  )) as Array<{ snap_schema: string }>;
-  if (!meta[0]) {
+  const exists = await q(dbName, `SELECT 1 AS ok FROM dolt_tags WHERE tag_name = $1`, [snapId]);
+  if (!exists[0]) {
     throw new brivenError('not_found', `snapshot not found: ${snapId}`, { status: 404 });
   }
-  const snap = meta[0].snap_schema;
 
-  const snapTables = (await sql.unsafe(
-    `SELECT c.relname AS name FROM pg_class c
-       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = $1 AND c.relkind = 'r'`,
-    [snap],
-  )) as Array<{ name: string }>;
-
-  let restored = 0;
-  await sql.begin(async (tx) => {
-    // Disable FK/trigger enforcement for a clean, order-independent restore.
-    await tx.unsafe(`SET LOCAL session_replication_role = replica`);
-    for (const t of snapTables) {
-      const live = (await tx.unsafe(
-        `SELECT 1 AS ok FROM pg_class c
-           JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r'`,
-        [schema, t.name],
-      )) as Array<{ ok: number }>;
-      if (!live[0]) continue; // table was dropped since the snapshot — skip
-      await tx.unsafe(`TRUNCATE "${schema}"."${t.name}"`);
-      await tx.unsafe(`INSERT INTO "${schema}"."${t.name}" SELECT * FROM "${snap}"."${t.name}"`);
-      restored++;
-    }
-  });
-
+  await q(dbName, `SELECT DOLT_RESET('--hard', $1)`, [snapId]);
+  const restored = await countUserTables(dbName);
   return { restored };
 }
 
 /**
- * Maximum rows examined per table when diffing. Snapshots can hold large
- * tables; we never stream unbounded data into a diff response. Both the live
- * and snapshot side are read in PK order and capped at this many rows. When a
- * table has more than this on either side, the table's row diff is marked
- * `truncated` so the UI can say "showing the first N rows".
+ * Maximum rows examined per table when diffing — retained for API shape and
+ * reported back so the UI can phrase "showing the first N rows". DoltGres
+ * computes the row delta server-side, so this is an examination ceiling, not a
+ * hard cut.
  */
 const DIFF_ROW_CAP = 1000;
 
@@ -301,15 +371,15 @@ export interface ColumnDiff {
 }
 
 export interface TableRowDiff {
-  /** Rows present live but not in the snapshot (matched by PK). */
+  /** Rows present live but not in the snapshot. */
   readonly added: number;
-  /** Rows present in the snapshot but not live (matched by PK). */
+  /** Rows present in the snapshot but not live. */
   readonly removed: number;
-  /** Rows present on both sides whose non-PK contents differ. */
+  /** Rows present on both sides whose contents differ. */
   readonly changed: number;
-  /** Row count on the live side (capped sample size, see `truncated`). */
+  /** Row count on the live side. */
   readonly liveRowCount: number;
-  /** Row count on the snapshot side (capped sample size, see `truncated`). */
+  /** Row count on the snapshot side. */
   readonly snapshotRowCount: number;
   /** True when either side exceeded DIFF_ROW_CAP and the diff is partial. */
   readonly truncated: boolean;
@@ -318,16 +388,13 @@ export interface TableRowDiff {
 /** Per-table diff entry: schema delta + (optional) row delta. */
 export interface TableDiff {
   readonly name: string;
-  /** Columns present live but absent from the snapshot copy. */
+  /** Columns present live but absent from the snapshot. */
   readonly columnsAdded: readonly ColumnDiff[];
-  /** Columns present in the snapshot copy but absent live. */
+  /** Columns present in the snapshot but absent live. */
   readonly columnsRemoved: readonly ColumnDiff[];
-  /**
-   * Row-level delta. Null when the table has no primary key (we can't match
-   * rows reliably without one) — `noPrimaryKey` is then true.
-   */
+  /** Row-level delta. Null when it couldn't be computed. */
   readonly rows: TableRowDiff | null;
-  /** True when row diffing was skipped because the table has no primary key. */
+  /** True when row diffing was skipped (kept for API shape). */
   readonly noPrimaryKey: boolean;
 }
 
@@ -339,192 +406,181 @@ export interface SnapshotDiff {
   readonly tablesAdded: readonly string[];
   /** Tables captured in the snapshot but since dropped live. */
   readonly tablesRemoved: readonly string[];
-  /** Per-table diffs for tables present on BOTH sides. */
+  /** Per-table diffs for tables present on BOTH sides but changed. */
   readonly tables: readonly TableDiff[];
   /** The per-table row examination cap (so the UI can phrase truncation). */
   readonly rowCap: number;
 }
 
-type ColRow = { column_name: string; data_type: string; is_pk: boolean };
+/** Strip a leading `public.` from a Dolt table name. */
+function bareTable(name: string): string {
+  return name.startsWith('public.') ? name.slice('public.'.length) : name;
+}
 
-/** Read columns + PK membership for one table in one schema. Read-only. */
-async function readColumns(
-  sql: ReturnType<typeof dataPlaneClient>,
-  schema: string,
-  table: string,
-): Promise<ColRow[]> {
-  return (await sql.unsafe(
-    `
-    WITH pk_cols AS (
-      SELECT a.attname AS column_name
-      FROM pg_index i
-      JOIN pg_class c ON c.oid = i.indrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
-      WHERE i.indisprimary AND n.nspname = $1 AND c.relname = $2
-    )
-    SELECT
-      c.column_name,
-      c.data_type,
-      (pk.column_name IS NOT NULL) AS is_pk
-    FROM information_schema.columns c
-    LEFT JOIN pk_cols pk ON pk.column_name = c.column_name
-    WHERE c.table_schema = $1 AND c.table_name = $2
-    ORDER BY c.ordinal_position
-  `,
-    [schema, table],
-  )) as ColRow[];
+/** A function-arg string literal, single-quotes doubled. */
+function lit(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
 }
 
 /**
- * Compute the row-level delta for one table present on both sides, matched by
- * primary key. Reads at most DIFF_ROW_CAP rows per side (ordered by PK) and
- * compares the full row JSON for "changed". Pure read — never writes. The
- * `pkCols` are validated identifiers (real column names from the catalog), so
- * interpolating them is safe; the schema/table names are likewise catalog-
- * sourced. Everything else is structural SQL with no user values.
+ * Best-effort parse of column name → type from a Dolt `CREATE TABLE` body.
+ * `AS OF` is unsupported on information_schema in this DoltGres build, so the
+ * snapshot-side schema is read from DOLT_SCHEMA_DIFF's create statements.
  */
-async function diffRows(
-  sql: ReturnType<typeof dataPlaneClient>,
-  liveSchema: string,
-  snapSchema: string,
-  table: string,
-  pkCols: readonly string[],
-): Promise<TableRowDiff> {
-  const orderBy = pkCols.map((c) => `"${c}"`).join(', ');
-  const keyExpr = pkCols.map((c) => `"${c}"::text`).join(` || '' || `);
-
-  // Pull a capped, PK-ordered sample from each side. We read the whole row as
-  // JSON so we can detect content changes without enumerating every column,
-  // and a separate stable key built from the PK columns for matching.
-  const read = async (schema: string) =>
-    (await sql.unsafe(
-      `SELECT (${keyExpr}) AS _k, to_jsonb(t.*) AS _row
-         FROM "${schema}"."${table}" t
-        ORDER BY ${orderBy}
-        LIMIT ${DIFF_ROW_CAP + 1}`,
-    )) as Array<{ _k: string; _row: Record<string, unknown> }>;
-
-  const liveRaw = await read(liveSchema);
-  const snapRaw = await read(snapSchema);
-  const truncated = liveRaw.length > DIFF_ROW_CAP || snapRaw.length > DIFF_ROW_CAP;
-  const live = truncated ? liveRaw.slice(0, DIFF_ROW_CAP) : liveRaw;
-  const snap = truncated ? snapRaw.slice(0, DIFF_ROW_CAP) : snapRaw;
-
-  const snapByKey = new Map(snap.map((r) => [r._k, r._row]));
-  const liveKeys = new Set(live.map((r) => r._k));
-
-  let added = 0;
-  let changed = 0;
-  for (const r of live) {
-    const prior = snapByKey.get(r._k);
-    if (prior === undefined) {
-      added++;
-    } else if (JSON.stringify(prior) !== JSON.stringify(r._row)) {
-      changed++;
+function parseCreateColumns(stmt: string): Map<string, string> {
+  const cols = new Map<string, string>();
+  if (!stmt) return cols;
+  const open = stmt.indexOf('(');
+  const close = stmt.lastIndexOf(')');
+  if (open < 0 || close <= open) return cols;
+  const body = stmt.slice(open + 1, close);
+  const segs: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of body) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
+      segs.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
     }
   }
-  let removed = 0;
-  for (const r of snap) {
-    if (!liveKeys.has(r._k)) removed++;
+  if (cur.trim()) segs.push(cur);
+  const constraintKw = /^(primary|key|unique|constraint|foreign|index|check)\b/i;
+  for (const seg of segs) {
+    const t = seg.trim();
+    if (!t || constraintKw.test(t)) continue;
+    const m = t.match(/^["`]?([A-Za-z_][A-Za-z0-9_]*)["`]?\s+(.+)$/s);
+    const colName = m?.[1];
+    const colType = m?.[2];
+    if (colName && colType) cols.set(colName, colType.trim().replace(/\s+/g, ' '));
   }
-
-  return {
-    added,
-    removed,
-    changed,
-    liveRowCount: live.length,
-    snapshotRowCount: snap.length,
-    truncated,
-  };
+  return cols;
 }
 
 /**
- * Compare the CURRENT project schema (`proj_<id>`) against a snapshot schema
- * (`snap_<id>`) and return a structured, capped diff: tables added/removed,
- * per-table columns added/removed, and per-table row delta matched by primary
- * key. Strictly read-only — never writes to either schema. Row examination is
- * capped at DIFF_ROW_CAP per table per side; tables without a primary key get
- * `noPrimaryKey: true` and no row delta (we can't match rows safely).
+ * Compare a snapshot against the project's CURRENT (WORKING) data and return a
+ * structured diff: tables added/removed, per-table columns added/removed, and
+ * per-table row delta (added/removed/changed). Strictly read-only. Built on
+ * `DOLT_DIFF_SUMMARY` (table/row presence) and `DOLT_DIFF` (per-row delta).
  */
 export async function diffSnapshot(projectId: string, snapId: string): Promise<SnapshotDiff> {
   if (!SNAP_ID_RE.test(snapId)) {
     throw new ValidationError('invalid snapshot id', { snapId });
   }
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  await ensureRegistry(sql, schema);
+  const dbName = dbNameFor(projectId);
 
-  const meta = (await sql.unsafe(
-    `SELECT name, snap_schema, created_at FROM "${schema}"."_briven_snapshots" WHERE id = $1`,
-    [snapId],
-  )) as Array<{ name: string; snap_schema: string; created_at: Date | string }>;
-  if (!meta[0]) {
+  const tag = (await q(dbName, `SELECT tag_hash, message, date FROM dolt_tags WHERE tag_name = $1`, [
+    snapId,
+  ])) as Array<{ tag_hash?: unknown; message?: unknown; date?: unknown }>;
+  if (!tag[0]) {
     throw new brivenError('not_found', `snapshot not found: ${snapId}`, { status: 404 });
   }
-  const snap = meta[0].snap_schema;
-  const snapshotCreatedAt =
-    meta[0].created_at instanceof Date
-      ? meta[0].created_at.toISOString()
-      : String(meta[0].created_at);
+  const meta = parseMeta(String(tag[0].message ?? ''), snapId);
+  const snapshotCreatedAt = toIso(tag[0].date);
 
-  // User tables on each side (skip platform-owned `_briven_*`). The snapshot
-  // schema only ever holds copies of user tables, but we filter both for
-  // symmetry and safety.
-  const tablesIn = async (s: string) =>
-    (
-      (await sql.unsafe(
-        `SELECT c.relname AS name FROM pg_class c
-           JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = $1 AND c.relkind = 'r'
-            AND c.relname NOT LIKE '\\_briven\\_%' ESCAPE '\\'
-          ORDER BY c.relname`,
-        [s],
-      )) as Array<{ name: string }>
-    ).map((r) => r.name);
+  // Table-level presence: from = snapshot tag, to = WORKING (live). The tag id
+  // is SNAP_ID_RE-validated, so interpolating it into the function call is
+  // safe.
+  const summary = await q(
+    dbName,
+    `SELECT from_table_name, to_table_name, diff_type, schema_change
+       FROM DOLT_DIFF_SUMMARY(${lit(snapId)}, 'WORKING')`,
+  );
 
-  const liveTables = await tablesIn(schema);
-  const snapTables = await tablesIn(snap);
-  const liveSet = new Set(liveTables);
-  const snapSet = new Set(snapTables);
-
-  const tablesAdded = liveTables.filter((t) => !snapSet.has(t));
-  const tablesRemoved = snapTables.filter((t) => !liveSet.has(t));
-  const common = liveTables.filter((t) => snapSet.has(t));
+  const tablesAdded: string[] = [];
+  const tablesRemoved: string[] = [];
+  const changedTables: { name: string; schemaChange: boolean }[] = [];
+  for (const r of summary) {
+    const type = String(r.diff_type ?? '');
+    const to = bareTable(String(r.to_table_name ?? ''));
+    const from = bareTable(String(r.from_table_name ?? ''));
+    if (type === 'added') tablesAdded.push(to || from);
+    else if (type === 'removed') tablesRemoved.push(from || to);
+    else changedTables.push({ name: to || from, schemaChange: String(r.schema_change) === '1' });
+  }
 
   const tables: TableDiff[] = [];
-  for (const table of common) {
-    const liveCols = await readColumns(sql, schema, table);
-    const snapCols = await readColumns(sql, snap, table);
-    const liveColSet = new Set(liveCols.map((c) => c.column_name));
-    const snapColSet = new Set(snapCols.map((c) => c.column_name));
+  for (const { name, schemaChange } of changedTables) {
+    // Row delta, grouped by Dolt's diff_type.
+    let added = 0;
+    let removed = 0;
+    let changed = 0;
+    try {
+      const rows = await q(
+        dbName,
+        `SELECT diff_type, count(*)::int AS n
+           FROM DOLT_DIFF(${lit(snapId)}, 'WORKING', ${lit(name)})
+          GROUP BY diff_type`,
+      );
+      for (const r of rows) {
+        const n = Number(r.n) || 0;
+        const t = String(r.diff_type ?? '');
+        if (t === 'added') added = n;
+        else if (t === 'removed') removed = n;
+        else if (t === 'modified') changed = n;
+      }
+    } catch (err) {
+      log.warn('snapshot_diff_rows_failed', {
+        dbName,
+        table: name,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
 
-    const columnsAdded: ColumnDiff[] = liveCols
-      .filter((c) => !snapColSet.has(c.column_name))
-      .map((c) => ({ name: c.column_name, dataType: c.data_type }));
-    const columnsRemoved: ColumnDiff[] = snapCols
-      .filter((c) => !liveColSet.has(c.column_name))
-      .map((c) => ({ name: c.column_name, dataType: c.data_type }));
+    const liveRowCount = await safeCount(dbName, `SELECT count(*)::int AS n FROM "${name}"`);
+    const snapshotRowCount = await safeCount(
+      dbName,
+      `SELECT count(*)::int AS n FROM "${name}" AS OF ${lit(snapId)}`,
+    );
 
-    // Match rows by the LIVE table's PK. If the live PK columns aren't all
-    // present in the snapshot copy (rare — schema changed), we can't match
-    // rows reliably, so treat it as "no primary key" for the row diff.
-    const pkCols = liveCols.filter((c) => c.is_pk).map((c) => c.column_name);
-    const pkUsable = pkCols.length > 0 && pkCols.every((c) => snapColSet.has(c));
+    let columnsAdded: ColumnDiff[] = [];
+    let columnsRemoved: ColumnDiff[] = [];
+    if (schemaChange) {
+      try {
+        const sd = await q(
+          dbName,
+          `SELECT from_create_statement, to_create_statement
+             FROM DOLT_SCHEMA_DIFF(${lit(snapId)}, 'WORKING', ${lit(name)})`,
+        );
+        const fromCols = parseCreateColumns(String(sd[0]?.from_create_statement ?? ''));
+        const toCols = parseCreateColumns(String(sd[0]?.to_create_statement ?? ''));
+        columnsAdded = [...toCols]
+          .filter(([c]) => !fromCols.has(c))
+          .map(([name2, dataType]) => ({ name: name2, dataType }));
+        columnsRemoved = [...fromCols]
+          .filter(([c]) => !toCols.has(c))
+          .map(([name2, dataType]) => ({ name: name2, dataType }));
+      } catch (err) {
+        log.warn('snapshot_diff_schema_failed', {
+          dbName,
+          table: name,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
-    const rows = pkUsable ? await diffRows(sql, schema, snap, table, pkCols) : null;
     tables.push({
-      name: table,
+      name,
       columnsAdded,
       columnsRemoved,
-      rows,
-      noPrimaryKey: !pkUsable,
+      rows: {
+        added,
+        removed,
+        changed,
+        liveRowCount,
+        snapshotRowCount,
+        truncated: liveRowCount > DIFF_ROW_CAP || snapshotRowCount > DIFF_ROW_CAP,
+      },
+      noPrimaryKey: false,
     });
   }
 
   return {
     snapshotId: snapId,
-    snapshotName: meta[0].name,
+    snapshotName: meta.l,
     snapshotCreatedAt,
     tablesAdded,
     tablesRemoved,
@@ -533,18 +589,22 @@ export async function diffSnapshot(projectId: string, snapId: string): Promise<S
   };
 }
 
-/** Delete a snapshot (drops its schema + registry row). */
+async function safeCount(dbName: string, sql: string): Promise<number> {
+  try {
+    const rows = await q(dbName, sql);
+    return Number(rows[0]?.n) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Delete a snapshot (drops its Dolt tag). Idempotent. */
 export async function deleteSnapshot(projectId: string, snapId: string): Promise<void> {
   if (!SNAP_ID_RE.test(snapId)) {
     throw new ValidationError('invalid snapshot id', { snapId });
   }
-  const schema = schemaNameFor(projectId);
-  const sql = dataPlaneClient();
-  const meta = (await sql.unsafe(
-    `SELECT snap_schema FROM "${schema}"."_briven_snapshots" WHERE id = $1`,
-    [snapId],
-  )) as Array<{ snap_schema: string }>;
-  if (!meta[0]) return;
-  await sql.unsafe(`DROP SCHEMA IF EXISTS "${meta[0].snap_schema}" CASCADE`);
-  await sql.unsafe(`DELETE FROM "${schema}"."_briven_snapshots" WHERE id = $1`, [snapId]);
+  const dbName = dbNameFor(projectId);
+  const exists = await q(dbName, `SELECT 1 AS ok FROM dolt_tags WHERE tag_name = $1`, [snapId]);
+  if (!exists[0]) return;
+  await q(dbName, `SELECT DOLT_TAG('-d', $1)`, [snapId]);
 }

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { constantTimeEqual, resolveBuildIdentity } from '@briven/shared';
 import { createLogger } from '@briven/shared/observability';
 import { Hono } from 'hono';
+import pg from 'pg';
 import { z } from 'zod';
 
 import { env } from './env.js';
@@ -66,7 +67,7 @@ app.get('/ready', async (c) => {
       status: ready ? 'ready' : 'not_ready',
       checks: {
         api: apiOk ? 'ok' : 'unreachable',
-        data_plane_dolt: env.BRIVEN_URL
+        data_plane_dolt: env.BRIVEN_DATA_PLANE_URL
           ? dpOk
             ? 'ok'
             : 'unreachable'
@@ -89,21 +90,24 @@ async function probeApi(): Promise<boolean> {
 }
 
 async function probeDataPlane(): Promise<boolean> {
-  if (!env.BRIVEN_URL) return false;
+  if (!env.BRIVEN_DATA_PLANE_URL) return false;
+  // @README-BRIVEN ADR 0001: DoltGres (Postgres-wire) readiness probe via the
+  // `pg` driver (node-postgres works against DoltGres; postgres.js does not).
+  // Opens a single short-lived pool, runs `select 1`, then ends it — never
+  // leaves a connection in a long-lived pool.
+  const pool = new pg.Pool({
+    connectionString: env.BRIVEN_DATA_PLANE_URL,
+    max: 1,
+    connectionTimeoutMillis: 2000,
+    idleTimeoutMillis: 1000,
+  });
   try {
-    // @README-BRIVEN: migrated from dynamic `import('postgres')` to static
-    // `import('mysql2/promise')` for the readiness probe. Opens a single
-    // connection, pings, and closes — never leaves a connection in the pool.
-    const mysql2 = await import('mysql2/promise');
-    const conn = await mysql2.createConnection({
-      uri: env.BRIVEN_URL,
-      connectTimeout: 2000,
-    });
-    await conn.ping();
-    await conn.end();
+    await pool.query('select 1');
     return true;
   } catch {
     return false;
+  } finally {
+    await pool.end();
   }
 }
 

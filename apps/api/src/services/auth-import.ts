@@ -1,6 +1,6 @@
 import { ValidationError, newId } from '@briven/shared';
 
-import { runInProjectSchema } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 import { log } from '../lib/logger.js';
 
 /**
@@ -130,7 +130,7 @@ export async function importAuthUsers(
   let inserted = 0;
   let skipped = 0;
 
-  await runInProjectSchema(projectId, async (tx) => {
+  await runInProjectDatabase(projectId, async (tx) => {
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i]!;
       if (!EMAIL_RE.test(row.email)) {

@@ -1,6 +1,6 @@
 import { ValidationError } from '@briven/shared';
 
-import { runInProjectSchema } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 
 /**
  * Briven auth users — list + detail with hard redaction per CLAUDE.md §5.1
@@ -181,7 +181,7 @@ export async function listProjectUsers(
   params.push(limit + 1);
   const limitPlaceholder = `$${params.length}`;
 
-  const rows = await runInProjectSchema<RawUserJoinRow[]>(projectId, async (tx) => {
+  const rows = await runInProjectDatabase<RawUserJoinRow[]>(projectId, async (tx) => {
     return (await tx.unsafe(
       `
         SELECT
@@ -252,7 +252,7 @@ export async function getProjectUserDetail(
     throw new ValidationError('invalid user id', { userId });
   }
 
-  return runInProjectSchema<UserDetail | null>(projectId, async (tx) => {
+  return runInProjectDatabase<UserDetail | null>(projectId, async (tx) => {
     const userRows = (await tx.unsafe(
       `SELECT id, email, name, created_at
        FROM "_briven_auth_users"

@@ -71,7 +71,7 @@ see the internal build docs for the authoritative spec. headlines:
 - deno isolates for the customer function runtime
 - git-native sql database (branches, commits, time-travel, diffs)
 - better auth (google + github + konnos + magic link), polar.sh, mittera.eu, minio, redis
-- grafana + loki + prometheus + mysqld_exporter for observability
+- grafana + loki + prometheus + postgres_exporter for observability (doltgres is postgres-wire)
 
 ## brand
 

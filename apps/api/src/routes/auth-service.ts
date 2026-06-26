@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 
 import { ValidationError } from '@briven/shared';
 
-import { runInProjectSchema } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
@@ -118,7 +118,7 @@ authServiceRouter.post(
 
     const statements = renderAuthProvisioningSql();
     try {
-      await runInProjectSchema(projectId, async (tx) => {
+      await runInProjectDatabase(projectId, async (tx) => {
         for (const stmt of statements) {
           await tx.unsafe(stmt);
         }

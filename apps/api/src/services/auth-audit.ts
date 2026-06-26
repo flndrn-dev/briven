@@ -1,6 +1,6 @@
 import { ValidationError } from '@briven/shared';
 
-import { runInProjectSchema } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 
 /**
  * Briven auth audit log reader.
@@ -124,7 +124,7 @@ export async function listAuditEntries(
   params.push(limit + 1);
   const limitPlaceholder = `$${params.length}`;
 
-  const rows = await runInProjectSchema<RawAuditRow[]>(projectId, async (tx) => {
+  const rows = await runInProjectDatabase<RawAuditRow[]>(projectId, async (tx) => {
     return (await tx.unsafe(
       `
         SELECT id, user_id, action, ip_address_hash, user_agent, metadata, occurred_at

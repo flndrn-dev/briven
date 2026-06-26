@@ -1,5 +1,4 @@
-import type { PoolConnection } from 'mysql2/promise';
-
+import type { ProjectTx } from './db.js';
 import type {
   Ctx,
   DbClient,
@@ -13,7 +12,8 @@ import type {
 } from '@briven/schema';
 
 /**
- * Phase 1 query builder backed by `mysql2` and a per-invoke transaction.
+ * Phase 1 query builder backed by postgres.js (DoltGres) and a per-invoke
+ * transaction.
  *
  * Scope: covers the 90% path from the `Ctx` interface in @briven/schema —
  * select / insert / update / delete with where (equality), orderBy, limit,
@@ -23,31 +23,32 @@ import type {
  * Table and column names are validated to a strict identifier shape before
  * being interpolated into SQL — never accept arbitrary strings here.
  *
- * @README-BRIVEN ADR 0001 — migrated from postgres to mysql2.
+ * @README-BRIVEN ADR 0001 — converged onto DoltGres (postgres.js driver),
+ * off the abandoned mysql2 detour:
  *
- *   - Identifier quoting: `"name"` → `` `name` `` (MySQL backticks)
- *   - Parameter placeholders: `$1`, `$2` → `?` (MySQL positional only)
- *   - `RETURNING` clause: **removed** — MySQL does not support it.
- *     Queries with `.returning()` return an empty array.
- *     **Phase 5** must implement post-INSERT/UPDATE/DELETE SELECT.
- *   - Vector search: pgvector operators (`<->`, `<#>`, `<=>`) are
- *     Postgres-only. `vectorSearch()` throws an error.
- *     **Phase 5** replaces with LanceDB embedded.
- *   - `postgres.TransactionSql` → `mysql.PoolConnection`
- *   - `tx.unsafe(sql, params)` → `conn.query(sql, params)`
+ *   - Identifier quoting: `` `name` `` (MySQL backticks) → `"name"` (Postgres)
+ *   - Parameter placeholders: `?` (MySQL positional) → `$1`, `$2`, … (Postgres)
+ *   - `RETURNING`: now implemented for INSERT/UPDATE — `.returning()` returns
+ *     the affected rows. DELETE is conservative (rowcount-only) until DoltGres
+ *     DELETE … RETURNING is confirmed (see DeleteImpl).
+ *   - Vector search: pgvector operators (`<->`, `<#>`, `<=>`) — `vectorSearch()`
+ *     still throws; LanceDB embedded lands in Phase 5.
+ *   - `mysql.PoolConnection` → `ProjectTx`
+ *   - `conn.query(sql, params)` (returns `[rows]`) → `tx.unsafe(sql, params)`
+ *     (returns the rows directly)
  */
 
 const IDENT = /^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/;
 
 /**
- * @README-BRIVEN MySQL uses backticks for identifier quoting,
- * not double quotes.
+ * @README-BRIVEN Postgres/DoltGres quote identifiers with double quotes,
+ * not MySQL backticks.
  */
 function quote(name: string): string {
   if (!IDENT.test(name)) {
     throw new Error(`invalid identifier: ${JSON.stringify(name)}`);
   }
-  return `\`${name}\``;
+  return `"${name}"`;
 }
 
 function quoteList(names: readonly string[]): string {
@@ -55,18 +56,26 @@ function quoteList(names: readonly string[]): string {
 }
 
 class WhereClause {
-  private readonly parts: string[] = [];
+  private readonly cols: string[] = [];
   private readonly params: unknown[] = [];
 
   add(predicate: Record<string, unknown>): void {
     for (const [col, value] of Object.entries(predicate)) {
-      this.parts.push(`${quote(col)} = ?`);
+      this.cols.push(col);
       this.params.push(value);
     }
   }
 
-  sql(): string {
-    return this.parts.length === 0 ? '' : ` WHERE ${this.parts.join(' AND ')}`;
+  /**
+   * Render ` WHERE …` with `$N` positional placeholders. Postgres numbers
+   * placeholders across the whole statement, so callers that bind params
+   * before the WHERE (e.g. UPDATE … SET) pass the count already consumed as
+   * `offset`; the first WHERE placeholder is then `$(offset + 1)`.
+   */
+  sql(offset = 0): string {
+    if (this.cols.length === 0) return '';
+    const parts = this.cols.map((col, i) => `${quote(col)} = $${offset + i + 1}`);
+    return ` WHERE ${parts.join(' AND ')}`;
   }
 
   values(): unknown[] {
@@ -82,7 +91,7 @@ class SelectImpl implements SelectQuery {
   private _offset: number | null = null;
 
   constructor(
-    private readonly conn: PoolConnection,
+    private readonly tx: ProjectTx,
     private readonly table: string,
     columns?: readonly string[],
   ) {
@@ -118,11 +127,11 @@ class SelectImpl implements SelectQuery {
 
   private async execute(): Promise<unknown[]> {
     const cols = this.columns ? quoteList(this.columns) : '*';
-    let sql = `SELECT ${cols} FROM ${quote(this.table)}${this.w.sql()}`;
-    if (this.order) sql += ` ORDER BY ${quote(this.order.col)} ${this.order.dir.toUpperCase()}`;
-    if (this._limit !== null) sql += ` LIMIT ${Number(this._limit)}`;
-    if (this._offset !== null) sql += ` OFFSET ${Number(this._offset)}`;
-    const [rows] = await this.conn.query(sql, this.w.values());
+    let query = `SELECT ${cols} FROM ${quote(this.table)}${this.w.sql()}`;
+    if (this.order) query += ` ORDER BY ${quote(this.order.col)} ${this.order.dir.toUpperCase()}`;
+    if (this._limit !== null) query += ` LIMIT ${Number(this._limit)}`;
+    if (this._offset !== null) query += ` OFFSET ${Number(this._offset)}`;
+    const rows = await this.tx.unsafe(query, this.w.values() as never[]);
     return rows as unknown[];
   }
 }
@@ -131,16 +140,13 @@ class InsertImpl implements InsertQuery {
   private returningCols: readonly string[] | null = null;
 
   constructor(
-    private readonly conn: PoolConnection,
+    private readonly tx: ProjectTx,
     private readonly table: string,
     private readonly values: Record<string, unknown> | readonly Record<string, unknown>[],
   ) {}
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
-    // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
-    // Currently returns empty array. Phase 5 must implement
-    // post-INSERT SELECT to return inserted rows.
     return this.execute();
   }
 
@@ -160,18 +166,19 @@ class InsertImpl implements InsertQuery {
     const valueRows = rows.map((r) => {
       const placeholders = cols.map((c) => {
         params.push(r[c]);
-        return '?';
+        return `$${params.length}`;
       });
       return `(${placeholders.join(', ')})`;
     });
-    // @README-BRIVEN: no RETURNING clause in MySQL.
-    // Phase 5: follow INSERT with SELECT WHERE to return rows.
-    const sql = `INSERT INTO ${quote(this.table)} (${colSql}) VALUES ${valueRows.join(', ')}`;
+    let query = `INSERT INTO ${quote(this.table)} (${colSql}) VALUES ${valueRows.join(', ')}`;
+    // @README-BRIVEN DoltGres supports INSERT … RETURNING. `.returning()` with
+    // no columns means "all columns" (RETURNING *); otherwise the named columns.
     if (this.returningCols !== null) {
-      // RETURNING is not supported — caller gets empty array.
-      // Phase 5 will add SELECT after INSERT.
+      query += ` RETURNING ${returningClause(this.returningCols)}`;
+      const out = await this.tx.unsafe(query, params as never[]);
+      return out as unknown[];
     }
-    await this.conn.query(sql, params);
+    await this.tx.unsafe(query, params as never[]);
     return [];
   }
 }
@@ -181,7 +188,7 @@ class UpdateImpl implements UpdateQuery {
   private returningCols: readonly string[] | null = null;
 
   constructor(
-    private readonly conn: PoolConnection,
+    private readonly tx: ProjectTx,
     private readonly table: string,
     private readonly patch: Record<string, unknown>,
   ) {}
@@ -193,7 +200,6 @@ class UpdateImpl implements UpdateQuery {
 
   returning(cols?: readonly string[]): PromiseLike<unknown[]> {
     this.returningCols = cols ?? [];
-    // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
     return this.execute();
   }
 
@@ -209,27 +215,28 @@ class UpdateImpl implements UpdateQuery {
     const params: unknown[] = [];
     for (const [col, value] of Object.entries(this.patch)) {
       params.push(value);
-      setParts.push(`${quote(col)} = ?`);
+      setParts.push(`${quote(col)} = $${params.length}`);
     }
-    const whereSql = this.w.sql();
+    // WHERE placeholders continue numbering after the SET params.
+    const whereSql = this.w.sql(params.length);
     const allParams = [...params, ...this.w.values()];
-    // @README-BRIVEN: no RETURNING clause in MySQL.
-    // Phase 5: follow UPDATE with SELECT WHERE to return updated rows.
-    let sql = `UPDATE ${quote(this.table)} SET ${setParts.join(', ')}${whereSql}`;
+    let query = `UPDATE ${quote(this.table)} SET ${setParts.join(', ')}${whereSql}`;
+    // @README-BRIVEN DoltGres supports UPDATE … RETURNING.
     if (this.returningCols !== null) {
-      // RETURNING is not supported — caller gets empty array.
+      query += ` RETURNING ${returningClause(this.returningCols)}`;
+      const out = await this.tx.unsafe(query, allParams as never[]);
+      return out as unknown[];
     }
-    await this.conn.query(sql, allParams);
+    await this.tx.unsafe(query, allParams as never[]);
     return [];
   }
 }
 
 class DeleteImpl implements DeleteQuery {
   private readonly w = new WhereClause();
-  private returningCols: readonly string[] | null = null;
 
   constructor(
-    private readonly conn: PoolConnection,
+    private readonly tx: ProjectTx,
     private readonly table: string,
   ) {}
 
@@ -238,9 +245,9 @@ class DeleteImpl implements DeleteQuery {
     return this;
   }
 
-  returning(cols?: readonly string[]): PromiseLike<unknown[]> {
-    this.returningCols = cols ?? [];
-    // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
+  // @README-BRIVEN `cols` is intentionally ignored — see execute(): DoltGres
+  // DELETE … RETURNING is not yet confirmed, so DELETE is rowcount-only for now.
+  returning(_cols?: readonly string[]): PromiseLike<unknown[]> {
     return this.execute();
   }
 
@@ -252,14 +259,24 @@ class DeleteImpl implements DeleteQuery {
   }
 
   private async execute(): Promise<unknown[]> {
-    let sql = `DELETE FROM ${quote(this.table)}${this.w.sql()}`;
-    if (this.returningCols !== null) {
-      // @README-BRIVEN Phase 5: MySQL has no RETURNING clause.
-      // Caller gets empty array. Phase 5 adds post-DELETE SELECT.
-    }
-    await this.conn.query(sql, this.w.values());
+    const query = `DELETE FROM ${quote(this.table)}${this.w.sql()}`;
+    // TODO(ADR 0001): DoltGres DELETE … RETURNING is not yet confirmed against
+    // a live DoltGres (INSERT/UPDATE RETURNING are verified). Until then DELETE
+    // runs plain and returns [] even when `.returning(cols)` was requested —
+    // rowcount-only semantics, no rows. Once confirmed, capture cols in
+    // returning() and append ` RETURNING ${returningClause(cols)}`, then return
+    // the rows exactly like InsertImpl / UpdateImpl.
+    await this.tx.unsafe(query, this.w.values() as never[]);
     return [];
   }
+}
+
+/**
+ * Render a RETURNING column list. `null`/empty → `*` (all columns), otherwise
+ * the named columns, double-quoted.
+ */
+function returningClause(cols: readonly string[] | null): string {
+  return cols && cols.length > 0 ? quoteList(cols) : '*';
 }
 
 /**
@@ -268,22 +285,19 @@ class DeleteImpl implements DeleteQuery {
  * this implementation in Phase 5. For now, throws an error.
  */
 class VectorSearchImpl implements VectorSearchQuery {
-  private readonly w = new WhereClause();
-  private selectedCols: readonly string[] | null = null;
-
+  // Stub: execute() throws before any query runs, so where()/select() are
+  // no-ops and we store only what the error message reads. The full builder
+  // (with a `tx`-bound query) lands with the Phase 5 implementation.
   constructor(
-    private readonly conn: PoolConnection,
     private readonly table: string,
     private readonly input: VectorSearchInput,
   ) {}
 
-  where(p: Record<string, unknown>): VectorSearchQuery {
-    this.w.add(p);
+  where(_p: Record<string, unknown>): VectorSearchQuery {
     return this;
   }
 
-  select(cols: readonly string[]): VectorSearchQuery {
-    this.selectedCols = cols;
+  select(_cols: readonly string[]): VectorSearchQuery {
     return this;
   }
 
@@ -296,9 +310,8 @@ class VectorSearchImpl implements VectorSearchQuery {
 
   private async execute(): Promise<unknown[]> {
     throw new Error(
-      'ctx.db().vectorSearch() is not available yet. ' +
-      'Vector search will ship with LanceDB in Phase 5. ' +
-      'See docs/ADR/0001-dolt-migration.md § "Vector search".',
+      `ctx.db('${this.table}').vectorSearch({ column: '${this.input.column}' }) ` +
+        'is not available yet. Vector search will ship with LanceDB in Phase 5.',
     );
   }
 }
@@ -309,11 +322,12 @@ class VectorSearchImpl implements VectorSearchQuery {
  * realtime service uses this to decide which tables to watch for
  * change-driven re-invocation.
  *
- * @README-BRIVEN Phase 2: The realtime service replaces Postgres LISTEN/NOTIFY
- * with Dolt commit-diff polling. The `touched` Set is still recorded; Phase 2
- * consumes it via the PollManager instead of LISTEN channels.
+ * @README-BRIVEN Phase 2: The realtime service detects changes via Dolt
+ * commit-diff polling (the auto-commit-per-write in withProjectTx advances
+ * the Dolt version log on every mutating tx). The `touched` Set is still
+ * recorded; Phase 2 consumes it via the PollManager.
  */
-export function buildDbClient(conn: PoolConnection): {
+export function buildDbClient(tx: ProjectTx): {
   db: DbClient;
   touched: Set<string>;
 } {
@@ -321,16 +335,16 @@ export function buildDbClient(conn: PoolConnection): {
   const dbFn = ((table: string): TableQuery => {
     touched.add(table);
     return {
-      select: (cols) => new SelectImpl(conn, table, cols),
-      insert: (values) => new InsertImpl(conn, table, values),
-      update: (patch) => new UpdateImpl(conn, table, patch),
-      delete: () => new DeleteImpl(conn, table),
-      vectorSearch: (input) => new VectorSearchImpl(conn, table, input),
+      select: (cols) => new SelectImpl(tx, table, cols),
+      insert: (values) => new InsertImpl(tx, table, values),
+      update: (patch) => new UpdateImpl(tx, table, patch),
+      delete: () => new DeleteImpl(tx, table),
+      vectorSearch: (input) => new VectorSearchImpl(table, input),
     };
   }) as DbClient;
 
   dbFn.execute = async (sql: string, params: readonly unknown[] = []) => {
-    const [rows] = await conn.query(sql, [...params]);
+    const rows = await tx.unsafe(sql, [...params] as never[]);
     return rows as unknown[];
   };
 
@@ -338,7 +352,7 @@ export function buildDbClient(conn: PoolConnection): {
 }
 
 export function makeCtx(
-  conn: PoolConnection,
+  tx: ProjectTx,
   request: {
     requestId: string;
     auth: Ctx['auth'];
@@ -346,7 +360,7 @@ export function makeCtx(
     log?: Ctx['log'];
   },
 ): { ctx: Ctx; touched: Set<string> } {
-  const { db, touched } = buildDbClient(conn);
+  const { db, touched } = buildDbClient(tx);
   const ctx: Ctx = {
     db,
     requestId: request.requestId,

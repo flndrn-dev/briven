@@ -1,4 +1,4 @@
-import { runInProjectSchema } from '../db/data-plane.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
 
 import { getProjectTier, TIERS } from './tiers.js';
 
@@ -42,7 +42,7 @@ export async function getAuthMauStats(projectId: string): Promise<AuthMauStats> 
   // Distinct user_id across sessions in the window. We could read users +
   // last_seen but distinct-from-sessions is the spec'd definition (an MAU
   // is someone who *used* the app in the window).
-  const rows = await runInProjectSchema<CountRow[]>(projectId, async (tx) => {
+  const rows = await runInProjectDatabase<CountRow[]>(projectId, async (tx) => {
     return (await tx.unsafe(
       `SELECT COUNT(DISTINCT user_id)::bigint AS count
        FROM "_briven_auth_sessions"
