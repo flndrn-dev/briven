@@ -42,7 +42,10 @@ export async function listProjectTables(projectId: string): Promise<TableSummary
       JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public'
         AND c.relkind = 'r'
-        AND c.relname NOT LIKE '\\_briven\\_%' ESCAPE '\\'
+        -- DoltGres lacks the LIKE ... ESCAPE function (errno 1105
+        -- 'not_like_escape'), so the _briven_ housekeeping filter uses a
+        -- plain prefix compare instead. left()/<> are both supported.
+        AND left(c.relname, 8) <> '_briven_'
       ORDER BY c.relname
     `,
     )) as Array<{ table_name: string; reltuples: string | number; bytes: string | number }>;
