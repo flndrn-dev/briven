@@ -237,6 +237,11 @@ export const projects = pgTable(
     // can investigate via the dashboard. Setting to null re-enables.
     suspendedAt: ts('suspended_at'),
     suspendReason: text('suspend_reason'),
+    // Sprint 4 storage admin: per-project overrides of the tier storage caps.
+    // NULL = inherit the tier default from tier_storage_caps. Bytes are
+    // unmeasurable on DoltGres, so limits are expressed as rows + tables.
+    storageMaxRows: bigint('storage_max_rows', { mode: 'number' }),
+    storageMaxTables: bigint('storage_max_tables', { mode: 'number' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -246,6 +251,19 @@ export const projects = pgTable(
     orgIdx: index('projects_org_idx').on(t.orgId),
   }),
 );
+
+/* ─── tier_storage_caps (Sprint 4) — DB-backed, admin-editable storage caps ─
+ * The Free/Pro/Team storage limits live here (not in code) so an admin can
+ * change them from the dashboard without a redeploy. Bytes are unmeasurable on
+ * DoltGres, so caps are rows + tables. Seeded by migration 0033.
+ */
+export const tierStorageCaps = pgTable('tier_storage_caps', {
+  tier: text('tier').$type<ProjectTier>().primaryKey(),
+  maxRows: bigint('max_rows', { mode: 'number' }).notNull(),
+  maxTables: bigint('max_tables', { mode: 'number' }).notNull(),
+  updatedAt: updatedAt(),
+  updatedBy: text('updated_by'),
+});
 
 /* ─── project_members (Phase 3 RBAC — columns exist, roles stubbed) ─ */
 export const memberRole = ['owner', 'admin', 'developer', 'viewer'] as const;

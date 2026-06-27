@@ -46,6 +46,12 @@ import {
 } from '../services/migration-requests.js';
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
+import {
+  getTierStorageCaps,
+  listStorageUsage,
+  setProjectStorageLimit,
+  updateTierStorageCap,
+} from '../services/storage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 import { incidentSeverity } from '../db/schema.js';
 import { ValidationError } from '@briven/shared';
@@ -99,6 +105,71 @@ adminRouter.get('/v1/admin/users/:id', async (c) => {
 adminRouter.get('/v1/admin/projects', async (c) => {
   const rows = await listProjects(500);
   return c.json({ projects: rows });
+});
+
+/**
+ * Storage admin (Sprint 4) — per-project table + row counts. Bytes are
+ * unmeasurable on DoltGres, so usage is reported as tables + rows. Phase 1 is
+ * read-only; limits + flagging land in Phase 2.
+ */
+adminRouter.get('/v1/admin/storage', async (c) => {
+  const usage = await listStorageUsage();
+  return c.json({ usage });
+});
+
+adminRouter.get('/v1/admin/storage/tier-caps', async (c) => {
+  const caps = await getTierStorageCaps();
+  return c.json({ caps });
+});
+
+const tierParam = z.enum(['free', 'pro', 'team']);
+const capBody = z.object({
+  maxRows: z.number().int().nonnegative(),
+  maxTables: z.number().int().nonnegative(),
+});
+
+/** Edit a tier's storage caps (takes effect immediately, no redeploy). */
+adminRouter.patch('/v1/admin/storage/tier-caps/:tier', async (c) => {
+  const parsedTier = tierParam.safeParse(c.req.param('tier'));
+  if (!parsedTier.success) throw new ValidationError('unknown tier');
+  const body = capBody.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw new ValidationError('expected { maxRows, maxTables } as whole numbers');
+  const user = c.get('user');
+  await updateTierStorageCap(parsedTier.data, body.data, user?.id ?? null);
+  await audit({
+    actorId: user?.id ?? null,
+    projectId: null,
+    action: 'admin.storage.tier_cap.update',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { tier: parsedTier.data, ...body.data },
+  });
+  return c.json({ ok: true });
+});
+
+const projectLimitBody = z.object({
+  maxRows: z.number().int().nonnegative().nullable(),
+  maxTables: z.number().int().nonnegative().nullable(),
+});
+
+/** Set or clear a single project's storage override (null = inherit tier cap). */
+adminRouter.patch('/v1/admin/storage/projects/:id', async (c) => {
+  const projectId = c.req.param('id');
+  const body = projectLimitBody.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) {
+    throw new ValidationError('expected { maxRows, maxTables } (whole numbers or null)');
+  }
+  const user = c.get('user');
+  await setProjectStorageLimit(projectId, body.data, user?.id ?? null);
+  await audit({
+    actorId: user?.id ?? null,
+    projectId,
+    action: 'admin.storage.project_limit.set',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { ...body.data },
+  });
+  return c.json({ ok: true });
 });
 
 /**
