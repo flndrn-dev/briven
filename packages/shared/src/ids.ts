@@ -41,6 +41,7 @@ export type IdPrefix =
   | 'me' // marketing event (funnel tracking for /migrate views + leads)
   | 'ctc' // contact message (public /contact form submission)
   | 'auk' // briven auth SDK key (issued from the Auth → API Keys panel)
+  | 'mck' // mcp / agent-access key (issued from the MCP control panel)
   | 'as'; // auto-snapshot settings row (per-project automatic save-points)
 
 export function newId(prefix: IdPrefix): string {

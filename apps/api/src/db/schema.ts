@@ -1237,6 +1237,51 @@ export const brivenAuthSdkKeys = pgTable(
 export type BrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferSelect;
 export type NewBrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferInsert;
 
+/* ─── mcp_keys (B Phase 5 — MCP / Agent-Access keys) ───────────────────── */
+// Keys an agent / MCP client presents to reach a project once MCP access is
+// turned on for it. Same one-time-reveal discipline as api_keys and
+// briven_auth_sdk_keys: the plaintext is returned exactly once on issue; only
+// a sha-256 hex digest persists. `prefix` is the constant `pk_briven_mcp_`
+// (kept as a column so a future v2 scheme can coexist without a migration);
+// `suffix` is the safe-to-show last 4 chars for the `<prefix>•••<suffix>`
+// dashboard hint. `enabled` is the per-key live switch — revoke flips it false
+// AND stamps revoked_at. This is only the access SURFACE; the MCP socket
+// server that consumes these keys is a separate track.
+export const mcpKeyScope = ['read', 'read-write', 'admin'] as const;
+export type McpKeyScope = (typeof mcpKeyScope)[number];
+
+export const mcpKeys = pgTable(
+  'mcp_keys',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    // sha-256 hex digest of the plaintext token. Never the plaintext itself.
+    hash: text('hash').notNull(),
+    // Plaintext prefix — currently always `pk_briven_mcp_`.
+    prefix: text('prefix').notNull(),
+    // Last 4 chars of the plaintext — safe to display.
+    suffix: varchar('suffix', { length: 4 }).notNull(),
+    scope: text('scope').$type<McpKeyScope>().notNull().default('read'),
+    enabled: boolean('enabled').notNull().default(true),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    lastUsedAt: ts('last_used_at'),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('mcp_keys_hash_idx').on(t.hash),
+    projectIdx: index('mcp_keys_project_idx').on(t.projectId),
+  }),
+);
+
+export type McpKey = typeof mcpKeys.$inferSelect;
+export type NewMcpKey = typeof mcpKeys.$inferInsert;
+
 /* ─── project_auto_snapshot_settings (automatic scheduled snapshots) ─ */
 // One row per project that has automatic save-points configured. Drives
 // the auto-snapshot worker: a project is "due" when enabled = true and

@@ -56,8 +56,20 @@ import {
   updateTierStorageCap,
 } from '../services/storage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
-import { incidentSeverity } from '../db/schema.js';
-import { ValidationError } from '@briven/shared';
+import {
+  disableForProject as mcpDisableForProject,
+  enableForProject as mcpEnableForProject,
+  getGlobalEnabled as mcpGetGlobalEnabled,
+  issueKey as mcpIssueKey,
+  listMcpAudit,
+  listProjectAccess as mcpListProjectAccess,
+  McpPlanRequiredError,
+  revokeKey as mcpRevokeKey,
+  setGlobalEnabled as mcpSetGlobalEnabled,
+  type McpActor,
+} from '../services/mcp-access.js';
+import { incidentSeverity, mcpKeyScope } from '../db/schema.js';
+import { NotFoundError, ValidationError } from '@briven/shared';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
 
@@ -1068,6 +1080,145 @@ adminRouter.post('/v1/admin/migration-requests/:id/promote-to-user', async (c) =
   } catch (err) {
     if (err instanceof ValidationError) {
       return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+/* ─── MCP / Agent-Access (B Phase 5) ─────────────────────────────────────
+ * The on/off + key-issuing + audit SURFACE for the future MCP server. The
+ * socket server that consumes these keys is a separate track. Every mutation
+ * is step-up-gated (the global middleware above) and audited via the service
+ * with the `mcp.*` action namespace. The plan gate is SERVER-SIDE: enabling /
+ * issuing for a non-paying project returns 403 mcp_plan_required.
+ */
+
+/** Build the audit actor from the request — id + hashed IP + user-agent. */
+function mcpActor(c: Context<AppEnv>): McpActor {
+  const user = c.get('user');
+  return {
+    id: user?.id ?? null,
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+  };
+}
+
+/** Status: global flag + per-project access list + recent mcp.* audit. */
+adminRouter.get('/v1/admin/mcp', async (c) => {
+  const [globalEnabled, projects, recentAudit] = await Promise.all([
+    mcpGetGlobalEnabled(),
+    mcpListProjectAccess(),
+    listMcpAudit(100),
+  ]);
+  return c.json({
+    globalEnabled,
+    projects,
+    audit: recentAudit.map((r) => ({
+      id: r.id,
+      action: r.action,
+      actorId: r.actorId,
+      metadata: r.metadata,
+      createdAt: r.createdAt.toISOString(),
+    })),
+  });
+});
+
+/** Flip the global MCP kill-switch. OFF cuts ALL agent access at once. */
+adminRouter.post('/v1/admin/mcp/global', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({ enabled: z.boolean() }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const result = await mcpSetGlobalEnabled(parsed.data.enabled, mcpActor(c));
+  return c.json(result);
+});
+
+const mcpProjectBody = z.object({ projectId: z.string().min(1) });
+
+/** Enable MCP for a project — SERVER-SIDE plan gate (Pro/Team only). */
+adminRouter.post('/v1/admin/mcp/projects/enable', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = mcpProjectBody.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const result = await mcpEnableForProject(parsed.data.projectId, mcpActor(c));
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof McpPlanRequiredError) {
+      return c.json(
+        {
+          code: err.code,
+          message: 'MCP access requires a Pro or Team plan',
+          tier: err.tier,
+        },
+        403,
+      );
+    }
+    throw err;
+  }
+});
+
+/** Disable MCP for a project (no plan gate — always allowed). */
+adminRouter.post('/v1/admin/mcp/projects/disable', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = mcpProjectBody.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const result = await mcpDisableForProject(parsed.data.projectId, mcpActor(c));
+  return c.json(result);
+});
+
+const mcpIssueBody = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1).max(120),
+  scope: z.enum(mcpKeyScope),
+});
+
+/** Issue a key — returns the FULL plaintext EXACTLY once. */
+adminRouter.post('/v1/admin/mcp/keys', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = mcpIssueBody.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const result = await mcpIssueKey(
+      { projectId: parsed.data.projectId, name: parsed.data.name, scope: parsed.data.scope },
+      mcpActor(c),
+    );
+    return c.json(result, 201);
+  } catch (err) {
+    if (err instanceof McpPlanRequiredError) {
+      return c.json(
+        {
+          code: err.code,
+          message: 'MCP access requires a Pro or Team plan',
+          tier: err.tier,
+        },
+        403,
+      );
+    }
+    throw err;
+  }
+});
+
+/** Revoke a key — sets revoked_at + enabled=false. */
+adminRouter.post('/v1/admin/mcp/keys/revoke', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({ keyId: z.string().min(1) }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const result = await mcpRevokeKey(parsed.data.keyId, mcpActor(c));
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof NotFoundError) {
+      return c.json({ code: 'not_found' }, 404);
     }
     throw err;
   }
