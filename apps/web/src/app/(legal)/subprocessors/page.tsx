@@ -8,6 +8,8 @@ interface Subprocessor {
   location: string;
   status: 'active' | 'planned';
   notes?: string;
+  /** Shown as a link below the entry — used for flndrn's own products. */
+  url?: string;
 }
 
 const SUBPROCESSORS: readonly Subprocessor[] = [
@@ -32,6 +34,7 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
     purpose: 'Transactional email delivery (magic-link sign-in, email verification, project invitations, account notices)',
     location: 'Limassol, Cyprus (EU)',
     status: 'active',
+    url: 'https://mittera.eu',
     notes:
       "Sister product to briven, also operated by flndrn. Outbound sends authenticate with a Bearer API key (POST https://api.mittera.eu/api/v1/emails); delivery / bounce / complaint events come back to https://api.briven.tech/mittera-webhook signed with HMAC-SHA256 of `${ts_ms}.${body}` and verified against BRIVEN_MITTERA_WEBHOOK_SECRET.",
   },
@@ -40,8 +43,18 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
     purpose: 'Code monitoring (logs, errors, and uptime/health monitoring for the briven platform)',
     location: 'Limassol, Cyprus (EU)',
     status: 'active',
+    url: 'https://katsuro.dev',
     notes:
       'Sister product to briven, also operated by flndrn. Receives platform operational logs and health signals so we can detect and resolve incidents. Customer database contents are never sent to Katsuro.',
+  },
+  {
+    name: 'Web Down by flndrn',
+    purpose: 'Website uptime & availability monitoring (external checks that alert when a site goes down)',
+    location: 'Limassol, Cyprus (EU)',
+    status: 'active',
+    url: 'https://web-down.com',
+    notes:
+      "Sister product to briven, also operated by flndrn. Probes briven's public endpoints from outside to detect outages and measure availability. No customer database content is processed.",
   },
   {
     name: 'Polar Software Inc.',
@@ -117,7 +130,17 @@ export default function SubprocessorsPage() {
               key={sp.name}
               className="border-b border-[var(--color-border-subtle)] align-top"
             >
-              <td className="py-3 pr-4 text-[var(--color-text)]">{sp.name}</td>
+              <td className="py-3 pr-4 text-[var(--color-text)]">
+                {sp.name}
+                {sp.url ? (
+                  <Link
+                    href={sp.url}
+                    className="mt-1 block font-mono text-[var(--color-text-link)] hover:underline"
+                  >
+                    {sp.url.replace(/^https?:\/\//, '')}
+                  </Link>
+                ) : null}
+              </td>
               <td className="py-3 pr-4 text-[var(--color-text-muted)]">
                 {sp.purpose}
                 {sp.notes ? (
