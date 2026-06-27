@@ -22,7 +22,13 @@ export const contactSchema = z.object({
   name: z.string().trim().min(1).max(200),
   email: z.string().trim().min(1).max(320).email(),
   topic: z.enum(contactTopics),
+  // Free-text "what's this about" line. Optional — the topic-only flow
+  // and older clients submit without it.
+  subject: z.string().trim().max(200).optional(),
   message: z.string().trim().min(1).max(8000),
+  // Visitor country auto-detected on the /contact page (locked field).
+  // Optional + capped; a hint for the operator, never a gate.
+  country: z.string().trim().max(100).optional(),
 });
 
 contactPublicRouter.post(
@@ -47,7 +53,9 @@ contactPublicRouter.post(
         name: parsed.data.name,
         email: parsed.data.email,
         topic: parsed.data.topic,
+        subject: parsed.data.subject ?? null,
         message: parsed.data.message,
+        country: parsed.data.country ?? null,
         ipHash: hashIpFromReq(c.req.raw.headers.get('x-forwarded-for')),
         userAgent: c.req.header('user-agent') ?? null,
       });

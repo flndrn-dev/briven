@@ -10,6 +10,7 @@ import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
 import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/credit-card';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { LayoutGridIcon, type LayoutGridIconHandle } from '../../components/ui/layout-grid';
+import { LifeBuoyIcon, type LifeBuoyIconHandle } from '../../components/ui/life-buoy';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
 import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
@@ -63,6 +64,12 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/dashboard/settings'),
   },
   {
+    href: '/dashboard/support',
+    label: 'support',
+    Icon: LifeBuoyIcon as never,
+    match: (p) => p.startsWith('/dashboard/support'),
+  },
+  {
     href: '/dashboard/admin',
     label: 'admin',
     Icon: ShieldCheckIcon as never,
@@ -77,7 +84,8 @@ type IconHandle =
   | ShieldCheckIconHandle
   | CreditCardIconHandle
   | UsersIconHandle
-  | LayoutGridIconHandle;
+  | LayoutGridIconHandle
+  | LifeBuoyIconHandle;
 
 interface SidebarUser {
   name: string | null;

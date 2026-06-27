@@ -941,7 +941,14 @@ export const contactMessages = pgTable(
     name: text('name').notNull(),
     email: text('email').notNull(),
     topic: text('topic').$type<ContactTopic>().notNull(),
+    // Free-text "what's this about" line from the form. Nullable: the
+    // topic-only flow (and older clients) submit without it.
+    subject: text('subject'),
     message: text('message').notNull(),
+    // Visitor country auto-detected from their IP on the /contact page and
+    // submitted as a locked field — a hint for the operator. Nullable when
+    // it couldn't be resolved (localhost, unknown block).
+    country: text('country'),
     ipHash: text('ip_hash'),
     userAgent: text('user_agent'),
     createdAt: createdAt(),

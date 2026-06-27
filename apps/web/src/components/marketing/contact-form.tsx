@@ -7,6 +7,15 @@ interface Props {
   /** Pre-selected topic (e.g. from a /contact?topic=privacy deep link). Falls
    *  back to 'general' when absent or not a known topic. */
   initialTopic?: string;
+  /** Country auto-detected server-side from the visitor's IP. The field is
+   *  LOCKED — the visitor can't edit it. `null` when it can't be resolved. */
+  initialCountry?: { code: string; name: string } | null;
+  /** Pre-fill the name field (e.g. the logged-in user's name on the
+   *  in-dashboard support page). Stays editable. */
+  initialName?: string;
+  /** Pre-fill the email field (e.g. the logged-in user's email). Stays
+   *  editable so they can reply from a different address if they want. */
+  initialEmail?: string;
 }
 
 type Topic = 'general' | 'support' | 'sales' | 'security' | 'privacy' | 'legal' | 'other';
@@ -30,16 +39,31 @@ interface SubmittedState {
   requestId: string;
 }
 
+const FIELD_CLASS =
+  'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]';
+
 /**
  * Public, unauthenticated contact form. Embedded on /contact so anyone
  * can reach us before signing up. Posts to /v1/contact on the api origin
  * (rate-limited 5/hr per IP) and renders an inline success state with the
  * briven reference id. We collect the sender's email so we can reply
  * privately — but we never render an email address back to the page.
+ *
+ * The `country` field is locked: it's pre-filled from a server-side geo-IP
+ * lookup and submitted with the message, but the visitor can't change it.
  */
-export function ContactForm({ apiOrigin, initialTopic }: Props) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+export function ContactForm({
+  apiOrigin,
+  initialTopic,
+  initialCountry,
+  initialName,
+  initialEmail,
+}: Props) {
+  const [name, setName] = useState(initialName ?? '');
+  const [email, setEmail] = useState(initialEmail ?? '');
+  // Locked, read-only value sent to the backend. Never editable in the UI.
+  const country = initialCountry ?? null;
+  const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState<Topic>(coerceTopic(initialTopic));
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,6 +84,10 @@ export function ContactForm({ apiOrigin, initialTopic }: Props) {
           email: email.trim(),
           topic,
           message: message.trim(),
+          // Optional extras — only sent when present so the backend's
+          // optional() schema stays happy on older clients.
+          ...(subject.trim() ? { subject: subject.trim() } : {}),
+          ...(country ? { country: country.name } : {}),
         }),
       });
       if (res.status === 429) {
@@ -107,14 +135,7 @@ export function ContactForm({ apiOrigin, initialTopic }: Props) {
       onSubmit={submit}
       className="flex flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6"
     >
-      <p className="font-sans font-medium tracking-[-0.02em] text-[var(--color-text)] text-[var(--text-h4)]">
-        send us a message · no signup needed
-      </p>
-      <p className="leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
-        tell us what&apos;s on your mind and we&apos;ll get back to you within one business
-        day. we reply privately to the address you give us — nothing is posted publicly.
-      </p>
-
+      {/* 1 — name + email side by side */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-2">
           <span className="font-mono text-xs text-[var(--color-text-muted)]">
@@ -127,7 +148,7 @@ export function ContactForm({ apiOrigin, initialTopic }: Props) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="your name"
-            className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+            className={FIELD_CLASS}
           />
         </label>
 
@@ -142,26 +163,58 @@ export function ContactForm({ apiOrigin, initialTopic }: Props) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="so we can reply"
-            className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+            className={FIELD_CLASS}
           />
         </label>
       </div>
 
+      {/* 2 — country, full width + locked (auto-filled from geo-IP) */}
       <label className="flex flex-col gap-2">
-        <span className="font-mono text-xs text-[var(--color-text-muted)]">topic</span>
-        <select
-          value={topic}
-          onChange={(e) => setTopic(e.target.value as Topic)}
-          className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-        >
-          {TOPICS.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+        <span className="font-mono text-xs text-[var(--color-text-muted)]">country</span>
+        <input
+          type="text"
+          readOnly
+          disabled
+          aria-readonly="true"
+          value={country ? country.name : 'unknown'}
+          className="cursor-not-allowed rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm text-[var(--color-text-muted)] opacity-80 outline-none"
+        />
+        <span className="font-mono text-[11px] text-[var(--color-text-subtle)]">
+          based on your location — contact support to change.
+        </span>
       </label>
 
+      {/* 3 — subject (free text) + topic (routing select) */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-2">
+          <span className="font-mono text-xs text-[var(--color-text-muted)]">subject</span>
+          <input
+            type="text"
+            maxLength={200}
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="what's this about?"
+            className={FIELD_CLASS}
+          />
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="font-mono text-xs text-[var(--color-text-muted)]">topic</span>
+          <select
+            value={topic}
+            onChange={(e) => setTopic(e.target.value as Topic)}
+            className={FIELD_CLASS}
+          >
+            {TOPICS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {/* 4 — message */}
       <label className="flex flex-col gap-2">
         <span className="font-mono text-xs text-[var(--color-text-muted)]">
           message{' '}
@@ -174,7 +227,7 @@ export function ContactForm({ apiOrigin, initialTopic }: Props) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="what can we help with?"
-          className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+          className={FIELD_CLASS}
         />
       </label>
 
@@ -182,6 +235,7 @@ export function ContactForm({ apiOrigin, initialTopic }: Props) {
         <p className="font-mono text-xs text-[var(--color-error)]">{error}</p>
       ) : null}
 
+      {/* 5 — submit */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"

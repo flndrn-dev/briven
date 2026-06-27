@@ -50,6 +50,27 @@ describe('contactSchema', () => {
     expect(contactSchema.safeParse({ ...valid, message: 'x'.repeat(8001) }).success).toBe(false);
   });
 
+  test('accepts an optional subject + country', () => {
+    const r = contactSchema.safeParse({
+      ...valid,
+      subject: 'dashboard question',
+      country: 'United States',
+    });
+    expect(r.success).toBe(true);
+  });
+
+  test('accepts a submission with neither subject nor country', () => {
+    expect(contactSchema.safeParse(valid).success).toBe(true);
+  });
+
+  test('rejects an over-long subject (>200)', () => {
+    expect(contactSchema.safeParse({ ...valid, subject: 'x'.repeat(201) }).success).toBe(false);
+  });
+
+  test('rejects an over-long country (>100)', () => {
+    expect(contactSchema.safeParse({ ...valid, country: 'x'.repeat(101) }).success).toBe(false);
+  });
+
   test('rejects a non-object body', () => {
     expect(contactSchema.safeParse(null).success).toBe(false);
     expect(contactSchema.safeParse('nope').success).toBe(false);

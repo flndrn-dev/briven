@@ -5,13 +5,19 @@ import { contactMessages, contactTopics, type ContactTopic } from '../db/schema.
 
 const NAME_CAP = 200;
 const EMAIL_CAP = 320;
+const SUBJECT_CAP = 200;
+const COUNTRY_CAP = 100;
 const MESSAGE_CAP = 8_000;
 
 export interface CreateContactMessageInput {
   name: string;
   email: string;
   topic: string;
+  /** Free-text "what's this about" line. Optional. */
+  subject?: string | null;
   message: string;
+  /** Visitor country auto-detected on /contact (locked field). Optional. */
+  country?: string | null;
   ipHash?: string | null;
   userAgent?: string | null;
 }
@@ -57,6 +63,12 @@ export async function createContactMessage(
   assertTopic(input.topic);
   const message = trimWithCap(input.message, MESSAGE_CAP, 'message');
   if (!message) throw new ValidationError('message is required');
+  // Optional fields — cap + normalise empties to null so we never store
+  // an empty string for "no subject" / "country unknown".
+  const subjectTrimmed = trimWithCap(input.subject, SUBJECT_CAP, 'subject');
+  const subject = subjectTrimmed.length > 0 ? subjectTrimmed : null;
+  const countryTrimmed = trimWithCap(input.country, COUNTRY_CAP, 'country');
+  const country = countryTrimmed.length > 0 ? countryTrimmed : null;
 
   const db = getDb();
   const [row] = await db
@@ -66,7 +78,9 @@ export async function createContactMessage(
       name,
       email,
       topic: input.topic,
+      subject,
       message,
+      country,
       ipHash: input.ipHash ?? null,
       userAgent: input.userAgent ?? null,
     })

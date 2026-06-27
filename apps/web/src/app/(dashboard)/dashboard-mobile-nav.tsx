@@ -16,6 +16,7 @@ const NAV = [
   { href: '/dashboard/teams', label: 'teams' },
   { href: '/dashboard/billing', label: 'billing' },
   { href: '/dashboard/settings', label: 'settings' },
+  { href: '/dashboard/support', label: 'support' },
 ] as const;
 
 export function DashboardMobileNav({ isAdmin }: { isAdmin: boolean }) {
