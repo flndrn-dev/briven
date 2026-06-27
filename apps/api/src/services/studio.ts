@@ -1,6 +1,7 @@
 import { brivenError, ValidationError } from '@briven/shared';
 
 import { runInProjectDatabase } from '../db/data-plane.js';
+import { assertWithinStorageLimit } from './storage-admin.js';
 
 /**
  * Studio read-mode services. Phase 2 first slice — table listing only.
@@ -504,6 +505,10 @@ export async function insertRow(input: InsertRowInput): Promise<InsertRowResult>
     throw new ValidationError('insert requires at least one column', {});
   }
 
+  // Phase 4: in 'block' mode, reject the write when the project is at its row
+  // cap. No-op fast path for 'flag' projects (the default) — no count runs.
+  await assertWithinStorageLimit(input.projectId, 'row');
+
   const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
   const cols_sql = keys.map((k) => `"${k}"`).join(', ');
   const params = keys.map((k) => input.values[k] as never);
@@ -876,6 +881,10 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
       await assertFkTarget(input.projectId, col.references, input.tableName);
     }
   }
+
+  // Phase 4: in 'block' mode, reject when the project is at its table cap.
+  // No-op fast path for 'flag' projects (the default).
+  await assertWithinStorageLimit(input.projectId, 'table');
 
   // Composite PK → table-level constraint; single PK stays inline so the
   // SQL output is unchanged for every non-M2M shape.

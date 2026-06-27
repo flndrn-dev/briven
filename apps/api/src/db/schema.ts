@@ -242,6 +242,11 @@ export const projects = pgTable(
     // unmeasurable on DoltGres, so limits are expressed as rows + tables.
     storageMaxRows: bigint('storage_max_rows', { mode: 'number' }),
     storageMaxTables: bigint('storage_max_tables', { mode: 'number' }),
+    // Sprint 4 Phase 4 enforcement lever. 'flag' (default) only surfaces an
+    // over-limit project in the admin dashboard and NEVER blocks a customer.
+    // 'block' rejects new writes (createTable / insertRow) while the project
+    // is over its effective cap. An admin opts a specific project into 'block'.
+    storageEnforcement: text('storage_enforcement').$type<'flag' | 'block'>().notNull().default('flag'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

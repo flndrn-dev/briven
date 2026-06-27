@@ -134,6 +134,104 @@ export async function setProjectStorageLimit(
     .where(eq(projects.id, projectId));
 }
 
+/* ── Enforcement mode (Phase 4 — the "block" lever) ──────────────────────── */
+
+export type StorageEnforcement = 'flag' | 'block';
+export type StorageWrite = 'row' | 'table';
+
+// Cache the per-project enforcement mode so the hot write path (insertRow /
+// createTable) doesn't hit the control DB on every call. 'flag' is the default
+// ("never block"), so a briefly-stale 'flag' is harmless; setProjectEnforcement
+// invalidates on change, and the short TTL bounds staleness when flipping on.
+const ENFORCEMENT_TTL_MS = 30_000;
+const enforcementCache = new Map<string, { mode: StorageEnforcement; expires: number }>();
+
+/** The project's enforcement mode, cached. Defaults to 'flag' for unknown ids. */
+export async function getProjectEnforcement(projectId: string): Promise<StorageEnforcement> {
+  const hit = enforcementCache.get(projectId);
+  const now = Date.now();
+  if (hit && hit.expires > now) return hit.mode;
+  const db = getDb();
+  const rows = await db
+    .select({ mode: projects.storageEnforcement })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const mode: StorageEnforcement = rows[0]?.mode === 'block' ? 'block' : 'flag';
+  enforcementCache.set(projectId, { mode, expires: now + ENFORCEMENT_TTL_MS });
+  return mode;
+}
+
+/** Flip a project between 'flag' (never blocks) and 'block' (rejects over-cap writes). */
+export async function setProjectEnforcement(
+  projectId: string,
+  mode: StorageEnforcement,
+  _actorId: string | null,
+): Promise<void> {
+  if (mode !== 'flag' && mode !== 'block') {
+    throw new ValidationError("enforcement must be 'flag' or 'block'", { mode });
+  }
+  const db = getDb();
+  await db
+    .update(projects)
+    .set({ storageEnforcement: mode, updatedAt: new Date() })
+    .where(eq(projects.id, projectId));
+  enforcementCache.delete(projectId); // take effect immediately
+}
+
+/** Test-only: drop the in-memory enforcement cache. */
+export function _resetEnforcementCache(): void {
+  enforcementCache.clear();
+}
+
+/**
+ * Guard a single storage-growing write (one new row or one new table). In
+ * 'flag' mode (the default) this is a no-op fast path — NO row count runs, so
+ * normal projects pay nothing. Only a project an admin has flipped to 'block'
+ * pays the count, and only that project is ever rejected. Throws a
+ * ValidationError (→ 4xx) when the write would push the project over its
+ * effective cap (per-project override ?? tier cap). Fails OPEN on a missing
+ * project so enforcement can never wedge a legitimate write by accident.
+ */
+export async function assertWithinStorageLimit(
+  projectId: string,
+  write: StorageWrite,
+): Promise<void> {
+  if ((await getProjectEnforcement(projectId)) !== 'block') return; // flag → never blocks
+
+  const db = getDb();
+  const projRows = await db
+    .select({
+      tier: projects.tier,
+      storageMaxRows: projects.storageMaxRows,
+      storageMaxTables: projects.storageMaxTables,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const proj = projRows[0];
+  if (!proj) return; // unknown project → fail open
+
+  const caps = await getTierStorageCaps();
+  const tierCap = caps[proj.tier] ?? { maxRows: Infinity, maxTables: Infinity };
+  const maxRows = proj.storageMaxRows ?? tierCap.maxRows;
+  const maxTables = proj.storageMaxTables ?? tierCap.maxTables;
+  const { rowCount, tableCount } = await getProjectRowCount(projectId);
+
+  if (write === 'table' && tableCount + 1 > maxTables) {
+    throw new ValidationError(
+      `storage limit reached — this project is at its table cap (${maxTables}). Delete a table or raise the limit.`,
+      { projectId, tableCount, maxTables, write },
+    );
+  }
+  if (write === 'row' && rowCount + 1 > maxRows) {
+    throw new ValidationError(
+      `storage limit reached — this project is at its row cap (${maxRows}). Delete rows or raise the limit.`,
+      { projectId, rowCount, maxRows, write },
+    );
+  }
+}
+
 /* ── Over-limit flag math (pure — unit tested) ───────────────────────────── */
 
 export interface LimitFlags {
@@ -170,6 +268,8 @@ export interface ProjectStorageUsage {
   readonly maxTables: number;
   /** True when the per-project override is set (vs inheriting the tier cap). */
   readonly hasOverride: boolean;
+  /** Enforcement mode: 'flag' (surface only) or 'block' (reject over-cap writes). */
+  readonly enforcement: StorageEnforcement;
   readonly overRows: boolean;
   readonly overTables: boolean;
   readonly overLimit: boolean;
@@ -191,6 +291,7 @@ export async function listStorageUsage(): Promise<readonly ProjectStorageUsage[]
       tier: projects.tier,
       storageMaxRows: projects.storageMaxRows,
       storageMaxTables: projects.storageMaxTables,
+      storageEnforcement: projects.storageEnforcement,
     })
     .from(projects)
     .where(isNull(projects.deletedAt));
@@ -212,6 +313,7 @@ export async function listStorageUsage(): Promise<readonly ProjectStorageUsage[]
         maxRows,
         maxTables,
         hasOverride: p.storageMaxRows != null || p.storageMaxTables != null,
+        enforcement: (p.storageEnforcement ?? 'flag') as StorageEnforcement,
         ...flags,
       };
     }),

@@ -1,4 +1,5 @@
 import { apiJson } from '../../../../../lib/api';
+import { EnforcementForm } from './enforcement-form';
 import { ProjectLimitForm } from './project-limit-form';
 import { TierCapsForm, type Tier, type TierCap } from './tier-caps-form';
 
@@ -11,6 +12,7 @@ interface ProjectStorageUsage {
   maxRows: number;
   maxTables: number;
   hasOverride: boolean;
+  enforcement: 'flag' | 'block';
   overRows: boolean;
   overTables: boolean;
   overLimit: boolean;
@@ -123,6 +125,7 @@ export default async function AdminStoragePage() {
                   <th className="px-3 py-2 font-medium">tables</th>
                   <th className="px-3 py-2 font-medium">tables usage</th>
                   <th className="px-3 py-2 font-medium">limit</th>
+                  <th className="px-3 py-2 font-medium">enforcement</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,6 +179,14 @@ export default async function AdminStoragePage() {
                         effectiveMaxTables={u.maxTables}
                         tierMaxRows={caps[u.tier].maxRows}
                         tierMaxTables={caps[u.tier].maxTables}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <EnforcementForm
+                        apiOrigin={apiOrigin}
+                        projectId={u.id}
+                        projectName={u.name}
+                        enforcement={u.enforcement}
                       />
                     </td>
                   </tr>

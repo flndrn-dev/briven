@@ -49,6 +49,7 @@ import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admi
 import {
   getTierStorageCaps,
   listStorageUsage,
+  setProjectEnforcement,
   setProjectStorageLimit,
   updateTierStorageCap,
 } from '../services/storage-admin.js';
@@ -168,6 +169,30 @@ adminRouter.patch('/v1/admin/storage/projects/:id', async (c) => {
     ipHash: ipHash(c),
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { ...body.data },
+  });
+  return c.json({ ok: true });
+});
+
+const enforcementBody = z.object({
+  enforcement: z.enum(['flag', 'block']),
+});
+
+/** Flip a project between 'flag' (surface over-cap only) and 'block' (reject over-cap writes). */
+adminRouter.patch('/v1/admin/storage/projects/:id/enforcement', async (c) => {
+  const projectId = c.req.param('id');
+  const body = enforcementBody.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) {
+    throw new ValidationError("expected { enforcement: 'flag' | 'block' }");
+  }
+  const user = c.get('user');
+  await setProjectEnforcement(projectId, body.data.enforcement, user?.id ?? null);
+  await audit({
+    actorId: user?.id ?? null,
+    projectId,
+    action: 'admin.storage.enforcement.set',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { enforcement: body.data.enforcement },
   });
   return c.json({ ok: true });
 });
