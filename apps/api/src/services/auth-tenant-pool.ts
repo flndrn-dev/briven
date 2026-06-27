@@ -2,11 +2,11 @@ import { randomBytes } from 'node:crypto';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
 
 import { authSchema } from '../db/auth-customer-schema.js';
-import { schemaNameFor } from '../db/data-plane.js';
+import { dbNameFor } from '../db/data-plane.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import {
@@ -22,19 +22,17 @@ import { TenantInstancePool } from './tenant-instance-pool.js';
  *
  * Lifecycle (ARCHITECTURE.md §3):
  *   - first `getAuthInstance(projectId)` lazily creates the pool
- *   - cache miss opens a per-project postgres pool with `search_path`
- *     locked to `proj_<projectId>` at libpq startup, wraps it in a
- *     Drizzle client, and constructs a `betterAuth({...})` instance
+ *   - cache miss opens a per-project `pg` pool bound to the project's own
+ *     DoltGres DATABASE (`proj_<id>`), wraps it in a Drizzle client, and
+ *     constructs a `betterAuth({...})` instance
  *   - cache hit returns the warm instance
- *   - eviction (idle, LRU, or forced) closes the per-project postgres
- *     pool via `closePool()` so connections are released
+ *   - eviction (idle, LRU, or forced) closes the per-project pool via
+ *     `closePool()` so connections are released
  *
- * Search-path strategy: Better Auth's Drizzle adapter issues queries
- * outside our transaction boundaries, so the existing `runInProjectSchema`
- * pattern (`SET LOCAL search_path`) cannot reach those calls. Instead
- * the schema is bound to the **connection** itself at libpq startup via
- * postgres-js's `connection.search_path` option, which sets `search_path`
- * for every query on that physical connection.
+ * Tenancy: database-per-project (ADR 0001). The auth tables live in the
+ * project's own database `public` schema, so binding the pool to that
+ * database is enough — no `search_path` pinning, and no schema-per-project.
+ * Uses `pg` (node-postgres), not postgres.js, which desyncs with DoltGres.
  *
  * v0 provider configuration: email + password only. OAuth providers,
  * magic link, OTP, and passkeys land in the next step once the per-tenant
@@ -78,22 +76,30 @@ function authSecret(): string {
 
 async function createAuthInstance(projectId: string) {
   if (!env.BRIVEN_DATA_PLANE_URL) {
-    throw new Error('BRIVEN_DATA_PLANE_URL not configured — briven auth cannot bind a schema');
+    throw new Error('BRIVEN_DATA_PLANE_URL not configured — briven auth cannot bind a database');
   }
-  const schema = schemaNameFor(projectId);
 
-  // Per-project postgres pool. `connection.search_path` sets the schema
-  // for every query on every physical connection in the pool; the
-  // SET runs as part of the libpq startup packet so even queries that
-  // bypass our transaction wrapper land in the right schema.
-  const sql = postgres(env.BRIVEN_DATA_PLANE_URL, {
+  // Per-project pg (node-postgres) pool bound to the project's OWN DoltGres
+  // DATABASE (proj_<id>) — database-per-project, mirroring data-plane.ts and
+  // apps/runtime/src/db.ts. Two reasons this replaced postgres.js + a
+  // search_path schema (ADR 0001 / sprint S2.1):
+  //   1. postgres.js's extended-protocol pipelining desyncs with DoltGres
+  //      (`unhandled message "&{}"`); `pg` works reliably.
+  //   2. The model is database-per-project, not schema-per-project, so the
+  //      auth tables live in this database's `public` schema — no search_path
+  //      pinning is needed (the connection is already bound to the right DB).
+  const base = new URL(env.BRIVEN_DATA_PLANE_URL);
+  const pgPool = new pg.Pool({
+    host: base.hostname,
+    port: Number(base.port || 5432),
+    user: decodeURIComponent(base.username),
+    password: decodeURIComponent(base.password),
+    database: dbNameFor(projectId),
     max: 5,
-    idle_timeout: 30,
-    connect_timeout: 5,
-    prepare: false,
-    connection: { search_path: schema },
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
   });
-  const db = drizzle(sql);
+  const db = drizzle(pgPool);
 
   const instance = betterAuth({
     appName: `briven-auth-${projectId}`,
@@ -147,7 +153,7 @@ async function createAuthInstance(projectId: string) {
   return {
     betterAuth: instance,
     closePool: async () => {
-      await sql.end({ timeout: 5 });
+      await pgPool.end();
     },
   };
 }
