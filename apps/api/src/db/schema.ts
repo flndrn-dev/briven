@@ -916,6 +916,42 @@ export const migrationRequests = pgTable(
   }),
 );
 
+/* ─── contact_messages (public /contact form intake) ─────────────── */
+// Public, unauthenticated contact-form submissions from the /contact
+// marketing page. The sender's email is collected + stored here so the
+// operator can reply privately — it is never rendered back to the
+// website. Triaged out-of-band; `handled_at` is stamped once an operator
+// has actioned the message.
+
+export const contactTopics = [
+  'general',
+  'support',
+  'sales',
+  'security',
+  'privacy',
+  'other',
+] as const;
+export type ContactTopic = (typeof contactTopics)[number];
+
+export const contactMessages = pgTable(
+  'contact_messages',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    email: text('email').notNull(),
+    topic: text('topic').$type<ContactTopic>().notNull(),
+    message: text('message').notNull(),
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    createdAt: createdAt(),
+    handledAt: ts('handled_at'),
+  },
+  (t) => ({
+    createdIdx: index('contact_messages_created_idx').on(t.createdAt),
+  }),
+);
+export type ContactMessage = typeof contactMessages.$inferSelect;
+
 /* ─── platform_settings (single-row dashboard-controllable flags) ─── */
 // Key/value JSONB store for platform-level flags an admin needs to flip
 // without a container restart. Today: `openSignups` (boolean). Future:

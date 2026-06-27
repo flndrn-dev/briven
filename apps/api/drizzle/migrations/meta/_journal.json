@@ -253,6 +253,13 @@
       "when": 1779710000000,
       "tag": "0035_storage_enforcement",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1779780000000,
+      "tag": "0036_contact_messages",
+      "breakpoints": true
     }
   ]
 }

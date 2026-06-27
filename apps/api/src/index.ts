@@ -43,6 +43,7 @@ import { platformRouter } from './routes/platform.js';
 import { usageRouter } from './routes/usage.js';
 import { incidentsRouter } from './routes/incidents.js';
 import { marketingEventsPublicRouter } from './routes/marketing-events.js';
+import { contactPublicRouter } from './routes/contact.js';
 import {
   migrationRequestsPublicRouter,
   migrationRequestsRouter,
@@ -138,6 +139,7 @@ app.route('/', webhooksPublicRouter);
 app.route('/', incidentsRouter);
 app.route('/', migrationRequestsRouter);
 app.route('/', migrationRequestsPublicRouter);
+app.route('/', contactPublicRouter);
 app.route('/', marketingEventsPublicRouter);
 app.route('/', outboundWebhooksRouter);
 

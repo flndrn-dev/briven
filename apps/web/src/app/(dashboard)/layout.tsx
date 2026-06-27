@@ -29,7 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
       <LiveRefresh />
-      <header className="shrink-0 border-b border-[var(--color-border-subtle)]">
+      <header className="shrink-0">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/dashboard" className="flex items-center gap-3" aria-label="briven dashboard">
             <Image src="/icon.svg" alt="" width={24} height={24} priority />
