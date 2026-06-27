@@ -21,7 +21,14 @@ import {
   provisionProjectDatabase,
   runInProjectDatabase,
 } from '../db/data-plane.js';
-import { executeQuery, listIndexes, truncateTable } from './studio.js';
+import {
+  createTable,
+  executeQuery,
+  getTableColumns,
+  insertRow,
+  listIndexes,
+  truncateTable,
+} from './studio.js';
 
 const HAS_DB = Boolean(process.env.BRIVEN_DATA_PLANE_URL);
 const PROJECT_ID = `p_studio${Date.now().toString(36)}`;
@@ -44,6 +51,39 @@ describe.skipIf(!HAS_DB)('studio against real DoltGres (S1.1–S1.4)', () => {
   afterAll(async () => {
     await dropProjectDatabase(PROJECT_ID).catch(() => {});
     await closeProjectDbPools().catch(() => {});
+  });
+
+  // S3 ISY-live regression: the full customer data path through the studio
+  // service functions. getTableColumns used a pg_index/pg_attribute PK-detection
+  // join (`attnum = ANY(indkey)`) that DoltGres 500s on
+  // ("operator does not exist: smallint = int2vector"), which broke EVERY row
+  // insert + read on a real DoltGres table even though createTable worked.
+  // Caught only by the live ISY proof; this locks the whole path.
+  test('S3 ISY path: createTable → getTableColumns (PK) → insertRow → read', async () => {
+    const t = 'isy_proof';
+    await createTable({
+      projectId: PROJECT_ID,
+      tableName: t,
+      columns: [
+        { name: 'id', type: 'integer', primaryKey: true, notNull: true },
+        { name: 'label', type: 'text' },
+      ],
+    });
+    // Must NOT throw the int2vector error, and must detect the primary key.
+    const cols = await getTableColumns(PROJECT_ID, t);
+    expect(cols.find((c) => c.name === 'id')?.isPrimaryKey).toBe(true);
+    expect(cols.find((c) => c.name === 'label')?.isPrimaryKey).toBe(false);
+    // insertRow calls getTableColumns internally, then INSERT ... RETURNING *.
+    const ins = await insertRow({
+      projectId: PROJECT_ID,
+      tableName: t,
+      values: { id: 1, label: 'Hello ISY' },
+    });
+    expect((ins.inserted as { id?: number } | null)?.id).toBe(1);
+    // Read it back.
+    const res = await executeQuery(PROJECT_ID, `SELECT id, label FROM "${t}" ORDER BY id`);
+    expect(res.rows.length).toBe(1);
+    expect((res.rows[0] as { label: string }).label).toBe('Hello ISY');
   });
 
   test('S1.4 listIndexes returns primary + secondary + unique with columns', async () => {

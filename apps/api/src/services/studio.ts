@@ -120,21 +120,27 @@ export async function getTableColumns(
 ): Promise<readonly ColumnInfo[]> {
   await assertTableExists(projectId, tableName);
   // Single query: information_schema.columns LEFT JOINed against the
-  // table's PK column set sourced from pg_index, plus a LEFT JOIN against
-  // information_schema's FK metadata so each column row can carry its
-  // (table.column) reference if there is one.
+  // table's PK column set, plus a LEFT JOIN against information_schema's FK
+  // metadata so each column row can carry its (table.column) reference.
+  //
+  // PK detection MUST come from information_schema, NOT the pg_index /
+  // pg_attribute catalog join (`a.attnum = ANY(i.indkey)`): DoltGres has no
+  // `smallint = int2vector` operator and 500s on it ("operator does not exist:
+  // smallint = int2vector"). This is the same DoltGres gap S1.4 hit in
+  // listIndexes — sourcing PKs from table_constraints + key_column_usage (the
+  // exact shape the fk_cols CTE below already uses successfully) avoids it.
   const rows = (await runInProjectDatabase(projectId, async (tx) =>
     tx.unsafe(
       `
     WITH pk_cols AS (
-      SELECT a.attname AS column_name
-      FROM pg_index i
-      JOIN pg_class c ON c.oid = i.indrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
-      WHERE i.indisprimary
-        AND n.nspname = 'public'
-        AND c.relname = $1
+      SELECT kcu.column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON kcu.constraint_name = tc.constraint_name
+       AND kcu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'PRIMARY KEY'
+        AND tc.table_schema = 'public'
+        AND tc.table_name = $1
     ),
     fk_cols AS (
       SELECT
