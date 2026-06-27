@@ -27,6 +27,8 @@ import {
   unsuspendUser,
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
+import { getBillingTotals } from '../services/billing/mavi-pay.js';
+import { getHealthSummary } from '../services/platform-health.js';
 import { listDeploys } from '../services/deploy-history.js';
 import {
   createIncident,
@@ -84,6 +86,36 @@ adminRouter.use('/v1/admin/*', async (c, next) => {
 });
 
 adminRouter.get('/v1/admin/stats', async (c) => c.json(await adminStats()));
+
+/**
+ * Superadmin Overview — the 3-second glance. One aggregate fan-out so the
+ * cockpit home renders from a single round-trip. Every number is REAL or
+ * explicitly null; the web layer renders "—" for nulls (Mavi Pay MRR/churn
+ * + host metrics) rather than a fake zero. Read-only, so no audit row.
+ */
+adminRouter.get('/v1/admin/overview', async (c) => {
+  const [billing, health, incidents, deploys, stats] = await Promise.all([
+    getBillingTotals(),
+    getHealthSummary(),
+    listIncidents({ activeOnly: true, limit: 100 }),
+    listDeploys({ limit: 3 }),
+    adminStats(),
+  ]);
+  return c.json({
+    billing,
+    health,
+    openIncidents: incidents.length,
+    recentDeploys: deploys.map((r) => ({
+      id: r.id,
+      service: r.service,
+      buildSha: r.buildSha,
+      buildAt: r.buildAt,
+      env: r.env,
+      bootedAt: r.bootedAt,
+    })),
+    counts: { projects: stats.projects, users: stats.users },
+  });
+});
 
 adminRouter.get('/v1/admin/users', async (c) => {
   const rows = await listUsers(200);
