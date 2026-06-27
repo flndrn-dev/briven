@@ -13,6 +13,15 @@ export const dynamic = 'force-dynamic';
 
 type HealthCheck = 'ok' | 'unreachable' | 'not_configured';
 
+interface HostMetrics {
+  cpuPercent: number | null;
+  memUsedBytes: number | null;
+  memTotalBytes: number | null;
+  diskPercent: number | null;
+  stealPercent: number | null;
+  instance?: string;
+}
+
 interface Overview {
   billing: {
     subscribers: number | null;
@@ -28,7 +37,7 @@ interface Overview {
       runtime: HealthCheck;
       redis: HealthCheck;
     };
-    host: null;
+    host: HostMetrics | null;
   };
   openIncidents: number;
   recentDeploys: Array<{
@@ -95,11 +104,7 @@ export default async function AdminOverviewPage() {
         <SectionHeading icon={<ActivityIcon size={16} />} label="platform" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SystemHealthCard checks={health.checks} />
-          <MetricCard
-            label="server cpu · ram · disk"
-            value={null}
-            waitingOn="platform health · Phase 4"
-          />
+          <HostCard host={health.host} />
           <IncidentsCard count={openIncidents} />
           <MetricCard
             label="projects · users"
@@ -258,6 +263,62 @@ function SystemHealthCard({
       </ul>
     </CardShell>
   );
+}
+
+/**
+ * Real host load (CPU / RAM / disk) from Prometheus, linking through to
+ * the full Health page. `host === null` is the HARD honesty case: render
+ * "—" with a "monitoring not connected" note, never a fabricated 0%.
+ */
+function HostCard({ host }: { host: HostMetrics | null }) {
+  const memPercent =
+    host && host.memUsedBytes !== null && host.memTotalBytes !== null && host.memTotalBytes > 0
+      ? (host.memUsedBytes / host.memTotalBytes) * 100
+      : null;
+  const rows: Array<[string, number | null]> = [
+    ['cpu', host?.cpuPercent ?? null],
+    ['ram', memPercent],
+    ['disk', host?.diskPercent ?? null],
+  ];
+
+  return (
+    <Link
+      href="/dashboard/admin/health"
+      className="flex h-full flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-border-strong)]"
+    >
+      <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+        <span className="text-[var(--color-text-muted)]">
+          <ActivityIcon size={14} />
+        </span>
+        server cpu · ram · disk
+      </p>
+      {host === null ? (
+        <>
+          <p className="font-mono text-2xl text-[var(--color-text-subtle)]">—</p>
+          <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+            monitoring not connected
+          </p>
+        </>
+      ) : (
+        <dl className="mt-0.5 flex flex-col gap-1 font-mono text-xs">
+          {rows.map(([label, pct]) => (
+            <div key={label} className="flex items-center justify-between">
+              <dt className="text-[var(--color-text-muted)]">{label}</dt>
+              <dd className={hostPercentClass(pct)}>{pct === null ? '—' : `${pct.toFixed(0)}%`}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </Link>
+  );
+}
+
+/** green/amber/red text tone for a host percent; null → muted "—". */
+function hostPercentClass(percent: number | null): string {
+  if (percent === null) return 'text-[var(--color-text-subtle)]';
+  if (percent >= 85) return 'text-[var(--color-error)]';
+  if (percent >= 70) return 'text-[var(--color-warning)]';
+  return 'text-[var(--color-text)]';
 }
 
 function IncidentsCard({ count }: { count: number }) {

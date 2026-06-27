@@ -118,6 +118,15 @@ adminRouter.get('/v1/admin/overview', async (c) => {
 });
 
 /**
+ * Platform health — the full summary (the four upstream checks + real
+ * host CPU/RAM/disk/steal from Prometheus). Backs the cockpit Health
+ * page. Host metrics are REAL or null; the web layer renders "—" with a
+ * "monitoring not connected" note for null rather than a fabricated 0%.
+ * Read-only, no audit row.
+ */
+adminRouter.get('/v1/admin/health', async (c) => c.json(await getHealthSummary()));
+
+/**
  * Mavi Pay (backed by Polar.sh) — billing totals for the Subscribers &
  * Billing page. Same shape the Overview reads; every number is REAL or
  * explicitly null (MRR degrades to null when Polar isn't configured).

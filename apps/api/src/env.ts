@@ -168,6 +168,14 @@ const envSchema = z.object({
   // only writes invocations + storage_bytes.
   BRIVEN_REALTIME_URL: z.string().url().default('http://localhost:3004'),
 
+  // Prometheus — the observability stack's query endpoint (Phase 4). The
+  // superadmin Health cockpit reads real host metrics (CPU/RAM/disk/steal)
+  // from node-exporter via Prometheus's instant-query API. Optional: when
+  // unset, getHostMetrics() returns null and the cockpit honestly shows
+  // "—" with a "monitoring not connected" note rather than a fake zero.
+  // Point this at the in-cluster Prometheus (e.g. http://prometheus:9090).
+  BRIVEN_PROMETHEUS_URL: z.string().url().optional(),
+
   // GeoIP — optional path to a MaxMind GeoLite2-City.mmdb file. When unset
   // or unreadable, IP → city lookups return null and callers show a dash.
   // Refresh the DB monthly via the free MaxMind account download portal.
