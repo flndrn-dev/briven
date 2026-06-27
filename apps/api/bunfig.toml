@@ -1,0 +1,5 @@
+[test]
+# Runs before any test module. Sets secrets that production always provides so
+# env.ts (which freezes process.env at first import) captures them regardless of
+# test-file load order. See src/test-preload.ts for the full rationale.
+preload = ["./src/test-preload.ts"]

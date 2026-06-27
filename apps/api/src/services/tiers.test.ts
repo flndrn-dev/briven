@@ -23,8 +23,13 @@ describe('RATE_LIMITS_BY_TIER', () => {
     }
   });
 
-  test('covers invoke + deploy + mutate scopes', () => {
-    expect(Object.keys(RATE_LIMITS_BY_TIER).sort()).toEqual(['deploy', 'invoke', 'mutate']);
+  test('covers read + invoke + deploy + mutate scopes', () => {
+    expect(Object.keys(RATE_LIMITS_BY_TIER).sort()).toEqual([
+      'deploy',
+      'invoke',
+      'mutate',
+      'read',
+    ]);
   });
 
   test('window is exactly one minute', () => {
