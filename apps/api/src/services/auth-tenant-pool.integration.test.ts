@@ -23,15 +23,12 @@ import { clearAuthInstancePool, getAuthInstance } from './auth-tenant-pool.js';
 
 const PROJECT_ID = `p_authpool${Date.now().toString(36)}`;
 const PASSWORD = 'correct-horse-battery-staple';
+const HAS_DB = Boolean(process.env.BRIVEN_DATA_PLANE_URL);
 
-// SKIPPED until the Better-Auth schema rebuild lands (sprint S2.1b). The
-// driver re-platform (pg + db-per-project, S2.1a) and citext→text (S2.3) ARE
-// done, but this test PROVED the four customer-auth tables don't match
-// Better-Auth's expected schema (user.emailVerified must be boolean not
-// timestamp; account needs a `password` column + accountId; session needs
-// updatedAt; verification needs `value`+updatedAt). This is the acceptance
-// test for that rebuild — un-skip it when the schema is aligned.
-describe.skip('customer auth on real DoltGres (S2.1 + S2.3) — needs S2.1b schema rebuild', () => {
+// Acceptance test for the customer-auth rebuild: S2.1a (pg + db-per-project),
+// S2.3 (citext→text + lower(email) unique), S2.1b (Better-Auth table schema).
+// Skips when no DoltGres is configured.
+describe.skipIf(!HAS_DB)('customer auth on real DoltGres (S2.1 + S2.3)', () => {
   beforeAll(async () => {
     await provisionProjectDatabase(PROJECT_ID);
     // Create the auth tables exactly as the "enable auth" route does.

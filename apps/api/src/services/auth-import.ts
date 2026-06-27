@@ -173,23 +173,27 @@ export async function importAuthUsers(
             userId,
             row.email,
             row.name ?? null,
-            row.emailVerified ? new Date() : null,
+            // email_verified is a boolean (Better-Auth shape, S2.1b).
+            row.emailVerified === true,
           ] as never[],
         );
 
         if (row.passwordHash && algo) {
-          // Better Auth's password is stored in `_briven_auth_accounts`
-          // with provider_id='credential'. The `scope` column is reused
-          // here to record the hash algorithm — string-typed already
-          // and only meaningful per-provider.
+          // Better Auth's email/password credential lives in
+          // `_briven_auth_accounts` with provider_id='credential', the password
+          // hash in the `password` column, and account_id = the user id (Better
+          // Auth's natural key for credential accounts). The hash algorithm is
+          // recorded in `scope` so a future Better-Auth password.verify hook can
+          // verify imported argon2id/bcrypt hashes (Better Auth hashes new
+          // passwords with its own scheme — imported hashes need that hook).
           await tx.unsafe(
             `INSERT INTO "_briven_auth_accounts"
-               (id, user_id, provider_id, provider_account_id, access_token_encrypted, scope)
-             VALUES ($1, $2, 'credential', $3, $4, $5)`,
+               (id, user_id, account_id, provider_id, password, scope)
+             VALUES ($1, $2, $3, 'credential', $4, $5)`,
             [
               newId('a'),
               userId,
-              row.email,
+              userId,
               row.passwordHash,
               `hash_algo=${algo}`,
             ] as never[],

@@ -100,14 +100,16 @@ interface RawSessionRow {
   id: string;
   created_at: Date;
   expires_at: Date;
-  ip_address_hash: string | null;
+  // Better-Auth session column (S2.1b). IP tracking is disabled, so null.
+  ip_address: string | null;
   user_agent: string | null;
 }
 
 interface RawAccountRow {
   id: string;
   provider_id: string;
-  provider_account_id: string;
+  // Better-Auth's natural account key (was provider_account_id) — S2.1b.
+  account_id: string;
   created_at: Date;
 }
 
@@ -266,7 +268,7 @@ export async function getProjectUserDetail(
     if (!user) return null;
 
     const sessionRows = (await tx.unsafe(
-      `SELECT id, created_at, expires_at, ip_address_hash, user_agent
+      `SELECT id, created_at, expires_at, ip_address, user_agent
        FROM "_briven_auth_sessions"
        WHERE user_id = $1
          AND expires_at > now()
@@ -276,7 +278,7 @@ export async function getProjectUserDetail(
     )) as RawSessionRow[];
 
     const accountRows = (await tx.unsafe(
-      `SELECT id, provider_id, provider_account_id, created_at
+      `SELECT id, provider_id, account_id, created_at
        FROM "_briven_auth_accounts"
        WHERE user_id = $1
        ORDER BY created_at DESC`,
@@ -301,13 +303,17 @@ export async function getProjectUserDetail(
         id: s.id,
         createdAt: s.created_at.toISOString(),
         expiresAt: s.expires_at.toISOString(),
-        ipHashHint: s.ip_address_hash ? s.ip_address_hash.slice(0, 8) : null,
+        // IP tracking is disabled (privacy), so ip_address is null and this
+        // hint is null. DTO key kept for dashboard stability.
+        ipHashHint: s.ip_address ? s.ip_address.slice(0, 8) : null,
         userAgent: s.user_agent ? s.user_agent.slice(0, USER_AGENT_CAP) : null,
       })),
       accounts: accountRows.map((a) => ({
         id: a.id,
         providerId: a.provider_id,
-        providerAccountId: a.provider_account_id,
+        // DTO key kept stable for the dashboard; sourced from Better-Auth's
+        // account_id column now.
+        providerAccountId: a.account_id,
         createdAt: a.created_at.toISOString(),
       })),
       audit: auditRows.map((r) => ({

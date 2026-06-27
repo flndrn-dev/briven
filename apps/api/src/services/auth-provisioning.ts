@@ -25,23 +25,22 @@
  */
 
 /**
- * Emit the full DDL batch for a project's auth tables. Caller wraps in a
- * transaction and runs inside `runInProjectSchema(projectId, tx)` so
- * `search_path` points at `proj_<projectId>`.
+ * Emit the full DDL batch for a project's auth tables. Caller wraps it in
+ * `runInProjectDatabase(projectId, tx)` — the connection is bound to the
+ * project's own DoltGres database (`proj_<id>`, public schema), so no
+ * search_path is needed. Tables are shaped to Better Auth's schema (S2.1b).
  */
 export function renderAuthProvisioningSql(): string[] {
   return [
-    // _briven_auth_users
-    // DoltGres has no `citext` type and no `CREATE EXTENSION`. Case-insensitive
-    // email matching is reproduced with a plain `text` column + a UNIQUE index
-    // on `lower(email)` — verified on DoltGres to enforce case-insensitive
-    // uniqueness (sprint S2.3). The Drizzle model already declares email as
-    // `text`, so this aligns the physical DDL with the model.
+    // _briven_auth_users — Better-Auth user shape (sprint S2.1b).
+    // DoltGres has no `citext`/`CREATE EXTENSION`; case-insensitive email is a
+    // `text` column + a UNIQUE index on `lower(email)` (verified on DoltGres).
+    // `email_verified` is BOOLEAN — what Better Auth reads/writes.
     `CREATE TABLE IF NOT EXISTS "_briven_auth_users" (
        id              text        PRIMARY KEY,
-       email           text        NOT NULL,
-       email_verified  timestamptz,
        name            text,
+       email           text        NOT NULL,
+       email_verified  boolean     NOT NULL DEFAULT false,
        image           text,
        created_at      timestamptz NOT NULL DEFAULT now(),
        updated_at      timestamptz NOT NULL DEFAULT now()
@@ -49,15 +48,17 @@ export function renderAuthProvisioningSql(): string[] {
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_users_email_uniq"
        ON "_briven_auth_users" (lower(email))`,
 
-    // _briven_auth_sessions
+    // _briven_auth_sessions — Better-Auth session shape. `ip_address` exists for
+    // compatibility but IP tracking is disabled (privacy), so it stays null.
     `CREATE TABLE IF NOT EXISTS "_briven_auth_sessions" (
-       id               text        PRIMARY KEY,
-       user_id          text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
-       token            text        NOT NULL,
-       expires_at       timestamptz NOT NULL,
-       ip_address_hash  text,
-       user_agent       text,
-       created_at       timestamptz NOT NULL DEFAULT now()
+       id          text        PRIMARY KEY,
+       user_id     text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       token       text        NOT NULL,
+       expires_at  timestamptz NOT NULL,
+       ip_address  text,
+       user_agent  text,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
      )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_sessions_token_uniq"
        ON "_briven_auth_sessions" (token)`,
@@ -66,35 +67,41 @@ export function renderAuthProvisioningSql(): string[] {
     `CREATE INDEX IF NOT EXISTS "_briven_auth_sessions_expires_idx"
        ON "_briven_auth_sessions" (expires_at)`,
 
-    // _briven_auth_accounts
+    // _briven_auth_accounts — Better-Auth account shape. The email/password
+    // "credential" account stores the password hash in `password`. OAuth token
+    // columns are present but unused in v1 (no social providers wired).
     `CREATE TABLE IF NOT EXISTS "_briven_auth_accounts" (
-       id                       text        PRIMARY KEY,
-       user_id                  text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
-       provider_id              text        NOT NULL,
-       provider_account_id      text        NOT NULL,
-       refresh_token_encrypted  text,
-       access_token_encrypted   text,
-       scope                    text,
-       created_at               timestamptz NOT NULL DEFAULT now(),
-       updated_at               timestamptz NOT NULL DEFAULT now()
+       id                        text        PRIMARY KEY,
+       user_id                   text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       account_id                text        NOT NULL,
+       provider_id               text        NOT NULL,
+       access_token              text,
+       refresh_token             text,
+       id_token                  text,
+       access_token_expires_at   timestamptz,
+       refresh_token_expires_at  timestamptz,
+       scope                     text,
+       password                  text,
+       created_at                timestamptz NOT NULL DEFAULT now(),
+       updated_at                timestamptz NOT NULL DEFAULT now()
      )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_accounts_provider_pair_uniq"
-       ON "_briven_auth_accounts" (provider_id, provider_account_id)`,
+       ON "_briven_auth_accounts" (provider_id, account_id)`,
     `CREATE INDEX IF NOT EXISTS "_briven_auth_accounts_user_idx"
        ON "_briven_auth_accounts" (user_id)`,
 
-    // _briven_auth_verification_tokens
+    // _briven_auth_verification_tokens — Better-Auth verification shape.
+    // Better Auth creates + consumes these rows directly ({identifier,value}).
     `CREATE TABLE IF NOT EXISTS "_briven_auth_verification_tokens" (
-       id           text        PRIMARY KEY,
-       identifier   text        NOT NULL,
-       value_hash   text        NOT NULL,
-       type         text        NOT NULL,
-       expires_at   timestamptz NOT NULL,
-       consumed_at  timestamptz,
-       created_at   timestamptz NOT NULL DEFAULT now()
+       id          text        PRIMARY KEY,
+       identifier  text        NOT NULL,
+       value       text        NOT NULL,
+       expires_at  timestamptz NOT NULL,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
      )`,
-    `CREATE INDEX IF NOT EXISTS "_briven_auth_verif_identifier_type_idx"
-       ON "_briven_auth_verification_tokens" (identifier, type)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_verif_identifier_idx"
+       ON "_briven_auth_verification_tokens" (identifier)`,
     `CREATE INDEX IF NOT EXISTS "_briven_auth_verif_expires_idx"
        ON "_briven_auth_verification_tokens" (expires_at)`,
 

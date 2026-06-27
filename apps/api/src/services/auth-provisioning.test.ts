@@ -53,6 +53,21 @@ describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
     expect(uniq).toBeDefined();
   });
 
+  test('S2.1b: user.email_verified is BOOLEAN (Better-Auth shape, not timestamp)', () => {
+    const usersTable = stmts.find((s) =>
+      s.startsWith('CREATE TABLE IF NOT EXISTS "_briven_auth_users"'),
+    );
+    expect(usersTable!).toContain('email_verified boolean NOT NULL DEFAULT false');
+  });
+
+  test('S2.1b: accounts has a password column + account_id (Better-Auth credential)', () => {
+    const accounts = stmts.find((s) =>
+      s.startsWith('CREATE TABLE IF NOT EXISTS "_briven_auth_accounts"'),
+    );
+    expect(accounts!).toContain('account_id text NOT NULL');
+    expect(accounts!).toContain('password text');
+  });
+
   test('sessions cascade-delete on user removal', () => {
     const sessions = stmts.find((s) =>
       s.startsWith('CREATE TABLE IF NOT EXISTS "_briven_auth_sessions"'),
@@ -85,11 +100,12 @@ describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
     expect(uniq).toBeDefined();
   });
 
-  test('verification_tokens stores value_hash, never the raw token', () => {
+  test('S2.1b: verification table uses Better-Auth shape (value, not value_hash)', () => {
     const verif = stmts.find((s) =>
       s.startsWith('CREATE TABLE IF NOT EXISTS "_briven_auth_verification_tokens"'),
     );
-    expect(verif!).toContain('value_hash text NOT NULL');
+    expect(verif!).toContain('value text NOT NULL');
+    expect(verif!).not.toContain('value_hash');
   });
 
   test('audit_log metadata defaults to empty jsonb', () => {
