@@ -14,7 +14,7 @@ export default function TermsPage() {
       <p>
         briven is an open-core reactive Postgres backend platform operated by{' '}
         <strong>flndrn</strong> (the &ldquo;Operator&rdquo;, &ldquo;we&rdquo;,
-        &ldquo;us&rdquo;), a company registered at Arch. Makariou III 171, Vanezis Business
+        &ldquo;us&rdquo;), operating from Arch. Makariou III 171, Vanezis Business
         Center 4th floor, 3027 Limassol, Cyprus. Day-to-day development happens in Flanders,
         Belgium. This document, together with the{' '}
         <a href="/privacy" className="text-[var(--color-text-link)]">

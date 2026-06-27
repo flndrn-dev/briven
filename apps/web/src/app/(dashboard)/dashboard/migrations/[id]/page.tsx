@@ -407,13 +407,13 @@ export default async function MigrationDetailPage({
       </div>
 
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-        questions? reply to any email we sent, or write to{' '}
-        <a
-          href="mailto:migrations@flndrn.com"
+        questions? reply to any email we sent, or reach us via our{' '}
+        <Link
+          href="/contact?topic=sales"
           className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
         >
-          migrations@flndrn.com
-        </a>{' '}
+          contact form
+        </Link>{' '}
         and quote the request id.
       </p>
 

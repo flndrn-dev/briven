@@ -14,7 +14,7 @@ export default function PrivacyPage() {
         This Privacy Policy explains what personal data the briven Service (briven.tech and any
         subdomain) collects, why, and what you can do about it. The Service is operated by{' '}
         <strong>flndrn</strong> (the &ldquo;Operator&rdquo;, also the data controller
-        for the purposes of the EU General Data Protection Regulation), a company registered at
+        for the purposes of the EU General Data Protection Regulation), operating from
         Arch. Makariou III 171, Vanezis Business Center 4th floor, 3027 Limassol, Cyprus.
         Day-to-day development takes place in Flanders, Belgium. For brand and legal context see
         the <a href="/terms" className="text-[var(--color-text-link)]">Terms of Service</a>.
