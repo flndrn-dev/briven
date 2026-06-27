@@ -11,8 +11,7 @@ const NOT_YET: readonly [string, string][] = [
   ['GSSAPI auth', 'not supported'],
   ['statement-level triggers', 'row-level triggers work; statement-level do not'],
   ['stored procedures', 'partial — described as "almost done" as of October 2025, not yet complete'],
-  ['CTEs (WITH)', 'not supported at Beta'],
-  ['window functions', 'not supported at Beta'],
+  ['window functions', 'not supported yet (verified: row_number() OVER (...) errors on a live instance)'],
   ['custom operators / indexing / aggregates', 'not supported at Beta'],
   ['multi-table single-statement UPDATE', 'updating several tables in one UPDATE is not supported'],
   ['ALTER SEQUENCE / COMMENT ON', 'these DDL statements are not yet supported'],
@@ -81,6 +80,27 @@ export default function LimitationsPage() {
             </tbody>
           </table>
         </div>
+      </Section>
+
+      <Section title="verified working (live probe)">
+        <p>
+          Confirmed against a live DoltGres instance (so you don&apos;t have to take an old changelog
+          on faith):
+        </p>
+        <ul className="mt-2 list-inside list-disc">
+          <li>
+            <strong>Common table expressions</strong> (<code>WITH … SELECT</code>) work — including{' '}
+            <code>UNION ALL</code> inside the CTE.
+          </li>
+          <li>
+            <code>current_setting(...)</code> reads work; the default transaction isolation is{' '}
+            <strong>read committed</strong>.
+          </li>
+          <li>
+            The engine reports itself as <strong>PostgreSQL 15.5</strong> over the wire, and the{' '}
+            <code>dolt.</code> version-control system tables (e.g. <code>dolt.branches</code>) resolve.
+          </li>
+        </ul>
       </Section>
 
       <Callout tone="info">
