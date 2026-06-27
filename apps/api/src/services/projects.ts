@@ -4,7 +4,7 @@ import { newId, NotFoundError, ValidationError } from '@briven/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { dropProjectDatabase, provisionProjectDatabase, schemaNameFor } from '../db/data-plane.js';
+import { dbNameFor, dropProjectDatabase, provisionProjectDatabase } from '../db/data-plane.js';
 import {
   projects,
   projectMembers,
@@ -62,7 +62,9 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     orgId: input.orgId,
     region: input.region ?? 'eu-west-1',
     tier: 'free',
-    dataSchemaName: schemaNameFor(projectId),
+    // Field name kept for API/schema stability; value is now the per-project
+    // DoltGres database name (database-per-project), not a schema name.
+    dataSchemaName: dbNameFor(projectId),
   };
 
   const db = getDb();

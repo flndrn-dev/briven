@@ -96,3 +96,17 @@ packages/client-*/src/*.d.ts.map
 # with `git clone --depth=1` (per machine); never committed, never built
 # against, never imported from. Used as shape spec only.
 _reference/
+
+# Internal planning / spec / instruction docs — NOT for the public repo.
+# The Codeberg repo is public open-core; these contain internal plans, specs,
+# AI instructions, and a security-sensitive bug report. Kept local-only.
+ARCHITECTURE.md
+BUILD_PLAN.md
+CLAUDE.md
+CONTRIBUTING.md
+SPEC.md
+SPRINT-PLAN.md
+docs/
+docs/*
+docs/*/*
+specs/
