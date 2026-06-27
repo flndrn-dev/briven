@@ -508,7 +508,15 @@ export async function runIsolateLoop(
       if (msg.type === 'shutdown') {
         Deno.exit(0);
       } else if (msg.type === 'invoke') {
-        await handleInvoke(msg as never, dispatch);
+        // Do NOT await — the invoked function may issue queries whose
+        // `query_result` replies arrive as *later* stdin messages handled by
+        // THIS same loop. Awaiting here blocks the reader, so the reply is
+        // never read, the query promise never resolves, and Deno aborts with
+        // "Top-level await promise never resolved" (a self-deadlock). Running
+        // it concurrently lets the loop keep reading; handleInvoke writes its
+        // own result/error frame to stdout when it finishes. The host
+        // serialises one invocation per isolate, so at most one is in flight.
+        void handleInvoke(msg as never, dispatch).catch(() => undefined);
       } else if (msg.type === 'query_result') {
         const m = msg as { qid: string; rows?: readonly unknown[]; error?: { code: string; message: string } };
         const pending = pendingQueries.get(m.qid);
