@@ -240,11 +240,12 @@ export function buildFilterClauses(
         clauses.push(`"${col}" = ${placeholder}`);
         break;
       case 'contains':
-        // ILIKE for case-insensitive substring match. The placeholder is
-        // wrapped server-side so callers can't smuggle pattern characters
-        // by writing `%foo%` themselves — `'%' || $N || '%'` parameterises
-        // the literal value with `%` glued in SQL, not in the input.
-        clauses.push(`"${col}"::text ILIKE '%' || ${placeholder} || '%'`);
+        // DoltGres has no ILIKE, so `lower(col) LIKE lower(value)` gives the
+        // same case-insensitive substring match. The placeholder is wrapped
+        // server-side so callers can't smuggle pattern characters by writing
+        // `%foo%` themselves — `'%' || lower($N) || '%'` parameterises the
+        // literal value with `%` glued in SQL, not in the input.
+        clauses.push(`lower("${col}"::text) LIKE '%' || lower(${placeholder}) || '%'`);
         break;
       case 'gt':
         clauses.push(`"${col}" > ${placeholder}`);
@@ -528,8 +529,8 @@ export interface QueryResult {
  * legacy per-project SET LOCAL ROLE scoping is obsolete in the
  * database-per-project model).
  *
- *  - 5s statement_timeout
- *  - search_path pinned to public (the project's own database)
+ *  - bound to the project's own database (public schema) by the connection
+ *    itself — no search_path pinning needed (DoltGres has no SET LOCAL)
  *  - transactional via `runInProjectDatabase`: rolls back if the statement
  *    errors, and `dolt_transaction_commit` makes the COMMIT a real Dolt commit
  *    for any writes
@@ -553,8 +554,9 @@ export async function executeQuery(projectId: string, sqlText: string): Promise<
   // (mirrors apps/runtime/src/db.ts:withProjectTx).
   const out = (await runInProjectDatabase(projectId, async (tx) => {
     await tx.unsafe('SET dolt_transaction_commit = 1');
-    await tx.unsafe(`SET LOCAL search_path TO public`);
-    await tx.unsafe(`SET LOCAL statement_timeout = '5s'`);
+    // No SET LOCAL: DoltGres doesn't support it, and the connection is already
+    // bound to the project's own database (public schema), so search_path
+    // pinning is unnecessary. statement_timeout isn't enforceable here.
     const result = (await tx.unsafe(sqlText)) as Array<Record<string, unknown>>;
     const rows = Array.isArray(result) ? [...result] : [];
     const first = rows[0];
@@ -894,10 +896,10 @@ export async function dropTable(projectId: string, tableName: string): Promise<v
 }
 
 /**
- * TRUNCATE a table — wipes every row but keeps the schema. RESTART
- * IDENTITY resets serial sequences. Default ON cascade is off; the
- * caller can pass cascade=true to also wipe rows from tables that FK
- * into this one (otherwise the truncate fails with a clear error).
+ * TRUNCATE a table — wipes every row but keeps the schema. DoltGres does not
+ * support `RESTART IDENTITY` (no serial sequences) nor `CASCADE`, so neither
+ * is emitted; cascade=true is rejected with a clear error rather than sent as
+ * SQL DoltGres can't run.
  */
 export async function truncateTable(
   projectId: string,
@@ -905,10 +907,12 @@ export async function truncateTable(
   cascade = false,
 ): Promise<void> {
   await assertTableExists(projectId, tableName);
-  const cascadeClause = cascade ? 'CASCADE' : '';
+  if (cascade) {
+    throw new ValidationError('TRUNCATE CASCADE is not supported on DoltGres', {});
+  }
   await runInProjectDatabase(projectId, async (tx) => {
     await tx.unsafe('SET dolt_transaction_commit = 1');
-    await tx.unsafe(`TRUNCATE TABLE "${tableName}" RESTART IDENTITY ${cascadeClause}`);
+    await tx.unsafe(`TRUNCATE TABLE "${tableName}"`);
   });
 }
 
@@ -1039,42 +1043,53 @@ export async function listIndexes(
   tableName: string,
 ): Promise<readonly IndexSummary[]> {
   await assertTableExists(projectId, tableName);
-  const rows = (await runInProjectDatabase(projectId, async (tx) =>
+  // DoltGres rejects the pg_index/array_position introspection join
+  // ("operator does not exist: smallint = int2vector"). information_schema.
+  // statistics IS supported (MySQL-heritage view) and gives one row per
+  // (index, column) with order + uniqueness. The primary key surfaces as the
+  // synthetic name 'PRIMARY'. NB: DoltGres returns these column keys in
+  // UPPERCASE, so we read each row case-insensitively.
+  const rawRows = (await runInProjectDatabase(projectId, async (tx) =>
     tx.unsafe(
       `
-    SELECT
-      ic.relname AS index_name,
-      ARRAY(
-        SELECT a.attname
-        FROM pg_attribute a
-        WHERE a.attrelid = c.oid
-          AND a.attnum = ANY(i.indkey)
-        ORDER BY array_position(i.indkey, a.attnum)
-      ) AS columns,
-      i.indisunique AS is_unique,
-      i.indisprimary AS is_primary
-    FROM pg_index i
-    JOIN pg_class c ON c.oid = i.indrelid
-    JOIN pg_class ic ON ic.oid = i.indexrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public'
-      AND c.relname = $1
-    ORDER BY i.indisprimary DESC, ic.relname
+    SELECT index_name, column_name, seq_in_index, non_unique
+    FROM information_schema.statistics
+    WHERE table_schema = 'public'
+      AND table_name = $1
+    ORDER BY index_name, seq_in_index
   `,
       [tableName],
     ),
-  )) as Array<{
-    index_name: string;
-    columns: string[];
-    is_unique: boolean;
-    is_primary: boolean;
-  }>;
-  return rows.map((r) => ({
-    name: r.index_name,
-    columns: r.columns,
-    unique: Boolean(r.is_unique),
-    isPrimary: Boolean(r.is_primary),
+  )) as Array<Record<string, unknown>>;
+
+  // Normalise UPPER/lower key casing into a predictable shape.
+  const pick = (row: Record<string, unknown>, key: string): unknown =>
+    row[key] ?? row[key.toUpperCase()] ?? row[key.toLowerCase()];
+
+  // Group the per-column rows into one entry per index, preserving column order.
+  const byIndex = new Map<string, { columns: string[]; unique: boolean; isPrimary: boolean }>();
+  for (const row of rawRows) {
+    const indexName = String(pick(row, 'index_name'));
+    const columnName = String(pick(row, 'column_name'));
+    const nonUnique = Number(pick(row, 'non_unique')) === 1;
+    let entry = byIndex.get(indexName);
+    if (!entry) {
+      entry = { columns: [], unique: !nonUnique, isPrimary: indexName === 'PRIMARY' };
+      byIndex.set(indexName, entry);
+    }
+    entry.columns.push(columnName);
+  }
+
+  const summaries: IndexSummary[] = Array.from(byIndex.entries()).map(([name, e]) => ({
+    name,
+    columns: e.columns,
+    unique: e.unique,
+    isPrimary: e.isPrimary,
   }));
+  // Primary key first, then the rest by name — matches the previous ordering.
+  return summaries.sort((a, b) =>
+    a.isPrimary === b.isPrimary ? a.name.localeCompare(b.name) : a.isPrimary ? -1 : 1,
+  );
 }
 
 export interface CreateIndexInput {

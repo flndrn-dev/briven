@@ -58,10 +58,7 @@ export async function applySchema(
 export function renderChange(change: Change): string[] {
   switch (change.kind) {
     case 'create_table':
-      return [
-        renderCreateTable(change.table, change.def),
-        ...renderNotifyTrigger(change.table, change.def),
-      ];
+      return [renderCreateTable(change.table, change.def)];
     case 'drop_table':
       // Order matters: trigger first (depends on table), then function (no
       // longer referenced once the trigger is gone), then the table itself.
@@ -87,48 +84,11 @@ export function singlePkColumn(def: TableDef): string | null {
   return pks.length === 1 && pks[0] ? pks[0][0] : null;
 }
 
-/**
- * Per-table NOTIFY trigger. Channel name is `briven_<schemaname>_<table>` — the
- * schema name is the project's data-plane schema (`proj_<projectId>`), so the
- * channel is unique across the whole shared cluster. Realtime LISTENs on
- * those channels to know when to re-invoke a subscribed query.
- *
- * Payload is small JSON: `{op, id?}` — we send the op kind plus the primary
- * key value when the table has exactly one PK column (the common case).
- * Composite-PK tables get op-only; consumers can re-query for the row.
- * Anything more would risk leaking row data into a side channel.
- */
-export function renderNotifyTrigger(table: string, def: TableDef): string[] {
-  const fn = triggerFnName(table);
-  const trg = triggerName(table);
-  const pk = singlePkColumn(def);
-  // why: hoist the row-value to `rec` so PL/pgSQL can read OLD on DELETE and
-  // NEW on INSERT/UPDATE through a single reference. PK identifier is the
-  // schema-emit-time table column name and is safe to inline.
-  const payloadExpr = pk
-    ? `json_build_object('op', TG_OP, 'id', rec."${pk}")`
-    : `json_build_object('op', TG_OP)`;
-  return [
-    `
-    CREATE OR REPLACE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
-    DECLARE
-      channel text;
-      rec RECORD;
-    BEGIN
-      channel := 'briven_' || current_schema() || '_${table}';
-      IF TG_OP = 'DELETE' THEN rec := OLD; ELSE rec := NEW; END IF;
-      PERFORM pg_notify(channel, (${payloadExpr})::text);
-      IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
-    END $$
-    `.trim(),
-    `DROP TRIGGER IF EXISTS ${trg} ON "${table}"`,
-    `
-    CREATE TRIGGER ${trg}
-      AFTER INSERT OR UPDATE OR DELETE ON "${table}"
-      FOR EACH ROW EXECUTE FUNCTION ${fn}()
-    `.trim(),
-  ];
-}
+// NOTE: per-table plpgsql NOTIFY triggers were removed (sprint S1.7). Realtime
+// detects changes by polling `DOLT_HASHOF('HEAD')` (see apps/realtime), not
+// LISTEN/NOTIFY, so emitting these on every create_table was dead work. The
+// `drop_table` case still issues idempotent `DROP TRIGGER/FUNCTION IF EXISTS`
+// to clean up triggers left behind by projects deployed before this change.
 
 function triggerName(table: string): string {
   return `_briven_notify_${table}`;

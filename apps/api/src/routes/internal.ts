@@ -2,6 +2,7 @@ import { constantTimeEqual } from '@briven/shared';
 import { Hono } from 'hono';
 
 import { env } from '../env.js';
+import { resolveApiKey } from '../services/api-keys.js';
 import { getDeployment, getDeploymentBundle } from '../services/deployments.js';
 import { invoke } from '../services/invoke.js';
 import { getPlainEnvForProject } from '../services/project-env.js';
@@ -25,6 +26,19 @@ internalRouter.use('/v1/internal/*', async (c, next) => {
   }
   await next();
   return;
+});
+
+internalRouter.post('/v1/internal/projects/:projectId/verify-key', async (c) => {
+  // Realtime asks whether a project key (brk_…) is valid FOR this project, so a
+  // browser's WebSocket token only ever opens its own project. apps/api owns
+  // the api-key table, so the check lives here (reuses resolveApiKey, the same
+  // resolver requireProjectAuth uses).
+  const projectId = c.req.param('projectId');
+  const body = (await c.req.json().catch(() => null)) as { token?: string } | null;
+  const token = body?.token;
+  if (!token || !token.startsWith('brk_')) return c.json({ valid: false });
+  const resolved = await resolveApiKey(token);
+  return c.json({ valid: !!resolved && resolved.projectId === projectId });
 });
 
 internalRouter.get('/v1/internal/deployments/:projectId/:deploymentId/bundle', async (c) => {

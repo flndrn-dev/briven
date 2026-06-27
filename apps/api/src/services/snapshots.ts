@@ -142,7 +142,7 @@ async function countUserTables(dbName: string): Promise<number> {
        FROM information_schema.tables
       WHERE table_schema = 'public'
         AND table_type = 'BASE TABLE'
-        AND table_name NOT LIKE '_briven_%'`,
+        AND left(table_name, 8) <> '_briven_'`,
   );
   return Number(rows[0]?.n) || 0;
 }

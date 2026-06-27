@@ -1,0 +1,28 @@
+# DoltGres for integration tests (local + CI).
+#
+# Brings up the REAL engine the data plane runs against, so DoltGres
+# incompatibilities (LIKE…ESCAPE, ILIKE, SET LOCAL, citext, vector, etc.)
+# fail HERE — in a test — instead of in production. This is the foundation
+# that stops the "little bugs keep coming back" cycle: the convergence was
+# done without any test that uses real DoltGres, so every incompatibility
+# only surfaced when a user hit it.
+#
+# Usage:
+#   docker compose -f infra/test/docker-compose.dolt.yml up -d
+#   BRIVEN_DATA_PLANE_URL=postgres://postgres:password@127.0.0.1:5433/postgres \
+#     pnpm test:integration
+#   docker compose -f infra/test/docker-compose.dolt.yml down -v
+services:
+  doltgres-test:
+    image: dolthub/doltgresql:latest
+    environment:
+      DOLTGRES_USER: postgres
+      DOLTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    healthcheck:
+      # DoltGres has no pg_isready; check the wire port is accepting connections.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/5432' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30

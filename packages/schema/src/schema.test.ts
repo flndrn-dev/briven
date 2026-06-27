@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { diff, generateSql, schema, table, text, timestamp, type SchemaDef } from './index.js';
+import {
+  diff,
+  generateSql,
+  schema,
+  table,
+  text,
+  timestamp,
+  vector,
+  type SchemaDef,
+} from './index.js';
+
+test('vector columns throw until DoltGres/LanceDB support lands', () => {
+  // DoltGres has no vector(N) type; defining one must fail early at
+  // build time rather than emitting SQL that 500s at apply time.
+  assert.throws(() => vector(3), /not supported yet on DoltGres/);
+});
 
 test('schema rejects reserved _briven_ prefix', () => {
   assert.throws(() =>
