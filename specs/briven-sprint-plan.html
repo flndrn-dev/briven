@@ -76,7 +76,7 @@
     <div class="sub">Sprint plan · one fixing pass · created 2026-06-27</div>
     <div style="margin-top:10px">
       <span class="pill live">status: building</span>
-      <span class="pill">Sprint 0 ✓ · Sprint 1 ✓ · Sprint 2 next</span>
+      <span class="pill">S0 ✓ · S1 ✓ · S2 ISY-path ✓ (auth cluster left)</span>
       <span class="pill">source: BRIVEN-BUGS-REPORT.md</span>
     </div>
   </header>
@@ -152,9 +152,10 @@
       <li><span class="box done"></span><div><span class="id">S2.6</span>Verified <b>already handled</b> — project creation provisions the database (with rollback) before any write</div></li>
       <li><span class="box done"></span><div><span class="id">S2.7</span>API keys no longer wrongly rejected on /env, /db, /logs, /usage, /export, /studio, /ai (full proof in the Sprint 3 ISY live test)</div></li>
       <li><span class="box done"></span><div><span class="id">S2.8</span>Auth secret now <em>required</em> to sign/verify CLI tokens — fails closed (no forgeable empty key)</div></li>
-      <li><span class="box"></span><div><span class="id">S2.1</span>Customer logins re-wired onto pg + correct database <b>(the worst landmine — Better-Auth)</b> — REMAINING</div></li>
-      <li><span class="box"></span><div><span class="id">S2.3</span>Case-insensitive emails without "citext" <em>(coupled to S2.1)</em> — REMAINING</div></li>
-      <li><span class="box"></span><div><span class="id">S2.9</span>Retire the old plug code entirely (after S2.1) — REMAINING</div></li>
+      <li><span class="box done"></span><div><span class="id">S2.1a</span>Login engine re-platformed onto pg + database-per-project (was postgres.js + schema-per-project)</div></li>
+      <li><span class="box done"></span><div><span class="id">S2.3</span>citext → text + UNIQUE index on lower(email) (DoltGres-verified). Stale "MySQL" test rewritten.</div></li>
+      <li><span class="box"></span><div><span class="id">S2.1b</span>⚠️ <b>NEW (found by the verification test):</b> the 4 auth tables don't match Better-Auth (emailVerified must be boolean; account needs a password column; session/verification fields). Customer login needs a real schema rebuild + service updates — its own PlanKoi sub-plan. Acceptance test written + skipped.</div></li>
+      <li><span class="box"></span><div><span class="id">S2.9</span>Retire old postgres.js/schema helpers — blocked until S2.1b + db-shell moves off postgres.js</div></li>
     </ul>
     <div class="done-when"><b>Done so far ✓ evidence:</b> api typecheck 0 errors; <b>53 pass / 0 fail</b> on live DoltGres (storage + compat + upsert/cursor/auth tests). All local, nothing deployed. The brk_ key can now set up tables + write data — the ISY data path is unblocked.</div>
   </div>
@@ -170,6 +171,17 @@
       <li><span class="box"></span><div><span class="id">S3.4</span>Prove ISY live: create tables → write → read → live update → fresh-project login</div></li>
     </ul>
     <div class="done-when"><b>Done when:</b> ISY runs the full loop against live Briven, on screen. <em>(screenshots)</em></div>
+  </div>
+
+  <div class="sprint" style="border-left:4px solid var(--koi2)">
+    <h3>Sprint 4 — Storage admin in the dashboard <span class="tag todo">scheduled</span> <span class="tag safe">after login cluster · not on ISY path</span></h3>
+    <div class="why">Bytes aren't measurable on DoltGres, but tables + rows are. You want to see and control storage from the admin dashboard. Agreed scope:</div>
+    <ul class="tasks">
+      <li><span class="box"></span><div><span class="id">S4.1</span>Show <b>real usage</b> per project — table count + total row count (instead of the blank bytes figure)</div></li>
+      <li><span class="box"></span><div><span class="id">S4.2</span>Set <b>per-project limits</b> (max rows/tables); flag projects that go over</div></li>
+      <li><span class="box"></span><div><span class="id">S4.3</span>Set <b>plan-tier caps</b> (Free / Pro / Team) in one place</div></li>
+    </ul>
+    <div class="done-when">Touches api + the web admin dashboard. Gets its own PlanKoi sub-plan before building. <b>Done when:</b> you can view usage, set per-project + tier caps, and over-limit projects are flagged — proven on live DoltGres.</div>
   </div>
 
   <div class="park">

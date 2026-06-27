@@ -31,15 +31,15 @@
  */
 export function renderAuthProvisioningSql(): string[] {
   return [
-    // citext for case-insensitive email matching. The extension is per-schema
-    // on Postgres 17 when installed inside a SET search_path session, which
-    // is exactly the context the caller establishes.
-    `CREATE EXTENSION IF NOT EXISTS citext`,
-
     // _briven_auth_users
+    // DoltGres has no `citext` type and no `CREATE EXTENSION`. Case-insensitive
+    // email matching is reproduced with a plain `text` column + a UNIQUE index
+    // on `lower(email)` — verified on DoltGres to enforce case-insensitive
+    // uniqueness (sprint S2.3). The Drizzle model already declares email as
+    // `text`, so this aligns the physical DDL with the model.
     `CREATE TABLE IF NOT EXISTS "_briven_auth_users" (
        id              text        PRIMARY KEY,
-       email           citext      NOT NULL,
+       email           text        NOT NULL,
        email_verified  timestamptz,
        name            text,
        image           text,
@@ -47,7 +47,7 @@ export function renderAuthProvisioningSql(): string[] {
        updated_at      timestamptz NOT NULL DEFAULT now()
      )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_users_email_uniq"
-       ON "_briven_auth_users" (email)`,
+       ON "_briven_auth_users" (lower(email))`,
 
     // _briven_auth_sessions
     `CREATE TABLE IF NOT EXISTS "_briven_auth_sessions" (

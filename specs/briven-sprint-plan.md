@@ -106,10 +106,13 @@ Bigger changes, so they get their own sprint — still each proven on the alarm.
 - `[x]` **S2.7** API keys no longer wrongly rejected on /env, /db, /logs, /usage, /export, /studio, /ai (carve-outs added; full e2e proof comes in the Sprint 3 ISY live test)
 - `[x]` **S2.8** Auth secret now *required* to sign/verify CLI tokens — fails closed instead of using a forgeable empty key
 
-**Customer end-user login cluster — REMAINING (NOT needed for the first ISY data test):**
-- `[ ]` **S2.1** Customer logins re-wired onto `pg` + correct database (the worst landmine — Better-Auth)
-- `[ ]` **S2.3** Case-insensitive emails without the missing "citext" type *(coupled to S2.1)*
-- `[ ]` **S2.9** Retire the old plug code entirely (after S2.1), so this whole class of bug can't return
+**Customer end-user login cluster — partly done; rebuild discovered (NOT needed for the first ISY data test):**
+- `[x]` **S2.1a** Login engine re-platformed onto `pg` + database-per-project (`auth-tenant-pool.ts`; was postgres.js + schema-per-project). Typechecks.
+- `[x]` **S2.3** citext → `text` + UNIQUE index on `lower(email)` (`auth-provisioning.ts`; DoltGres-verified to enforce case-insensitive uniqueness). Stale "MySQL" test rewritten.
+- `[ ]` **S2.1b** ⚠️ **NEW — discovered by the verification test:** the four customer-auth tables don't match Better-Auth's schema (user.emailVerified must be **boolean** not timestamp; account needs a **password** column + accountId + token fields; session needs updatedAt; verification needs `value`+updatedAt). Customer login 500s on first sign-up until the tables are rebuilt to Better-Auth's shape **and** the services that read them (`auth-users.ts`, `auth-audit.ts`, verification logic, admin dashboard) are updated. This is its own focused build — needs a PlanKoi sub-plan. Acceptance test already written + skipped: `auth-tenant-pool.integration.test.ts`.
+- `[ ]` **S2.9** Retire the old postgres.js/schema helpers — blocked until S2.1b **and** db-shell role provisioning (`data-plane.ts`) also moves off postgres.js.
+
+**Honest status:** the *driver/citext prerequisites* are done; *functional customer login* is a real remaining build (S2.1b), not a quick fix — exactly the "half-built/unusable" item the bug report flagged. The good news: the smoke-alarm caught it before it shipped.
 
 **Done so far — evidence:** api typecheck 0 errors; **53 pass / 0 fail** on live DoltGres (storage integration + compat alarm incl. the new size-limit probe + upsert/cursor/auth unit tests). All local, nothing deployed.
 
@@ -125,6 +128,21 @@ so I stop and ask you first.
 - `[ ]` **S3.4** Prove ISY live: create the tables → write a row → read it → see a live update → fresh-project login works
 
 **Done when:** ISY runs the full loop against live Briven, on screen. *(evidence: screenshots)*
+
+---
+
+### Sprint 4 — Storage admin in the dashboard  `[ ]`  *(scheduled — after the login cluster; not on the ISY path)*
+**Why:** DoltGres can't report byte sizes (S2.2 finding), but tables + rows ARE measurable.
+flndrn wants to see and control storage from the admin dashboard. Agreed scope (flndrn, 2026-06-27):
+
+- `[ ]` **S4.1** Show **real usage** per project — table count + total row count (measurable on DoltGres via `COUNT(*)` / `information_schema`), shown instead of the blank bytes figure.
+- `[ ]` **S4.2** Set **per-project limits** — admin sets a cap (max rows and/or max tables) per project; projects over the cap are flagged.
+- `[ ]` **S4.3** Set **plan-tier caps** — one place to set Free/Pro/Team storage limits, applied to all projects on that tier.
+- *(Not doing: manually-typed byte figure per project.)*
+
+Touches: api (a rows/tables usage query + limit storage + admin endpoints) + web admin dashboard UI. Enforcement ties into tiers (see S-parking "hard tier limits"). Will get its own PlanKoi sub-plan before building.
+
+**Done when:** admin can view tables+rows per project, set a per-project cap, set tier caps, and over-limit projects are flagged — proven against live DoltGres.
 
 ---
 
