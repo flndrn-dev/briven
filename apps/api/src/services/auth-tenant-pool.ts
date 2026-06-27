@@ -147,6 +147,12 @@ async function createAuthInstance(projectId: string) {
         sameSite: 'lax',
         httpOnly: true,
       },
+      // Privacy (CLAUDE.md §5.1): never persist raw end-user IPs. The
+      // session.ip_address column exists for Better-Auth compatibility but
+      // stays null. (Add hashed-IP-on-write later if device tracking is wanted.)
+      ipAddress: {
+        disableIpTracking: true,
+      },
     },
   });
 
