@@ -5,6 +5,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/session';
 
 import { AdminSignOut } from './admin-sign-out';
+import { CockpitMobileNav } from './cockpit-mobile-nav';
 import { CockpitNav } from './cockpit-nav';
 
 export const metadata = {
@@ -52,6 +53,8 @@ export default async function AdminCockpitLayout({
           </div>
         </div>
       </header>
+
+      <CockpitMobileNav />
 
       <div className="flex min-h-0 flex-1">
         <CockpitNav />

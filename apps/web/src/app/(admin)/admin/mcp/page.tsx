@@ -127,10 +127,10 @@ function auditProjectId(row: AuditRow): string | null {
 
 function SectionHeading({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+    <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
       <span className="text-[var(--color-text-muted)]">{icon}</span>
       {label}
-    </div>
+    </h2>
   );
 }
 
