@@ -173,7 +173,8 @@ export async function listProjectUsers(
 
   if (opts.cursor) {
     const parsed = parseCursor(opts.cursor);
-    cursorClause = 'AND (u.created_at, u.id) < ($1::timestamptz, $2)';
+    cursorClause =
+      'AND (u.created_at < $1::timestamptz OR (u.created_at = $1::timestamptz AND u.id < $2))';
     params.push(parsed.createdAt, parsed.id);
   }
 

@@ -103,7 +103,7 @@ export async function listAuditEntries(
     const parsed = parseCursor(opts.cursor);
     params.push(parsed.occurredAt, parsed.id);
     where.push(
-      `(occurred_at, id) < ($${params.length - 1}::timestamptz, $${params.length})`,
+      `(occurred_at < $${params.length - 1}::timestamptz OR (occurred_at = $${params.length - 1}::timestamptz AND id < $${params.length}))`,
     );
   }
   if (opts.action) {

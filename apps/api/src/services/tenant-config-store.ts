@@ -206,10 +206,18 @@ export async function updateAuthConfig(
   const current = await getAuthConfig(projectId);
   const next = mergeAuthConfig(current, patch);
   await runInProjectDatabase(projectId, async (tx) => {
+    // DoltGres has no `ON CONFLICT ... DO UPDATE` (the `excluded` pseudo-table
+    // is unsupported). Emulate the upsert manually: insert if absent, then
+    // unconditionally update. Both run inside the same transaction so the
+    // pair is atomic, giving identical set-or-overwrite behaviour.
     await tx.unsafe(
       `INSERT INTO "_briven_meta" (key, value)
        VALUES ($1, $2::jsonb)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+       ON CONFLICT (key) DO NOTHING`,
+      [META_KEY, JSON.stringify(next)],
+    );
+    await tx.unsafe(
+      `UPDATE "_briven_meta" SET value = $2::jsonb WHERE key = $1`,
       [META_KEY, JSON.stringify(next)],
     );
   });

@@ -12,7 +12,16 @@ export interface CliTokenPayload extends JWTPayload {
 }
 
 function secretBytes(): Uint8Array {
-  return new TextEncoder().encode(env.BRIVEN_BETTER_AUTH_SECRET);
+  // Fail closed (sprint S2.8): if the secret is unset, encoding `undefined`
+  // would yield a CONSTANT key — anyone could forge a CLI token. Refuse to
+  // sign or verify rather than fall back to a guessable key.
+  const secret = env.BRIVEN_BETTER_AUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      'BRIVEN_BETTER_AUTH_SECRET is not set — refusing to sign/verify CLI tokens with an empty key',
+    );
+  }
+  return new TextEncoder().encode(secret);
 }
 
 export async function signCliToken(userId: string): Promise<string> {

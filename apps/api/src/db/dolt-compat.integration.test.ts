@@ -202,4 +202,17 @@ describe.skipIf(!HAS_DB)('DoltGres compatibility alarm', () => {
       await rejects(`CREATE TABLE "${TAG}_v" (embedding vector(3))`);
     });
   });
+
+  // ───────────── documented limitations (flip = good news) ──────────────────
+  // Accepted SQL that returns a degenerate result on DoltGres. If the value
+  // changes, the test fails on purpose → DoltGres gained the capability and we
+  // can rely on it (e.g. storage-byte metering — sprint S2.2).
+  describe('documented limitations', () => {
+    test('pg_total_relation_size returns 0 (no on-disk size accounting yet)', async () => {
+      const r = await run(`SELECT pg_total_relation_size('"${TAG}"'::regclass)::bigint AS bytes`);
+      // DoltGres does not report relation byte sizes today. getStorageUsage
+      // counts tables accurately but `bytes` stays 0 until this flips.
+      expect(Number(r.rows[0].bytes)).toBe(0);
+    });
+  });
 });
