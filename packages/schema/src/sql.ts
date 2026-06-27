@@ -53,7 +53,23 @@ export function renderCreateTable(name: string, table: TableDef): string {
   return `CREATE TABLE IF NOT EXISTS "${name}" (\n${lines.join(',\n')}\n);`;
 }
 
+// DoltGres has no `vector(N)` column type — emitting it as DDL fails at
+// apply time with an opaque `at or near "(": syntax error`. The SDK builder
+// (columns.ts) already throws when a vector column is *defined*, but a schema
+// snapshot arriving over the wire (wire.ts permits `vector(N)`) bypasses the
+// builder, so we guard again here at the single DDL chokepoint to reject it
+// with a friendly message before it ever reaches DoltGres. Vector search is
+// coming with LanceDB.
+function rejectVectorType(sqlType: string): void {
+  if (/^vector\b/i.test(sqlType)) {
+    throw new Error(
+      "vector columns aren't supported yet — vector search is coming with LanceDB",
+    );
+  }
+}
+
 function renderColumn(def: ColumnDef, inCompositeKey: boolean): string {
+  rejectVectorType(def.sqlType);
   const parts: string[] = [def.sqlType];
   // Inline PRIMARY KEY only when the table has exactly one PK column;
   // composite keys are emitted as a single constraint at the table level.
