@@ -61,6 +61,16 @@ describe.skipIf(!HAS_DB)('studio against real DoltGres (S1.1–S1.4)', () => {
   // Caught only by the live ISY proof; this locks the whole path.
   test('S3 ISY path: createTable → getTableColumns (PK) → insertRow → read', async () => {
     const t = 'isy_proof';
+    // A SECOND table that also has an `id` primary key. In DoltGres/MySQL every
+    // PK is named 'PRIMARY', so a PK-detection join on constraint_name alone
+    // fans out the column list across tables. This sibling table makes the test
+    // a multi-table fixture so that fan-out (id appearing 2×) is caught — a
+    // single-table fixture would silently pass.
+    await createTable({
+      projectId: PROJECT_ID,
+      tableName: 'isy_proof_sibling',
+      columns: [{ name: 'id', type: 'integer', primaryKey: true, notNull: true }],
+    });
     await createTable({
       projectId: PROJECT_ID,
       tableName: t,
@@ -71,6 +81,8 @@ describe.skipIf(!HAS_DB)('studio against real DoltGres (S1.1–S1.4)', () => {
     });
     // Must NOT throw the int2vector error, and must detect the primary key.
     const cols = await getTableColumns(PROJECT_ID, t);
+    // No duplicate columns despite the sibling table's identically-named PK.
+    expect(cols.map((c) => c.name)).toEqual(['id', 'label']);
     expect(cols.find((c) => c.name === 'id')?.isPrimaryKey).toBe(true);
     expect(cols.find((c) => c.name === 'label')?.isPrimaryKey).toBe(false);
     // insertRow calls getTableColumns internally, then INSERT ... RETURNING *.

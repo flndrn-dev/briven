@@ -133,17 +133,23 @@ export async function getTableColumns(
     tx.unsafe(
       `
     WITH pk_cols AS (
-      SELECT kcu.column_name
+      -- NOTE: the kcu join MUST include table_name. In DoltGres/MySQL every
+      -- primary key is named 'PRIMARY', so joining tc→kcu on constraint_name
+      -- alone matches the PK column of EVERY table in the schema, fanning out
+      -- the column list (e.g. an 'id' PK column appearing once per table that
+      -- also has an 'id' PK). DISTINCT is a belt-and-suspenders guard.
+      SELECT DISTINCT kcu.column_name
       FROM information_schema.table_constraints tc
       JOIN information_schema.key_column_usage kcu
         ON kcu.constraint_name = tc.constraint_name
        AND kcu.table_schema = tc.table_schema
+       AND kcu.table_name = tc.table_name
       WHERE tc.constraint_type = 'PRIMARY KEY'
         AND tc.table_schema = 'public'
         AND tc.table_name = $1
     ),
     fk_cols AS (
-      SELECT
+      SELECT DISTINCT
         kcu.column_name,
         ccu.table_name AS fk_table,
         ccu.column_name AS fk_column
@@ -151,6 +157,7 @@ export async function getTableColumns(
       JOIN information_schema.key_column_usage kcu
         ON kcu.constraint_name = tc.constraint_name
        AND kcu.table_schema = tc.table_schema
+       AND kcu.table_name = tc.table_name
       JOIN information_schema.constraint_column_usage ccu
         ON ccu.constraint_name = tc.constraint_name
        AND ccu.table_schema = tc.table_schema
