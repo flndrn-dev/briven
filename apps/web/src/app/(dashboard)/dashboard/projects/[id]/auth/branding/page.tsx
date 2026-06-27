@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { apiJson } from '../../../../../../../lib/api';
 import { BrandingForm, type AuthConfig } from './branding-form';
+import { LogoUploader } from './logo-uploader';
 
 interface AuthStateResponse {
   enabled: boolean;
@@ -52,6 +53,8 @@ export default async function AuthBrandingPage({
           send while DNS propagates.
         </p>
       </header>
+
+      <LogoUploader projectId={id} initialLogoUrl={state.config.branding.logoUrl} />
 
       <BrandingForm projectId={id} initial={state.config} />
     </section>

@@ -65,12 +65,19 @@ export async function getHourlyInvocations(
   projectId: string,
 ): Promise<readonly HourlyInvocations[]> {
   const db = getDb();
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // NOTE: pass timestamps to raw `sql` as ISO *strings*, never `Date` objects.
+  // The control-plane postgres.js client runs with `prepare: false`, and on
+  // Bun that path can't encode a Date bind param ("the string argument must be
+  // … Received an instance of Date") — it 500s before the SQL even runs. The
+  // `::timestamptz` cast parses the ISO string fine. (Drizzle's typed query
+  // builder is unaffected — it knows the column OID; only raw sql interpolation
+  // hits this.)
+  const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   // generate_series fills missing hours so the chart is a stable 24 points.
   const rows = (await db.execute(sql`
     WITH hours AS (
       SELECT generate_series(
-        date_trunc('hour', ${since}::timestamptz),
+        date_trunc('hour', ${sinceIso}::timestamptz),
         date_trunc('hour', now()),
         interval '1 hour'
       ) AS hour
@@ -82,7 +89,7 @@ export async function getHourlyInvocations(
         count(*) FILTER (WHERE status = 'err')::int AS err_count
       FROM function_logs
       WHERE project_id = ${projectId}
-        AND created_at >= ${since}::timestamptz
+        AND created_at >= ${sinceIso}::timestamptz
       GROUP BY 1
     )
     SELECT
@@ -114,6 +121,9 @@ export interface FunctionStats {
  *
  * durationMs is stored as varchar (legacy choice from the runtime payload
  * shape) — CAST to numeric for the aggregation.
+ *
+ * `sinceIso` is passed as an ISO string, not a Date — see the note in
+ * getHourlyInvocations (prepare:false + Bun can't bind a Date param).
  */
 export async function getFunctionStats(
   projectId: string,
@@ -121,7 +131,7 @@ export async function getFunctionStats(
   sinceHours = 24,
 ): Promise<FunctionStats> {
   const db = getDb();
-  const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+  const sinceIso = new Date(Date.now() - sinceHours * 60 * 60 * 1000).toISOString();
   const rows = (await db.execute(sql`
     SELECT
       count(*)::int AS count,
@@ -131,7 +141,7 @@ export async function getFunctionStats(
     FROM function_logs
     WHERE project_id = ${projectId}
       AND function_name = ${functionName}
-      AND created_at >= ${since}
+      AND created_at >= ${sinceIso}::timestamptz
   `)) as Array<{
     count: number | string;
     err_count: number | string;
