@@ -300,12 +300,73 @@ async function dropSubscription(subId: string): Promise<void> {
  * unauthenticated WebSocket service. apps/api/src/routes/internal.ts
  * already does the right thing (503 when secret unset); this matches.
  */
+/**
+ * Extract the bearer token from a WS upgrade request. Accepts the Authorization
+ * header (server-to-server) OR a `?token=` / `?bearer=` query param — browsers
+ * CANNOT set headers on a WebSocket, so the SDK passes the token in the URL.
+ */
+function extractToken(req: Request): string | null {
+  const auth = req.headers.get('authorization');
+  const headerToken = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
+  if (headerToken) return headerToken;
+  try {
+    const p = new URL(req.url).searchParams;
+    return p.get('token') ?? p.get('bearer');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Authorise an incoming WS upgrade. Accepts either the global shared secret
+ * (trusted server-to-server callers) or a structurally-valid project key
+ * (`brk_…`). A project key's validity FOR A SPECIFIC PROJECT is verified at
+ * SUBSCRIBE time (see verifyProjectKey) — the projectId isn't known until the
+ * subscribe frame arrives. Refuses ALL requests when the shared secret is unset
+ * (fail-closed), matching apps/api/src/routes/internal.ts.
+ */
 function authorise(req: Request): boolean {
   if (!env.BRIVEN_RUNTIME_SHARED_SECRET) return false;
-  const auth = req.headers.get('authorization');
-  const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
+  const token = extractToken(req);
   if (!token) return false;
-  return constantTimeEqual(token, env.BRIVEN_RUNTIME_SHARED_SECRET);
+  if (constantTimeEqual(token, env.BRIVEN_RUNTIME_SHARED_SECRET)) return true;
+  return token.startsWith('brk_');
+}
+
+/**
+ * Verify a project key (`brk_…`) is valid FOR `projectId` by asking apps/api
+ * (which owns the api-key table) over the shared-secret internal channel.
+ * Cached briefly so a reconnect storm doesn't hammer the control plane.
+ */
+const keyVerifyCache = new Map<string, { ok: boolean; exp: number }>();
+async function verifyProjectKey(projectId: string, token: string): Promise<boolean> {
+  if (!token.startsWith('brk_')) return false;
+  const cacheKey = `${projectId}:${token}`;
+  const now = Date.now();
+  const hit = keyVerifyCache.get(cacheKey);
+  if (hit && hit.exp > now) return hit.ok;
+  let ok = false;
+  try {
+    const res = await fetch(
+      `${env.BRIVEN_API_INTERNAL_URL}/v1/internal/projects/${projectId}/verify-key`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(env.BRIVEN_RUNTIME_SHARED_SECRET
+            ? { authorization: `Bearer ${env.BRIVEN_RUNTIME_SHARED_SECRET}` }
+            : {}),
+        },
+        body: JSON.stringify({ token }),
+      },
+    );
+    if (res.ok) ok = ((await res.json()) as { valid?: boolean }).valid === true;
+  } catch {
+    ok = false;
+  }
+  // Short positive TTL (keys can be revoked); shorter negative TTL.
+  keyVerifyCache.set(cacheKey, { ok, exp: now + (ok ? 60_000 : 5_000) });
+  return ok;
 }
 
 if (!env.BRIVEN_RUNTIME_SHARED_SECRET) {
@@ -376,7 +437,7 @@ interface SocketHandle {
 
 export default {
   port: env.BRIVEN_REALTIME_PORT,
-  fetch(req: Request, server: { upgrade: (req: Request) => boolean }) {
+  fetch(req: Request, server: { upgrade: (req: Request, options?: { data?: unknown }) => boolean }) {
     const url = new URL(req.url);
     if (url.pathname === '/health') return Response.json({ status: 'ok', service: 'realtime' });
     if (url.pathname === '/ready') {
@@ -435,7 +496,9 @@ export default {
     }
     if (url.pathname === '/v1/subscribe') {
       if (!authorise(req)) return Response.json({ code: 'unauthorized' }, { status: 401 });
-      if (server.upgrade(req)) return undefined;
+      // Carry the upgrade token onto the socket so the subscribe handler can do
+      // the per-project authorization check once the projectId is known.
+      if (server.upgrade(req, { data: { token: extractToken(req) } })) return undefined;
       return new Response('upgrade required', { status: 426 });
     }
     return Response.json({ code: 'not_found' }, { status: 404 });
@@ -463,6 +526,32 @@ export default {
         await dropSubscription(parsed.subscriptionId);
         ws.send(JSON.stringify({ type: 'unsubscribed', subscriptionId: parsed.subscriptionId }));
         return;
+      }
+
+      // Per-project authorization. A connection authed with the global shared
+      // secret is a trusted server-to-server caller and may subscribe to any
+      // project. A connection authed with a project key (brk_…) may ONLY
+      // subscribe to the project that key belongs to — verified against
+      // apps/api. Without this, one browser token could read another tenant's
+      // data (the subscribe frame's projectId is otherwise unchecked).
+      const connToken = (ws as unknown as { data?: { token?: string } }).data?.token ?? null;
+      const trusted =
+        !!connToken &&
+        !!env.BRIVEN_RUNTIME_SHARED_SECRET &&
+        constantTimeEqual(connToken, env.BRIVEN_RUNTIME_SHARED_SECRET);
+      if (!trusted) {
+        const allowed = connToken ? await verifyProjectKey(parsed.projectId, connToken) : false;
+        if (!allowed) {
+          incCounter('briven_realtime_subscribe_rejected_total', { reason: 'forbidden_project' });
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              code: 'forbidden',
+              subscriptionId: parsed.subscriptionId,
+            }),
+          );
+          return;
+        }
       }
 
       if (owned.size >= env.BRIVEN_REALTIME_MAX_SUBS_PER_WS) {

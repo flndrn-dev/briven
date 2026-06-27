@@ -234,6 +234,7 @@ class UpdateImpl implements UpdateQuery {
 
 class DeleteImpl implements DeleteQuery {
   private readonly w = new WhereClause();
+  private returningCols: readonly string[] | null = null;
 
   constructor(
     private readonly tx: ProjectTx,
@@ -245,9 +246,8 @@ class DeleteImpl implements DeleteQuery {
     return this;
   }
 
-  // @README-BRIVEN `cols` is intentionally ignored — see execute(): DoltGres
-  // DELETE … RETURNING is not yet confirmed, so DELETE is rowcount-only for now.
-  returning(_cols?: readonly string[]): PromiseLike<unknown[]> {
+  returning(cols?: readonly string[]): PromiseLike<unknown[]> {
+    this.returningCols = cols ?? [];
     return this.execute();
   }
 
@@ -259,13 +259,13 @@ class DeleteImpl implements DeleteQuery {
   }
 
   private async execute(): Promise<unknown[]> {
-    const query = `DELETE FROM ${quote(this.table)}${this.w.sql()}`;
-    // TODO(ADR 0001): DoltGres DELETE … RETURNING is not yet confirmed against
-    // a live DoltGres (INSERT/UPDATE RETURNING are verified). Until then DELETE
-    // runs plain and returns [] even when `.returning(cols)` was requested —
-    // rowcount-only semantics, no rows. Once confirmed, capture cols in
-    // returning() and append ` RETURNING ${returningClause(cols)}`, then return
-    // the rows exactly like InsertImpl / UpdateImpl.
+    let query = `DELETE FROM ${quote(this.table)}${this.w.sql()}`;
+    // @README-BRIVEN DoltGres supports DELETE … RETURNING.
+    if (this.returningCols !== null) {
+      query += ` RETURNING ${returningClause(this.returningCols)}`;
+      const out = await this.tx.unsafe(query, this.w.values() as never[]);
+      return out as unknown[];
+    }
     await this.tx.unsafe(query, this.w.values() as never[]);
     return [];
   }

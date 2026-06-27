@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: Briven — finish DoltGres convergence & real-time production-ready</title>
+<style>
+  :root{
+    --bg:#0f1419; --surface:#1a2230; --surface-2:#232d3d; --text:#e6edf3; --muted:#9fb0c0;
+    --accent:#ff7a59; --accent-2:#4cc4c0; --gold:#f4b740; --ok:#4caf7d; --warn:#e0b341;
+    --err:#e5534b; --border:#2c3a4d; --radius:12px; --maxw:920px;
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box} html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.65}
+  main{max-width:var(--maxw);margin:0 auto;padding:2rem 1.25rem 5rem}
+  h1{font-size:2rem;line-height:1.2;margin:.2em 0} h2{margin-top:2.2rem;border-bottom:1px solid var(--border);padding-bottom:.3rem}
+  h3{margin-top:1.6rem} h4{margin:1.1rem 0 .4rem;color:var(--accent-2)}
+  a{color:var(--accent-2)} code{font-family:var(--mono)}
+  p code,li code,td code{background:var(--surface-2);padding:.1em .4em;border-radius:6px;font-size:.9em}
+  pre{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;overflow:auto}
+  table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.92rem}
+  th,td{border:1px solid var(--border);padding:.4rem .6rem;text-align:left;vertical-align:top}
+  th{background:var(--surface-2);color:var(--muted)}
+  details.meta{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.6rem 1rem;margin:1rem 0}
+  details.meta summary{cursor:pointer;font-weight:600;color:var(--muted)}
+  details.meta dl{display:grid;grid-template-columns:auto 1fr;gap:.2rem 1rem;margin:.6rem 0 0}
+  details.meta dt{color:var(--muted)} details.meta dd{margin:0}
+  figure{margin:1.2rem 0;text-align:center} figure img{max-width:100%;border:1px solid var(--border);border-radius:var(--radius)}
+  figcaption{color:var(--muted);font-size:.9rem;margin-top:.4rem}
+  .imgslot{border:1px dashed var(--border);border-radius:var(--radius);padding:1.5rem 1rem;color:var(--muted);background:repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(255,255,255,.02) 10px,rgba(255,255,255,.02) 20px)}
+  section{margin:1.5rem 0}
+  .files .tag{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;padding:.1em .5em;border-radius:999px;border:1px solid var(--border)}
+  .files .tag.existing{color:var(--accent-2)} .files .tag.new{color:var(--gold)}
+  .phase{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;margin:1.2rem 0}
+  .checklist{list-style:none;padding-left:0} .checklist li{margin:.35rem 0}
+  .status{font-family:var(--mono);background:var(--surface-2);border-radius:6px;padding:.05em .45em;margin-right:.4rem;color:var(--muted)}
+  .loop{background:rgba(76,196,192,.08);border-left:3px solid var(--accent-2);border-radius:8px;padding:.7rem 1rem;margin:.8rem 0}
+  .mermaid{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center}
+  .ok{color:var(--ok)} .bad{color:var(--err)}
+  @media (max-width:700px){main{padding:1.25rem .8rem}}
+</style>
+</head>
+<body>
+<main>
+
+  <header>
+    <h1>Plan: Briven — finish the DoltGres convergence &amp; make real-time production-ready</h1>
+    <details class="meta">
+      <summary>Metadata</summary>
+      <dl>
+        <dt>created</dt>      <dd>2026-06-27T09:35:06Z</dd>
+        <dt>modified</dt>     <dd>2026-06-27T09:35:06Z</dd>
+        <dt>commits</dt>      <dd>e9fa837 (studio LIKE…ESCAPE fix), realtime WS auth (uncommitted)</dd>
+        <dt>agent name</dt>   <dd>claude-opus-4-8</dd>
+        <dt>session id</dt>   <dd>bb266471-e169-4b1b-b407-d47f5a9cecdb</dd>
+        <dt>back refs</dt>    <dd>memory: briven-doltgres-convergence, flndrn-roadmap, plankoi-skill</dd>
+        <dt>forward refs</dt> <dd>katsuro (built on this); flndrn git platform</dd>
+      </dl>
+    </details>
+  </header>
+
+  <figure>
+    <div class="imgslot">🖼️ hero pending — <code>/plankoi image briven-realtime-production-ready</code> (needs OPENAI_API_KEY)<br><small>subject: one finished "data pipe" (DoltGres) with a live-update spark running end to end, old duplicate pipe removed</small></div>
+    <figcaption>Finish the one pipe, prove the live spark, never let the old pipe leak back.</figcaption>
+  </figure>
+
+  <section id="purpose">
+    <h2>Purpose</h2>
+    <p><strong>For:</strong> flndrn — to get Briven to "100% real-time production-ready" so it can be tested live with the ISY database and <strong>unblock Katsuro</strong> (and later the git platform). <strong>Not for:</strong> shipping new product surfaces (wallet, branches, workflows) — those are explicitly out of scope here. <strong>Why now:</strong> Briven is the gate for everything else on the roadmap; until its data layer and real-time loop are trustworthy, nothing built on top is usable.</p>
+  </section>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>"Little bugs keep coming back" and stall the build. A 4-agent audit + a live DoltGres probe proved this is <strong>not bad luck</strong> — it is one root cause with two halves:</p>
+    <ol>
+      <li><strong>The database switch (Postgres → DoltGres) was left half-finished on purpose.</strong> <code>apps/api/src/db/data-plane.ts</code> still keeps <em>two drivers</em> (<code>postgres.js</code> + <code>pg</code>) and <em>two tenancy models</em> (schema-per-project + database-per-project) side by side. Old wiring survives in cold corners (metering, customer-auth, <code>db shell</code>, deploy triggers) and breaks the first time each is exercised.</li>
+      <li><strong>Nothing tests the real DoltGres.</strong> Every test mocks the DB or points at a dead URL; the existing tests are titled <em>"MySQL"</em> and 8/11 currently fail; CI runs no database and may not run at all; images ship even when tests are red. So incompatibilities are invisible until production.</li>
+    </ol>
+    <p>Result: the same unfinished convergence surfaces one surface at a time, forever, until both halves are fixed.</p>
+    <figure><div class="imgslot">🖼️ problem pending<br><small>subject: a switched filing cabinet, alarm still wired to the old one</small></div><figcaption>New database, old alarm system.</figcaption></figure>
+  </section>
+
+  <section id="solution">
+    <h2>Solution</h2>
+    <p><strong>Finish the convergence to ONE world, prove the real-time loop, and build a DoltGres-backed test net that runs in CI before every deploy.</strong> Concretely: (a) a foundation test harness that exercises the real DoltGres end-to-end (this stops the recurrence); (b) fix the proven incompatibilities in batches, each verified locally before a single batched deploy; (c) prove ISY's live write→update loop in production; (d) harden the reactive engine.</p>
+    <pre class="mermaid">
+flowchart TB
+  A[Foundation: DoltGres test net + CI gate] --> B[Batch A: surgical SQL fixes + realtime auth]
+  B --> C[Deploy once + PROVE ISY live loop]
+  C --> D[Batch B: latent landmines<br/>citext, Better-Auth, metering, runtime DB provisioning]
+  D --> E[Phase 4: realtime hardening<br/>change scoping, heartbeats, shutdown]
+  E --> F([Briven ready → Katsuro builds])
+    </pre>
+  </section>
+
+  <section id="files" class="files">
+    <h2>Relevant Files</h2>
+    <h3>Existing Files</h3>
+    <ul>
+      <li><span class="tag existing">existing</span> <code>apps/api/src/db/data-plane.ts</code> — the two-worlds seam; legacy postgres.js paths to retire.</li>
+      <li><span class="tag existing">existing</span> <code>apps/api/src/services/studio.ts</code> — ILIKE (:247), SET LOCAL (:556), TRUNCATE RESTART IDENTITY (:911), index introspection (:1042).</li>
+      <li><span class="tag existing">existing</span> <code>apps/api/src/services/auth-provisioning.ts</code> — citext (:37,42) → text+lower().</li>
+      <li><span class="tag existing">existing</span> <code>apps/api/src/services/auth-tenant-pool.ts</code> — Better-Auth on postgres.js + wrong DB (:89).</li>
+      <li><span class="tag existing">existing</span> <code>apps/api/src/services/usage.ts</code> — getStorageUsage on postgres.js + wrong DB (:181).</li>
+      <li><span class="tag existing">existing</span> <code>apps/realtime/src/index.ts</code> — WS auth (FIXED, uncommitted) + change-scoping/heartbeats.</li>
+      <li><span class="tag existing">existing</span> <code>apps/realtime/src/poll-manager.ts</code> — DB-wide DOLT_HASHOF → needs per-table scoping.</li>
+      <li><span class="tag existing">existing</span> <code>apps/runtime/src/db.ts</code> — poolFor assumes DB exists → runtime-side provisioning.</li>
+      <li><span class="tag existing">existing</span> <code>apps/api/src/services/studio.test.ts</code> — stale "MySQL", 8/11 RED → delete/rewrite.</li>
+      <li><span class="tag existing">existing</span> <code>.github/workflows/ci.yml</code>, <code>.forgejo/workflows/ci.yml</code>, <code>release-image.yml</code> — add DB service + gate deploy on tests.</li>
+    </ul>
+    <h3>New Files</h3>
+    <ul>
+      <li><span class="tag new">new</span> <code>apps/api/tests/integration/dolt-compat.integration.test.ts</code> — the compatibility matrix as a permanent test.</li>
+      <li><span class="tag new">new</span> <code>apps/api/tests/integration/full-loop.integration.test.ts</code> — provision→table→insert→query→live-update against real DoltGres.</li>
+      <li><span class="tag new">new</span> <code>infra/test/docker-compose.dolt.yml</code> — DoltGres service for local + CI.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Implementation Phases</h2>
+    <p><strong>IMPORTANT:</strong> Execute every phase and task step by step, in order, top to bottom.</p>
+    <p>Status markers: <code>[]</code> idle · <code>[wip]</code> in progress · <code>[x]</code> complete · <code>[f]</code> failed.</p>
+
+    <div class="phase">
+      <h3><code class="status">[wip]</code> Phase 1: Foundation — DoltGres test net (the cure)</h3>
+      <p>Make incompatibilities surface BEFORE production. Without this, every later fix is unverified and bugs return.</p>
+      <h4>1.1 Local DoltGres harness</h4>
+      <ul class="checklist"><li><code class="status">[wip]</code> Add <code>infra/test/docker-compose.dolt.yml</code> (dolthub/doltgresql) ✓ + a test bootstrap that provisions a throwaway project DB.</li></ul>
+      <h4>1.2 Compatibility + full-loop tests</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Land the proven compatibility matrix as <code>dolt-compat.integration.test.ts</code> (locks the ✅/❌ list so a regression fails CI).</li>
+        <li><code class="status">[]</code> Land <code>full-loop.integration.test.ts</code>: provision → create-table → insert → studio query → realtime DOLT_HASHOF fires → snapshot.</li>
+      </ul>
+      <h4>1.3 Fix the safety net + CI gate</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Delete/rewrite the stale "MySQL" <code>studio.test.ts</code> to assert DoltGres syntax (turn it green).</li>
+        <li><code class="status">[]</code> Add a DoltGres service to the CI <code>test</code> job; make <code>release-image.yml</code> <code>needs: [test]</code>; verify the Forgejo runner is actually registered.</li>
+      </ul>
+      <h4>1.4 Testing Strategy</h4>
+      <ul class="checklist"><li><code class="status">[]</code> <code>pnpm test:integration</code> runs green locally against docker DoltGres; CI shows the DB job executing.</li></ul>
+      <div class="loop">🔁 Do not exit until the integration suite runs green locally AND CI runs it before deploy.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 2: Batch A — surgical fixes + prove ISY live</h3>
+      <p>Fix the confirmed breaks that are quick + the realtime auth (already coded), one batched deploy, then prove the live loop on ISY.</p>
+      <h4>2.1 Studio SQL fixes</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>ILIKE</code> → <code>lower(col) LIKE lower($n)</code> (studio.ts:247).</li>
+        <li><code class="status">[]</code> Drop <code>SET LOCAL</code> (search_path/statement_timeout) in executeQuery (studio.ts:556).</li>
+        <li><code class="status">[]</code> <code>TRUNCATE … RESTART IDENTITY</code> → plain <code>TRUNCATE</code> (studio.ts:911).</li>
+        <li><code class="status">[]</code> Index list (studio.ts:1042) → information_schema-based or graceful-degrade.</li>
+      </ul>
+      <h4>2.2 Runtime + realtime + snapshots</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Realtime WS auth — already coded (query-token + per-project verify); commit it.</li>
+        <li><code class="status">[]</code> Enable runtime inline <code>DELETE … RETURNING</code> (proven supported); align inline≡isolate (query-builder.ts:248).</li>
+        <li><code class="status">[]</code> Align snapshots table filter to <code>left(name,8) &lt;&gt; '_briven_'</code> (snapshots.ts:145).</li>
+        <li><code class="status">[]</code> Gate <code>vector(N)</code> column DDL with a clear error until LanceDB (packages/schema sql.ts).</li>
+        <li><code class="status">[]</code> Remove dead plpgsql NOTIFY trigger emission (schema-apply.ts) — polling replaced it.</li>
+      </ul>
+      <h4>2.3 Deploy &amp; PROVE</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> One batched rebuild on briven.tech (hot-zone — get flndrn's OK).</li>
+        <li><code class="status">[]</code> Prove ISY live loop: subscribe with ISY brk_ key → insert a note → live update frame received.</li>
+      </ul>
+      <h4>2.4 Testing Strategy</h4>
+      <ul class="checklist"><li><code class="status">[]</code> Integration tests green for every changed query; live ISY subscribe→insert→push shows evidence (logged frame / screenshot).</li></ul>
+      <div class="loop">🔁 Do not mark done until the live ISY real-time push is observed in production.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 3: Batch B — latent landmines &amp; one-world cleanup</h3>
+      <p>Fix the breaks that aren't hit yet but will block customer auth + new projects, and retire the legacy world.</p>
+      <h4>3.1 Auth + metering off the old driver</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>citext</code> → <code>text</code> + <code>lower(email)</code> unique index (auth-provisioning.ts).</li>
+        <li><code class="status">[]</code> Re-platform Better-Auth onto <code>pg</code> bound to the project DATABASE (auth-tenant-pool.ts:89).</li>
+        <li><code class="status">[]</code> Fix <code>getStorageUsage</code> onto <code>pg</code> + correct DB (usage.ts:181).</li>
+        <li><code class="status">[]</code> <code>ON CONFLICT DO UPDATE</code> → manual upsert (tenant-config-store.ts:211, auth-service.ts:127).</li>
+        <li><code class="status">[]</code> Row-tuple cursors → expand to <code>a&lt;$1 OR (a=$1 AND b&lt;$2)</code> (auth-users.ts:176, auth-audit.ts:106).</li>
+      </ul>
+      <h4>3.2 Runtime DB provisioning (Katsuro hard-blocker)</h4>
+      <ul class="checklist"><li><code class="status">[]</code> Ensure a new project's <code>proj_&lt;id&gt;</code> DoltGres DB exists before first write (provision on create or create-if-missing in runtime db.ts).</li></ul>
+      <h4>3.3 Retire the second world</h4>
+      <ul class="checklist"><li><code class="status">[]</code> Delete <code>pgjsClient</code>/<code>dataPlaneClient</code>, <code>schemaNameFor</code>, <code>provisionProjectRole</code>, <code>rotateProjectRolePassword</code> once nothing calls them.</li></ul>
+      <h4>3.4 Testing Strategy</h4>
+      <ul class="checklist"><li><code class="status">[]</code> Integration test: enable auth on a fresh project → sign up → sign in (proves citext-free auth on DoltGres). Create-project → first write succeeds.</li></ul>
+      <div class="loop">🔁 Do not exit until a fresh project can enable auth and accept its first write end-to-end.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 4: Real-time hardening</h3>
+      <p>Make the reactive loop efficient and reliable enough for Katsuro's write volume.</p>
+      <h4>4.1 Per-table change scoping</h4>
+      <ul class="checklist"><li><code class="status">[]</code> Use DOLT_DIFF / per-table hashing so a write only re-invokes subs whose tables changed (poll-manager.ts) — today every commit re-invokes every sub in the project.</li></ul>
+      <h4>4.2 Connection reliability</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> WS heartbeats + idleTimeout; graceful shutdown (call PollManager.close on SIGTERM); jittered client reconnect.</li>
+        <li><code class="status">[]</code> Add realtime to api <code>/ready</code> + point the compose healthcheck at <code>/ready</code>.</li>
+        <li><code class="status">[]</code> Add poll-failure + fan-out latency metrics + alerts.</li>
+      </ul>
+      <h4>4.3 Testing Strategy</h4>
+      <ul class="checklist"><li><code class="status">[]</code> Load test (real project token) 1000 subs p99&lt;500ms; write to table A does not re-invoke subs on table B.</li></ul>
+      <div class="loop">🔁 Do not exit until scoping is proven (cross-table isolation) and the load test passes.</div>
+      <p><em>Note: horizontal scale (multi-replica) is deliberately deferred — single instance is fine at first-customer scale, but document that &gt;1 replica needs shared state (caps + metering break otherwise).</em></p>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>Validation Commands</h2>
+    <ul class="checklist">
+      <li><code class="status">[]</code> <code>pnpm -w build</code> — all packages compile.</li>
+      <li><code class="status">[]</code> <code>pnpm -w test</code> — unit tests green (incl. rewritten studio test).</li>
+      <li><code class="status">[]</code> <code>pnpm test:integration</code> — DoltGres integration suite green.</li>
+      <li><code class="status">[]</code> Live: ISY subscribe → insert → real-time push observed on briven.tech.</li>
+      <li><code class="status">[]</code> Live: fresh project → enable auth → sign in; create-project → first write succeeds.</li>
+    </ul>
+    <div class="loop">🔁 Not complete until every box is checked and every command passes. If a step is genuinely impossible, mark it <code>[f]</code> and continue.</div>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <h3>Proven DoltGres compatibility matrix (live probe, 2026-06-27)</h3>
+    <table>
+      <tr><th class="ok">✅ Supported (no fix)</th><th class="bad">❌ Rejected (must fix)</th></tr>
+      <tr>
+        <td><code>ON CONFLICT DO NOTHING</code>, jsonb cast, <code>interval</code>, <code>date_trunc</code>, CTE, <code>generate_series</code>, <code>COUNT(DISTINCT)</code>, <code>ARRAY(SELECT DISTINCT)</code>, <code>::regclass</code>+<code>pg_total_relation_size</code>, <code>format('%I.%I')</code>, <code>gen_random_uuid()</code>, <strong>information_schema FK join</strong>, <strong>DELETE…RETURNING</strong>, plpgsql trigger DDL (dead code)</td>
+        <td><code>ON CONFLICT DO UPDATE</code> (excluded), row-tuple <code>(a,b)&lt;(...)</code>, <strong>ILIKE</strong>, <strong>SET LOCAL</strong>, <strong>TRUNCATE…RESTART IDENTITY</strong>, <code>pg_index</code>/<code>array_position</code>, <strong>citext</strong> / <code>CREATE EXTENSION</code>, <strong>vector(N)</strong> column, <code>percentile_cont WITHIN GROUP</code>*, <code>count(*) FILTER</code>*, window <code>row_number()</code>* &nbsp;(*control-plane only → fine on stock Postgres)</td>
+      </tr>
+    </table>
+    <h3>Auth carve-out drift (same bug class as Studio)</h3>
+    <p>The broad <code>/v1/projects/*</code> session guard (projects.ts:81) shadows later routers' <code>requireProjectAuth</code>, so <code>brk_</code> keys 401 on <code>/env</code>, <code>/db/*</code>, <code>/logs/*</code>, <code>/usage</code>, <code>/export</code>. Fix: make the broad guard <code>brk_</code>-aware (or drop it). Also make <code>BRIVEN_BETTER_AUTH_SECRET</code> required at boot (currently optional → forgeable CLI JWTs). <em>(Folds into Phase 3.)</em></p>
+    <h3>Out of scope (not needed to unblock Katsuro)</h3>
+    <p>Prepaid wallet billing, branches/preview envs, workflows/automation, vectorSearch, SLA auto-credit, multi-replica realtime scale, apps/studio (replaced by apps/web dashboard), Python/Go SDKs.</p>
+    <figure><div class="imgslot">🖼️ notes pending<br><small>subject: the test-net catching a bug before it reaches production</small></div><figcaption>The cure: catch it in CI, not in prod.</figcaption></figure>
+  </section>
+
+  <section id="amendments">
+    <h2>Amendments</h2>
+    <p style="color:var(--muted)"><em>None yet. Update Plan / Update References append here.</em></p>
+  </section>
+
+</main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  const css = getComputedStyle(document.documentElement);
+  if (window.mermaid) mermaid.initialize({ startOnLoad:true, theme:'base', themeVariables:{
+    primaryColor: css.getPropertyValue('--surface-2').trim(), primaryTextColor: css.getPropertyValue('--text').trim(),
+    primaryBorderColor: css.getPropertyValue('--accent-2').trim(), lineColor: css.getPropertyValue('--accent-2').trim(),
+    fontFamily: css.getPropertyValue('--mono').trim() }});
+  document.querySelectorAll('.status').forEach(s=>{const t=s.textContent.trim();
+    s.style.color = t==='[x]'?css.getPropertyValue('--ok'):t==='[wip]'?css.getPropertyValue('--gold'):t==='[f]'?css.getPropertyValue('--err'):css.getPropertyValue('--muted');});
+</script>
+</body>
+</html>

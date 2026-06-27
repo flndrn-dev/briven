@@ -98,9 +98,13 @@ export function uuid(): ColumnBuilder {
   return col('uuid');
 }
 
-export function vector(dimensions: number): ColumnBuilder {
-  if (!Number.isInteger(dimensions) || dimensions <= 0 || dimensions > 16_000) {
-    throw new Error(`vector dimensions must be 1..16000, got ${dimensions}`);
-  }
-  return col(`vector(${dimensions})`);
+export function vector(_dimensions: number): ColumnBuilder {
+  // Briven's data plane runs on DoltGres, which does not support the
+  // `vector(N)` column type — emitting it produces SQL that only fails
+  // later at apply time with an opaque syntax error. Fail early here
+  // instead. Vector search is a planned feature that will arrive with
+  // LanceDB, at which point this builder can construct a real column.
+  throw new Error(
+    'vector columns are not supported yet on DoltGres — vector search is coming with LanceDB',
+  );
 }

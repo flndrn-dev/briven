@@ -30,6 +30,19 @@ jobs:
     runs-on: docker
     container:
       image: oven/bun:1.3
+    # Real DoltGres alongside the job so the data-plane alarms
+    # (apps/api/src/db/*.integration.test.ts) actually RUN instead of
+    # self-skipping. This is the net that stops DoltGres incompatibilities
+    # (ILIKE, SET LOCAL, citext, vector, ON CONFLICT DO UPDATE, …) from
+    # reaching production. Reachable from the job container as host `doltgres`.
+    # See specs/briven-sprint-plan.md (S0.5). NOTE: only fires once a Forgejo
+    # runner is registered (see header); until then the local alarm is the net.
+    services:
+      doltgres:
+        image: dolthub/doltgresql:latest
+        env:
+          DOLTGRES_USER: postgres
+          DOLTGRES_PASSWORD: password
     steps:
       - name: checkout
         uses: https://code.forgejo.org/actions/checkout@v4
@@ -59,7 +72,23 @@ jobs:
       - name: typecheck
         run: pnpm -r typecheck
 
+      - name: wait for DoltGres
+        # The TCP port opening is a good-enough readiness signal for DoltGres
+        # (it accepts SQL as soon as the wire port is up). bash + /dev/tcp are
+        # available in the debian-based oven/bun image.
+        shell: bash
+        run: |
+          for i in $(seq 1 60); do
+            if (echo > /dev/tcp/doltgres/5432) 2>/dev/null; then echo "DoltGres up"; exit 0; fi
+            sleep 2
+          done
+          echo "DoltGres did not come up in time" >&2
+          exit 1
+
       - name: test
         # bun is already in the container image; -r runs each
-        # workspace's own test script.
+        # workspace's own test script. BRIVEN_DATA_PLANE_URL makes the
+        # data-plane integration alarms run against the DoltGres service.
         run: pnpm -r test
+        env:
+          BRIVEN_DATA_PLANE_URL: postgres://postgres:password@doltgres:5432/postgres
