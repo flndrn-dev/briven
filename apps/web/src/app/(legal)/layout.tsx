@@ -33,7 +33,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
 
       <footer className="border-t border-[var(--color-border-subtle)] py-6">
         <p className="mx-auto max-w-3xl px-6 font-mono text-xs text-[var(--color-text-subtle)]">
-          flndrn Limited · Arch. Makariou III 171, Vanezis Business Center 4th floor, 3027
+          flndrn · Arch. Makariou III 171, Vanezis Business Center 4th floor, 3027
           Limassol, Cyprus · built with{' '}
           <span className="text-[#e8344a]">♥</span> in Flanders
         </p>

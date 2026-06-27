@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export const metadata = { title: 'subprocessors' };
 
 interface Subprocessor {
@@ -26,20 +28,28 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
       'No personal data is shared beyond the public domain name being certified. Renewals are automatic via ACME.',
   },
   {
-    name: 'mittera.eu',
+    name: 'Mittera by flndrn',
     purpose: 'Transactional email delivery (magic-link sign-in, email verification, project invitations, account notices)',
-    location: 'EU (operator-controlled)',
-    status: 'planned',
+    location: 'Limassol, Cyprus (EU)',
+    status: 'active',
     notes:
-      "Sister product to briven, also operated by the briven Operator. Outbound sends authenticate with a Bearer API key (POST https://api.mittera.eu/api/v1/emails); delivery / bounce / complaint events come back to https://api.briven.tech/mittera-webhook signed with HMAC-SHA256 of `${ts_ms}.${body}` and verified against BRIVEN_MITTERA_WEBHOOK_SECRET. Until BRIVEN_MITTERA_API_URL and BRIVEN_MITTERA_API_KEY are configured, magic-link emails print to the api container stdout for first-user bootstrap.",
+      "Sister product to briven, also operated by flndrn. Outbound sends authenticate with a Bearer API key (POST https://api.mittera.eu/api/v1/emails); delivery / bounce / complaint events come back to https://api.briven.tech/mittera-webhook signed with HMAC-SHA256 of `${ts_ms}.${body}` and verified against BRIVEN_MITTERA_WEBHOOK_SECRET.",
+  },
+  {
+    name: 'Katsuro by flndrn',
+    purpose: 'Code monitoring (logs, errors, and uptime/health monitoring for the briven platform)',
+    location: 'Limassol, Cyprus (EU)',
+    status: 'active',
+    notes:
+      'Sister product to briven, also operated by flndrn. Receives platform operational logs and health signals so we can detect and resolve incidents. Customer database contents are never sent to Katsuro.',
   },
   {
     name: 'Polar Software Inc.',
     purpose: 'Subscription billing, checkout, invoicing, taxation',
     location: 'United States; EU-resident processors via Stripe Connect',
-    status: 'planned',
+    status: 'active',
     notes:
-      'Activated when paid tiers launch. Polar handles all card data; no card details ever touch briven infrastructure.',
+      'Polar handles all card data; no card details ever touch briven infrastructure.',
   },
   {
     name: 'Backblaze, Inc. (B2 Cloud Storage)',
@@ -61,7 +71,7 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
     name: 'Google Cloud (Google LLC)',
     purpose: 'OAuth identity (Sign in with Google)',
     location: 'United States; EU points of presence',
-    status: 'planned',
+    status: 'active',
     notes:
       'Engaged only if you choose to sign in via Google. We receive your name, email, and avatar URL; we send Google nothing about your briven activity.',
   },
@@ -77,7 +87,7 @@ export default function SubprocessorsPage() {
 
       <p className="mt-8">
         This page lists every third-party service that processes briven Customer data on behalf
-        of <strong>flndrn Limited</strong> (the Operator), a company registered at Arch. Makariou
+        of <strong>flndrn</strong> (the Operator), a company registered at Arch. Makariou
         III 171, Vanezis Business Center 4th floor, 3027 Limassol, Cyprus. Where a subprocessor
         is &ldquo;planned&rdquo;, the integration exists in code but is disabled until the
         corresponding configuration is provided; we list them here so you can audit what your
@@ -149,8 +159,12 @@ export default function SubprocessorsPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">questions</h2>
       <p>
-        Contact <strong>privacy@flndrn.com</strong> for any subprocessor-related question, including
-        requests for the underlying data-processing agreements where they are not publicly available.
+        Use our{' '}
+        <Link href="/contact?topic=privacy" className="text-[var(--color-text-link)] underline">
+          contact form
+        </Link>{' '}
+        for any subprocessor-related question, including requests for the underlying
+        data-processing agreements where they are not publicly available.
       </p>
     </>
   );

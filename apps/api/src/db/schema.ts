@@ -929,6 +929,7 @@ export const contactTopics = [
   'sales',
   'security',
   'privacy',
+  'legal',
   'other',
 ] as const;
 export type ContactTopic = (typeof contactTopics)[number];

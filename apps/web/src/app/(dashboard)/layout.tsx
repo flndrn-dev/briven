@@ -86,7 +86,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn
             </span>
             <span>100% self-funded, sustainable &amp; independent</span>
-            <span>flndrn Limited, Limassol, Cyprus</span>
+            <span>flndrn, Limassol, Cyprus</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">

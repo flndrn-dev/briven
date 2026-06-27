@@ -517,7 +517,7 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Customer-visible contact addresses route to the parent flndrn Limited
+// Customer-visible contact addresses route to the parent flndrn
 // inbox (admin.flndrn.com queue). Outbound product From: stays on
 // briven.tech for SPF/DKIM alignment — only inbound contact moves.
 const MIGRATIONS_CONTACT = 'migrations@flndrn.com';
@@ -683,7 +683,7 @@ function shell(title: string, body: string): string {
             briven · <a style="color:#9ba3af" href="https://${domain}">${domain}</a><br/>
             made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn<br/>
             100% self-funded, sustainable &amp; independent<br/>
-            flndrn Limited, Limassol, Cyprus
+            flndrn, Limassol, Cyprus
           </p>
         </td></tr>
       </table>

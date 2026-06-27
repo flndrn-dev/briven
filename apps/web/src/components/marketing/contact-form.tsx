@@ -4,9 +4,12 @@ import { useState } from 'react';
 
 interface Props {
   apiOrigin: string;
+  /** Pre-selected topic (e.g. from a /contact?topic=privacy deep link). Falls
+   *  back to 'general' when absent or not a known topic. */
+  initialTopic?: string;
 }
 
-type Topic = 'general' | 'support' | 'sales' | 'security' | 'privacy' | 'other';
+type Topic = 'general' | 'support' | 'sales' | 'security' | 'privacy' | 'legal' | 'other';
 
 const TOPICS: readonly { value: Topic; label: string }[] = [
   { value: 'general', label: 'general' },
@@ -14,8 +17,14 @@ const TOPICS: readonly { value: Topic; label: string }[] = [
   { value: 'sales', label: 'sales' },
   { value: 'security', label: 'security' },
   { value: 'privacy', label: 'privacy' },
+  { value: 'legal', label: 'legal' },
   { value: 'other', label: 'other' },
 ];
+
+/** Coerce an untrusted URL value to a known topic; default 'general'. */
+function coerceTopic(value: string | undefined): Topic {
+  return TOPICS.some((t) => t.value === value) ? (value as Topic) : 'general';
+}
 
 interface SubmittedState {
   requestId: string;
@@ -28,10 +37,10 @@ interface SubmittedState {
  * briven reference id. We collect the sender's email so we can reply
  * privately — but we never render an email address back to the page.
  */
-export function ContactForm({ apiOrigin }: Props) {
+export function ContactForm({ apiOrigin, initialTopic }: Props) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [topic, setTopic] = useState<Topic>('general');
+  const [topic, setTopic] = useState<Topic>(coerceTopic(initialTopic));
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

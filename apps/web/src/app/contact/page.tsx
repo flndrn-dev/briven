@@ -40,8 +40,15 @@ const HELP_LINKS: readonly HelpLink[] = [
   },
 ];
 
-export default async function ContactPage() {
-  const user = await getSessionUser().catch(() => null);
+export default async function ContactPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ topic?: string }>;
+}) {
+  const [user, params] = await Promise.all([
+    getSessionUser().catch(() => null),
+    searchParams,
+  ]);
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       <TrackPageView
@@ -66,7 +73,10 @@ export default async function ContactPage() {
       </section>
 
       <section className="relative z-10 mx-auto w-full max-w-4xl px-6 pb-16">
-        <ContactForm apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''} />
+        <ContactForm
+          apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+          initialTopic={params.topic}
+        />
       </section>
 
       <section className="relative z-10 mx-auto w-full max-w-4xl px-6 pb-24">
