@@ -27,7 +27,7 @@ import {
   unsuspendUser,
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
-import { getBillingTotals } from '../services/billing/mavi-pay.js';
+import { getBillingTotals, listSubscribers } from '../services/billing/mavi-pay.js';
 import { getHealthSummary } from '../services/platform-health.js';
 import { listDeploys } from '../services/deploy-history.js';
 import {
@@ -115,6 +115,23 @@ adminRouter.get('/v1/admin/overview', async (c) => {
     })),
     counts: { projects: stats.projects, users: stats.users },
   });
+});
+
+/**
+ * Mavi Pay (backed by Polar.sh) — billing totals for the Subscribers &
+ * Billing page. Same shape the Overview reads; every number is REAL or
+ * explicitly null (MRR degrades to null when Polar isn't configured).
+ * Read-only, no audit row.
+ */
+adminRouter.get('/v1/admin/billing/totals', async (c) => c.json(await getBillingTotals()));
+
+/**
+ * Mavi Pay — non-canceled subscriber list (org, plan, status, period-end,
+ * since), joined to the owning org for operator triage. Read-only.
+ */
+adminRouter.get('/v1/admin/billing/subscribers', async (c) => {
+  const subscribers = await listSubscribers();
+  return c.json({ subscribers });
 });
 
 adminRouter.get('/v1/admin/users', async (c) => {

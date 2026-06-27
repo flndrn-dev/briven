@@ -17,6 +17,7 @@ interface Overview {
   billing: {
     subscribers: number | null;
     mrr: number | null;
+    currency: string | null;
     planMix: { free: number; pro: number; team: number } | null;
     churn30d: number | null;
   };
@@ -72,14 +73,19 @@ export default async function AdminOverviewPage() {
           />
           <MetricCard
             label="mrr"
-            value={billing.mrr === null ? null : `€${billing.mrr.toLocaleString()}`}
-            waitingOn="Mavi Pay wiring up"
+            value={
+              billing.mrr === null
+                ? null
+                : `${currencySymbol(billing.currency)}${billing.mrr.toLocaleString()}`
+            }
+            hint={billing.mrr === null ? undefined : 'monthly recurring revenue'}
+            waitingOn="Mavi Pay not configured"
           />
           <PlanMixCard planMix={billing.planMix} />
           <MetricCard
             label="churn · 30d"
-            value={billing.churn30d === null ? null : `${billing.churn30d}%`}
-            waitingOn="Mavi Pay wiring up"
+            value={billing.churn30d === null ? null : billing.churn30d.toLocaleString()}
+            hint="subscriptions canceled · last 30d"
           />
         </div>
       </section>
@@ -106,6 +112,20 @@ export default async function AdminOverviewPage() {
       </section>
     </div>
   );
+}
+
+/** ISO currency code → display symbol, falling back to the code itself. */
+function currencySymbol(code: string | null): string {
+  switch (code) {
+    case 'EUR':
+      return '€';
+    case 'USD':
+      return '$';
+    case 'GBP':
+      return '£';
+    default:
+      return code ? `${code} ` : '';
+  }
 }
 
 function SectionHeading({ icon, label }: { icon: React.ReactNode; label: string }) {
