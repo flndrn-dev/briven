@@ -37,6 +37,8 @@ export function SiteFooter() {
             </Link>
             <span aria-hidden>·</span>
             <WebDownLink>web down</WebDownLink>
+            <span aria-hidden>·</span>
+            <KatsuroLink>katsuro</KatsuroLink>
           </div>
         </div>
 
@@ -140,6 +142,19 @@ export function WebDownLink({ children }: { children: React.ReactNode }) {
     <Link
       href="https://web-down.com"
       className="inline-flex items-center gap-0.5 text-[#09a1d3] transition-colors hover:text-[#5dc0e0]"
+    >
+      {children}
+      <ExternalArrow className="-translate-y-px" />
+    </Link>
+  );
+}
+
+/** katsuro.dev link in the Katsuro brand red, with the up-right arrow. */
+export function KatsuroLink({ children }: { children: React.ReactNode }) {
+  return (
+    <Link
+      href="https://katsuro.dev"
+      className="inline-flex items-center gap-0.5 text-[#ed1b23] transition-colors hover:text-[#f5575d]"
     >
       {children}
       <ExternalArrow className="-translate-y-px" />
