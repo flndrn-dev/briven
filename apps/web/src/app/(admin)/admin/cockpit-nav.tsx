@@ -1,0 +1,176 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+
+import { ActivityIcon } from '@/components/ui/activity';
+import { ArrowLeftRightIcon } from '@/components/ui/arrow-left-right';
+import { BotIcon } from '@/components/ui/bot';
+import { CogIcon } from '@/components/ui/cog';
+import { CreditCardIcon } from '@/components/ui/credit-card';
+import { DatabaseIcon } from '@/components/ui/database';
+import { FoldersIcon } from '@/components/ui/folders';
+import { LayoutGridIcon } from '@/components/ui/layout-grid';
+import { MailIcon } from '@/components/ui/mail';
+import { RocketIcon } from '@/components/ui/rocket';
+import { ShieldCheckIcon } from '@/components/ui/shield-check';
+import { TriangleAlertIcon } from '@/components/ui/triangle-alert';
+import { UsersIcon } from '@/components/ui/users';
+import { ZapIcon } from '@/components/ui/zap';
+
+interface IconHandle {
+  startAnimation: () => void;
+  stopAnimation: () => void;
+}
+
+interface NavItem {
+  href: string;
+  label: string;
+  Icon: (props: {
+    className?: string;
+    size?: number;
+    ref?: unknown;
+    onMouseEnter?: (e: React.MouseEvent) => void;
+    onMouseLeave?: (e: React.MouseEvent) => void;
+  }) => ReactNode;
+  // Exact match by default; prefix-match for sections with sub-routes.
+  match: (pathname: string) => boolean;
+}
+
+const NAV: NavItem[] = [
+  { href: '/admin', label: 'overview', Icon: LayoutGridIcon as never, match: (p) => p === '/admin' },
+  {
+    href: '/admin/billing',
+    label: 'subscribers & billing',
+    Icon: CreditCardIcon as never,
+    match: (p) => p.startsWith('/admin/billing'),
+  },
+  {
+    href: '/admin/health',
+    label: 'platform health',
+    Icon: ActivityIcon as never,
+    match: (p) => p.startsWith('/admin/health'),
+  },
+  {
+    href: '/admin/mcp',
+    label: 'mcp / agent access',
+    Icon: BotIcon as never,
+    match: (p) => p.startsWith('/admin/mcp'),
+  },
+  {
+    href: '/dashboard/admin/projects',
+    label: 'projects',
+    Icon: FoldersIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/projects'),
+  },
+  {
+    href: '/dashboard/admin/users',
+    label: 'users',
+    Icon: UsersIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/users'),
+  },
+  {
+    href: '/dashboard/admin/storage',
+    label: 'storage',
+    Icon: DatabaseIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/storage'),
+  },
+  {
+    href: '/dashboard/admin/deploys',
+    label: 'deploys',
+    Icon: RocketIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/deploys'),
+  },
+  {
+    href: '/dashboard/admin/incidents',
+    label: 'incidents',
+    Icon: TriangleAlertIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/incidents'),
+  },
+  {
+    href: '/dashboard/admin/abuse-reports',
+    label: 'abuse & allowlist',
+    Icon: ShieldCheckIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/abuse-reports'),
+  },
+  {
+    href: '/dashboard/admin/email-events',
+    label: 'email',
+    Icon: MailIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/email-events'),
+  },
+  {
+    href: '/dashboard/admin/migrations',
+    label: 'migrations',
+    Icon: ArrowLeftRightIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin/migrations'),
+  },
+  {
+    href: '/admin/launch',
+    label: 'launch controls',
+    Icon: ZapIcon as never,
+    match: (p) => p.startsWith('/admin/launch'),
+  },
+  {
+    href: '/admin/settings',
+    label: 'settings',
+    Icon: CogIcon as never,
+    match: (p) => p.startsWith('/admin/settings'),
+  },
+];
+
+export function CockpitNav() {
+  const pathname = usePathname();
+
+  return (
+    <aside
+      aria-label="admin sections"
+      className="hidden h-full w-[200px] shrink-0 overflow-y-auto border-r border-[var(--color-border-subtle)] px-3 py-4 md:block"
+    >
+      <ul className="flex flex-col gap-1">
+        {NAV.map((item) => (
+          <NavLink key={item.href} item={item} active={item.match(pathname)} />
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
+function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  const iconRef = useRef<IconHandle>(null);
+  const [hovering, setHovering] = useState(false);
+  const { Icon } = item;
+
+  // Drive the icon's imperative animation from the Link's hover state so
+  // hovering anywhere in the row (not only the icon) triggers it — mirrors
+  // the dashboard sidebar pattern.
+  useEffect(() => {
+    if (!iconRef.current) return;
+    if (hovering) iconRef.current.startAnimation();
+    else iconRef.current.stopAnimation();
+  }, [hovering]);
+
+  return (
+    <li>
+      <Link
+        href={item.href as never}
+        aria-current={active ? 'page' : undefined}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        onFocus={() => setHovering(true)}
+        onBlur={() => setHovering(false)}
+        className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 font-mono text-sm transition-colors ${
+          active
+            ? 'bg-[var(--color-surface)] text-[var(--color-primary)]'
+            : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]'
+        }`}
+      >
+        <span className="pointer-events-none shrink-0">
+          <Icon ref={iconRef as never} size={20} />
+        </span>
+        <span className="truncate">{item.label}</span>
+      </Link>
+    </li>
+  );
+}
