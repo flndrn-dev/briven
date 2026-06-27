@@ -136,27 +136,27 @@
       <li><span class="box done"></span><div><span class="id">S1.6</span>"Delete and return the deleted rows" now behaves the same in both runtimes</div></li>
       <li><span class="box done"></span><div><span class="id">S1.7</span>Dead NOTIFY trigger removed from create-table; drop-table still cleans up old ones</div></li>
       <li><span class="box done"></span><div><span class="id">S1.8</span>Snapshots use the DoltGres-safe table-name filter (found a twin → folded into S2.2)</div></li>
-      <li><span class="box wip"></span><div><span class="id">S1.9</span>Realtime login fix is code-complete + typechecks — <b>not yet committed</b> (holding for the Sprint 3 batch, or commit now on your say-so)</div></li>
+      <li><span class="box done"></span><div><span class="id">S1.9</span>Realtime login fix committed (local commit <code>eb17d26</code>, branch briven-doltgres-readiness-s0-s1 — NOT pushed; live untouched)</div></li>
     </ul>
     <div class="done-when"><b>Done ✓ evidence:</b> api/runtime/schema/realtime typecheck 0 errors; <b>api Sprint-1 tests on live DoltGres: 40 pass / 0 fail</b>. Nothing deployed — all local.</div>
   </div>
 
   <!-- SPRINT 2 -->
   <div class="sprint s2">
-    <h3>Sprint 2 — The landmines (Batch B) <span class="tag todo">queued</span> <span class="tag risk">big & important</span></h3>
-    <div class="why">The back-room plugs that <em>will</em> spark for ISY and real customers. Bigger changes — still each proven on the alarm.</div>
+    <h3>Sprint 2 — The landmines (Batch B) <span class="tag wip">in progress</span> <span class="tag safe">ISY-data path done</span></h3>
+    <div class="why">The back-room plugs that <em>will</em> spark for ISY and real customers. The ones that block ISY's data path are <b>done</b>; the customer end-user login cluster remains (not needed for the first ISY data test).</div>
     <ul class="tasks">
-      <li><span class="box"></span><div><span class="id">S2.1</span>Customer logins re-wired onto the correct plug + correct database <b>(the worst landmine)</b></div></li>
-      <li><span class="box"></span><div><span class="id">S2.2</span>"Storage used" counter reads the right database (was silently always 0)</div></li>
-      <li><span class="box"></span><div><span class="id">S2.3</span>Case-insensitive emails without the missing "citext" type</div></li>
-      <li><span class="box"></span><div><span class="id">S2.4</span>Upserts (insert-or-update) rewritten to the form the new database accepts</div></li>
-      <li><span class="box"></span><div><span class="id">S2.5</span>Admin list pagination rewritten</div></li>
-      <li><span class="box"></span><div><span class="id">S2.6</span>A brand-new project's database gets created before its first write — <b>needed for ISY's first write</b></div></li>
-      <li><span class="box"></span><div><span class="id">S2.7</span>API keys stop getting wrongly rejected on /env, /db, /logs, /usage, /export</div></li>
-      <li><span class="box"></span><div><span class="id">S2.8</span>The auth secret is <em>required</em> at startup (no forgeable keys)</div></li>
-      <li><span class="box"></span><div><span class="id">S2.9</span>Retire the old plug code entirely, so this class of bug can't return</div></li>
+      <li><span class="box done"></span><div><span class="id">S2.2</span>"Storage used" reads the right database + counts tables correctly. <em>(DoltGres reports byte-size as 0 — a real engine limit, now documented; alarm watches for it to change.)</em></div></li>
+      <li><span class="box done"></span><div><span class="id">S2.4</span>Upserts rewritten to the form DoltGres accepts</div></li>
+      <li><span class="box done"></span><div><span class="id">S2.5</span>Admin list pagination rewritten (row-tuple → OR form)</div></li>
+      <li><span class="box done"></span><div><span class="id">S2.6</span>Verified <b>already handled</b> — project creation provisions the database (with rollback) before any write</div></li>
+      <li><span class="box done"></span><div><span class="id">S2.7</span>API keys no longer wrongly rejected on /env, /db, /logs, /usage, /export, /studio, /ai (full proof in the Sprint 3 ISY live test)</div></li>
+      <li><span class="box done"></span><div><span class="id">S2.8</span>Auth secret now <em>required</em> to sign/verify CLI tokens — fails closed (no forgeable empty key)</div></li>
+      <li><span class="box"></span><div><span class="id">S2.1</span>Customer logins re-wired onto pg + correct database <b>(the worst landmine — Better-Auth)</b> — REMAINING</div></li>
+      <li><span class="box"></span><div><span class="id">S2.3</span>Case-insensitive emails without "citext" <em>(coupled to S2.1)</em> — REMAINING</div></li>
+      <li><span class="box"></span><div><span class="id">S2.9</span>Retire the old plug code entirely (after S2.1) — REMAINING</div></li>
     </ul>
-    <div class="done-when"><b>Done when:</b> every item green on the alarm, including a fresh-project create→write→login.</div>
+    <div class="done-when"><b>Done so far ✓ evidence:</b> api typecheck 0 errors; <b>53 pass / 0 fail</b> on live DoltGres (storage + compat + upsert/cursor/auth tests). All local, nothing deployed. The brk_ key can now set up tables + write data — the ISY data path is unblocked.</div>
   </div>
 
   <!-- SPRINT 3 -->

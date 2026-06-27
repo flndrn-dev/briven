@@ -123,11 +123,17 @@ authServiceRouter.post(
           await tx.unsafe(stmt);
         }
         // Flip the meta flag so other code paths can probe "is auth on?"
-        // without inspecting pg_tables. ON CONFLICT keeps this idempotent.
+        // without inspecting pg_tables. DoltGres lacks `ON CONFLICT ... DO
+        // UPDATE` (no `excluded` pseudo-table), so emulate the upsert: insert
+        // if absent, then unconditionally update. Both run inside the same
+        // transaction, so the pair stays atomic and idempotent.
         await tx.unsafe(
           `INSERT INTO "_briven_meta" (key, value)
            VALUES ('auth_enabled', 'true'::jsonb)
-           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+           ON CONFLICT (key) DO NOTHING`,
+        );
+        await tx.unsafe(
+          `UPDATE "_briven_meta" SET value = 'true'::jsonb WHERE key = 'auth_enabled'`,
         );
       });
     } catch (err) {

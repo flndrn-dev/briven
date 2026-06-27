@@ -88,27 +88,30 @@ and *saw* each one pass.
 - `[x]` **S1.6** Inline `DELETE … RETURNING` implemented to match the isolate executor (`apps/runtime` query-builder)
 - `[x]` **S1.7** Dead NOTIFY trigger removed from create_table (`schema-apply.ts`); drop_table still cleans up old ones; tests updated
 - `[x]` **S1.8** Snapshots filter → `left(table_name,8) <> '_briven_'` (DoltGres-safe). *(Found a twin at `usage.ts:192` → folded into S2.2.)*
-- `[wip]` **S1.9** Realtime WS auth fix is code-complete + typechecks — **not yet committed** (holding for the Sprint 3 batch, or commit now on your say-so)
+- `[x]` **S1.9** Realtime WS auth fix committed (local commit `eb17d26` on branch `briven-doltgres-readiness-s0-s1` — NOT pushed; live server untouched)
 
 **Done — evidence:** api typecheck 0 errors; runtime + schema + realtime typecheck 0 errors; **api Sprint-1 tests against live DoltGres: 40 pass / 0 fail** (`src/db/*.integration.test.ts` + `src/services/studio*.test.ts` + `schema-apply.test.ts`); schema vector test green. Nothing deployed — all local.
 
 ---
 
-### Sprint 2 — The landmines (Batch B)  `[ ]`  *(the big, important ones)*
+### Sprint 2 — The landmines (Batch B)  `[wip]`  *(ISY-data path DONE; customer-login cluster remains)*
 **Why:** these are the back-room plugs that *will* spark for ISY and for real customers.
 Bigger changes, so they get their own sprint — still each proven on the alarm.
 
-- `[ ]` **S2.1** Customer logins re-wired onto the correct plug + correct database (the worst landmine)
-- `[ ]` **S2.2** "Storage used" counter reads the right database (was silently always 0)
-- `[ ]` **S2.3** Case-insensitive emails without the missing "citext" type
-- `[ ]` **S2.4** Upserts (insert-or-update) rewritten to the form the new database accepts
-- `[ ]` **S2.5** Admin list pagination rewritten (row-tuple cursors)
-- `[ ]` **S2.6** A brand-new project's database gets created before its first write (runtime side) — **needed for ISY's first write**
-- `[ ]` **S2.7** API keys stop getting wrongly rejected on /env, /db, /logs, /usage, /export (login drift)
-- `[ ]` **S2.8** The auth secret is *required* at startup (no forgeable keys)
-- `[ ]` **S2.9** Retire the old plug code entirely, so this whole class of bug can't return
+**ISY-data-path landmines — DONE (the brk_ key can now set up & write data):**
+- `[x]` **S2.2** "Storage used" now reads the right database + counts tables correctly. *(Probe found DoltGres reports byte-size as 0 — a real engine limit, now documented; table count is accurate. Alarm watches for it to change.)*
+- `[x]` **S2.4** Upserts rewritten to the form DoltGres accepts (manual `DO NOTHING` + `UPDATE`)
+- `[x]` **S2.5** Admin list pagination rewritten (row-tuple cursors → OR form)
+- `[x]` **S2.6** Verified **already handled** — `createProject` provisions the project database (with rollback) before any write. No change needed.
+- `[x]` **S2.7** API keys no longer wrongly rejected on /env, /db, /logs, /usage, /export, /studio, /ai (carve-outs added; full e2e proof comes in the Sprint 3 ISY live test)
+- `[x]` **S2.8** Auth secret now *required* to sign/verify CLI tokens — fails closed instead of using a forgeable empty key
 
-**Done when:** every item green on the alarm, including a fresh-project create→write→login. *(evidence here)*
+**Customer end-user login cluster — REMAINING (NOT needed for the first ISY data test):**
+- `[ ]` **S2.1** Customer logins re-wired onto `pg` + correct database (the worst landmine — Better-Auth)
+- `[ ]` **S2.3** Case-insensitive emails without the missing "citext" type *(coupled to S2.1)*
+- `[ ]` **S2.9** Retire the old plug code entirely (after S2.1), so this whole class of bug can't return
+
+**Done so far — evidence:** api typecheck 0 errors; **53 pass / 0 fail** on live DoltGres (storage integration + compat alarm incl. the new size-limit probe + upsert/cursor/auth unit tests). All local, nothing deployed.
 
 ---
 

@@ -1,7 +1,7 @@
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { dataPlaneClient, schemaNameFor } from '../db/data-plane.js';
+import { dbNameFor, runInProjectDatabase } from '../db/data-plane.js';
 import { functionLogs, usageEvents } from '../db/schema.js';
 import { log } from '../lib/logger.js';
 
@@ -175,22 +175,33 @@ export async function getCurrentMonthConnectionSecondsUsage(
  * throwing — the dashboard renders this as "—" naturally.
  */
 export async function getStorageUsage(projectId: string): Promise<StorageUsage> {
-  const schema = schemaNameFor(projectId);
+  // db-per-project (sprint S2.2): the previous code used postgres.js + a
+  // schema-per-project name, which queried the WRONG database and silently
+  // returned 0. Run against the project's OWN DoltGres database (pg, bound to
+  // proj_<id>); its tables live in `public`. `left(...)` instead of LIKE
+  // because DoltGres lacks the bare LIKE escape the old filter relied on.
+  //
+  // KNOWN LIMITATION: DoltGres reports pg_total_relation_size/pg_relation_size
+  // as 0 (no on-disk size accounting yet) and has no information_schema.tables
+  // data_length. So `bytes` is best-effort and will read 0 until DoltGres adds
+  // size reporting. `tableCount` IS accurate. Storage-byte billing must not
+  // depend on `bytes` yet (track via row counts / a future size source). The
+  // dolt-compat alarm probes this so we know when it changes.
+  const schema = dbNameFor(projectId);
   const sampledAt = new Date().toISOString();
   try {
-    const sql = dataPlaneClient();
-    const rows = await sql<
-      { bytes: string; table_count: string }[]
-    >`
-      SELECT
-        COALESCE(SUM(pg_total_relation_size(format('%I.%I', n.nspname, c.relname)::regclass)), 0)::bigint AS bytes,
-        COUNT(*)::bigint AS table_count
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = ${schema}
-        AND c.relkind IN ('r', 'p')  -- ordinary + partitioned tables
-        AND c.relname NOT LIKE '_briven_%'
-    `;
+    const rows = (await runInProjectDatabase(projectId, async (tx) =>
+      tx.unsafe(`
+        SELECT
+          COALESCE(SUM(pg_total_relation_size(format('%I.%I', n.nspname, c.relname)::regclass)), 0)::bigint AS bytes,
+          COUNT(*)::bigint AS table_count
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relkind IN ('r', 'p')  -- ordinary + partitioned tables
+          AND left(c.relname, 8) <> '_briven_'
+      `),
+    )) as Array<{ bytes: string; table_count: string }>;
     const row = rows[0];
     return {
       bytes: row ? Number.parseInt(row.bytes, 10) : 0,

@@ -78,6 +78,27 @@ projectsRouter.use('/v1/projects/:id/deployments', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/deployments/*', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/functions/:name', requireProjectAuth());
 
+// Project-scoped DATA routes (sprint S2.7). These live in their own routers
+// (dbRouter, projectEnvRouter, logsRouter, usageRouter, exportRouter,
+// studioRouter, aiRouter) and each already declares requireProjectAuth()
+// + its own role check. But because the broad `/v1/projects/*` requireAuth()
+// below is registered first (Hono runs matching middleware in registration
+// order across mounted routers), a `brk_` API key was rejected by the
+// session-only guard before those routers ran — so SDK/CLI calls 401'd on
+// /env, /db/*, /logs/*, /usage, /export, /studio/*, /ai/*. Carving them out
+// here authenticates the key first (session OR brk_); the broad requireAuth
+// then honours the already-authenticated request (see session.ts). The per-
+// route role checks (admin/developer) still run in the owning routers.
+projectsRouter.use('/v1/projects/:id/env', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/env/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/db/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/logs/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/usage', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/realtime-stats', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/export', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/studio/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/ai/*', requireProjectAuth());
+
 projectsRouter.use('/v1/projects', requireAuth());
 projectsRouter.use('/v1/projects/*', requireAuth());
 
