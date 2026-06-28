@@ -163,11 +163,11 @@ export interface BrivenSignInProps {
 }
 
 const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
+  'konnos',
   'google',
   'github',
   'discord',
   'microsoft',
-  'konnos',
 ];
 
 /**

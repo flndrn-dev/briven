@@ -29,7 +29,8 @@ interface Props {
 }
 
 type OAuthKey = 'google' | 'github' | 'discord' | 'microsoft' | 'konnos';
-const OAUTH_KEYS: OAuthKey[] = ['google', 'github', 'discord', 'microsoft', 'konnos'];
+// Konnos first — it's our own product, so it leads the social providers.
+const OAUTH_KEYS: OAuthKey[] = ['konnos', 'google', 'github', 'discord', 'microsoft'];
 
 /**
  * Client-side editor for the Providers panel. Local state holds the

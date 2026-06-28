@@ -11,12 +11,13 @@ interface Props {
   flow: FormFlow;
 }
 
+// Konnos first — our own product leads the social providers.
 const OAUTH_PROVIDERS: ReadonlyArray<'google' | 'github' | 'discord' | 'microsoft' | 'konnos'> = [
+  'konnos',
   'google',
   'github',
   'discord',
   'microsoft',
-  'konnos',
 ];
 
 const TITLES: Record<FormFlow, string> = {
