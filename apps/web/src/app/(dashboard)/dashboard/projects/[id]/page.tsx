@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../lib/api';
+import { CopyButton } from '@/components/ui/copy-button';
+
 import { InvocationsSparkline } from './invocations-sparkline';
 
 interface Project {
@@ -122,8 +124,8 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card label="endpoint" value={endpoint} mono />
-        <Card label="project id" value={project.id} mono />
+        <Card label="endpoint" value={endpoint} mono copyValue={endpoint} />
+        <Card label="project id" value={project.id} mono copyValue={project.id} />
         <Card
           label="last deploy"
           value={
@@ -312,16 +314,21 @@ function Card({
   value,
   mono,
   hint,
+  copyValue,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   hint?: string;
+  copyValue?: string;
 }) {
   return (
     <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">{label}</p>
-      <p className={`mt-1 text-sm ${mono ? 'font-mono' : ''}`}>{value}</p>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className={`min-w-0 truncate text-sm ${mono ? 'font-mono' : ''}`}>{value}</p>
+        {copyValue ? <CopyButton value={copyValue} label={`copy ${label}`} /> : null}
+      </div>
       {hint ? (
         <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">{hint}</p>
       ) : null}
