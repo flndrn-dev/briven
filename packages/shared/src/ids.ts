@@ -42,6 +42,7 @@ export type IdPrefix =
   | 'ctc' // contact message (public /contact form submission)
   | 'auk' // briven auth SDK key (issued from the Auth → API Keys panel)
   | 'mck' // mcp / agent-access key (issued from the MCP control panel)
+  | 'tsec' // tenant secret (per-project encrypted OAuth client secret)
   | 'as'; // auto-snapshot settings row (per-project automatic save-points)
 
 export function newId(prefix: IdPrefix): string {

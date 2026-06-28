@@ -23,14 +23,18 @@ export interface AuthConfig {
   };
 }
 
-interface Props {
-  projectId: string;
-  initial: AuthConfig;
-}
-
 type OAuthKey = 'google' | 'github' | 'discord' | 'microsoft' | 'konnos';
 // Konnos first — it's our own product, so it leads the social providers.
 const OAUTH_KEYS: OAuthKey[] = ['konnos', 'google', 'github', 'discord', 'microsoft'];
+
+/** Which providers already have an encrypted client secret on file. */
+export type SecretStatus = Record<OAuthKey, boolean>;
+
+interface Props {
+  projectId: string;
+  initial: AuthConfig;
+  initialSecrets: SecretStatus;
+}
 
 /**
  * Client-side editor for the Providers panel. Local state holds the
@@ -39,14 +43,15 @@ const OAUTH_KEYS: OAuthKey[] = ['konnos', 'google', 'github', 'discord', 'micros
  * evicts the cached Better Auth instance, so the next sign-in uses the
  * updated provider set.
  *
- * OAuth client SECRETS aren't editable here — they need the encrypted
- * tenant-secrets persistence layer (BUILD_PLAN.md §6 + ARCHITECTURE.md §4)
- * which lands in a follow-up turn. For now the panel surfaces the public
- * client id only, with a note that secrets land separately.
+ * OAuth client SECRETS are write-only: each card POSTs the typed secret to
+ * a dedicated encrypted endpoint and the value is never read back. We only
+ * track a per-provider boolean (has a secret been saved?) so the UI can show
+ * "secret set ✓" vs "no secret yet" — seeded server-side from secret-status.
  */
-export function ProviderToggles({ projectId, initial }: Props) {
+export function ProviderToggles({ projectId, initial, initialSecrets }: Props) {
   const router = useRouter();
   const [providers, setProviders] = useState(initial.providers);
+  const [secretSet, setSecretSet] = useState<SecretStatus>(initialSecrets);
   const [pending, setPending] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -140,20 +145,22 @@ export function ProviderToggles({ projectId, initial }: Props) {
       />
 
       <div className="mt-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 font-mono text-[11px] text-[var(--color-text-muted)]">
-        OAuth client SECRETS rotate through a separate encrypted endpoint
-        (BUILD_PLAN.md §6 + ARCHITECTURE.md §4). that endpoint lands in the
-        next iteration — for now you can paste client ids here, save, and
-        come back later to set the secret. providers stay disabled at the
-        engine until both halves are present.
+        each social provider needs BOTH a public client id and a client
+        secret. the secret is stored encrypted and write-only — it is never
+        shown again, so paste a fresh one to rotate it. providers stay
+        disabled at the engine until both halves are set.
       </div>
 
       {OAUTH_KEYS.map((key) => (
         <OAuthCard
           key={key}
           name={key}
+          projectId={projectId}
           value={providers[key]}
+          hasSecret={secretSet[key]}
           onToggle={(v) => update(key, { enabled: v })}
           onClientId={(s) => update(key, { clientId: s.length === 0 ? null : s })}
+          onSecretSaved={(k) => setSecretSet((prev) => ({ ...prev, [k]: true }))}
         />
       ))}
 
@@ -207,25 +214,83 @@ function ProviderCard({ title, description, enabled, onToggle, children }: Provi
 
 interface OAuthCardProps {
   name: OAuthKey;
+  projectId: string;
   value: { enabled: boolean; clientId: string | null };
+  hasSecret: boolean;
   onToggle: (v: boolean) => void;
   onClientId: (s: string) => void;
+  onSecretSaved: (name: OAuthKey) => void;
 }
 
-function OAuthCard({ name, value, onToggle, onClientId }: OAuthCardProps) {
+function OAuthCard({
+  name,
+  projectId,
+  value,
+  hasSecret,
+  onToggle,
+  onClientId,
+  onSecretSaved,
+}: OAuthCardProps) {
+  // Local-only working copy of the typed secret. Never prefilled — the API
+  // never returns saved secrets. Cleared on a successful save.
+  const [secret, setSecret] = useState('');
+  const [pending, setPending] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  async function saveSecret(): Promise<void> {
+    if (secret.length === 0) return;
+    setPending(true);
+    setErrMsg(null);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/auth/providers/${name}/secret`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientSecret: secret }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          code?: string;
+          message?: string;
+        };
+        throw new Error(body.message ?? body.code ?? `http ${res.status}`);
+      }
+      setSecret('');
+      setSavedAt(Date.now());
+      onSecretSaved(name);
+    } catch (err) {
+      setErrMsg(err instanceof Error ? err.message : 'save failed');
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <h3 className="font-mono text-sm text-[var(--color-text)]">{name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-mono text-sm text-[var(--color-text)]">{name}</h3>
+            {hasSecret ? (
+              <span className="font-mono text-[10px] text-[var(--color-primary)]">
+                secret set ✓
+              </span>
+            ) : (
+              <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+                no secret yet
+              </span>
+            )}
+          </div>
           <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-            OAuth 2.0 with PKCE. paste the public client id from{' '}
-            <span className="text-[var(--color-text)]">{providerConsoleUrl(name)}</span>.
+            OAuth 2.0 with PKCE. paste the public client id and client secret from{' '}
+            <span className="text-[var(--color-text)]">{providerConsoleUrl(name)}</span>. the
+            provider stays disabled at the engine until both client id and secret are set.
           </p>
         </div>
         <Toggle value={value.enabled} onChange={onToggle} />
       </div>
-      <div className="mt-3 flex flex-wrap gap-3 border-t border-[var(--color-border-subtle)] pt-3">
+      <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-[var(--color-border-subtle)] pt-3">
         <label className="flex flex-col gap-1 font-mono text-[11px] text-[var(--color-text-muted)]">
           client id
           <input
@@ -236,9 +301,34 @@ function OAuthCard({ name, value, onToggle, onClientId }: OAuthCardProps) {
             className="w-80 rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
           />
         </label>
-        <p className="self-end pb-1 font-mono text-[11px] text-[var(--color-text-subtle)]">
-          client secret: configure separately (encrypted endpoint)
-        </p>
+        <label className="flex flex-col gap-1 font-mono text-[11px] text-[var(--color-text-muted)]">
+          client secret
+          <input
+            type="password"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            placeholder={hasSecret ? 'paste a new secret to rotate' : 'paste client secret'}
+            autoComplete="new-password"
+            className="w-80 rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void saveSecret()}
+          disabled={pending || secret.length === 0}
+          className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 font-mono text-xs font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+        >
+          {pending ? 'saving…' : 'save secret'}
+        </button>
+        {errMsg ? (
+          <span className="self-end pb-1.5 font-mono text-[11px] text-[var(--color-error)]">
+            {errMsg}
+          </span>
+        ) : savedAt ? (
+          <span className="self-end pb-1.5 font-mono text-[11px] text-[var(--color-text-muted)]">
+            secret saved
+          </span>
+        ) : null}
       </div>
     </div>
   );

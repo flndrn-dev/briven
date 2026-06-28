@@ -36,7 +36,21 @@ import {
   isAuthEnabled,
   updateAuthConfig,
 } from '../services/tenant-config-store.js';
+import { hasTenantSecret, setTenantSecret } from '../services/tenant-secrets.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
+
+/**
+ * OAuth providers whose client secret can be stored via the secret endpoint.
+ * google/github/discord/microsoft ride Better Auth's built-in socialProviders;
+ * konnos rides the genericOAuth plugin. The per-tenant pool reads these back
+ * under the `<provider>_client_secret` name convention (service 'auth').
+ */
+const OAUTH_PROVIDERS = ['google', 'github', 'discord', 'microsoft', 'konnos'] as const;
+type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
+
+function isOAuthProvider(value: string): value is OAuthProvider {
+  return (OAUTH_PROVIDERS as readonly string[]).includes(value);
+}
 
 /**
  * briven auth service router (BUILD_PLAN.md §4).
@@ -273,6 +287,107 @@ authServiceRouter.patch(
     });
 
     return c.json({ config: next });
+  },
+);
+
+/**
+ * Store (or rotate) an OAuth provider's client SECRET. Write-only: the
+ * secret is encrypted into the tenant-secret store (service 'auth', name
+ * `<provider>_client_secret`) and is NEVER echoed back or logged. The public
+ * clientId + enabled toggle live in the auth config (PATCH /auth/config);
+ * this endpoint owns only the secret half so the per-tenant Better Auth pool
+ * can wire the provider (gated on enabled + clientId + secret-present).
+ *
+ * After a successful write, `invalidateAuthInstance` drops the cached
+ * instance so the next sign-in rebuilds with the new credential.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/providers/:provider/secret',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const provider = c.req.param('provider');
+    if (!projectId || !provider) {
+      return c.json(
+        { code: 'validation_failed', message: 'missing :id or :provider' },
+        400,
+      );
+    }
+    if (!isOAuthProvider(provider)) {
+      return c.json(
+        {
+          code: 'validation_failed',
+          message: `provider must be one of: ${OAUTH_PROVIDERS.join(', ')}`,
+        },
+        400,
+      );
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = (await c.req.json().catch(() => null)) as
+      | { clientSecret?: unknown }
+      | null;
+    const clientSecret =
+      body && typeof body.clientSecret === 'string' ? body.clientSecret.trim() : '';
+    if (!clientSecret) {
+      return c.json(
+        { code: 'validation_failed', message: 'clientSecret must be a non-empty string' },
+        400,
+      );
+    }
+
+    try {
+      await setTenantSecret(projectId, 'auth', `${provider}_client_secret`, clientSecret, actor.id);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      log.error('briven_auth_provider_secret_set_failed', {
+        projectId,
+        provider,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'secret_store_failed' }, 500);
+    }
+
+    // Drop the cached instance so the next request rebuilds with the new
+    // credential (mirrors the config PATCH path).
+    await invalidateAuthInstance(projectId);
+
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.provider.secret.set',
+      ipHash: hashIp(
+        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      ),
+      userAgent: c.req.header('user-agent') ?? null,
+      // why: NEVER log the secret — only which provider was configured.
+      metadata: { provider },
+    });
+
+    return c.json({ ok: true });
+  },
+);
+
+/**
+ * Which OAuth providers currently have a client secret saved. Boolean-only
+ * presence flags (never the secret itself) so the dashboard can show a
+ * "secret configured ✓ / needs secret" state next to each provider toggle.
+ */
+authServiceRouter.get(
+  '/v1/projects/:id/auth/providers/secret-status',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const [google, github, discord, microsoft, konnos] = await Promise.all(
+      OAUTH_PROVIDERS.map((p) => hasTenantSecret(projectId, 'auth', `${p}_client_secret`)),
+    );
+    return c.json({ secrets: { google, github, discord, microsoft, konnos } });
   },
 );
 

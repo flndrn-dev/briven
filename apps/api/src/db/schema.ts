@@ -1349,3 +1349,46 @@ export const projectAutoSnapshotSettings = pgTable(
 
 export type ProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferSelect;
 export type NewProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferInsert;
+
+/* ─── tenant_secrets (per-tenant encrypted secrets — OAuth client secrets) ─ */
+// Persistence layer for the Layer-2 secret primitive in
+// services/tenant-secret-store.ts (HKDF-SHA256 per-tenant key +
+// AES-256-GCM). One row per (project, service, name) secret — e.g. a
+// project's `google_client_secret` for the `auth` service. The ciphertext
+// in `encrypted_value` is the base64 blob `encryptTenantSecret` returns;
+// it is NEVER read directly — always through services/tenant-secrets.ts
+// which wraps decrypt. `service` stores the TenantService string
+// ('auth' | 'pay') so a single table serves both briven auth and pay
+// without colliding (key derivation is service-scoped). Control-plane
+// table (Postgres 17), so `onConflictDoUpdate` upserts are available.
+export const tenantSecrets = pgTable(
+  'tenant_secrets',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // TenantService discriminator ('auth' | 'pay'). Stored as text so the
+    // table doesn't need a migration when a third service appears.
+    service: text('service').notNull(),
+    // Logical secret name within the (project, service) namespace, e.g.
+    // 'google_client_secret', 'github_client_secret'.
+    name: text('name').notNull(),
+    // base64 ciphertext from encryptTenantSecret. Never read directly.
+    encryptedValue: text('encrypted_value').notNull(),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    projectServiceNameIdx: uniqueIndex('tenant_secrets_project_service_name_idx').on(
+      t.projectId,
+      t.service,
+      t.name,
+    ),
+    projectServiceIdx: index('tenant_secrets_project_service_idx').on(t.projectId, t.service),
+  }),
+);
+
+export type TenantSecret = typeof tenantSecrets.$inferSelect;
+export type NewTenantSecret = typeof tenantSecrets.$inferInsert;

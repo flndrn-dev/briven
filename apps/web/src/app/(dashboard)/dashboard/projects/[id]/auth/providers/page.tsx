@@ -1,12 +1,24 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../../lib/api';
-import { ProviderToggles, type AuthConfig } from './provider-toggles';
+import { ProviderToggles, type AuthConfig, type SecretStatus } from './provider-toggles';
 
 interface AuthStateResponse {
   enabled: boolean;
   config: AuthConfig;
 }
+
+interface SecretStatusResponse {
+  secrets: SecretStatus;
+}
+
+const EMPTY_SECRETS: SecretStatus = {
+  google: false,
+  github: false,
+  discord: false,
+  microsoft: false,
+  konnos: false,
+};
 
 export const metadata = { title: 'auth · providers' };
 export const dynamic = 'force-dynamic';
@@ -40,6 +52,15 @@ export default async function AuthProvidersPage({
     );
   }
 
+  // Which providers already have an encrypted secret on file. Write-only —
+  // the API never returns the secret itself, just a per-provider boolean.
+  // Fetched alongside the config (same server-side pattern) so the cards can
+  // render "secret set ✓" without a client-side loading flash.
+  const secretStatus = await apiJson<SecretStatusResponse>(
+    `/v1/projects/${id}/auth/providers/secret-status`,
+  ).catch(() => null);
+  const initialSecrets = secretStatus?.secrets ?? EMPTY_SECRETS;
+
   return (
     <section className="flex flex-col gap-6">
       <header>
@@ -52,7 +73,7 @@ export default async function AuthProvidersPage({
         </p>
       </header>
 
-      <ProviderToggles projectId={id} initial={state.config} />
+      <ProviderToggles projectId={id} initial={state.config} initialSecrets={initialSecrets} />
     </section>
   );
 }
