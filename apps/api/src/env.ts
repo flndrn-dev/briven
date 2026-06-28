@@ -241,6 +241,17 @@ if (env.BRIVEN_ENV !== 'development') {
       `BRIVEN_WEB_ORIGIN must be HTTPS outside development (got: ${env.BRIVEN_WEB_ORIGIN})`,
     );
   }
+  // why: BRIVEN_BETTER_AUTH_SECRET is the HS256 key for session cookies AND
+  // CLI JWTs (lib/cli-jwt.ts). It's marked .optional() so local dev/tests can
+  // boot, and cli-jwt.ts already fails closed at sign/verify time. But a
+  // deployed environment that booted WITHOUT it would silently run with no
+  // stable signing key — so fail at boot here instead of on the first auth.
+  // Pre-flight: production/staging MUST have BRIVEN_BETTER_AUTH_SECRET set.
+  if (!env.BRIVEN_BETTER_AUTH_SECRET) {
+    throw new Error(
+      'BRIVEN_BETTER_AUTH_SECRET must be set outside development (HS256 key for sessions + CLI JWTs — an unset key makes CLI tokens forgeable)',
+    );
+  }
   // why: BRIVEN_ENCRYPTION_KEY decrypts customer env vars at rest. If
   // unset, services/project-env.ts fails-closed at request time — but a
   // deploy that forgot the key would only surface the misconfiguration
