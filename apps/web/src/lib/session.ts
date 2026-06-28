@@ -14,6 +14,12 @@ export interface SessionUser {
   // set one in Settings → Security; the destructive-action step-up needs
   // a password to confirm against.
   hasPassword: boolean;
+  // True when the user has set a "delete secret" — a separate credential
+  // the api confirms destructive actions (e.g. project deletion) against.
+  // Set in Settings → Security; the step-up prompt verifies against it.
+  hasDeleteSecret: boolean;
+  // ISO timestamp the delete secret was set, or null if none.
+  deleteSecretSetAt: string | null;
   // Personal org id auto-created by migration 0010. Web uses this as the
   // implicit org context for every billing + project route; Phase 3 adds
   // an org switcher that overrides it.
@@ -57,7 +63,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     const res = await apiFetch('/v1/me');
     if (res.status === 401) return null;
     if (!res.ok) throw new ApiError(res.status, await res.text());
-    return (await res.json()) as SessionUser;
+    const user = (await res.json()) as Partial<SessionUser> & SessionUser;
+    // Default the delete-secret fields if an older api build omits them.
+    return {
+      ...user,
+      hasDeleteSecret: user.hasDeleteSecret ?? false,
+      deleteSecretSetAt: user.deleteSecretSetAt ?? null,
+    };
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return null;
     throw err;

@@ -1,3 +1,4 @@
+import { NotFoundError, ValidationError } from '@briven/shared';
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -12,11 +13,17 @@ import { softDeleteAccount } from '../services/account-deletion.js';
 import { audit, hashIp } from '../services/audit.js';
 import { checkVatWithVies } from '../services/billing.js';
 import {
+  DeleteSecretExistsError,
   getCurrentVat,
+  getDeleteSecretStatus,
   getProfile,
   hasPasswordCredential,
+  resetDeleteSecret,
+  revealDeleteSecret,
   setAvatar,
+  setDeleteSecret,
   updateProfile,
+  verifyDeleteSecret,
   type ProfilePatch,
 } from '../services/me.js';
 import { listOrgsForUser } from '../services/orgs.js';
@@ -420,3 +427,157 @@ meRouter.post(
     return c.json({ ok: true });
   },
 );
+
+/* ─── delete secret ──────────────────────────────────────────────────
+ *
+ * A user-chosen "delete secret" gating project deletion. Stored encrypted-
+ * at-rest (reveal/copy) AND hashed (verify) — mirrors the SDK-key reveal
+ * pattern. Verifying the secret bumps users.last_mfa_at exactly like the
+ * password step-up, so the project DELETE route's requireRecentMfa(10)
+ * gate passes for the next 10 minutes.
+ */
+
+const deleteSecretSchema = z.object({
+  secret: z.string().min(1).max(256),
+});
+
+// Current status — does the signed-in user have a delete secret, and when
+// was it set? No secret material is returned.
+meRouter.get('/v1/me/delete-secret', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  const status = await getDeleteSecretStatus(user.id);
+  return c.json({ hasSecret: status.hasSecret, setAt: status.setAt?.toISOString() ?? null });
+});
+
+// Set the delete secret (one per user). 409 if one already exists — the
+// user must reset before setting a new one. Validation failures surface
+// the human-readable complexity message.
+meRouter.post('/v1/me/delete-secret', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  const body = await c.req.json().catch(() => null);
+  const parsed = deleteSecretSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
+      400,
+    );
+  }
+  let setAt: Date;
+  try {
+    ({ setAt } = await setDeleteSecret(user.id, parsed.data.secret));
+  } catch (err) {
+    if (err instanceof DeleteSecretExistsError) {
+      return c.json({ code: 'delete_secret_exists', message: err.message }, 409);
+    }
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'me.delete_secret_set',
+    ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: {},
+  });
+  return c.json({ ok: true, setAt: setAt.toISOString() }, 201);
+});
+
+// Reveal the plaintext so the owner can copy it again. Rate-limited and
+// audited; the value itself is never logged.
+meRouter.post(
+  '/v1/me/delete-secret/reveal',
+  requireAuth(),
+  rateLimit({
+    scope: 'me-delete-secret-reveal',
+    limit: 10,
+    windowMs: 5 * 60_000,
+    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+  }),
+  async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+    let secret: string;
+    try {
+      ({ secret } = await revealDeleteSecret(user.id));
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return c.json({ code: 'no_delete_secret', message: 'no delete secret is set' }, 404);
+      }
+      throw err;
+    }
+    await audit({
+      actorId: user.id,
+      projectId: null,
+      action: 'me.delete_secret_reveal',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {},
+    });
+    return c.json({ secret });
+  },
+);
+
+// Verify the secret. On match, bump last_mfa_at (same as POST /v1/me/step-up)
+// and audit 'auth.step_up' so the project DELETE route's recent-MFA gate
+// passes. Rate-limited to blunt brute force.
+meRouter.post(
+  '/v1/me/delete-secret/verify',
+  requireAuth(),
+  rateLimit({
+    scope: 'me-delete-secret-verify',
+    limit: 10,
+    windowMs: 5 * 60_000,
+    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+  }),
+  async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+    const body = await c.req.json().catch(() => null);
+    const parsed = deleteSecretSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
+        400,
+      );
+    }
+    const ok = await verifyDeleteSecret(user.id, parsed.data.secret);
+    if (!ok) {
+      return c.json({ code: 'invalid_delete_secret', message: 'secret incorrect' }, 401);
+    }
+    const db = getDb();
+    await db
+      .update(users)
+      .set({ lastMfaAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+    await audit({
+      actorId: user.id,
+      projectId: null,
+      action: 'auth.step_up',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { via: 'delete_secret' },
+    });
+    return c.json({ ok: true, validUntilMs: Date.now() + 10 * 60_000 });
+  },
+);
+
+// Reset (clear) the delete secret so a new one can be set.
+meRouter.delete('/v1/me/delete-secret', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  await resetDeleteSecret(user.id);
+  await audit({
+    actorId: user.id,
+    projectId: null,
+    action: 'me.delete_secret_reset',
+    ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: {},
+  });
+  return c.json({ ok: true });
+});

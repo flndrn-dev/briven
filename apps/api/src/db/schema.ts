@@ -97,6 +97,16 @@ export const users = pgTable(
     // Surfaced only in audit_logs / admin tools — never replayed back
     // to the user, never used in cross-user analytics.
     deletionReason: text('deletion_reason'),
+    // User-chosen "delete secret" gating project deletion. Mirrors the SDK
+    // key pattern (migration 0034/0039): sha-256 hex `delete_secret_hash`
+    // is the sole verification mechanism, while AES-256-GCM
+    // `delete_secret_enc` (BRIVEN_ENCRYPTION_KEY KEK via
+    // services/project-env.ts) lets the owner reveal/copy the secret again
+    // through the authenticated + audited reveal path. All NULLABLE — a
+    // user without a secret set has all three null.
+    deleteSecretHash: text('delete_secret_hash'),
+    deleteSecretEnc: text('delete_secret_enc'),
+    deleteSecretSetAt: ts('delete_secret_set_at'),
   },
   (t) => ({
     emailIdx: uniqueIndex('users_email_idx').on(t.email),

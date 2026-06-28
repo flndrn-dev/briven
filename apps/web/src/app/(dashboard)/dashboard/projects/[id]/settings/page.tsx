@@ -140,7 +140,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
             projectId={id}
             projectName={project.name}
             apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
-            hasPassword={user.hasPassword}
+            hasDeleteSecret={user.hasDeleteSecret}
           />
         </div>
       </section>

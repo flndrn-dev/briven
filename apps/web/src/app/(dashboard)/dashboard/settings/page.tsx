@@ -6,7 +6,7 @@ import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
 import { ChangeEmailForm } from './change-email-form';
 import { DeleteAccountForm } from './delete-account-form';
-import { PasswordForm } from './password-form';
+import { DeleteSecretSection } from './delete-secret-section';
 
 interface PendingInvitation {
   id: string;
@@ -127,12 +127,13 @@ export default async function SettingsPage() {
       <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
         <h2 className="text-base font-semibold text-[var(--color-text)]">Security</h2>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-          {user.hasPassword
-            ? 'Change the password you use to confirm destructive actions like deleting a project.'
-            : 'Set a password to confirm destructive actions like deleting a project.'}
+          {user.hasDeleteSecret
+            ? 'Your delete secret confirms destructive actions like deleting a project. Reveal, copy, or reset it below.'
+            : 'Set a delete secret — a separate phrase used to confirm destructive actions like deleting a project.'}
         </p>
-        <PasswordForm
-          hasPassword={user.hasPassword}
+        <DeleteSecretSection
+          hasDeleteSecret={user.hasDeleteSecret}
+          deleteSecretSetAt={user.deleteSecretSetAt}
           apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
         />
       </section>

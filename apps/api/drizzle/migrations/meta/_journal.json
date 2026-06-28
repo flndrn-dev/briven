@@ -281,6 +281,13 @@
       "when": 1779990000000,
       "tag": "0039_api_key_encrypted",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780060000000,
+      "tag": "0040_user_delete_secret",
+      "breakpoints": true
     }
   ]
 }
