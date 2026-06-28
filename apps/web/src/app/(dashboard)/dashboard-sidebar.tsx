@@ -11,7 +11,6 @@ import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/c
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { LayoutGridIcon, type LayoutGridIconHandle } from '../../components/ui/layout-grid';
 import { LifeBuoyIcon, type LifeBuoyIconHandle } from '../../components/ui/life-buoy';
-import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
 import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
 const STORAGE_KEY = 'briven.sidebar.collapsed';
@@ -69,19 +68,11 @@ const NAV: NavItem[] = [
     Icon: LifeBuoyIcon as never,
     match: (p) => p.startsWith('/dashboard/support'),
   },
-  {
-    href: '/admin',
-    label: 'admin',
-    Icon: ShieldCheckIcon as never,
-    match: (p) => p.startsWith('/admin'),
-    adminOnly: true,
-  },
 ];
 
 type IconHandle =
   | FoldersIconHandle
   | CogIconHandle
-  | ShieldCheckIconHandle
   | CreditCardIconHandle
   | UsersIconHandle
   | LayoutGridIconHandle

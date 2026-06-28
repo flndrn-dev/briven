@@ -2,9 +2,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
+import { UserMenuButton } from '@/components/user-menu-button';
 import { getSessionUser } from '@/lib/session';
 
-import { AdminSignOut } from './admin-sign-out';
 import { CockpitMobileNav } from './cockpit-mobile-nav';
 import { CockpitNav } from './cockpit-nav';
 
@@ -48,15 +48,23 @@ export default async function AdminCockpitLayout({
             <Image src="/icon.svg" alt="" width={24} height={24} priority />
             <span className="font-mono text-sm">briven admin</span>
           </Link>
-          <div className="flex items-center gap-4">
-            <span
-              className="hidden font-mono text-xs text-[var(--color-text-subtle)] sm:inline"
-              aria-label="signed in operator"
-            >
-              {/* No email shown — name fallback only (hard rule). */}
-              {user.name ?? 'operator'}
-            </span>
-            <AdminSignOut />
+          {/* Same dropdown as the user dashboard — lets the super admin pivot
+              between admin ↔ user dashboard ↔ website ↔ docs, and sign out.
+              variant="admin" swaps the first row to a "dashboard" link;
+              placement="down" opens it below this top header. */}
+          <div className="w-56">
+            <UserMenuButton
+              user={{
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                legalName: user.legalName,
+              }}
+              collapsed={false}
+              isAdmin={user.isAdmin}
+              placement="down"
+              variant="admin"
+            />
           </div>
         </div>
       </header>

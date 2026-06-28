@@ -19,9 +19,9 @@ const NAV = [
   { href: '/dashboard/support', label: 'support' },
 ] as const;
 
-export function DashboardMobileNav({ isAdmin }: { isAdmin: boolean }) {
+export function DashboardMobileNav() {
   const pathname = usePathname();
-  const items = isAdmin ? [...NAV, { href: '/admin', label: 'admin' }] : NAV;
+  const items = NAV;
   return (
     <nav
       aria-label="dashboard sections"

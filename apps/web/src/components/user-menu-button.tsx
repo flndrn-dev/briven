@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
 import { ChevronsUpDownIcon, type ChevronsUpDownIconHandle } from './ui/chevrons-up-down';
 import { GlobeIcon, type GlobeIconHandle } from './ui/globe';
+import { LayoutGridIcon, type LayoutGridIconHandle } from './ui/layout-grid';
 import { LogOutIcon, type LogOutIconHandle } from './ui/log-out';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from './ui/shield-check';
 
@@ -20,6 +21,12 @@ interface Props {
   user: UserInfo;
   collapsed: boolean;
   isAdmin: boolean;
+  /** Which way the dropdown opens. 'up' for the bottom-anchored sidebar
+   *  (default), 'down' for a top header (e.g. the admin cockpit). */
+  placement?: 'up' | 'down';
+  /** Where this menu is mounted. On the admin cockpit ('admin') the first
+   *  row links back to the user dashboard instead of into /admin. */
+  variant?: 'dashboard' | 'admin';
 }
 
 /**
@@ -35,7 +42,13 @@ interface Props {
  * component handle — hovering anywhere in the row (icon, label, padding)
  * triggers the animation, not just the icon's own 16px surface.
  */
-export function UserMenuButton({ user, collapsed, isAdmin }: Props) {
+export function UserMenuButton({
+  user,
+  collapsed,
+  isAdmin,
+  placement = 'up',
+  variant = 'dashboard',
+}: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -119,7 +132,9 @@ export function UserMenuButton({ user, collapsed, isAdmin }: Props) {
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-50 mb-2 w-60 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]"
+          className={`absolute z-50 w-60 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)] ${
+            placement === 'down' ? 'right-0 top-full mt-2' : 'left-0 bottom-full mb-2'
+          }`}
         >
           <div className="flex items-center gap-3 border-b border-[var(--color-border-subtle)] px-3 py-3">
             <Avatar user={user} size={32} />
@@ -133,7 +148,19 @@ export function UserMenuButton({ user, collapsed, isAdmin }: Props) {
             </div>
           </div>
           <ul className="p-1">
-            {isAdmin ? (
+            {variant === 'admin' ? (
+              <li>
+                <MenuRow
+                  as="button"
+                  onSelect={() => {
+                    setOpen(false);
+                    router.push('/dashboard');
+                  }}
+                  icon={LayoutGridIcon}
+                  label="dashboard"
+                />
+              </li>
+            ) : isAdmin ? (
               <li>
                 <MenuRow
                   as="button"
@@ -185,12 +212,18 @@ export function UserMenuButton({ user, collapsed, isAdmin }: Props) {
   );
 }
 
-type IconHandle = GlobeIconHandle | BookOpenIconHandle | LogOutIconHandle | ShieldCheckIconHandle;
+type IconHandle =
+  | GlobeIconHandle
+  | BookOpenIconHandle
+  | LogOutIconHandle
+  | ShieldCheckIconHandle
+  | LayoutGridIconHandle;
 type IconComponent =
   | typeof GlobeIcon
   | typeof BookOpenIcon
   | typeof LogOutIcon
-  | typeof ShieldCheckIcon;
+  | typeof ShieldCheckIcon
+  | typeof LayoutGridIcon;
 
 interface MenuRowBaseProps {
   onSelect?: () => void;
