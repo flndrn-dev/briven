@@ -1,8 +1,14 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { basename, dirname, resolve } from 'node:path';
 
 import { readProjectConfig, writeProjectConfig } from '../project-config.js';
 import { banner, blankLine, error as printError, link, step, success } from '../output.js';
+
+// The CLI pins the scaffold to its own version so a freshly-inited project
+// installs the matching `@briven/cli` (mirrors commands/version.ts).
+const cliRequire = createRequire(import.meta.url);
+const CLI_VERSION = (cliRequire('../../package.json') as { version: string }).version;
 
 interface Args {
   name?: string;
@@ -89,8 +95,7 @@ export default query(async (ctx: Ctx, args: Args = {}) => {
   return q.orderBy('createdAt', 'desc').limit(200);
 });
 `,
-      'briven/functions/createTodo.ts': `import { brivenError, mutation, type Ctx } from '@briven/cli/server';
-import { ulid } from '@briven/shared';
+      'briven/functions/createTodo.ts': `import { brivenError, mutation, ulid, type Ctx } from '@briven/cli/server';
 
 interface Args {
   body: string;
@@ -188,8 +193,7 @@ export default query(async (ctx: Ctx, args: Args) => {
     .limit(limit);
 });
 `,
-      'briven/functions/createRoom.ts': `import { brivenError, mutation, type Ctx } from '@briven/cli/server';
-import { ulid } from '@briven/shared';
+      'briven/functions/createRoom.ts': `import { brivenError, mutation, ulid, type Ctx } from '@briven/cli/server';
 
 interface Args {
   name: string;
@@ -206,8 +210,7 @@ export default mutation(async (ctx: Ctx, args: Args) => {
   return row;
 });
 `,
-      'briven/functions/sendMessage.ts': `import { brivenError, mutation, type Ctx } from '@briven/cli/server';
-import { ulid } from '@briven/shared';
+      'briven/functions/sendMessage.ts': `import { brivenError, mutation, ulid, type Ctx } from '@briven/cli/server';
 
 interface Args {
   roomId: string;
@@ -281,8 +284,7 @@ export default query(async (ctx: Ctx, args: Args) => {
   return q.orderBy('updatedAt', 'desc').limit(200);
 });
 `,
-      'briven/functions/createNote.ts': `import { brivenError, mutation, type Ctx } from '@briven/cli/server';
-import { ulid } from '@briven/shared';
+      'briven/functions/createNote.ts': `import { brivenError, mutation, ulid, type Ctx } from '@briven/cli/server';
 
 interface Args {
   ownerId: string;
@@ -410,8 +412,7 @@ export default query(async (ctx: Ctx) => {
     .limit(500);
 });
 `,
-      'briven/functions/createTodo.ts': `import { brivenError, mutation, type Ctx } from '@briven/cli/server';
-import { ulid } from '@briven/shared';
+      'briven/functions/createTodo.ts': `import { brivenError, mutation, ulid, type Ctx } from '@briven/cli/server';
 
 interface Args {
   body: string;
@@ -486,6 +487,70 @@ export default mutation(async (ctx: Ctx, args: Args) => {
     },
   },
 };
+
+/**
+ * The package.json every scaffolded project needs. Two fields are what
+ * separate "it just works" from the dreaded
+ * "default export is not a valid briven schema":
+ *   - "type": "module" — so tsx loads briven/schema.ts as a real ES module
+ *     and the `export default schema({...})` isn't CJS-interop double-wrapped.
+ *   - one dependency, @briven/cli — which bundles the schema DSL, the server
+ *     helpers, brivenError, and ulid, so no private @briven/* package is
+ *     ever needed.
+ */
+function packageJsonContents(name: string): string {
+  return (
+    JSON.stringify(
+      {
+        name,
+        private: true,
+        type: 'module',
+        scripts: { deploy: 'briven deploy', dev: 'briven dev' },
+        dependencies: { '@briven/cli': `^${CLI_VERSION}` },
+      },
+      null,
+      2,
+    ) + '\n'
+  );
+}
+
+type PackageJsonResult = 'created' | 'exists-ok' | 'exists-no-esm';
+
+/**
+ * Write package.json for a fresh project. If one already exists (the user
+ * ran `init` inside an existing app) we NEVER overwrite it — we only check
+ * it declares `"type": "module"` and report back so the caller can warn,
+ * because without it `briven deploy` fails to load the schema.
+ */
+async function ensurePackageJson(cwd: string, name: string): Promise<PackageJsonResult> {
+  const path = resolve(cwd, 'package.json');
+  let existing: string | null = null;
+  try {
+    existing = await readFile(path, 'utf8');
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+  }
+  if (existing === null) {
+    await writeFile(path, packageJsonContents(name));
+    return 'created';
+  }
+  try {
+    const parsed = JSON.parse(existing) as { type?: string };
+    return parsed.type === 'module' ? 'exists-ok' : 'exists-no-esm';
+  } catch {
+    // Unparseable package.json — leave it untouched, can't safely verify.
+    return 'exists-ok';
+  }
+}
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: string }).code === 'ENOENT'
+  );
+}
 
 const GITIGNORE_ENTRIES = ['.briven/', 'node_modules/', 'dist/'];
 
@@ -575,15 +640,23 @@ export async function runInit(argv: readonly string[]): Promise<number> {
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, contents);
   }
+  const pkgResult = await ensurePackageJson(cwd, name);
   await updateGitignore(cwd);
 
   success('scaffolded:');
   step('  briven.json');
+  if (pkgResult === 'created') step('  package.json');
   for (const path of Object.keys(tpl.files)) {
     step(`  ${path}`);
   }
   blankLine();
-  step('next: create a project in the dashboard, then run');
+  if (pkgResult === 'exists-no-esm') {
+    step('⚠  your existing package.json is missing "type": "module".');
+    step('⚠  add it, otherwise `briven deploy` can fail to load briven/schema.ts.');
+    blankLine();
+  }
+  step('next: install deps, create a project in the dashboard, then run');
+  step('      npm install');
   step('      briven login --project <id> --key <brk_...>');
   step('      briven link');
   step('      briven deploy');
