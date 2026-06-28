@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { SubjectTagsInput } from './subject-tags-input';
+
 interface Props {
   apiOrigin: string;
   /** Pre-selected topic (e.g. from a /contact?topic=privacy deep link). Falls
@@ -73,6 +75,7 @@ export function ContactForm({
   // Locked, read-only value sent to the backend. Never editable in the UI.
   const country = initialCountry ?? null;
   const [subject, setSubject] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [topic, setTopic] = useState<Topic>(coerceTopic(initialTopic));
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,6 +87,13 @@ export function ContactForm({
     if (busy) return;
     setBusy(true);
     setError(null);
+    // Serialise the #tag chips + free text into the single subject string the
+    // api already accepts (the admin dashboard reads the #tags back out for
+    // routing). No backend change needed until structured tags land.
+    const subjectPayload = [tags.map((t) => `#${t}`).join(' '), subject.trim()]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
     try {
       const res = await fetch(`${apiOrigin}/v1/contact`, {
         method: 'POST',
@@ -95,7 +105,7 @@ export function ContactForm({
           message: message.trim(),
           // Optional extras — only sent when present so the backend's
           // optional() schema stays happy on older clients.
-          ...(subject.trim() ? { subject: subject.trim() } : {}),
+          ...(subjectPayload ? { subject: subjectPayload } : {}),
           ...(country ? { country: country.name } : {}),
         }),
       });
@@ -193,35 +203,29 @@ export function ContactForm({
         </span>
       </label>
 
-      {/* 3 — subject (free text) + topic (routing select) */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">subject</span>
-          <input
-            type="text"
-            maxLength={200}
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="what's this about?"
-            className={FIELD_CLASS}
-          />
-        </label>
+      {/* 3 — subject: #tag chips + short line (tags route/triage in the admin dashboard) */}
+      <SubjectTagsInput
+        tags={tags}
+        onTagsChange={setTags}
+        text={subject}
+        onTextChange={setSubject}
+      />
 
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">topic</span>
-          <select
-            value={topic}
-            onChange={(e) => setTopic(e.target.value as Topic)}
-            className={FIELD_CLASS}
-          >
-            {TOPICS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      {/* 4 — topic (routing select) */}
+      <label className="flex flex-col gap-2">
+        <span className="font-mono text-xs text-[var(--color-text-muted)]">topic</span>
+        <select
+          value={topic}
+          onChange={(e) => setTopic(e.target.value as Topic)}
+          className={FIELD_CLASS}
+        >
+          {TOPICS.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {/* 4 — message */}
       <label className="flex flex-col gap-2">
