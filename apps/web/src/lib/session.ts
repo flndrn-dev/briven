@@ -9,6 +9,11 @@ export interface SessionUser {
   emailVerified: boolean;
   image: string | null;
   isAdmin: boolean;
+  // True when the user has an account password (Better Auth `credential`
+  // account). Passwordless magic-link / OAuth users are false until they
+  // set one in Settings → Security; the destructive-action step-up needs
+  // a password to confirm against.
+  hasPassword: boolean;
   // Personal org id auto-created by migration 0010. Web uses this as the
   // implicit org context for every billing + project route; Phase 3 adds
   // an org switcher that overrides it.

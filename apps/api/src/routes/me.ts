@@ -14,6 +14,7 @@ import { checkVatWithVies } from '../services/billing.js';
 import {
   getCurrentVat,
   getProfile,
+  hasPasswordCredential,
   setAvatar,
   updateProfile,
   type ProfilePatch,
@@ -320,5 +321,102 @@ meRouter.post(
       metadata: {},
     });
     return c.json({ ok: true, validUntilMs: Date.now() + 10 * 60_000 });
+  },
+);
+
+const passwordSchema = z.object({
+  // Required only when CHANGING an existing password. Passwordless users
+  // (magic-link / OAuth) ADD a first password and omit this.
+  currentPassword: z.string().min(1).max(200).optional(),
+  newPassword: z.string().min(10).max(128),
+});
+
+/**
+ * Set or change the account password from the dashboard — NO email round-
+ * trip. Passwordless (magic-link / OAuth) users use this to ADD a first
+ * password so the destructive-action step-up (POST /v1/me/step-up, which
+ * re-checks the account password) will then accept them.
+ *
+ * Delegates to Better Auth on the authenticated session:
+ *  - no existing password  → `auth.api.setPassword({ body: { newPassword } })`
+ *    links a `credential` account for the session user. Body is newPassword
+ *    ONLY — no email is involved.
+ *  - existing password     → `auth.api.changePassword` which re-verifies
+ *    `currentPassword` before swapping the hash.
+ * Both endpoints run under Better Auth's `sensitiveSessionMiddleware`, which
+ * only requires a valid session (resolved from the forwarded cookies) — so
+ * the existing dashboard session drives the request.
+ */
+meRouter.post(
+  '/v1/me/password',
+  requireAuth(),
+  rateLimit({
+    scope: 'me-password',
+    limit: 10,
+    windowMs: 5 * 60_000,
+    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+  }),
+  async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+    const body = await c.req.json().catch(() => null);
+    const parsed = passwordSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
+        400,
+      );
+    }
+
+    const alreadyHasPassword = await hasPasswordCredential(user.id);
+    try {
+      if (alreadyHasPassword) {
+        if (!parsed.data.currentPassword) {
+          return c.json(
+            {
+              code: 'current_password_required',
+              message: 'your current password is required to change it',
+            },
+            400,
+          );
+        }
+        await auth.api.changePassword({
+          body: {
+            currentPassword: parsed.data.currentPassword,
+            newPassword: parsed.data.newPassword,
+          },
+          headers: c.req.raw.headers,
+        });
+      } else {
+        await auth.api.setPassword({
+          body: { newPassword: parsed.data.newPassword },
+          headers: c.req.raw.headers,
+        });
+      }
+    } catch {
+      // Better Auth throws on wrong current password / policy failure.
+      // Don't leak which: a single generic message covers both the
+      // change-path (bad current password) and any set-path edge case.
+      return c.json(
+        {
+          code: 'password_update_failed',
+          message: alreadyHasPassword
+            ? 'could not change password — check your current password and try again'
+            : 'could not set password — please try again',
+        },
+        400,
+      );
+    }
+
+    await audit({
+      actorId: user.id,
+      projectId: null,
+      action: alreadyHasPassword ? 'me.password_change' : 'me.password_set',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {},
+    });
+
+    return c.json({ ok: true });
   },
 );

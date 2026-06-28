@@ -11,11 +11,12 @@ interface Props {
   flow: FormFlow;
 }
 
-const OAUTH_PROVIDERS: ReadonlyArray<'google' | 'github' | 'discord' | 'microsoft'> = [
+const OAUTH_PROVIDERS: ReadonlyArray<'google' | 'github' | 'discord' | 'microsoft' | 'konnos'> = [
   'google',
   'github',
   'discord',
   'microsoft',
+  'konnos',
 ];
 
 const TITLES: Record<FormFlow, string> = {

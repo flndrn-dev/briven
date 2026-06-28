@@ -13,6 +13,7 @@ export interface AuthConfig {
     github: { enabled: boolean; clientId: string | null };
     discord: { enabled: boolean; clientId: string | null };
     microsoft: { enabled: boolean; clientId: string | null };
+    konnos: { enabled: boolean; clientId: string | null };
   };
   branding: {
     logoUrl: string | null;
@@ -27,8 +28,8 @@ interface Props {
   initial: AuthConfig;
 }
 
-type OAuthKey = 'google' | 'github' | 'discord' | 'microsoft';
-const OAUTH_KEYS: OAuthKey[] = ['google', 'github', 'discord', 'microsoft'];
+type OAuthKey = 'google' | 'github' | 'discord' | 'microsoft' | 'konnos';
+const OAUTH_KEYS: OAuthKey[] = ['google', 'github', 'discord', 'microsoft', 'konnos'];
 
 /**
  * Client-side editor for the Providers panel. Local state holds the
@@ -252,6 +253,8 @@ function providerConsoleUrl(name: OAuthKey): string {
       return 'discord.com/developers/applications';
     case 'microsoft':
       return 'portal.azure.com → Entra ID → App registrations';
+    case 'konnos':
+      return 'code.konnos.org → Settings → Applications → OAuth2';
   }
 }
 

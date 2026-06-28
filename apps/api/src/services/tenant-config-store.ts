@@ -46,6 +46,11 @@ const authConfigSchema = z.object({
     github: oauthProviderConfig,
     discord: oauthProviderConfig,
     microsoft: oauthProviderConfig,
+    // Generic OIDC/OAuth provider (Forgejo at code.konnos.org). Same
+    // {enabled, clientId} shape as the built-in social providers — the
+    // public client id is non-secret; the secret rides the encrypted
+    // tenant-secret-store like the others.
+    konnos: oauthProviderConfig,
   }),
   branding: z.object({
     /** Customer-uploaded logo URL. Null means use the briven default mark. */
@@ -108,6 +113,7 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     github: { enabled: false, clientId: null },
     discord: { enabled: false, clientId: null },
     microsoft: { enabled: false, clientId: null },
+    konnos: { enabled: false, clientId: null },
   },
   branding: {
     logoUrl: null,

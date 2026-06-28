@@ -26,7 +26,7 @@
  * `credentials: 'include'` so the browser stores it).
  */
 
-export type OAuthProvider = 'google' | 'github' | 'discord' | 'microsoft';
+export type OAuthProvider = 'google' | 'github' | 'discord' | 'microsoft' | 'konnos';
 
 export interface CreateBrivenAuthOptions {
   /** briven project id (`p_<ulid>`). Required. */

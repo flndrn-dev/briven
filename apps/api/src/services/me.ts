@@ -1,7 +1,7 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { sessions, users } from '../db/schema.js';
+import { accounts, sessions, users } from '../db/schema.js';
 import { lookupIp } from '../lib/geoip.js';
 import { getDefaultOrgForUser } from './orgs.js';
 
@@ -21,6 +21,31 @@ export interface ProfilePatch {
   dateOfBirth?: string | null;
   countryOfBirth?: string | null;
   timezone?: string | null;
+}
+
+/**
+ * Does this user have a usable account password? True only when a Better
+ * Auth credential account row exists with a non-null password hash —
+ * passwordless (magic-link / OAuth-only) users return false. Used to (a)
+ * surface `hasPassword` on /v1/me so the dashboard can offer "set a
+ * password", and (b) route POST /v1/me/password to setPassword vs
+ * changePassword. The destructive-action step-up (POST /v1/me/step-up)
+ * re-checks this same password, so a passwordless user must set one first.
+ */
+export async function hasPasswordCredential(userId: string): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.userId, userId),
+        eq(accounts.providerId, 'credential'),
+        isNotNull(accounts.password),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }
 
 export async function getCurrentVat(
@@ -93,8 +118,12 @@ export async function getProfile(userId: string) {
   // org-less until Phase 3 adds a switcher.
   const defaultOrg = await getDefaultOrgForUser(userId);
 
+  // Whether the user can satisfy the destructive-action password step-up.
+  const hasPassword = await hasPasswordCredential(userId);
+
   return {
     ...row,
+    hasPassword,
     defaultOrgId: defaultOrg.id,
     lastSignIn: last
       ? {

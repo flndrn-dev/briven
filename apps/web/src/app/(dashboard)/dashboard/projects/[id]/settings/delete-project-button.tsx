@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -9,6 +10,12 @@ interface Props {
   projectId: string;
   projectName: string;
   apiOrigin: string;
+  /**
+   * Whether the account has a password. Passwordless (magic-link / OAuth)
+   * users can't satisfy the step-up password prompt, so instead of showing
+   * a dead input we point them to Settings → Security to set one first.
+   */
+  hasPassword: boolean;
 }
 
 /**
@@ -17,7 +24,7 @@ interface Props {
  * requireRecentMfa(10) on the api side; if the step-up window has
  * elapsed, we surface a password prompt inline.
  */
-export function DeleteProjectButton({ projectId, projectName, apiOrigin }: Props) {
+export function DeleteProjectButton({ projectId, projectName, apiOrigin, hasPassword }: Props) {
   const router = useRouter();
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -79,7 +86,7 @@ export function DeleteProjectButton({ projectId, projectName, apiOrigin }: Props
         {error ? (
           <p className="font-mono text-[10px] text-[var(--color-error)]">{error}</p>
         ) : null}
-        {needStepUp ? (
+        {needStepUp && hasPassword ? (
           <StepUpPrompt
             apiOrigin={apiOrigin}
             reason={`you're about to delete the project "${projectName}". this triggers the 30-day hard-delete grace window.`}
@@ -89,6 +96,24 @@ export function DeleteProjectButton({ projectId, projectName, apiOrigin }: Props
             }}
             onCancel={() => setNeedStepUp(false)}
           />
+        ) : null}
+        {needStepUp && !hasPassword ? (
+          <div className="mt-1 flex flex-col gap-2 rounded-md border border-[var(--color-warning)] bg-[var(--color-surface)] p-3 font-mono text-[10px] text-[var(--color-text-muted)]">
+            <p>
+              You need a password to confirm this.{' '}
+              <Link href="/dashboard/settings" className="text-[var(--color-text-link)] underline">
+                Set one in Settings → Security
+              </Link>
+              .
+            </p>
+            <button
+              type="button"
+              onClick={() => setNeedStepUp(false)}
+              className="self-start text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              cancel
+            </button>
+          </div>
         ) : null}
       </div>
     </details>

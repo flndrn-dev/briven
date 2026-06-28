@@ -115,7 +115,10 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="mx-auto grid w-full max-w-6xl grid-cols-[220px_1fr] gap-10 px-6 py-10">
-        <nav aria-label="docs sections" className="flex flex-col gap-5 font-mono text-sm">
+        <nav
+          aria-label="docs sections"
+          className="sticky top-10 flex max-h-[calc(100dvh-5rem)] flex-col gap-5 self-start overflow-y-auto font-mono text-sm"
+        >
           {GROUPS.map((group) => (
             <div key={group.label} className="flex flex-col gap-1">
               <p className="px-3 pb-1 text-[10px] uppercase tracking-wide text-[var(--color-text-subtle)]">

@@ -167,6 +167,7 @@ const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
   'github',
   'discord',
   'microsoft',
+  'konnos',
 ];
 
 /**

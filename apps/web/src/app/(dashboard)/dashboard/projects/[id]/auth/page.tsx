@@ -11,6 +11,7 @@ interface AuthConfig {
     github: { enabled: boolean; clientId: string | null };
     discord: { enabled: boolean; clientId: string | null };
     microsoft: { enabled: boolean; clientId: string | null };
+    konnos: { enabled: boolean; clientId: string | null };
   };
   branding: {
     logoUrl: string | null;
@@ -116,6 +117,7 @@ export default async function AuthOverviewPage({
             ['github', state.config.providers.github.enabled],
             ['discord', state.config.providers.discord.enabled],
             ['microsoft', state.config.providers.microsoft.enabled],
+            ['konnos', state.config.providers.konnos.enabled],
           ]}
         />
         <SummaryCard

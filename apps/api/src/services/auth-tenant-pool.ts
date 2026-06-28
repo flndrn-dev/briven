@@ -101,6 +101,53 @@ async function createAuthInstance(projectId: string) {
   });
   const db = drizzle(pgPool);
 
+  // ──────────────────────────────────────────────────────────────────────
+  // TODO(konnos / tenant OAuth wiring): wire customer-configured OAuth
+  // providers into this per-tenant instance.
+  //
+  // STATUS: deferred — NOT yet wired for ANY provider. This factory
+  // currently builds email+password only; `getAuthConfig(projectId)` is not
+  // read here, so the per-project provider toggles (google/github/discord/
+  // microsoft/konnos) stored via tenant-config-store are persisted + shown
+  // in the dashboard but do not yet reach the Better Auth engine. The whole
+  // tenant-OAuth path (config-aware factory + per-tenant client-secret
+  // load) is a follow-up step (BUILD_PLAN.md §13 step 4 / §6).
+  //
+  // When building it, konnos is a GENERIC OIDC/OAuth provider (Forgejo at
+  // code.konnos.org) and must be wired via Better Auth's `genericOAuth`
+  // plugin (`import { genericOAuth } from 'better-auth/plugins'`) — NOT a
+  // built-in socialProvider. Copy the PROVEN control-plane pattern in
+  // apps/api/src/lib/auth.ts (lines ~204-228), but source the values
+  // per-tenant instead of from env:
+  //   const config = await getAuthConfig(projectId);
+  //   ...(config.providers.konnos.enabled && config.providers.konnos.clientId
+  //     ? [genericOAuth({ config: [{
+  //         providerId: 'konnos',
+  //         clientId: config.providers.konnos.clientId,
+  //         clientSecret: <decryptTenantSecret({ service: 'auth', projectId,
+  //                          ciphertext: <stored konnos secret> })>,
+  //         // discovery (Forgejo supports OIDC):
+  //         //   discoveryUrl: 'https://code.konnos.org/.well-known/openid-configuration'
+  //         // or explicit endpoints (gitea-compatible, as lib/auth.ts uses):
+  //         authorizationUrl: 'https://code.konnos.org/login/oauth/authorize',
+  //         tokenUrl:         'https://code.konnos.org/login/oauth/access_token',
+  //         userInfoUrl:      'https://code.konnos.org/api/v1/user',
+  //         scopes: ['openid', 'profile', 'email'],
+  //         mapProfileToUser: (p) => ({ id: String(p.id), email: p.email,
+  //           name: p.full_name || p.login, image: p.avatar_url, emailVerified: true }),
+  //       }] })]
+  //     : [])
+  // BLOCKER: the per-tenant OAuth client-SECRET load is not built yet. The
+  // primitive exists (tenant-secret-store.ts encrypt/decryptTenantSecret,
+  // service 'auth'), but there is no write endpoint nor a stored-key
+  // convention for OAuth client secrets — the provider-toggles UI itself
+  // notes "client secret: configure separately (encrypted endpoint)" which
+  // "lands in the next iteration". Wire konnos here once that secret path
+  // exists, gating on enabled + clientId + secret-present, exactly like the
+  // env-gated conditional in lib/auth.ts. The same plumbing then enables the
+  // built-in socialProviders (google/github/discord/microsoft) too.
+  // ──────────────────────────────────────────────────────────────────────
+
   const instance = betterAuth({
     appName: `briven-auth-${projectId}`,
     secret: authSecret(),

@@ -204,6 +204,9 @@ export const AUTH_VERIFICATION_TYPES = [
 ] as const;
 export type AuthVerificationType = (typeof AUTH_VERIFICATION_TYPES)[number];
 
-/** OAuth provider ids known to briven auth v1. Apple intentionally omitted. */
-export const AUTH_OAUTH_PROVIDERS = ['google', 'github', 'discord', 'microsoft'] as const;
+/** OAuth provider ids known to briven auth v1. Apple intentionally omitted.
+ *  `konnos` is a generic OIDC/OAuth provider (Forgejo at code.konnos.org) —
+ *  wired via Better Auth's genericOAuth plugin rather than a built-in social
+ *  provider (see apps/api/src/lib/auth.ts for the proven konnos config). */
+export const AUTH_OAUTH_PROVIDERS = ['google', 'github', 'discord', 'microsoft', 'konnos'] as const;
 export type AuthOAuthProvider = (typeof AUTH_OAUTH_PROVIDERS)[number];
