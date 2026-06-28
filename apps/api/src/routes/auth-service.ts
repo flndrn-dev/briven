@@ -20,6 +20,7 @@ import {
   createAuthSdkKey,
   isAssignableSdkKeyScope,
   listAuthSdkKeysForProject,
+  revealAuthSdkKey,
   revokeAuthSdkKey,
 } from '../services/auth-sdk-keys.js';
 import { getProjectUserDetail, listProjectUsers } from '../services/auth-users.js';
@@ -749,6 +750,59 @@ authServiceRouter.delete(
       return c.json({ ok: true });
     } catch (err) {
       if ((err as { code?: string }).code === 'not_found') {
+        return c.json({ code: 'not_found' }, 404);
+      }
+      throw err;
+    }
+  },
+);
+
+/**
+ * SDK keys — reveal. Decrypt and return the full plaintext so the owner can
+ * copy it again to paste elsewhere. Same authorisation as create/revoke
+ * (`requireProjectRole('admin')`) — access is NOT broadened. The plaintext is
+ * returned in the JSON body only; it is never logged and the frontend writes
+ * it straight to the clipboard without rendering it.
+ *
+ * A revoked key, or a key created before migration 0039 (no stored
+ * ciphertext), returns 404 `key_not_revealable` so the dashboard can tell the
+ * owner to rotate. Every successful reveal writes a
+ * `briven_auth.api_key.revealed` audit row including the keyId.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/api-keys/:keyId/reveal',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const keyId = c.req.param('keyId');
+    if (!projectId || !keyId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :keyId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) {
+      return c.json({ code: 'unauthorized' }, 401);
+    }
+    try {
+      const { plaintext } = await revealAuthSdkKey(projectId, keyId);
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'briven_auth.api_key.revealed',
+        ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { keyId },
+      });
+      // why: plaintext goes ONLY in this body — never to logs, never re-stored.
+      return c.json({ plaintext });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === 'key_not_revealable') {
+        return c.json(
+          { code: 'key_not_revealable', message: (err as Error).message },
+          404,
+        );
+      }
+      if (code === 'not_found') {
         return c.json({ code: 'not_found' }, 404);
       }
       throw err;

@@ -1,0 +1,18 @@
+-- 0039_api_key_encrypted — store each SDK key's ciphertext so a project owner
+-- can copy the FULL plaintext again later (to paste elsewhere) without it ever
+-- being displayed on screen.
+--
+-- Until now `briven_auth_sdk_keys` kept only a sha-256 digest (+ prefix +
+-- suffix); the plaintext was shown exactly once on creation and then
+-- unrecoverable. This adds a NULLABLE `encrypted_key` column holding the
+-- AES-256-GCM ciphertext of the plaintext, encrypted at rest with the same
+-- BRIVEN_ENCRYPTION_KEY KEK that protects customer env vars
+-- (services/project-env.ts). The sha-256 `hash` column is unchanged and
+-- remains the sole auth-verification mechanism — `encrypted_key` is for the
+-- authenticated, audited copy-again action only.
+--
+-- NULLABLE on purpose: keys created before this migration have no ciphertext
+-- and can never be revealed (the reveal endpoint returns key_not_revealable;
+-- the owner must rotate to get a copyable key). IF NOT EXISTS keeps this safe
+-- if a partial run ever happened.
+ALTER TABLE "briven_auth_sdk_keys" ADD COLUMN IF NOT EXISTS "encrypted_key" text;

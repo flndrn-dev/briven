@@ -274,6 +274,13 @@
       "when": 1779920000000,
       "tag": "0038_mcp_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1779990000000,
+      "tag": "0039_api_key_encrypted",
+      "breakpoints": true
     }
   ]
 }

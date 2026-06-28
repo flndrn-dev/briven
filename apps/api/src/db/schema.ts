@@ -1223,6 +1223,14 @@ export const brivenAuthSdkKeys = pgTable(
     // Last 4 chars of the plaintext — safe to display.
     suffix: varchar('suffix', { length: 4 }).notNull(),
     scope: text('scope').$type<BrivenAuthSdkKeyScope>().notNull().default('read'),
+    // AES-256-GCM ciphertext of the plaintext key, encrypted at rest with
+    // BRIVEN_ENCRYPTION_KEY (services/project-env.ts wire format). Lets an
+    // owner copy the full key again later via the authenticated + audited
+    // reveal endpoint — the value is NEVER returned in list/create masks and
+    // never rendered in HTML. NULL for keys minted before 0039: those cannot
+    // be revealed (rotate to get a copyable key). `hash` stays the only
+    // auth-verification mechanism; this column is copy-again only.
+    encryptedKey: text('encrypted_key'),
     lastUsedAt: ts('last_used_at'),
     expiresAt: ts('expires_at'),
     createdAt: createdAt(),
