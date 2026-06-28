@@ -47,6 +47,7 @@ const SUPPORT_TOPICS: readonly { label: string; body: string }[] = [
   { label: 'general', body: 'anything that doesn’t fit a box below.' },
   { label: 'support', body: 'something broken or not working as expected.' },
   { label: 'sales', body: 'plans, pricing, limits and getting started.' },
+  { label: 'self-host', body: 'running briven on your own server — we’ll get the process started.' },
   { label: 'security', body: 'vulnerabilities and responsible disclosure.' },
   { label: 'privacy', body: 'your data, access requests and deletion.' },
   { label: 'legal', body: 'terms, contracts and compliance questions.' },

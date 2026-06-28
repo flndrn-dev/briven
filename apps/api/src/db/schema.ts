@@ -937,6 +937,7 @@ export const contactTopics = [
   'general',
   'support',
   'sales',
+  'self-host',
   'security',
   'privacy',
   'legal',

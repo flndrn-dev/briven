@@ -20,7 +20,7 @@ export default function SupportPage() {
             <strong>community discord</strong> — open to everyone. fastest path for &quot;how
             do i…&quot; questions; expect informal answers from the team + community within
             an hour or two on Flanders business hours. invite link lands at public-beta open
-            on <strong>2026-05-21</strong>; until then ping the team via email below.
+            on <strong>2026-05-21</strong>; until then reach the team via the contact form below.
           </li>
           <li>
             <strong>github issues</strong>{' '}
@@ -34,13 +34,13 @@ export default function SupportPage() {
             footer and the relevant audit-log entries (sanitised — see below).
           </li>
           <li>
-            <strong>email</strong>{' '}
-            <a
-              href="mailto:support@flndrn.com"
+            <strong>contact form</strong>{' '}
+            <Link
+              href="https://briven.tech/contact?topic=support"
               className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
             >
-              support@flndrn.com
-            </a>{' '}
+              briven.tech/contact
+            </Link>{' '}
             — for paid customers; include your project id and the rough time of the issue.
             response targets per tier are on the SLA card in your billing dashboard.
           </li>
@@ -102,13 +102,13 @@ export default function SupportPage() {
       <section className="mt-8">
         <h2 className="font-mono text-lg tracking-tight">security disclosures</h2>
         <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-          report security issues to{' '}
-          <a
-            href="mailto:security@flndrn.com"
+          report security issues via{' '}
+          <Link
+            href="https://briven.tech/contact?topic=security"
             className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
           >
-            security@flndrn.com
-          </a>{' '}
+            the security topic on our contact form
+          </Link>{' '}
           — encrypted reports welcome (PGP key on{' '}
           <Link
             href="/trust"

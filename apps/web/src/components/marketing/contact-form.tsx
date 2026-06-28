@@ -18,12 +18,21 @@ interface Props {
   initialEmail?: string;
 }
 
-type Topic = 'general' | 'support' | 'sales' | 'security' | 'privacy' | 'legal' | 'other';
+type Topic =
+  | 'general'
+  | 'support'
+  | 'sales'
+  | 'self-host'
+  | 'security'
+  | 'privacy'
+  | 'legal'
+  | 'other';
 
 const TOPICS: readonly { value: Topic; label: string }[] = [
   { value: 'general', label: 'general' },
   { value: 'support', label: 'support' },
   { value: 'sales', label: 'sales' },
+  { value: 'self-host', label: 'self-host' },
   { value: 'security', label: 'security' },
   { value: 'privacy', label: 'privacy' },
   { value: 'legal', label: 'legal' },
