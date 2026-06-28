@@ -1,7 +1,7 @@
 import { CreditCardIcon } from '@/components/ui/credit-card';
 import { UsersIcon } from '@/components/ui/users';
 
-import { apiJson } from '../../../../lib/api';
+import { apiJson } from '@/lib/api';
 
 export const metadata = { title: 'subscribers & billing · admin' };
 export const dynamic = 'force-dynamic';

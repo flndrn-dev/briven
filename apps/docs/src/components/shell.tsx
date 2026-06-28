@@ -18,6 +18,7 @@ const GROUPS: readonly NavGroup[] = [
     items: [
       { href: '/', label: 'overview' },
       { href: '/quickstart', label: 'quickstart' },
+      { href: '/connect', label: 'connect' },
       { href: '/cli', label: 'cli' },
       { href: '/templates', label: 'templates' },
     ],
@@ -43,6 +44,7 @@ const GROUPS: readonly NavGroup[] = [
       { href: '/realtime', label: 'realtime' },
       { href: '/sdks', label: 'client sdks' },
       { href: '/api', label: 'http api' },
+      { href: '/api-keys', label: 'api keys' },
       { href: '/ai', label: 'ai schema' },
     ],
   },

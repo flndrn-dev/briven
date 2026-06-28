@@ -57,6 +57,16 @@ export const auth = betterAuth({
     .map((o) => o.trim())
     .filter(Boolean),
 
+  // Throttle credential-stuffing / brute-force against the auth endpoints
+  // (sign-in, sign-up, password reset). Better Auth's built-in rate limiter
+  // is window/max over each client IP. Enabled only in production so dev
+  // and tests aren't throttled; ~10 requests per 60s window.
+  rateLimit: {
+    enabled: env.BRIVEN_ENV === 'production',
+    window: 60,
+    max: 10,
+  },
+
   // Map Better Auth's singular model names onto our pluralised tables
   // (CLAUDE.md §6.1: DB tables are snake_case + plural).
   database: drizzleAdapter(getDb(), {

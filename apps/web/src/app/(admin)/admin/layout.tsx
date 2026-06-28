@@ -24,7 +24,8 @@ export const metadata = {
  * Gate: reuses the existing Better Auth session via getSessionUser()
  * (apps/api /v1/me, cookies forwarded by apiFetch). An unauthenticated
  * visitor is sent to /admin/login; a signed-in non-admin gets notFound()
- * — exactly the contract the existing /dashboard/admin layout uses.
+ * — the same contract the former /dashboard/admin layout used before the
+ * admin pages were consolidated into this cockpit route group.
  *
  * The login page lives in a SEPARATE route group ((admin-auth)) so it is
  * NOT wrapped by this layout — that is what prevents a redirect loop when

@@ -6,7 +6,7 @@ import { DatabaseIcon } from '@/components/ui/database';
 import { RocketIcon } from '@/components/ui/rocket';
 import { TriangleAlertIcon } from '@/components/ui/triangle-alert';
 
-import { apiJson } from '../../../lib/api';
+import { apiJson } from '@/lib/api';
 
 export const metadata = { title: 'overview · admin' };
 export const dynamic = 'force-dynamic';
@@ -283,7 +283,7 @@ function HostCard({ host }: { host: HostMetrics | null }) {
 
   return (
     <Link
-      href="/dashboard/admin/health"
+      href="/admin/health"
       className="flex h-full flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-border-strong)]"
     >
       <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
@@ -325,7 +325,7 @@ function IncidentsCard({ count }: { count: number }) {
   const tone = count > 0 ? 'text-[var(--color-warning)]' : 'text-[var(--color-text)]';
   return (
     <Link
-      href="/dashboard/admin/incidents"
+      href="/admin/incidents"
       className="flex h-full flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-border-strong)]"
     >
       <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
@@ -344,7 +344,7 @@ function RecentDeploys({ deploys }: { deploys: Overview['recentDeploys'] }) {
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
       <Link
-        href="/dashboard/admin/deploys"
+        href="/admin/deploys"
         className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)] transition hover:text-[var(--color-text-link)]"
       >
         <span className="text-[var(--color-text-muted)]">

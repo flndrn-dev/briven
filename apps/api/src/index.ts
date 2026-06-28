@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 
 import { env } from './env.js';
 import { log } from './lib/logger.js';
@@ -98,6 +99,11 @@ app.use('*', csrfOriginCheck());
 // and admin routes. Sits AFTER attachSession so admin requests can be
 // identified for the whitelist branch.
 app.use('*', maintenanceMode());
+
+// Security response headers (HSTS, nosniff, frame deny, etc.) on every
+// API response. Placed after the global middleware chain and before the
+// route mounts so all handlers inherit it.
+app.use('*', secureHeaders());
 
 // Block state-changing routes on a suspended project at the app level
 // instead of per-router — keeps the abuse-suspension gate from drifting
