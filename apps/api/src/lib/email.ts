@@ -4,6 +4,7 @@ import { env } from '../env.js';
 import { audit } from '../services/audit.js';
 import { isSuppressed } from '../services/suppressions.js';
 import { log } from './logger.js';
+import { sendViaSmtp, smtpConfigured } from './smtp.js';
 
 /**
  * Transactional email client — talks to mittera.eu's REST API at
@@ -75,13 +76,69 @@ async function send(label: string, args: SendArgs): Promise<void> {
     return;
   }
 
-  // Dev fallback: print so j can complete bootstrap without external email.
-  if (!isConfigured()) {
-    log.warn(`${label}_logged_only`);
-    process.stdout.write(`\n  ${label} (dev only):\n  to: ${args.to}\n  subject: ${args.subject}\n\n`);
-    return;
+  // Primary transport: mittera.eu. On success we're done. On any failure —
+  // or when mittera isn't configured at all — we drop through to the generic
+  // SMTP fallback so sign-in / magic-link / OTP mail still ships while
+  // mittera's own sender is sandbox-limited.
+  if (isConfigured()) {
+    try {
+      await sendViaMittera(label, args);
+      return;
+    } catch (err) {
+      log.error('mittera_send_failed_fallback', {
+        label,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // fall through to the SMTP fallback
+    }
   }
 
+  // Fallback transport: generic SMTP (lib/smtp.ts). Engages only when its
+  // five BRIVEN_SMTP_* vars are all set. Audited under an `smtp.*` action so
+  // operators can tell fallback sends apart from mittera sends in the stream.
+  if (smtpConfigured()) {
+    try {
+      await sendViaSmtp({
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+        text: args.text,
+        from: args.from ?? fromAddress(),
+      });
+      await audit({
+        actorId: null,
+        projectId: args.projectId ?? null,
+        action: `smtp.${label}.sent`,
+        ipHash: null,
+        userAgent: 'briven-api',
+        metadata: {
+          transport: 'smtp-fallback',
+          recipientRedacted: redactEmail(args.to),
+          subject: args.subject,
+        },
+      });
+      return;
+    } catch (err) {
+      log.error('smtp_send_failed', {
+        label,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // fall through to stdout-only
+    }
+  }
+
+  // Last resort: neither transport available. Print so first-user bootstrap
+  // still works on a fresh self-host with no mail configured at all.
+  log.warn(`${label}_logged_only`);
+  process.stdout.write(`\n  ${label} (dev only):\n  to: ${args.to}\n  subject: ${args.subject}\n\n`);
+}
+
+/**
+ * mittera.eu POST + audit chain. Throws on a non-2xx response so the caller
+ * (`send`) can fall through to the SMTP fallback. Extracted verbatim from the
+ * old inline body so mittera behavior is unchanged when it's healthy.
+ */
+async function sendViaMittera(label: string, args: SendArgs): Promise<void> {
   const body = JSON.stringify({
     from: args.from ?? fromAddress(),
     to: args.to,

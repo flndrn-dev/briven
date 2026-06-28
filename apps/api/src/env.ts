@@ -94,6 +94,21 @@ const envSchema = z.object({
   BRIVEN_MITTERA_API_KEY: z.string().optional(),
   BRIVEN_MITTERA_WEBHOOK_SECRET: z.string().optional(),
 
+  // Generic SMTP fallback for transactional email. When mittera is
+  // unconfigured OR a mittera send fails at runtime, briven falls back to
+  // this SMTP transport so sign-in / magic-link / OTP mail still goes out
+  // while mittera's sender is sandbox-limited. Provider-agnostic — point it
+  // at any SMTP server (a mailserver, or any provider's SMTP endpoint), so
+  // there's no lock-in. HOST + PORT + USER + PASS + FROM must ALL be set for
+  // the fallback to engage; otherwise the chain ends at stdout-only (dev
+  // bootstrap). Implicit TLS is inferred from PORT 465; all other ports use
+  // STARTTLS. See lib/smtp.ts + lib/email.ts.
+  BRIVEN_SMTP_HOST: z.string().optional(),
+  BRIVEN_SMTP_PORT: z.coerce.number().int().positive().optional(),
+  BRIVEN_SMTP_USER: z.string().optional(),
+  BRIVEN_SMTP_PASS: z.string().optional(),
+  BRIVEN_SMTP_FROM: z.string().optional(),
+
   // MinIO — object storage.
   //   _ENDPOINT          server-side (internal docker network OK).
   //   _PUBLIC_ENDPOINT   what the browser sees in presigned URLs. HTTPS
