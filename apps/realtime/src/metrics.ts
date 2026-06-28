@@ -13,9 +13,31 @@ const registry = createMetricsRegistry({
     briven_realtime_notifies_total: 'Total change events detected via Dolt commit-diff polling',
     briven_realtime_reinvoke_total:
       'Total function re-invocations triggered by change events, by outcome',
+    briven_realtime_poll_failures_total:
+      'Total poll cycles that errored or fell back, by reason',
+    briven_realtime_fanout_latency_ms:
+      'Latency from change detection to all frames shipped for a channel, in ms',
   },
 });
 
 export const incCounter = registry.incCounter;
 export const registerGauge = registry.registerGauge;
 export const renderPrometheus = registry.render;
+
+/**
+ * Record a latency observation for a histogram metric. The shared registry
+ * supports native histograms (bucketed `_bucket`/`_sum`/`_count` exposition),
+ * so this delegates straight through. Kept as a named export with a stable
+ * signature because another module depends on it. Never throws.
+ */
+export function observeHistogram(
+  name: string,
+  value: number,
+  labels?: Record<string, string>,
+): void {
+  try {
+    registry.observeHistogram(name, value, labels);
+  } catch {
+    /* metrics must never break the hot path */
+  }
+}

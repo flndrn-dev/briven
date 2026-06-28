@@ -5,7 +5,7 @@ import { createLogger } from '@briven/shared/observability';
 import { z } from 'zod';
 
 import { env } from './env.js';
-import { incCounter, registerGauge, renderPrometheus } from './metrics.js';
+import { incCounter, observeHistogram, registerGauge, renderPrometheus } from './metrics.js';
 import { PollManager } from './poll-manager.js';
 import { SubscriptionRegistry } from './subscription-registry.js';
 
@@ -154,6 +154,21 @@ function channelFor(projectId: string, table: string): string {
 
 const pollManager = new PollManager(registry, fireChannel, env.BRIVEN_REALTIME_POLL_MS);
 
+// Graceful shutdown — on SIGTERM/SIGINT stop the poll timer and close
+// every per-project DB pool before exiting so we don't leak connections
+// or drop a poll mid-flight. `shuttingDown` guards against a second fast
+// signal racing a double close().
+let shuttingDown = false;
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log.info('realtime_shutdown', { signal });
+  await pollManager.close();
+  process.exit(0);
+}
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
+
 // Per-project refcount — when the first channel is attached for a
 // project we call pollManager.addProject; when the last is detached
 // we call pollManager.removeProject. Keeps the poll set tight.
@@ -204,6 +219,11 @@ async function fireChannel(channel: string): Promise<void> {
   const snapshot = registry.subsForChannel(channel);
   if (snapshot.length === 0) return;
   incCounter('briven_realtime_notifies_total');
+  // Wall-clock span of the whole fan-out — from the first re-invoke to
+  // after the last subscriber's frame is sent. Recorded once per
+  // fan-out that had subscribers so the histogram reflects end-to-end
+  // delivery latency, not per-subscriber.
+  const fanoutStart = Date.now();
   for (const subId of snapshot) {
     const sub = subscriptions.get(subId);
     if (!sub) continue;
@@ -213,6 +233,7 @@ async function fireChannel(channel: string): Promise<void> {
     });
     sub.send({ type: 'data', subscriptionId: sub.subscriptionId, ...result });
   }
+  observeHistogram('briven_realtime_fanout_latency_ms', Date.now() - fanoutStart);
 }
 
 async function invokeOnce(sub: Subscription): Promise<Record<string, unknown>> {
@@ -504,6 +525,11 @@ export default {
     return Response.json({ code: 'not_found' }, { status: 404 });
   },
   websocket: {
+    // Close a socket after this many seconds of inactivity (Bun max 960).
+    // sendPings makes Bun emit periodic ping frames so live connections
+    // stay healthy and dead ones are detected and reaped.
+    idleTimeout: env.BRIVEN_REALTIME_IDLE_TIMEOUT_S,
+    sendPings: true,
     open(ws: SocketHandle) {
       sockets.set(ws as unknown as object, new Set<string>());
       ws.send(JSON.stringify({ type: 'hello', protocol: 1 }));

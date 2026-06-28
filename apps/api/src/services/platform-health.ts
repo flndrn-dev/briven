@@ -22,6 +22,7 @@ export interface HealthChecks {
   control_postgres: HealthCheck;
   data_plane_postgres: HealthCheck;
   runtime: HealthCheck;
+  realtime: HealthCheck;
   redis: HealthCheck;
 }
 
@@ -199,11 +200,27 @@ async function probeRuntime(): Promise<boolean> {
   }
 }
 
+// Mirrors probeRuntime exactly: a 2s liveness fetch to realtime's
+// /health, collapsing any failure to false so a realtime outage degrades
+// /ready the same way a runtime outage does.
+async function probeRealtime(): Promise<boolean> {
+  if (!env.BRIVEN_REALTIME_URL) return false;
+  try {
+    const res = await fetch(`${env.BRIVEN_REALTIME_URL}/health`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function getHealthSummary(): Promise<HealthSummary> {
-  const [controlOk, dataOk, runtimeOk, redisOk, host] = await Promise.all([
+  const [controlOk, dataOk, runtimeOk, realtimeOk, redisOk, host] = await Promise.all([
     env.BRIVEN_DATABASE_URL ? pingDb() : Promise.resolve(false),
     env.BRIVEN_DATA_PLANE_URL ? pingDataPlane() : Promise.resolve(false),
     probeRuntime(),
+    probeRealtime(),
     env.BRIVEN_REDIS_URL ? pingRedis() : Promise.resolve(false),
     // null fast when Prometheus is unset; cached ~15s otherwise. /ready
     // ignores host, so this never affects the readiness verdict.
@@ -222,6 +239,7 @@ export async function getHealthSummary(): Promise<HealthSummary> {
         : 'unreachable'
       : 'not_configured',
     runtime: runtimeOk ? 'ok' : 'unreachable',
+    realtime: realtimeOk ? 'ok' : 'unreachable',
     redis: env.BRIVEN_REDIS_URL ? (redisOk ? 'ok' : 'unreachable') : 'not_configured',
   };
 
@@ -238,6 +256,7 @@ export function isReady(checks: HealthChecks): boolean {
     checks.control_postgres === 'ok' &&
     checks.data_plane_postgres === 'ok' &&
     checks.runtime === 'ok' &&
+    checks.realtime === 'ok' &&
     (checks.redis === 'ok' || checks.redis === 'not_configured')
   );
 }

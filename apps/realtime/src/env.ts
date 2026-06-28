@@ -28,6 +28,12 @@ const envSchema = z.object({
   // latency but more database load. Default 500 ms, floor 100 ms, cap 5000 ms.
   BRIVEN_REALTIME_POLL_MS: z.coerce.number().int().min(100).max(5000).default(500),
 
+  // Idle timeout in seconds — Bun closes a WebSocket after this many
+  // seconds of inactivity (no incoming messages or pong frames). With
+  // sendPings:true Bun pings live sockets to keep them under the limit and
+  // detect dead ones. Default 120 s; clamped to Bun's valid range [1, 960].
+  BRIVEN_REALTIME_IDLE_TIMEOUT_S: z.coerce.number().int().min(1).max(960).default(120),
+
   // Per-WebSocket subscription cap. A single client opening more than
   // this many concurrent subs gets `error: subscription_limit_ws`. Sized
   // so a normal app (one page, ~dozens of useQuery hooks) is well under,

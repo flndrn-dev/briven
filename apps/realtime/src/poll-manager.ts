@@ -2,6 +2,7 @@ import { createLogger } from '@briven/shared/observability';
 import pg from 'pg';
 
 import { env } from './env.js';
+import { incCounter } from './metrics.js';
 import type { SubscriptionRegistry } from './subscription-registry.js';
 
 const log = createLogger({
@@ -161,7 +162,16 @@ export class PollManager {
         // Subsequent polls: hash changed → fire channels.
         this.lastHashes.set(projectId, hash);
         if (last !== undefined) {
-          await this.fireProjectChannels(projectId);
+          // Hash changed → scope the fan-out to the tables that actually
+          // changed between the last-seen commit and the new HEAD. On any
+          // failure (query throws OR no rows while the hash genuinely moved)
+          // fall back to firing every channel so an update is never missed.
+          const changedTables = await this.changedTablesBetween(projectId, last, hash);
+          if (changedTables && changedTables.size > 0) {
+            await this.fireProjectChannels(projectId, changedTables);
+          } else {
+            await this.fireProjectChannels(projectId);
+          }
         }
       } catch (err) {
         // Per-project failure shouldn't block other projects. Surface it
@@ -173,6 +183,7 @@ export class PollManager {
           projectId,
           message: err instanceof Error ? err.message : String(err),
         });
+        incCounter('briven_realtime_poll_failures_total', { reason: 'poll_error' });
       }
     }
   }
@@ -184,9 +195,79 @@ export class PollManager {
     return rows[0]?.h ?? null;
   }
 
-  private async fireProjectChannels(projectId: string): Promise<void> {
+  /**
+   * Resolve the set of bare table names that changed between two commits
+   * via `DOLT_DIFF_SUMMARY(from, to)`. The diff aggregates every table
+   * touched across all commits in the range, so passing (lastSeen, head)
+   * captures everything even when several commits landed between polls.
+   *
+   * Table names come back schema-qualified (e.g. `public.orders`); we keep
+   * only the part after the last '.'. Dropped tables have a null
+   * `to_table_name`, so we coalesce to `from_table_name`.
+   *
+   * Returns null to signal the caller must FALL BACK to firing every
+   * channel — either the query threw or it reported zero changed tables
+   * while HEAD genuinely moved. In both cases this logs a warning and bumps
+   * the diff-fallback failure counter so a missed scoping is observable.
+   */
+  private async changedTablesBetween(
+    projectId: string,
+    fromHash: string,
+    toHash: string,
+  ): Promise<Set<string> | null> {
+    const pool = this.clientFor(projectId);
+    if (!pool) return null;
+    try {
+      const { rows } = await pool.query<{
+        to_table_name: string | null;
+        from_table_name: string | null;
+      }>('SELECT to_table_name, from_table_name FROM DOLT_DIFF_SUMMARY($1, $2)', [
+        fromHash,
+        toHash,
+      ]);
+      const changed = new Set<string>();
+      for (const row of rows) {
+        const qualified = row.to_table_name ?? row.from_table_name;
+        if (!qualified) continue;
+        changed.add(bareTableName(qualified));
+      }
+      if (changed.size === 0) {
+        // Hash moved but the diff reported nothing actionable — don't risk
+        // dropping an update; fall back to firing all channels.
+        log.warn('realtime_diff_fallback', {
+          projectId,
+          message: 'DOLT_DIFF_SUMMARY returned no changed tables',
+        });
+        incCounter('briven_realtime_poll_failures_total', { reason: 'diff_fallback' });
+        return null;
+      }
+      return changed;
+    } catch (err) {
+      log.warn('realtime_diff_fallback', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      incCounter('briven_realtime_poll_failures_total', { reason: 'diff_fallback' });
+      return null;
+    }
+  }
+
+  /**
+   * Fire the project's channels. When `changedTables` is supplied, only
+   * channels whose table is in that set are fired; otherwise (the fallback
+   * path) every channel for the project is fired.
+   */
+  private async fireProjectChannels(
+    projectId: string,
+    changedTables?: Set<string>,
+  ): Promise<void> {
     const channels = this.registry.channelsForProject(projectId);
+    const prefix = `briven_${dbNameFor(projectId)}_`;
     for (const channel of channels) {
+      if (changedTables) {
+        const table = channel.startsWith(prefix) ? channel.slice(prefix.length) : null;
+        if (table === null || !changedTables.has(table)) continue;
+      }
       await this.onChange(channel);
     }
   }
@@ -207,4 +288,14 @@ export class PollManager {
 function dbNameFor(projectId: string): string {
   const safe = projectId.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
   return `proj_${safe}`;
+}
+
+/**
+ * Strip a DoltGres schema prefix from a table name. `DOLT_DIFF_SUMMARY`
+ * returns schema-qualified names (e.g. `public.orders`); channels are keyed
+ * on the bare table name, so we keep only the part after the last '.'.
+ */
+function bareTableName(qualified: string): string {
+  const dot = qualified.lastIndexOf('.');
+  return dot === -1 ? qualified : qualified.slice(dot + 1);
 }
