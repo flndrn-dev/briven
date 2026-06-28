@@ -33,6 +33,36 @@ const REPLACEMENTS = [
   ],
 ];
 
+// Literal inlines — for a SINGLE re-exported symbol where pulling the whole
+// source package's types would dump unrelated exports (newId, crypto, env…)
+// into our public API. @briven/shared ships as raw .ts (no built .d.ts), so
+// we inline a hand-mirrored, self-contained declaration of just `brivenError`
+// — keeping it in sync with packages/shared/src/errors.ts.
+// Each entry: [distRelativePath, searchRegex, literalReplacement]
+const LITERAL_REPLACEMENTS = [
+  [
+    'dist/server/index.d.ts',
+    "export \\{ brivenError \\} from '@briven/shared';",
+    `declare class brivenError extends Error {
+    readonly code: string;
+    readonly status: number;
+    readonly cause?: unknown;
+    readonly context?: Readonly<Record<string, unknown>>;
+    constructor(code: string, message: string, options?: {
+        status?: number;
+        cause?: unknown;
+        context?: Record<string, unknown>;
+    });
+    toJSON(): {
+        code: string;
+        message: string;
+        status: number;
+    };
+}
+export { brivenError };`,
+  ],
+];
+
 async function main() {
   for (const [file, searchPattern, sourcePkg] of REPLACEMENTS) {
     const filePath = resolve(here, '..', file);
@@ -87,6 +117,26 @@ async function main() {
 
     await writeFile(filePath, newContent, 'utf8');
     console.log(`[dts-inline] ${file} — inlined ${typesContent.length} chars from ${sourcePkg}`);
+  }
+
+  for (const [file, searchPattern, replacement] of LITERAL_REPLACEMENTS) {
+    const filePath = resolve(here, '..', file);
+    /** @type {string} */
+    let content;
+    try {
+      content = await readFile(filePath, 'utf8');
+    } catch {
+      console.warn(`[dts-inline] ${file} not found — skipping literal`);
+      continue;
+    }
+    const regex = new RegExp(searchPattern, 'g');
+    if (!regex.test(content)) {
+      console.warn(`[dts-inline] literal pattern not found in ${file} — skipping`);
+      continue;
+    }
+    regex.lastIndex = 0;
+    await writeFile(filePath, content.replace(regex, replacement), 'utf8');
+    console.log(`[dts-inline] ${file} — inlined literal (${searchPattern.slice(0, 24)}…)`);
   }
 }
 
