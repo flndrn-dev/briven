@@ -43,6 +43,7 @@ const GROUPS: readonly NavGroup[] = [
       { href: '/functions', label: 'functions' },
       { href: '/realtime', label: 'realtime' },
       { href: '/sdks', label: 'client sdks' },
+      { href: '/auth', label: 'auth' },
       { href: '/api', label: 'http api' },
       { href: '/api-keys', label: 'api keys' },
       { href: '/ai', label: 'ai schema' },
