@@ -44,30 +44,13 @@ export function LanguageSelector() {
   }
 
   return (
-    <label className="inline-flex items-center gap-1.5" title="language">
+    <label className="inline-flex items-center" title="language">
       <span className="sr-only">language</span>
-      {/* lucide globe — inherits text color */}
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        width="12"
-        height="12"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="text-[var(--color-text-subtle)]"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path d="M2 12h20" />
-        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-      </svg>
       <select
         value={locale}
         onChange={onChange}
         aria-label="select language"
-        className="cursor-pointer rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-transparent py-0.5 pl-1.5 pr-5 font-mono text-[10px] text-[var(--color-text-muted)] outline-none transition-colors hover:text-[var(--color-text)] focus:border-[var(--color-border)]"
+        className="cursor-pointer border-0 bg-transparent py-0.5 pl-0 pr-5 font-mono text-[10px] text-[var(--color-text-muted)] outline-none transition-colors hover:text-[var(--color-text)]"
       >
         {LANGUAGES.map((language) => (
           <option

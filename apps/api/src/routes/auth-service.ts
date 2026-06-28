@@ -27,7 +27,6 @@ import { getProjectUserDetail, listProjectUsers } from '../services/auth-users.j
 import {
   brandingLogoPublicUrl,
   deleteBrandingLogo,
-  getBrandingLogo,
   isStorageConfigured,
   putBrandingLogo,
   validateLogoUpload,
@@ -99,45 +98,10 @@ authServiceRouter.get('/v1/auth-service/ready', (c) => {
   );
 });
 
-// ─── public branding logo (UNAUTHENTICATED — acts like a CDN) ───────────
-
-/**
- * Serve a project's branding logo. World-readable on purpose: hosted login
- * pages (and any embedder) load it via a plain <img src>, so it must work
- * without a session or api key.
- *
- * This handler is registered BEFORE the `requireProjectAuth()` group
- * middleware below. Hono runs matching handlers in registration order and
- * a handler that returns a Response without calling `next()` ends the
- * chain — so the auth middleware (registered later) never runs for this
- * GET, leaving the route genuinely public.
- *
- * The object itself stays PRIVATE in MinIO; we proxy the bytes through
- * here with the stored content-type. `nosniff` + a locked-down CSP keep a
- * customer-supplied SVG from being treated as anything other than an image.
- */
-authServiceRouter.get('/v1/projects/:id/auth/branding/logo', async (c) => {
-  const projectId = c.req.param('id');
-  if (!projectId) {
-    return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
-  }
-  if (!isStorageConfigured()) {
-    return c.json({ code: 'storage_not_configured' }, 503);
-  }
-  const obj = await getBrandingLogo(projectId);
-  if (!obj) {
-    return c.json({ code: 'not_found' }, 404);
-  }
-  return new Response(obj.bytes, {
-    status: 200,
-    headers: {
-      'content-type': obj.contentType,
-      'cache-control': 'public, max-age=300',
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-    },
-  });
-});
+// ─── public branding logo (UNAUTHENTICATED) ─────────────────────────────
+// Moved to routes/branding-public.ts: it must mount BEFORE the project-auth
+// guards (which otherwise return 401) and OUTSIDE the BRIVEN_AUTH_ENABLED kill
+// switch, since a hosted login page loads it via a plain <img src>. Same URL.
 
 // ─── admin (dashboard-driven) ───────────────────────────────────────────
 

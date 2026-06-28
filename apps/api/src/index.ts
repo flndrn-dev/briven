@@ -20,6 +20,7 @@ import { authRouter } from './routes/auth.js';
 import { authCliRouter } from './routes/auth-cli.js';
 import { authServiceRouter } from './routes/auth-service.js';
 import { billingRouter } from './routes/billing.js';
+import { brandingPublicRouter } from './routes/branding-public.js';
 import { dbRouter } from './routes/db.js';
 import { deploymentsRouter } from './routes/deployments.js';
 import { exportRouter } from './routes/export.js';
@@ -105,6 +106,11 @@ app.use('*', maintenanceMode());
 // readable, and on missing :id so the unmounted segments pass through.
 app.use('/v1/projects/:id', blockIfProjectSuspended());
 app.use('/v1/projects/:id/*', blockIfProjectSuspended());
+
+// Mounted FIRST — before every project-auth guard — so the public branding
+// logo stays genuinely public (a hosted login page loads it via <img>).
+// See routes/branding-public.ts for why it can't live in authServiceRouter.
+app.route('/', brandingPublicRouter);
 
 app.route('/', rootRouter);
 app.route('/', healthRouter);

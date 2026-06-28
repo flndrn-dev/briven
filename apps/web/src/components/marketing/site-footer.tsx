@@ -90,7 +90,6 @@ export function SiteFooter() {
           {/* right */}
           <span className="flex items-center gap-3 whitespace-nowrap">
             <LanguageSelector />
-            <span>flndrn</span>
           </span>
         </div>
       </div>

@@ -114,7 +114,7 @@ export default async function SettingsPage() {
               Platform admin
             </span>
             <Link
-              href="/dashboard/admin"
+              href="/admin"
               className="ml-3 text-[var(--color-text-link)] hover:underline"
             >
               open admin →

@@ -84,7 +84,14 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     `/v1/projects/${id}/realtime-stats`,
   ).catch(() => null);
 
-  const endpoint = `${project.slug}.apps.briven.tech`;
+  // The address a user points their 3 keys at to reach their database from
+  // ANYWHERE: the live, certificated data endpoint + their project id + an
+  // API key. This is deliberately NOT the per-project `<slug>.apps.briven.tech`
+  // subdomain — that has no wildcard certificate yet, so a real user copying it
+  // would get a TLS failure. Default to the working endpoint; swap to a branded
+  // host (e.g. https://mcp.briven.tech/mcp) later by setting the env var only.
+  const endpoint =
+    process.env.NEXT_PUBLIC_BRIVEN_MCP_ENDPOINT ?? 'https://mcp.flndrn.com/mcp';
   const latest = deployments[0];
 
   // Banner copy + colour driven by fill ratio. 75% = yellow (heads-up),
@@ -124,7 +131,13 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card label="endpoint" value={endpoint} mono copyValue={endpoint} />
+        <Card
+          label="database endpoint"
+          value={endpoint}
+          mono
+          copyValue={endpoint}
+          hint="connect from anywhere with this + project id + an API key"
+        />
         <Card label="project id" value={project.id} mono copyValue={project.id} />
         <Card
           label="last deploy"

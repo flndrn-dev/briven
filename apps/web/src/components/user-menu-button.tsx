@@ -7,6 +7,7 @@ import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
 import { ChevronsUpDownIcon, type ChevronsUpDownIconHandle } from './ui/chevrons-up-down';
 import { GlobeIcon, type GlobeIconHandle } from './ui/globe';
 import { LogOutIcon, type LogOutIconHandle } from './ui/log-out';
+import { ShieldCheckIcon, type ShieldCheckIconHandle } from './ui/shield-check';
 
 interface UserInfo {
   name: string | null;
@@ -18,6 +19,7 @@ interface UserInfo {
 interface Props {
   user: UserInfo;
   collapsed: boolean;
+  isAdmin: boolean;
 }
 
 /**
@@ -33,7 +35,7 @@ interface Props {
  * component handle — hovering anywhere in the row (icon, label, padding)
  * triggers the animation, not just the icon's own 16px surface.
  */
-export function UserMenuButton({ user, collapsed }: Props) {
+export function UserMenuButton({ user, collapsed, isAdmin }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -131,6 +133,19 @@ export function UserMenuButton({ user, collapsed }: Props) {
             </div>
           </div>
           <ul className="p-1">
+            {isAdmin ? (
+              <li>
+                <MenuRow
+                  as="button"
+                  onSelect={() => {
+                    setOpen(false);
+                    router.push('/admin');
+                  }}
+                  icon={ShieldCheckIcon}
+                  label="admin"
+                />
+              </li>
+            ) : null}
             <li>
               <MenuRow
                 as="button"
@@ -170,8 +185,12 @@ export function UserMenuButton({ user, collapsed }: Props) {
   );
 }
 
-type IconHandle = GlobeIconHandle | BookOpenIconHandle | LogOutIconHandle;
-type IconComponent = typeof GlobeIcon | typeof BookOpenIcon | typeof LogOutIcon;
+type IconHandle = GlobeIconHandle | BookOpenIconHandle | LogOutIconHandle | ShieldCheckIconHandle;
+type IconComponent =
+  | typeof GlobeIcon
+  | typeof BookOpenIcon
+  | typeof LogOutIcon
+  | typeof ShieldCheckIcon;
 
 interface MenuRowBaseProps {
   onSelect?: () => void;

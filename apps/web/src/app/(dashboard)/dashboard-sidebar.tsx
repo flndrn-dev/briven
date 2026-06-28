@@ -70,10 +70,10 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/dashboard/support'),
   },
   {
-    href: '/dashboard/admin',
+    href: '/admin',
     label: 'admin',
     Icon: ShieldCheckIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin'),
+    match: (p) => p.startsWith('/admin'),
     adminOnly: true,
   },
 ];
@@ -171,7 +171,7 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
             : 'flex-row items-center gap-1'
         }`}
       >
-        <UserMenuButton user={user} collapsed={isCollapsed} />
+        <UserMenuButton user={user} collapsed={isCollapsed} isAdmin={isAdmin} />
         <button
           type="button"
           onClick={toggle}

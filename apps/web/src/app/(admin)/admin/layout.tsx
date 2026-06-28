@@ -10,6 +10,12 @@ import { CockpitNav } from './cockpit-nav';
 
 export const metadata = {
   title: 'admin',
+  // Explicit briven favicon on the admin cockpit pages (don't rely on
+  // inherited metadata — these live in a separate route group).
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
+  },
 };
 
 /**
