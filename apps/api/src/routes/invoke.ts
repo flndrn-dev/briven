@@ -70,7 +70,12 @@ invokeRouter.post(
           : null,
     });
 
-    const status = result.ok ? 200 : 500;
+    // A non-ok result is the user's deployed function reporting its OWN error
+    // (it ran, then threw/returned an error frame) — that's a 4xx, not a server
+    // 5xx. Genuine runtime/infra failures already throw 502 upstream in
+    // services/invoke and never reach here. Returning 500 conflated "your code
+    // errored" with "briven is down" and inflated the api's 5xx alarms.
+    const status = result.ok ? 200 : 422;
     return c.json(result, status);
   },
 );
