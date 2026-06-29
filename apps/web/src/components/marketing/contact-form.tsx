@@ -48,6 +48,7 @@ function coerceTopic(value: string | undefined): Topic {
 
 interface SubmittedState {
   requestId: string;
+  ticketNumber: string | null;
 }
 
 const FIELD_CLASS =
@@ -121,8 +122,8 @@ export function ContactForm({
         setError(body?.message ?? `submit failed: ${res.status}`);
         return;
       }
-      const data = (await res.json()) as { requestId: string };
-      setSubmitted({ requestId: data.requestId });
+      const data = (await res.json()) as { requestId: string; ticketNumber?: string | null };
+      setSubmitted({ requestId: data.requestId, ticketNumber: data.ticketNumber ?? null });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'submit failed');
     } finally {
@@ -140,10 +141,22 @@ export function ContactForm({
           your message is queued. we&apos;ll reply to the address you gave us — keep an eye
           on your inbox. no marketing emails, ever.
         </p>
-        <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
-          reference:{' '}
-          <code className="text-[var(--color-text-muted)]">{submitted.requestId}</code>
-        </p>
+        {submitted.ticketNumber ? (
+          <>
+            <p className="mt-4 font-mono text-sm font-medium text-[var(--color-text)]">
+              your ticket number:{' '}
+              <code className="text-[var(--color-primary)]">{submitted.ticketNumber}</code>
+            </p>
+            <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+              we&apos;ve emailed it to you — use it to follow up or check your ticket status.
+            </p>
+          </>
+        ) : (
+          <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
+            reference:{' '}
+            <code className="text-[var(--color-text-muted)]">{submitted.requestId}</code>
+          </p>
+        )}
         <p className="mt-3 font-mono text-[10px] text-[var(--color-text-subtle)]">
           if you don&apos;t hear back within one business day, wait an hour and send it again,
           quoting the reference above.

@@ -12,6 +12,7 @@ import { CreditCardIcon } from '@/components/ui/credit-card';
 import { DatabaseIcon } from '@/components/ui/database';
 import { FoldersIcon } from '@/components/ui/folders';
 import { LayoutGridIcon } from '@/components/ui/layout-grid';
+import { LifeBuoyIcon } from '@/components/ui/life-buoy';
 import { MailIcon } from '@/components/ui/mail';
 import { RocketIcon } from '@/components/ui/rocket';
 import { ShieldCheckIcon } from '@/components/ui/shield-check';
@@ -105,6 +106,12 @@ const NAV: NavItem[] = [
     label: 'migrations',
     Icon: ArrowLeftRightIcon as never,
     match: (p) => p.startsWith('/admin/migrations'),
+  },
+  {
+    href: '/admin/tickets',
+    label: 'tickets',
+    Icon: LifeBuoyIcon as never,
+    match: (p) => p.startsWith('/admin/tickets'),
   },
   {
     href: '/admin/launch',

@@ -41,9 +41,17 @@ export default async function SupportPage() {
   return (
     <div className="flex max-w-3xl flex-col gap-8 pb-12">
       <header>
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--color-text)]">
-          contact support
-        </h1>
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--color-text)]">
+            contact support
+          </h1>
+          <Link
+            href="/dashboard/support/tickets"
+            className="font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          >
+            my tickets →
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
           something broken, or just a question? send us a message — we reply privately to your
           account email, usually within one business day. no marketing emails, ever.
