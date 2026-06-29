@@ -36,7 +36,11 @@ import {
   resolveIncident,
   updateIncident,
 } from '../services/incidents.js';
-import { sendMigrationStatusUpdate } from '../lib/email.js';
+import {
+  sendMigrationStatusUpdate,
+  sendTicketReply,
+  sendTicketStatusUpdate,
+} from '../lib/email.js';
 import { translateConvexSchema } from '../services/convex-schema-translator.js';
 import { getMarketingFunnel } from '../services/marketing-events.js';
 import { log } from '../lib/logger.js';
@@ -69,7 +73,15 @@ import {
   setGlobalEnabled as mcpSetGlobalEnabled,
   type McpActor,
 } from '../services/mcp-access.js';
-import { incidentSeverity, mcpKeyScope } from '../db/schema.js';
+import { incidentSeverity, mcpKeyScope, ticketStatuses } from '../db/schema.js';
+import {
+  addReply as addTicketReply,
+  getTicketByIdForAdmin,
+  listTicketsForAdmin,
+  renderTicketNumber,
+  updateTicket,
+  type UpdateTicketInput,
+} from '../services/support-tickets.js';
 import { NotFoundError, ValidationError } from '@briven/shared';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
@@ -1027,6 +1039,193 @@ adminRouter.patch('/v1/admin/migration-requests/:id', async (c) => {
       },
     });
   } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+/* ─── support tickets (tagged /contact submissions) ──────────────────── */
+
+interface AdminTicket {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  name: string;
+  email: string;
+  subject: string | null;
+  message: string;
+  country: string | null;
+  assignedTo: string | null;
+  operatorNotes: string | null;
+  createdAt: string;
+  handledAt: string | null;
+}
+
+function serializeAdminTicket(t: {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  name: string;
+  email: string;
+  subject: string | null;
+  message: string;
+  country: string | null;
+  assignedTo: string | null;
+  operatorNotes: string | null;
+  createdAt: Date;
+  handledAt: Date | null;
+}): AdminTicket {
+  return {
+    id: t.id,
+    ticketNumber: renderTicketNumber(t.ticketNumber),
+    status: t.status,
+    topic: t.topic,
+    topicCode: t.topicCode,
+    name: t.name,
+    email: t.email,
+    subject: t.subject,
+    message: t.message,
+    country: t.country,
+    assignedTo: t.assignedTo,
+    operatorNotes: t.operatorNotes,
+    createdAt: t.createdAt.toISOString(),
+    handledAt: t.handledAt ? t.handledAt.toISOString() : null,
+  };
+}
+
+function serializeReply(r: {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: Date;
+}): { id: string; author: string; body: string; createdAt: string } {
+  return { id: r.id, author: r.author, body: r.body, createdAt: r.createdAt.toISOString() };
+}
+
+const updateTicketSchema = z.object({
+  status: z.enum(ticketStatuses).optional(),
+  assignedTo: z.string().max(200).nullable().optional(),
+  operatorNotes: z.string().max(20_000).nullable().optional(),
+});
+
+const ticketReplySchema = z.object({
+  body: z.string().trim().min(1).max(8_000),
+});
+
+adminRouter.get('/v1/admin/tickets', async (c) => {
+  const statusParam = c.req.query('status');
+  const status =
+    statusParam && (ticketStatuses as readonly string[]).includes(statusParam)
+      ? (statusParam as (typeof ticketStatuses)[number])
+      : undefined;
+  const limitParam = c.req.query('limit');
+  const limit = limitParam ? Number(limitParam) || 100 : 100;
+  const rows = await listTicketsForAdmin({ status, limit });
+  return c.json({ tickets: rows.map(serializeAdminTicket) });
+});
+
+adminRouter.get('/v1/admin/tickets/:id', async (c) => {
+  const id = c.req.param('id');
+  try {
+    const { ticket, replies } = await getTicketByIdForAdmin(id);
+    return c.json({
+      ticket: serializeAdminTicket(ticket),
+      replies: replies.map(serializeReply),
+    });
+  } catch {
+    return c.json({ code: 'not_found' }, 404);
+  }
+});
+
+adminRouter.patch('/v1/admin/tickets/:id', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateTicketSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const before = await getTicketByIdForAdmin(id);
+    const patch: UpdateTicketInput = parsed.data;
+    const ticket = await updateTicket(id, patch);
+    const statusChanged = Boolean(patch.status) && before.ticket.status !== ticket.status;
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_ticket.update',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        ticketId: id,
+        ticketNumber: renderTicketNumber(ticket.ticketNumber),
+        fields: Object.keys(patch),
+        statusChanged,
+        newStatus: statusChanged ? ticket.status : null,
+      },
+    });
+    // Notify the sender on a real status change to 'replied'/'closed'.
+    // Fire-and-forget so mittera latency never blocks the operator.
+    const rendered = renderTicketNumber(ticket.ticketNumber);
+    if (
+      statusChanged &&
+      rendered &&
+      (ticket.status === 'replied' || ticket.status === 'closed')
+    ) {
+      void sendTicketStatusUpdate(ticket.email, rendered, ticket.status).catch((err) => {
+        log.error('ticket_status_email_failed', {
+          ticketId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    return c.json({ ticket: serializeAdminTicket(ticket) });
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+adminRouter.post('/v1/admin/tickets/:id/reply', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = ticketReplySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const { reply, ticket } = await addTicketReply(id, 'operator', parsed.data.body);
+    const rendered = renderTicketNumber(ticket.ticketNumber);
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_ticket.reply',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { ticketId: id, ticketNumber: rendered, replyId: reply.id },
+    });
+    // Email the sender the reply. Fire-and-forget.
+    if (rendered) {
+      void sendTicketReply(ticket.email, rendered, reply.body).catch((err) => {
+        log.error('ticket_reply_email_failed', {
+          ticketId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    return c.json({ reply: serializeReply(reply) }, 201);
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
     if (err instanceof ValidationError) {
       return c.json({ code: 'validation_failed', message: err.message }, 400);
     }

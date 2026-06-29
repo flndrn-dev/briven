@@ -49,6 +49,7 @@ export type IdPrefix =
   | 'mig' // migration request (customer-initiated import from convex/supabase/etc.)
   | 'me' // marketing event (funnel tracking for /migrate views + leads)
   | 'ctc' // contact message (public /contact form submission)
+  | 'crp' // contact message reply (operator/user thread message on a ticket)
   | 'auk' // briven auth SDK key (issued from the Auth → API Keys panel)
   | 'mck' // mcp / agent-access key (issued from the MCP control panel)
   | 'tsec' // tenant secret (per-project encrypted OAuth client secret)

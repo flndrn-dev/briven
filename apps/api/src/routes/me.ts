@@ -28,6 +28,11 @@ import {
 } from '../services/me.js';
 import { listOrgsForUser } from '../services/orgs.js';
 import { listProjectsForUser } from '../services/projects.js';
+import {
+  getTicketForUserByNumber,
+  listTicketsForUserEmail,
+  renderTicketNumber,
+} from '../services/support-tickets.js';
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
@@ -99,6 +104,68 @@ meRouter.get('/v1/me/projects', requireAuth(), async (c) => {
     orgName: orgsById.get(p.orgId)?.name ?? null,
   }));
   return c.json({ projects });
+});
+
+/* ─── support tickets ("my tickets" dashboard view) ──────────────────── */
+// The signed-in user's own support tickets, matched by the contact email
+// they submitted (case-insensitive). Operator-only fields (operator notes,
+// assignee, ip/user-agent) are NEVER surfaced here — only what the user
+// needs to follow their own ticket.
+
+function serializeUserTicket(t: {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  subject: string | null;
+  message: string;
+  createdAt: Date;
+}): {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  subject: string | null;
+  message: string;
+  createdAt: string;
+} {
+  return {
+    id: t.id,
+    ticketNumber: renderTicketNumber(t.ticketNumber),
+    status: t.status,
+    topic: t.topic,
+    topicCode: t.topicCode,
+    subject: t.subject,
+    message: t.message,
+    createdAt: t.createdAt.toISOString(),
+  };
+}
+
+meRouter.get('/v1/me/tickets', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  const rows = await listTicketsForUserEmail(user.email, { limit: 50 });
+  return c.json({ tickets: rows.map(serializeUserTicket) });
+});
+
+meRouter.get('/v1/me/tickets/:ticketNumber', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  const result = await getTicketForUserByNumber(user.email, c.req.param('ticketNumber'));
+  // 404 for both "doesn't exist" and "not yours" so we never leak the
+  // existence of another user's ticket.
+  if (!result) return c.json({ code: 'not_found' }, 404);
+  return c.json({
+    ticket: serializeUserTicket(result.ticket),
+    replies: result.replies.map((r) => ({
+      id: r.id,
+      author: r.author,
+      body: r.body,
+      createdAt: r.createdAt.toISOString(),
+    })),
+  });
 });
 
 meRouter.patch('/v1/me', requireAuth(), async (c) => {

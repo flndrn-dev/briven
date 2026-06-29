@@ -970,6 +970,23 @@ export const contactTopics = [
 ] as const;
 export type ContactTopic = (typeof contactTopics)[number];
 
+// Support-ticket lifecycle. A contact submission becomes a ticket only
+// when the sender tagged it with a routing tag (#support/#billing/etc).
+// A fresh ticket starts at `no_response`; an operator can move it through
+// the rest. Non-ticketed contact rows leave ticket_number/topic_code NULL
+// and carry the default status (never surfaced for them).
+export const ticketStatuses = ['no_response', 'in_review', 'replied', 'closed'] as const;
+export type TicketStatus = (typeof ticketStatuses)[number];
+
+// Per-topic 3-letter code stamped on a ticket. Derived from the primary
+// routing tag (support→SUP, billing→BIL, technical→TEC, self-hosting→SLF).
+export const ticketTopicCodes = ['SUP', 'BIL', 'TEC', 'SLF'] as const;
+export type TicketTopicCode = (typeof ticketTopicCodes)[number];
+
+// Who authored a thread message: the operator (admin reply) or the user.
+export const ticketReplyAuthors = ['operator', 'user'] as const;
+export type TicketReplyAuthor = (typeof ticketReplyAuthors)[number];
+
 export const contactMessages = pgTable(
   'contact_messages',
   {
@@ -978,7 +995,8 @@ export const contactMessages = pgTable(
     email: text('email').notNull(),
     topic: text('topic').$type<ContactTopic>().notNull(),
     // Free-text "what's this about" line from the form. Nullable: the
-    // topic-only flow (and older clients) submit without it.
+    // topic-only flow (and older clients) submit without it. Also holds the
+    // serialized `#tag` routing chips the support form sends.
     subject: text('subject'),
     message: text('message').notNull(),
     // Visitor country auto-detected from their IP on the /contact page and
@@ -987,14 +1005,71 @@ export const contactMessages = pgTable(
     country: text('country'),
     ipHash: text('ip_hash'),
     userAgent: text('user_agent'),
+    // ── Support-ticket columns (0045) ──
+    // Lifecycle status. NOT NULL with a default so every row has one; only
+    // meaningful for ticketed rows (ticket_number IS NOT NULL).
+    status: text('status').$type<TicketStatus>().notNull().default('no_response'),
+    // Human-facing ticket number stored WITHOUT the leading '#'
+    // (e.g. SUP260629-000001). NULL for non-ticketed contact messages.
+    // UNIQUE — a unique index on a nullable column lets the many
+    // non-ticket rows keep NULL while ticketed rows stay unique.
+    ticketNumber: text('ticket_number'),
+    // Primary topic code (SUP/BIL/TEC/SLF). NULL for non-ticketed rows.
+    topicCode: text('topic_code').$type<TicketTopicCode>(),
+    // Operator the ticket is assigned to (free-text handle). NULL = unassigned.
+    assignedTo: text('assigned_to'),
+    // Internal operator-only triage notes. NEVER surfaced to the user.
+    operatorNotes: text('operator_notes'),
     createdAt: createdAt(),
     handledAt: ts('handled_at'),
   },
   (t) => ({
     createdIdx: index('contact_messages_created_idx').on(t.createdAt),
+    // Nullable-unique: multiple NULLs allowed (non-ticket rows), ticketed
+    // rows are globally unique.
+    ticketNumberIdx: uniqueIndex('contact_messages_ticket_number_idx').on(t.ticketNumber),
   }),
 );
 export type ContactMessage = typeof contactMessages.$inferSelect;
+
+/* ─── ticket_counters (daily, per-topic-code sequence) ───────────── */
+// One row per (topic_code, day). The counter is atomically incremented by
+// an INSERT ... ON CONFLICT DO UPDATE on ticket creation, giving a
+// race-safe, gap-tolerant sequence that resets to 1 each new day per code.
+export const ticketCounters = pgTable(
+  'ticket_counters',
+  {
+    topicCode: text('topic_code').notNull(),
+    // Calendar day (UTC) the sequence belongs to. String mode → 'YYYY-MM-DD'.
+    day: date('day', { mode: 'string' }).notNull(),
+    counter: integer('counter').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.topicCode, t.day] }),
+  }),
+);
+export type TicketCounter = typeof ticketCounters.$inferSelect;
+
+/* ─── contact_message_replies (ticket thread) ────────────────────── */
+// Append-only thread of messages on a ticket. An operator reply emails the
+// sender; a user reply (future inbound path) is recorded too. Cascades when
+// the parent contact_messages row is deleted.
+export const contactMessageReplies = pgTable(
+  'contact_message_replies',
+  {
+    id: id(),
+    messageId: text('message_id')
+      .notNull()
+      .references(() => contactMessages.id, { onDelete: 'cascade' }),
+    author: text('author').$type<TicketReplyAuthor>().notNull(),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    messageIdx: index('contact_message_replies_message_idx').on(t.messageId),
+  }),
+);
+export type ContactMessageReply = typeof contactMessageReplies.$inferSelect;
 
 /* ─── platform_settings (single-row dashboard-controllable flags) ─── */
 // Key/value JSONB store for platform-level flags an admin needs to flip
