@@ -1,7 +1,11 @@
 import { Hono } from 'hono';
 
 import { getBrandingLogo, isStorageConfigured } from '../services/auth-branding-logo.js';
-import { getAuthConfig } from '../services/tenant-config-store.js';
+import {
+  buildAuthBrandingPublicPayload,
+  getAuthConfig,
+  listEnabledProviders,
+} from '../services/tenant-config-store.js';
 
 /**
  * Public, UNAUTHENTICATED branding-logo route — lives in its OWN router on
@@ -54,10 +58,15 @@ brandingPublicRouter.get('/v1/projects/:id/auth/branding/logo', async (c) => {
  * session, so they can't read the admin-gated `/v1/projects/:id/auth/config`
  * (it 401s) to pick up the tenant's accent colour.
  *
- * Returns ONLY non-sensitive presentation fields — `primaryColor` and
- * `senderName`. Nothing here is a secret: no provider client ids, no domains,
- * no toggles. `getAuthConfig` returns the frozen defaults when a project has
- * no config row yet, so this always yields a usable colour.
+ * Returns ONLY non-sensitive presentation fields — `primaryColor`,
+ * `senderName`, and the `socialProviders` ENABLED list (built-in keys + custom-
+ * OIDC slugs, with display labels for the OIDC ones). Nothing here is a secret:
+ * no provider client ids, no client secrets, no domains, no toggles, no
+ * endpoints. The enabled list lets the hosted pages + SDK render exactly the
+ * OAuth buttons that are actually wired (the admin `/auth/config` endpoint is
+ * 401-gated, so render-gating cannot read from it). `getAuthConfig` returns the
+ * frozen defaults when a project has no config row yet, so this always yields a
+ * usable colour and an (empty) provider list.
  */
 brandingPublicRouter.get('/v1/projects/:id/auth/branding/config', async (c) => {
   const projectId = c.req.param('id');
@@ -65,12 +74,8 @@ brandingPublicRouter.get('/v1/projects/:id/auth/branding/config', async (c) => {
     return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
   }
   const config = await getAuthConfig(projectId);
-  return c.json(
-    {
-      primaryColor: config.branding.primaryColor,
-      senderName: config.branding.senderName,
-    },
-    200,
-    { 'cache-control': 'public, max-age=60' },
-  );
+  const enabled = await listEnabledProviders(projectId, config);
+  return c.json(buildAuthBrandingPublicPayload(config, enabled), 200, {
+    'cache-control': 'public, max-age=60',
+  });
 });

@@ -11,12 +11,17 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   buildAuthDatabaseHooks,
+  buildGenericOAuthConfigs,
   buildTenantAuthPlugins,
   hostedAuthBaseUrl,
   resetPasswordUrl,
   type AuthEventDispatcher,
 } from './auth-tenant-pool.js';
-import { DEFAULT_AUTH_CONFIG, type AuthConfig } from './tenant-config-store.js';
+import {
+  DEFAULT_AUTH_CONFIG,
+  type AuthConfig,
+  type CustomOidcProvider,
+} from './tenant-config-store.js';
 
 const PROJECT_ID = 'p_test123';
 
@@ -160,6 +165,131 @@ describe('buildAuthDatabaseHooks — lifecycle webhook dispatch', () => {
     await hooks.session!.delete!.after!({ id: 's_1', userId: 'u_1' } as never, null);
 
     expect(calls[0]!.eventType).toBe('auth.signout');
+  });
+});
+
+describe('buildGenericOAuthConfigs — konnos + custom OIDC wiring', () => {
+  function oidc(overrides: Partial<CustomOidcProvider> = {}): CustomOidcProvider {
+    return {
+      id: 'acme-sso',
+      displayName: 'Acme SSO',
+      enabled: true,
+      clientId: 'acme-public-client-id',
+      issuer: 'https://issuer.example.com',
+      authorizationUrl: null,
+      tokenUrl: null,
+      userinfoUrl: null,
+      scopes: 'openid profile email',
+      pkce: true,
+      ...overrides,
+    };
+  }
+
+  test('wires konnos only when enabled + clientId + secret are all present', () => {
+    const config = configWith({ konnos: { enabled: true, clientId: 'k-cid' } });
+    const withSecret = buildGenericOAuthConfigs(config, { konnos: 'k-secret', oidc: {} });
+    expect(withSecret.map((e) => e.providerId)).toEqual(['konnos']);
+
+    const noSecret = buildGenericOAuthConfigs(config, { konnos: null, oidc: {} });
+    expect(noSecret).toHaveLength(0);
+  });
+
+  test('wires a fully-configured issuer-based custom-OIDC provider via discoveryUrl', () => {
+    const config: AuthConfig = { ...DEFAULT_AUTH_CONFIG, customOidc: [oidc()] };
+    const entries = buildGenericOAuthConfigs(config, {
+      konnos: null,
+      oidc: { 'acme-sso': 'oidc-secret' },
+    });
+    expect(entries).toHaveLength(1);
+    const e = entries[0]! as {
+      providerId: string;
+      clientId: string;
+      clientSecret?: string;
+      scopes?: string[];
+      pkce?: boolean;
+      issuer?: string;
+      discoveryUrl?: string;
+    };
+    expect(e.providerId).toBe('acme-sso');
+    expect(e.clientId).toBe('acme-public-client-id');
+    expect(e.clientSecret).toBe('oidc-secret');
+    expect(e.scopes).toEqual(['openid', 'profile', 'email']);
+    expect(e.pkce).toBe(true);
+    expect(e.discoveryUrl).toBe(
+      'https://issuer.example.com/.well-known/openid-configuration',
+    );
+  });
+
+  test('skips a custom-OIDC provider with no stored secret', () => {
+    const config: AuthConfig = { ...DEFAULT_AUTH_CONFIG, customOidc: [oidc()] };
+    const entries = buildGenericOAuthConfigs(config, {
+      konnos: null,
+      oidc: { 'acme-sso': null },
+    });
+    expect(entries).toHaveLength(0);
+  });
+
+  test('skips a disabled or endpoint-less custom-OIDC provider', () => {
+    const config: AuthConfig = {
+      ...DEFAULT_AUTH_CONFIG,
+      customOidc: [
+        oidc({ id: 'disabled', enabled: false }),
+        oidc({ id: 'no-endpoints', issuer: null }),
+      ],
+    };
+    const entries = buildGenericOAuthConfigs(config, {
+      konnos: null,
+      oidc: { disabled: 'x', 'no-endpoints': 'y' },
+    });
+    expect(entries).toHaveLength(0);
+  });
+
+  test('wires a custom-OIDC provider configured with explicit endpoints (no issuer)', () => {
+    const config: AuthConfig = {
+      ...DEFAULT_AUTH_CONFIG,
+      customOidc: [
+        oidc({
+          id: 'explicit',
+          issuer: null,
+          authorizationUrl: 'https://i.example.com/authorize',
+          tokenUrl: 'https://i.example.com/token',
+          userinfoUrl: 'https://i.example.com/userinfo',
+        }),
+      ],
+    };
+    const entries = buildGenericOAuthConfigs(config, {
+      konnos: null,
+      oidc: { explicit: 'sec' },
+    });
+    expect(entries).toHaveLength(1);
+    const e = entries[0]! as {
+      providerId: string;
+      authorizationUrl?: string;
+      tokenUrl?: string;
+      userInfoUrl?: string;
+      discoveryUrl?: string;
+    };
+    expect(e.providerId).toBe('explicit');
+    expect(e.authorizationUrl).toBe('https://i.example.com/authorize');
+    expect(e.tokenUrl).toBe('https://i.example.com/token');
+    expect(e.userInfoUrl).toBe('https://i.example.com/userinfo');
+    expect(e.discoveryUrl).toBeUndefined();
+  });
+
+  test('combines konnos and custom OIDC in one config array', () => {
+    const config: AuthConfig = {
+      ...DEFAULT_AUTH_CONFIG,
+      providers: {
+        ...DEFAULT_AUTH_CONFIG.providers,
+        konnos: { enabled: true, clientId: 'k-cid' },
+      },
+      customOidc: [oidc()],
+    };
+    const entries = buildGenericOAuthConfigs(config, {
+      konnos: 'k-secret',
+      oidc: { 'acme-sso': 'oidc-secret' },
+    });
+    expect(entries.map((e) => e.providerId)).toEqual(['konnos', 'acme-sso']);
   });
 });
 

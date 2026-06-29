@@ -5,8 +5,12 @@ import { ValidationError } from '@briven/shared';
 import {
   DEFAULT_AUTH_CONFIG,
   __authConfigSchema,
+  __customOidcSchema,
+  buildAuthBrandingPublicPayload,
+  computeEnabledProviders,
   mergeAuthConfig,
   type AuthConfig,
+  type CustomOidcProvider,
 } from './tenant-config-store.js';
 
 describe('tenant-config-store — pure helpers (BUILD_PLAN.md §6)', () => {
@@ -119,5 +123,150 @@ describe('tenant-config-store — pure helpers (BUILD_PLAN.md §6)', () => {
     expect(out.providers.github.enabled).toBe(false);
     expect(out.providers.discord.enabled).toBe(false);
     expect(out.providers.microsoft.enabled).toBe(false);
+  });
+});
+
+// ─── custom OIDC schema ──────────────────────────────────────────────────
+
+function oidc(overrides: Partial<CustomOidcProvider> = {}): CustomOidcProvider {
+  return {
+    id: 'acme-sso',
+    displayName: 'Acme SSO',
+    enabled: true,
+    clientId: 'acme-public-client-id',
+    issuer: 'https://issuer.example.com',
+    authorizationUrl: null,
+    tokenUrl: null,
+    userinfoUrl: null,
+    scopes: 'openid profile email',
+    pkce: true,
+    ...overrides,
+  };
+}
+
+describe('custom-OIDC schema (__customOidcSchema)', () => {
+  test('DEFAULT_AUTH_CONFIG carries an empty customOidc array', () => {
+    expect(DEFAULT_AUTH_CONFIG.customOidc).toEqual([]);
+  });
+
+  test('accepts a well-formed issuer-based entry and defaults scopes', () => {
+    const parsed = __customOidcSchema.safeParse({
+      id: 'acme-sso',
+      displayName: 'Acme SSO',
+      enabled: true,
+      clientId: 'cid',
+      issuer: 'https://issuer.example.com',
+      authorizationUrl: null,
+      tokenUrl: null,
+      userinfoUrl: null,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.scopes).toBe('openid profile email');
+  });
+
+  test('rejects a non-slug id (uppercase / spaces)', () => {
+    expect(__customOidcSchema.safeParse(oidc({ id: 'Acme SSO' })).success).toBe(false);
+    expect(__customOidcSchema.safeParse(oidc({ id: 'ACME' })).success).toBe(false);
+  });
+
+  test('rejects a non-URL issuer', () => {
+    expect(__customOidcSchema.safeParse(oidc({ issuer: 'not-a-url' })).success).toBe(false);
+  });
+
+  test('mergeAuthConfig accepts a customOidc array (whole-array replace)', () => {
+    const out = mergeAuthConfig(DEFAULT_AUTH_CONFIG, { customOidc: [oidc()] });
+    expect(out.customOidc).toHaveLength(1);
+    expect(out.customOidc?.[0]?.id).toBe('acme-sso');
+  });
+
+  test('old configs without customOidc still parse (optional field)', () => {
+    const withoutOidc = { ...DEFAULT_AUTH_CONFIG } as Record<string, unknown>;
+    delete withoutOidc.customOidc;
+    expect(__authConfigSchema.safeParse(withoutOidc).success).toBe(true);
+  });
+});
+
+// ─── enabled-providers gate + public payload (render-gating) ─────────────
+
+function configWithProviders(over: Partial<AuthConfig['providers']>, customOidc: CustomOidcProvider[] = []): AuthConfig {
+  return {
+    ...DEFAULT_AUTH_CONFIG,
+    providers: { ...DEFAULT_AUTH_CONFIG.providers, ...over },
+    customOidc,
+  };
+}
+
+describe('computeEnabledProviders — the single enable gate', () => {
+  test('lists only providers that are enabled AND have a clientId AND a secret', () => {
+    const config = configWithProviders({
+      google: { enabled: true, clientId: 'g-cid' }, // has secret below → enabled
+      github: { enabled: true, clientId: 'gh-cid' }, // NO secret → excluded
+      discord: { enabled: false, clientId: 'd-cid' }, // disabled → excluded
+      microsoft: { enabled: true, clientId: null }, // no clientId → excluded
+    });
+    const has = (name: string) => name === 'google_client_secret';
+    expect(computeEnabledProviders(config, has)).toEqual(['google']);
+  });
+
+  test('includes a fully-configured custom-OIDC id and excludes half-configured ones', () => {
+    const config = configWithProviders({}, [
+      oidc({ id: 'ready', clientId: 'cid' }), // issuer + clientId + secret → in
+      oidc({ id: 'no-secret', clientId: 'cid' }), // secret missing → out
+      oidc({ id: 'no-endpoints', clientId: 'cid', issuer: null }), // no issuer/endpoints → out
+      oidc({ id: 'disabled', clientId: 'cid', enabled: false }), // disabled → out
+    ]);
+    const has = (name: string) =>
+      name === 'oidc_ready_client_secret' ||
+      name === 'oidc_no-endpoints_client_secret' ||
+      name === 'oidc_disabled_client_secret';
+    expect(computeEnabledProviders(config, has)).toEqual(['ready']);
+  });
+
+  test('custom-OIDC with explicit endpoints (no issuer) counts as having endpoints', () => {
+    const config = configWithProviders({}, [
+      oidc({
+        id: 'explicit',
+        clientId: 'cid',
+        issuer: null,
+        authorizationUrl: 'https://i.example.com/authorize',
+        tokenUrl: 'https://i.example.com/token',
+        userinfoUrl: 'https://i.example.com/userinfo',
+      }),
+    ]);
+    const has = (name: string) => name === 'oidc_explicit_client_secret';
+    expect(computeEnabledProviders(config, has)).toEqual(['explicit']);
+  });
+});
+
+describe('buildAuthBrandingPublicPayload — never leaks secrets/clientIds', () => {
+  test('returns only enabled providers + safe presentation fields', () => {
+    const config = configWithProviders(
+      { google: { enabled: true, clientId: 'g-cid-SENSITIVE' } },
+      [oidc({ id: 'acme', clientId: 'acme-cid-SENSITIVE' })],
+    );
+    const enabled = ['google', 'acme'];
+    const payload = buildAuthBrandingPublicPayload(config, enabled);
+
+    expect(payload.socialProviders).toEqual(['google', 'acme']);
+    expect(payload.primaryColor).toBe(config.branding.primaryColor);
+    expect(payload.senderName).toBe(config.branding.senderName);
+    // OIDC display label is exposed (needed for the button) but nothing else.
+    expect(payload.customOidc).toEqual([{ id: 'acme', displayName: 'Acme SSO' }]);
+
+    // The serialized payload must NOT contain ANY clientId, endpoint, or toggle.
+    const json = JSON.stringify(payload);
+    expect(json).not.toContain('g-cid-SENSITIVE');
+    expect(json).not.toContain('acme-cid-SENSITIVE');
+    expect(json).not.toContain('issuer.example.com');
+    expect(json).not.toContain('clientId');
+  });
+
+  test('only enabled custom-OIDC entries surface their display label', () => {
+    const config = configWithProviders({}, [
+      oidc({ id: 'on', displayName: 'On SSO' }),
+      oidc({ id: 'off', displayName: 'Off SSO' }),
+    ]);
+    const payload = buildAuthBrandingPublicPayload(config, ['on']);
+    expect(payload.customOidc).toEqual([{ id: 'on', displayName: 'On SSO' }]);
   });
 });

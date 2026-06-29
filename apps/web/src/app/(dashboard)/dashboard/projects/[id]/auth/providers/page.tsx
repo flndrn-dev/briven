@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../../lib/api';
+import { apiOrigin } from '../../../../../../../lib/env';
+import { OidcProviders, type OidcSecretStatus } from './oidc-providers';
 import { ProviderToggles, type AuthConfig, type SecretStatus } from './provider-toggles';
 
 interface AuthStateResponse {
@@ -10,6 +12,7 @@ interface AuthStateResponse {
 
 interface SecretStatusResponse {
   secrets: SecretStatus;
+  oidc?: OidcSecretStatus;
 }
 
 const EMPTY_SECRETS: SecretStatus = {
@@ -60,6 +63,8 @@ export default async function AuthProvidersPage({
     `/v1/projects/${id}/auth/providers/secret-status`,
   ).catch(() => null);
   const initialSecrets = secretStatus?.secrets ?? EMPTY_SECRETS;
+  const initialOidcSecrets: OidcSecretStatus = secretStatus?.oidc ?? {};
+  const customOidc = state.config.customOidc ?? [];
 
   return (
     <section className="flex flex-col gap-6">
@@ -73,7 +78,21 @@ export default async function AuthProvidersPage({
         </p>
       </header>
 
-      <ProviderToggles projectId={id} initial={state.config} initialSecrets={initialSecrets} />
+      <ProviderToggles
+        projectId={id}
+        apiOrigin={apiOrigin}
+        initial={state.config}
+        initialSecrets={initialSecrets}
+      />
+
+      <div className="border-t border-[var(--color-border-subtle)] pt-6">
+        <OidcProviders
+          projectId={id}
+          apiOrigin={apiOrigin}
+          initial={customOidc}
+          initialSecrets={initialOidcSecrets}
+        />
+      </div>
     </section>
   );
 }

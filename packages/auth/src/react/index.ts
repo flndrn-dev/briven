@@ -40,6 +40,7 @@ import {
   type OAuthProvider,
   type SessionResponse,
   type SignInResult,
+  type SocialProvider,
   type User,
 } from '../index.js';
 
@@ -148,8 +149,13 @@ export function useUser(): UseUserResult {
 }
 
 export interface BrivenSignInProps {
-  /** Providers to render as OAuth buttons. Empty array hides the OAuth section. */
-  providers?: ReadonlyArray<OAuthProvider>;
+  /**
+   * Providers to render as OAuth buttons. An empty array hides the OAuth
+   * section. When OMITTED, the component auto-discovers the project's enabled
+   * providers at runtime (via `auth.getEnabledProviders()`) and renders only
+   * those — so it never shows a button for a provider that isn't wired.
+   */
+  providers?: ReadonlyArray<SocialProvider>;
   /** Render the email + password form. Default true. */
   showEmailPassword?: boolean;
   /** Render the magic-link section. Default true. */
@@ -168,14 +174,6 @@ export interface BrivenSignInProps {
   className?: string;
 }
 
-const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
-  'konnos',
-  'google',
-  'github',
-  'discord',
-  'microsoft',
-];
-
 /**
  * Drop-in sign-in component. Renders email+password, magic-link, and the
  * configured OAuth providers in a single panel. No CSS framework — the
@@ -188,9 +186,29 @@ const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
 export function BrivenSignIn(props: BrivenSignInProps) {
   const auth = useBrivenAuth();
   const mode = props.mode ?? 'sign-in';
-  const providers = props.providers ?? DEFAULT_PROVIDERS;
+  const explicitProviders = props.providers;
   const showEmailPassword = props.showEmailPassword ?? true;
   const showMagicLink = props.showMagicLink ?? true;
+
+  // Auto-discovery: when the caller does NOT pass `providers`, fetch the
+  // project's enabled list once on mount instead of defaulting to all five
+  // built-ins (which would render buttons for unconfigured providers). `null`
+  // means "not fetched yet" → render no OAuth buttons until the list lands.
+  const [discovered, setDiscovered] = useState<ReadonlyArray<string> | null>(null);
+  useEffect(() => {
+    if (explicitProviders !== undefined) return;
+    let cancelled = false;
+    void (async () => {
+      const list = await auth.getEnabledProviders();
+      if (!cancelled) setDiscovered(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth, explicitProviders]);
+
+  const providers: ReadonlyArray<SocialProvider> =
+    explicitProviders ?? discovered ?? [];
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -239,7 +257,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
   );
 
   const handleOAuth = useCallback(
-    (provider: OAuthProvider): void => {
+    (provider: SocialProvider): void => {
       const { redirectUrl } = auth.signIn.social({
         provider,
         redirectTo: props.redirectTo,
@@ -426,4 +444,11 @@ export function BrivenSignUp(props: BrivenSignUpProps) {
   return createElement(BrivenSignIn, { ...props, mode: 'sign-up' });
 }
 
-export type { BrivenAuthClient, SessionResponse, SignInResult, User, OAuthProvider };
+export type {
+  BrivenAuthClient,
+  SessionResponse,
+  SignInResult,
+  User,
+  OAuthProvider,
+  SocialProvider,
+};

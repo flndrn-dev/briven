@@ -34,7 +34,9 @@ import {
 import {
   getAuthConfig,
   isAuthEnabled,
+  removeCustomOidcProvider,
   updateAuthConfig,
+  upsertCustomOidcProvider,
 } from '../services/tenant-config-store.js';
 import { hasTenantSecret, setTenantSecret } from '../services/tenant-secrets.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
@@ -375,6 +377,8 @@ authServiceRouter.post(
  * Which OAuth providers currently have a client secret saved. Boolean-only
  * presence flags (never the secret itself) so the dashboard can show a
  * "secret configured ✓ / needs secret" state next to each provider toggle.
+ * Covers the built-in social providers AND every configured custom-OIDC entry
+ * (keyed by its slug `id`, secret name `oidc_<id>_client_secret`).
  */
 authServiceRouter.get(
   '/v1/projects/:id/auth/providers/secret-status',
@@ -384,10 +388,207 @@ authServiceRouter.get(
     if (!projectId) {
       return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
     }
-    const [google, github, discord, microsoft, konnos] = await Promise.all(
-      OAUTH_PROVIDERS.map((p) => hasTenantSecret(projectId, 'auth', `${p}_client_secret`)),
-    );
-    return c.json({ secrets: { google, github, discord, microsoft, konnos } });
+    const config = await getAuthConfig(projectId);
+    const oidcEntries = config.customOidc ?? [];
+    const [builtinPresence, oidcPresence] = await Promise.all([
+      Promise.all(
+        OAUTH_PROVIDERS.map((p) => hasTenantSecret(projectId, 'auth', `${p}_client_secret`)),
+      ),
+      Promise.all(
+        oidcEntries.map((o) =>
+          hasTenantSecret(projectId, 'auth', `oidc_${o.id}_client_secret`),
+        ),
+      ),
+    ]);
+    const [google, github, discord, microsoft, konnos] = builtinPresence;
+    const oidc: Record<string, boolean> = {};
+    oidcEntries.forEach((o, i) => {
+      oidc[o.id] = oidcPresence[i] ?? false;
+    });
+    return c.json({ secrets: { google, github, discord, microsoft, konnos }, oidc });
+  },
+);
+
+// ─── custom OIDC providers (generic OIDC, admin-managed) ─────────────────
+
+/** Slug guard mirroring the `customOidcProviderConfig.id` regex. */
+function isOidcSlug(value: string): boolean {
+  return /^[a-z0-9-]{1,40}$/.test(value);
+}
+
+/**
+ * Create or update a custom-OIDC provider (upsert keyed by `id`). Body is a
+ * full custom-OIDC entry (id, displayName, enabled, clientId, issuer OR explicit
+ * endpoints, scopes?, pkce?). The PUBLIC half only — the client SECRET is set
+ * separately via the `/oidc/:oidcId/secret` endpoint (same write-only pattern as
+ * the built-in providers). Re-validates server-side; `invalidateAuthInstance`
+ * flushes the cached engine so the next request rebuilds with the new provider.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/providers/oidc',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    if (body === null) {
+      return c.json({ code: 'validation_failed', message: 'body must be JSON' }, 400);
+    }
+
+    let next;
+    try {
+      next = await upsertCustomOidcProvider(projectId, body);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json(
+          {
+            code: 'validation_failed',
+            message: err.message,
+            context: (err as ValidationError & { context?: unknown }).context,
+          },
+          400,
+        );
+      }
+      log.error('briven_auth_oidc_upsert_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'config_update_failed' }, 500);
+    }
+
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.provider.oidc.upserted',
+      ipHash: hashIp(
+        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      ),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { oidcId: (body as { id?: unknown }).id ?? null },
+    });
+
+    return c.json({ config: next });
+  },
+);
+
+/**
+ * Delete a custom-OIDC provider by slug `id`. Idempotent. Drops the cached
+ * engine so the provider stops being offered on the next request. The stored
+ * secret is left in place (harmless once the entry is gone).
+ */
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/providers/oidc/:oidcId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const oidcId = c.req.param('oidcId');
+    if (!projectId || !oidcId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :oidcId' }, 400);
+    }
+    if (!isOidcSlug(oidcId)) {
+      return c.json({ code: 'validation_failed', message: 'invalid oidc id' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    let next;
+    try {
+      next = await removeCustomOidcProvider(projectId, oidcId);
+    } catch (err) {
+      log.error('briven_auth_oidc_delete_failed', {
+        projectId,
+        oidcId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'config_update_failed' }, 500);
+    }
+
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.provider.oidc.deleted',
+      ipHash: hashIp(
+        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      ),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { oidcId },
+    });
+
+    return c.json({ config: next });
+  },
+);
+
+/**
+ * Store (or rotate) a custom-OIDC provider's client SECRET. Write-only, encrypted
+ * into the tenant-secret store under name `oidc_<id>_client_secret` (service
+ * 'auth') — exactly the built-in providers' pattern, just a different name. The
+ * value is never echoed or logged. Drops the cached engine on success.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/providers/oidc/:oidcId/secret',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const oidcId = c.req.param('oidcId');
+    if (!projectId || !oidcId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :oidcId' }, 400);
+    }
+    if (!isOidcSlug(oidcId)) {
+      return c.json({ code: 'validation_failed', message: 'invalid oidc id' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = (await c.req.json().catch(() => null)) as { clientSecret?: unknown } | null;
+    const clientSecret =
+      body && typeof body.clientSecret === 'string' ? body.clientSecret.trim() : '';
+    if (!clientSecret) {
+      return c.json(
+        { code: 'validation_failed', message: 'clientSecret must be a non-empty string' },
+        400,
+      );
+    }
+
+    try {
+      await setTenantSecret(
+        projectId,
+        'auth',
+        `oidc_${oidcId}_client_secret`,
+        clientSecret,
+        actor.id,
+      );
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      log.error('briven_auth_oidc_secret_set_failed', {
+        projectId,
+        oidcId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'secret_store_failed' }, 500);
+    }
+
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.provider.oidc.secret.set',
+      ipHash: hashIp(
+        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      ),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { oidcId },
+    });
+
+    return c.json({ ok: true });
   },
 );
 

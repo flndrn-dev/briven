@@ -22,6 +22,9 @@ import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
 import { getTenantSecret } from './tenant-secrets.js';
 import { TenantInstancePool } from './tenant-instance-pool.js';
 
+/** The element type of `genericOAuth({ config: [...] })` — one provider entry. */
+type GenericOAuthEntry = Parameters<typeof genericOAuth>[0]['config'][number];
+
 /**
  * Per-tenant Better Auth instance pool — the briven auth-specific factory
  * that wires `TenantInstancePool` + Drizzle + Better Auth into a working
@@ -215,6 +218,96 @@ export function buildTenantAuthPlugins(
   return plugins;
 }
 
+// ─── generic OAuth wiring (konnos + custom OIDC) ─────────────────────────
+
+/**
+ * Decrypted client secrets for the `genericOAuth` providers. `konnos` is the
+ * fixed built-in; `oidc` maps each custom-OIDC `id` to its secret (or null when
+ * none is stored). Sourced by the caller from the encrypted tenant-secret store.
+ */
+export interface GenericOAuthSecrets {
+  konnos: string | null;
+  oidc: Record<string, string | null>;
+}
+
+/**
+ * Build every `genericOAuth` provider entry for a tenant — konnos (our own
+ * Forgejo, fixed gitea-compatible endpoints from env) PLUS one entry per
+ * customer-defined custom-OIDC provider. Pure + exported so the wiring is
+ * unit-testable without a live Better Auth + postgres.
+ *
+ * Each entry is gated EXACTLY like the built-in social providers:
+ * `enabled && clientId && secret` — and custom-OIDC additionally needs a usable
+ * endpoint set (an `issuer` for discovery, or all three explicit endpoints).
+ * Anything short of that is silently skipped, so a half-configured provider
+ * never reaches the engine.
+ */
+export function buildGenericOAuthConfigs(
+  config: AuthConfig,
+  secrets: GenericOAuthSecrets,
+): GenericOAuthEntry[] {
+  const entries: GenericOAuthEntry[] = [];
+
+  // konnos (Forgejo at code.konnos.org) — gitea-compatible endpoints +
+  // mapProfileToUser mirror lib/auth.ts exactly; only the credentials are
+  // sourced per-tenant.
+  const konnos = config.providers.konnos;
+  if (konnos.enabled && konnos.clientId && secrets.konnos) {
+    entries.push({
+      providerId: 'konnos',
+      clientId: konnos.clientId,
+      clientSecret: secrets.konnos,
+      authorizationUrl: `${env.BRIVEN_KONNOS_ISSUER}/login/oauth/authorize`,
+      tokenUrl: `${env.BRIVEN_KONNOS_ISSUER}/login/oauth/access_token`,
+      userInfoUrl: `${env.BRIVEN_KONNOS_ISSUER}/api/v1/user`,
+      scopes: ['read:user'],
+      mapProfileToUser: (profile) => ({
+        id: String(profile.id),
+        email: profile.email,
+        name: profile.full_name || profile.login,
+        image: profile.avatar_url,
+        emailVerified: true,
+      }),
+    });
+  }
+
+  // Customer-defined generic OIDC providers. Either issuer-discovery or the
+  // three explicit endpoints; scopes split off the space-separated config
+  // string; PKCE defaults on (the OIDC-secure default), overridable per entry.
+  for (const o of config.customOidc ?? []) {
+    const secret = secrets.oidc[o.id] ?? null;
+    const hasEndpoints = Boolean(o.authorizationUrl && o.tokenUrl && o.userinfoUrl);
+    if (!o.enabled || !o.clientId || !secret) continue;
+    if (!o.issuer && !hasEndpoints) continue;
+
+    const scopes = o.scopes.split(/\s+/).filter(Boolean);
+    const base = {
+      providerId: o.id,
+      clientId: o.clientId,
+      clientSecret: secret,
+      scopes,
+      pkce: o.pkce ?? true,
+    };
+    if (o.issuer) {
+      const issuer = o.issuer.replace(/\/+$/, '');
+      entries.push({
+        ...base,
+        issuer,
+        discoveryUrl: `${issuer}/.well-known/openid-configuration`,
+      });
+    } else {
+      entries.push({
+        ...base,
+        authorizationUrl: o.authorizationUrl!,
+        tokenUrl: o.tokenUrl!,
+        userInfoUrl: o.userinfoUrl!,
+      });
+    }
+  }
+
+  return entries;
+}
+
 // ─── outbound auth webhook dispatch (lifecycle hooks) ────────────────────
 
 /**
@@ -401,36 +494,29 @@ async function createAuthInstance(projectId: string) {
       : {}),
   };
 
-  // Konnos (Forgejo at code.konnos.org) is a GENERIC OAuth provider — not on
-  // Better Auth's built-in list — so it rides the `genericOAuth` plugin. The
-  // gitea-compatible endpoints, scopes and mapProfileToUser mirror lib/auth.ts
-  // exactly; only the credentials are sourced per-tenant.
-  const konnosCfg = config.providers.konnos;
-  const konnosPlugins =
-    konnosCfg.enabled && konnosCfg.clientId && konnosSecret
-      ? [
-          genericOAuth({
-            config: [
-              {
-                providerId: 'konnos',
-                clientId: konnosCfg.clientId,
-                clientSecret: konnosSecret,
-                authorizationUrl: `${env.BRIVEN_KONNOS_ISSUER}/login/oauth/authorize`,
-                tokenUrl: `${env.BRIVEN_KONNOS_ISSUER}/login/oauth/access_token`,
-                userInfoUrl: `${env.BRIVEN_KONNOS_ISSUER}/api/v1/user`,
-                scopes: ['read:user'],
-                mapProfileToUser: (profile) => ({
-                  id: String(profile.id),
-                  email: profile.email,
-                  name: profile.full_name || profile.login,
-                  image: profile.avatar_url,
-                  emailVerified: true,
-                }),
-              },
-            ],
-          }),
-        ]
-      : [];
+  // Generic OAuth providers ride the `genericOAuth` plugin (not on Better
+  // Auth's built-in list): konnos (Forgejo at code.konnos.org) PLUS any
+  // customer-defined custom-OIDC providers. Each custom-OIDC entry needs its
+  // own decrypted secret (name `oidc_<id>_client_secret`), fetched only when the
+  // entry is enabled with a clientId so a disabled one never touches the store.
+  const customOidc = config.customOidc ?? [];
+  const oidcSecretEntries = await Promise.all(
+    customOidc.map(
+      async (o) =>
+        [
+          o.id,
+          o.enabled && o.clientId
+            ? await getTenantSecret(projectId, 'auth', `oidc_${o.id}_client_secret`)
+            : null,
+        ] as const,
+    ),
+  );
+  const genericOAuthConfigs = buildGenericOAuthConfigs(config, {
+    konnos: konnosSecret,
+    oidc: Object.fromEntries(oidcSecretEntries),
+  });
+  const genericOAuthPlugins =
+    genericOAuthConfigs.length > 0 ? [genericOAuth({ config: genericOAuthConfigs })] : [];
 
   const instance = betterAuth({
     appName: `briven-auth-${projectId}`,
@@ -479,9 +565,9 @@ async function createAuthInstance(projectId: string) {
     // enabled + clientId + a stored secret above, so an empty object / empty
     // array here simply means "no OAuth configured for this tenant yet".
     socialProviders,
-    // konnos (generic OAuth) + the per-tenant magic-link / email-OTP plugins,
-    // each gated on the project's auth config.
-    plugins: [...konnosPlugins, ...buildTenantAuthPlugins(projectId, config)],
+    // konnos + custom-OIDC (generic OAuth) + the per-tenant magic-link /
+    // email-OTP plugins, each gated on the project's auth config.
+    plugins: [...genericOAuthPlugins, ...buildTenantAuthPlugins(projectId, config)],
     // Fan signup / signin / signout / session-revoked out to customer webhook
     // subscribers. Dispatch is fire-and-forget and cannot break the request.
     databaseHooks: buildAuthDatabaseHooks(projectId),

@@ -3,6 +3,20 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+/** A customer-defined generic OIDC provider (mirrors the API's AuthConfig). */
+export interface CustomOidcProvider {
+  id: string;
+  displayName: string;
+  enabled: boolean;
+  clientId: string | null;
+  issuer: string | null;
+  authorizationUrl: string | null;
+  tokenUrl: string | null;
+  userinfoUrl: string | null;
+  scopes: string;
+  pkce?: boolean;
+}
+
 export interface AuthConfig {
   providers: {
     emailPassword: { enabled: boolean };
@@ -21,17 +35,31 @@ export interface AuthConfig {
     senderDomain: string | null;
     senderName: string;
   };
+  customOidc?: CustomOidcProvider[];
 }
 
 type OAuthKey = 'google' | 'github' | 'discord' | 'microsoft' | 'konnos';
 // Konnos first — it's our own product, so it leads the social providers.
 const OAUTH_KEYS: OAuthKey[] = ['konnos', 'google', 'github', 'discord', 'microsoft'];
 
+/**
+ * konnos is a GENERIC OAuth provider (rides the better-auth genericOAuth plugin),
+ * so its upstream callback path is `/oauth2/callback/:id`. The four built-in
+ * social providers use better-auth's native `/callback/:id`. Custom-OIDC also
+ * uses `/oauth2/callback/:id` (see oidc-providers.tsx).
+ */
+export function callbackUrlFor(apiOrigin: string, name: OAuthKey): string {
+  const path = name === 'konnos' ? `/oauth2/callback/${name}` : `/callback/${name}`;
+  return `${apiOrigin}/v1/auth-tenant${path}`;
+}
+
 /** Which providers already have an encrypted client secret on file. */
 export type SecretStatus = Record<OAuthKey, boolean>;
 
 interface Props {
   projectId: string;
+  /** Public api origin (e.g. https://api.briven.tech) for upstream callback URLs. */
+  apiOrigin: string;
   initial: AuthConfig;
   initialSecrets: SecretStatus;
 }
@@ -48,7 +76,7 @@ interface Props {
  * track a per-provider boolean (has a secret been saved?) so the UI can show
  * "secret set ✓" vs "no secret yet" — seeded server-side from secret-status.
  */
-export function ProviderToggles({ projectId, initial, initialSecrets }: Props) {
+export function ProviderToggles({ projectId, apiOrigin, initial, initialSecrets }: Props) {
   const router = useRouter();
   const [providers, setProviders] = useState(initial.providers);
   const [secretSet, setSecretSet] = useState<SecretStatus>(initialSecrets);
@@ -156,6 +184,7 @@ export function ProviderToggles({ projectId, initial, initialSecrets }: Props) {
           key={key}
           name={key}
           projectId={projectId}
+          apiOrigin={apiOrigin}
           value={providers[key]}
           hasSecret={secretSet[key]}
           onToggle={(v) => update(key, { enabled: v })}
@@ -215,6 +244,7 @@ function ProviderCard({ title, description, enabled, onToggle, children }: Provi
 interface OAuthCardProps {
   name: OAuthKey;
   projectId: string;
+  apiOrigin: string;
   value: { enabled: boolean; clientId: string | null };
   hasSecret: boolean;
   onToggle: (v: boolean) => void;
@@ -225,6 +255,7 @@ interface OAuthCardProps {
 function OAuthCard({
   name,
   projectId,
+  apiOrigin,
   value,
   hasSecret,
   onToggle,
@@ -330,6 +361,26 @@ function OAuthCard({
           </span>
         ) : null}
       </div>
+      <CallbackUrl url={callbackUrlFor(apiOrigin, name)} />
+    </div>
+  );
+}
+
+/**
+ * Read-only display of the upstream redirect/callback URL the customer must
+ * register in their provider console (Google "Authorised redirect URIs", GitHub
+ * "Authorization callback URL", etc). Shown so they can copy the exact value —
+ * a mismatch here is the #1 cause of `redirect_uri_mismatch` failures.
+ */
+function CallbackUrl({ url }: { url: string }) {
+  return (
+    <div className="mt-3 flex flex-col gap-1 border-t border-[var(--color-border-subtle)] pt-3">
+      <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+        register this redirect / callback URL in the provider console:
+      </span>
+      <code className="select-all break-all rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1 font-mono text-[11px] text-[var(--color-text)]">
+        {url}
+      </code>
     </div>
   );
 }

@@ -26,7 +26,15 @@
  * `credentials: 'include'` so the browser stores it).
  */
 
+/** Built-in social providers Briven wires natively. */
 export type OAuthProvider = 'google' | 'github' | 'discord' | 'microsoft' | 'konnos';
+
+/**
+ * A provider the customer can sign in with: a built-in {@link OAuthProvider} OR
+ * a custom-OIDC slug the project configured (any `[a-z0-9-]` id). The `string &
+ * {}` keeps editor autocomplete for the built-ins while still accepting slugs.
+ */
+export type SocialProvider = OAuthProvider | (string & {});
 
 export interface CreateBrivenAuthOptions {
   /** briven project id (`p_<ulid>`). Required. */
@@ -124,7 +132,7 @@ export type PasswordResetResult =
   | { ok: false; code: SignInErrorCode; message: string };
 
 export interface SocialInput {
-  provider: OAuthProvider;
+  provider: SocialProvider;
   /** Optional URL the customer's app wants the user to land on post-callback. */
   redirectTo?: string;
 }
@@ -155,6 +163,15 @@ export interface BrivenAuthClient {
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
   getUser(): Promise<User | null>;
+  /**
+   * Discover which OAuth/OIDC providers are actually wired for this project,
+   * from the PUBLIC, unauthenticated branding/config endpoint. Returns the
+   * provider keys + custom-OIDC slugs that are fully configured (enabled +
+   * client id + stored secret). Used by `<BrivenSignIn>` to render only the
+   * live buttons when no explicit `providers` prop is given. Never throws —
+   * returns `[]` on any error (e.g. CORS / network), so callers can fall back.
+   */
+  getEnabledProviders(): Promise<string[]>;
   /**
    * Send a password-reset email to the supplied address.
    * POST /request-password-reset — Better Auth always returns ok to prevent
@@ -379,6 +396,23 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
         return null;
       } catch {
         return null;
+      }
+    },
+    async getEnabledProviders() {
+      // The PUBLIC branding/config endpoint is NOT under the auth-tenant bridge
+      // prefix and needs no session/key — fetch it directly off the api origin.
+      try {
+        const res = await fetchImpl(
+          `${apiOrigin}/v1/projects/${opts.projectId}/auth/branding/config`,
+          { credentials: 'omit' },
+        );
+        if (!res.ok) return [];
+        const body = (await res.json()) as { socialProviders?: unknown };
+        return Array.isArray(body.socialProviders)
+          ? body.socialProviders.filter((p): p is string => typeof p === 'string')
+          : [];
+      } catch {
+        return [];
       }
     },
     async sendPasswordReset(email: string) {
