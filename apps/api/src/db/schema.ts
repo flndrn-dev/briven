@@ -189,9 +189,13 @@ export const organizations = pgTable(
     // True for the auto-created first org per user. Lets the UI keep a
     // single-org implicit UX until Phase 3 adds a switcher.
     personal: boolean('personal').notNull().default(false),
-    createdBy: text('created_by')
-      .notNull()
-      .references(() => users.id),
+    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
+    // user can proceed when this org is shared (multi-owner) and survives
+    // the purge — the creator reference simply nulls out instead of an FK
+    // violation blocking the whole DELETE. Sole-owner orgs are hard-deleted
+    // before the user in the same purge transaction, so they never rely on
+    // this null-out.
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -524,7 +528,10 @@ export const auditLogs = pgTable(
   'audit_logs',
   {
     id: id(),
-    actorId: text('actor_id').references(() => users.id),
+    // ON DELETE SET NULL so a GDPR hard-delete of the actor preserves the
+    // audit row (action + timestamp survive) while severing the FK — keeps
+    // the immutable audit trail intact without blocking the purge DELETE.
+    actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }),
     projectId: text('project_id').references(() => projects.id),
     action: text('action').notNull(),
     // SHA-256 hash of the caller IP — we never store raw IPs (CLAUDE.md §5.1).
@@ -1001,7 +1008,11 @@ export const signupAllowlist = pgTable(
     id: id(),
     email: text('email').notNull(),
     invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
-    invitedAt: createdAt(),
+    // Column is `invited_at` (migration 0024). Do NOT use the createdAt()
+    // helper here — it hard-codes the column name to `created_at`, which does
+    // not exist on this table, so every addToAllowlist/listAllowlist query
+    // failed against the real DB ("column created_at does not exist").
+    invitedAt: ts('invited_at').defaultNow().notNull(),
     acceptedAt: ts('accepted_at'),
     notes: text('notes'),
   },

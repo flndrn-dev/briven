@@ -68,7 +68,12 @@ export async function addToAllowlist(input: AddEntryInput): Promise<SignupAllowl
     if (!row) throw new Error('insert returned no row');
     return row;
   } catch (err) {
-    if (err instanceof Error && /unique|duplicate/i.test(err.message)) {
+    // drizzle wraps the pg error in DrizzleQueryError whose own .message is
+    // "Failed query: …"; the unique-violation text is on `.cause`. Check both,
+    // or a duplicate invite surfaces as a raw 500 instead of this clean 400.
+    const cause = err instanceof Error ? (err.cause as { message?: string } | undefined) : undefined;
+    const text = err instanceof Error ? `${err.message} ${cause?.message ?? ''}` : String(err);
+    if (/unique|duplicate/i.test(text)) {
       throw new ValidationError(`${email} is already on the allowlist`);
     }
     throw err;

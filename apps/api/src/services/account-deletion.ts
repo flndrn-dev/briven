@@ -378,9 +378,26 @@ async function isSoleOwner(org: Organization, userId: string): Promise<boolean> 
 
 /**
  * Hard-delete every soft-deleted user whose 30-day grace window has
- * elapsed. Cascades via the FK ON DELETE CASCADE rules already in the
- * schema (sessions, accounts, audit_logs.actor_id ref but nullable —
- * actorId nulls out). Called by the account-deletion-gc worker.
+ * elapsed. Called by the account-deletion-gc worker.
+ *
+ * Two ordered DELETEs in ONE transaction:
+ *   1. Hard-delete the expiring users' OWN soft-deleted orgs (the personal
+ *      org + any sole-owner team org soft-deleted by softDeleteAccount).
+ *      Their projects — and everything hanging off those projects
+ *      (api_keys, env vars, deployments, invitations, …) — cascade away via
+ *      projects.org_id ON DELETE CASCADE. This clears the FK rows that would
+ *      otherwise block step 2.
+ *   2. Hard-delete the expired users. This now SUCCEEDS where it previously
+ *      ALWAYS raised FK violation 23503 (silently swallowed by the gc
+ *      worker, so no account was ever purged): migration 0042 flipped the
+ *      two blocking FKs to ON DELETE SET NULL, so a surviving SHARED org's
+ *      `created_by` and every `audit_logs.actor_id` simply null out instead
+ *      of blocking the DELETE. Other user FKs are ON DELETE CASCADE
+ *      (sessions, accounts, org/project memberships).
+ *
+ * The 30-day threshold is computed in SQL in BOTH statements (no JS-side
+ * date drift), and the org DELETE is gated to the SAME expiring-user set so
+ * it can only ever touch orgs belonging to users about to be purged.
  *
  * Returns the count of users hard-deleted. Idempotent: safe to retry
  * after a crash.
@@ -388,14 +405,32 @@ async function isSoleOwner(org: Organization, userId: string): Promise<boolean> 
 export async function hardDeleteExpiredAccounts(opts: { graceDays?: number } = {}): Promise<number> {
   const db = getDb();
   const graceDays = opts.graceDays ?? 30;
-  // Use a raw SQL fragment so the threshold comparison happens entirely
-  // in SQL (no JS-side date drift).
-  const rows = (await db.execute(sql`
-    DELETE FROM users
-    WHERE deleted_at IS NOT NULL
-      AND deleted_at < now() - (${graceDays} || ' days')::interval
-    RETURNING id
-  `)) as unknown as Array<{ id: string }>;
-  log.info('account_hard_delete_run', { graceDays, deleted: rows.length });
-  return rows.length;
+
+  let deleted = 0;
+  await db.transaction(async (tx) => {
+    // 1. Hard-delete the expiring users' own soft-deleted orgs first.
+    // Projects (and their api_keys / env vars / deployments / invitations)
+    // cascade via projects.org_id ON DELETE CASCADE.
+    await tx.execute(sql`
+      DELETE FROM organizations
+      WHERE deleted_at IS NOT NULL
+        AND created_by IN (
+          SELECT id FROM users
+          WHERE deleted_at IS NOT NULL
+            AND deleted_at < now() - (${graceDays} || ' days')::interval
+        )
+    `);
+
+    // 2. Hard-delete the expired users themselves.
+    const rows = (await tx.execute(sql`
+      DELETE FROM users
+      WHERE deleted_at IS NOT NULL
+        AND deleted_at < now() - (${graceDays} || ' days')::interval
+      RETURNING id
+    `)) as unknown as Array<{ id: string }>;
+    deleted = rows.length;
+  });
+
+  log.info('account_hard_delete_run', { graceDays, deleted });
+  return deleted;
 }

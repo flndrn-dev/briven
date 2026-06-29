@@ -288,6 +288,13 @@
       "when": 1780060000000,
       "tag": "0040_user_delete_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780130000000,
+      "tag": "0042_account_purge_fk_set_null",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,16 @@ import { NotFoundError } from '@briven/shared';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { auditLogs, orgMembers, organizations, projects, sessions, users } from '../db/schema.js';
+import {
+  apiKeys,
+  auditLogs,
+  orgMembers,
+  organizations,
+  projects,
+  sessions,
+  users,
+  type Organization,
+} from '../db/schema.js';
 
 export interface AdminUserRow {
   id: string;
@@ -67,15 +76,72 @@ export async function listProjects(limit = 500): Promise<AdminProjectRow[]> {
     .limit(limit);
 }
 
+/**
+ * True when the user is the only role='owner' member of the org, or when
+ * the org is the user's personal org (always sole-owner by design). Mirrors
+ * `isSoleOwner` in services/account-deletion.ts so suspension scopes its
+ * api-key revocation to EXACTLY the projects deletion would.
+ */
+async function isSoleOwner(org: Organization, userId: string): Promise<boolean> {
+  if (org.personal) return org.createdBy === userId;
+  const db = getDb();
+  const owners = await db
+    .select({ userId: orgMembers.userId })
+    .from(orgMembers)
+    .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.role, 'owner')));
+  if (owners.length === 0) return false;
+  if (owners.length > 1) return false;
+  return owners[0]?.userId === userId;
+}
+
 export async function suspendUser(userId: string): Promise<void> {
   const db = getDb();
   const [row] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!row) throw new NotFoundError('user', userId);
-  await db.update(users).set({ suspendedAt: new Date() }).where(eq(users.id, userId));
-  // Invalidate every live session for the suspended user.
-  await db.delete(sessions).where(eq(sessions.userId, userId));
+
+  // One transaction so a suspension can't half-apply (flag set but keys/sessions
+  // still live, or vice-versa).
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ suspendedAt: new Date() }).where(eq(users.id, userId));
+
+    // Invalidate every live session for the suspended user.
+    await tx.delete(sessions).where(eq(sessions.userId, userId));
+
+    // Cascade-revoke api keys on every project the user solely owns — same
+    // scope as softDeleteAccount (sole-owner orgs only; multi-owner team org
+    // keys survive). Without this a suspended user's brk_* keys keep full
+    // read+write because the api-key path never re-checks owner status.
+    const memberships = await tx
+      .select({ orgId: orgMembers.orgId })
+      .from(orgMembers)
+      .where(eq(orgMembers.userId, userId));
+    for (const m of memberships) {
+      const [org] = await tx
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, m.orgId))
+        .limit(1);
+      if (!org) continue;
+      if (!(await isSoleOwner(org, userId))) continue;
+      const orgProjects = await tx
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)));
+      for (const p of orgProjects) {
+        await tx
+          .update(apiKeys)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(apiKeys.projectId, p.id), isNull(apiKeys.revokedAt)));
+      }
+    }
+  });
 }
 
+/**
+ * Clears the suspension flag. Does NOT auto-restore api keys revoked by
+ * `suspendUser` — consistent with softDeleteAccount/restoreAccount, which
+ * also leaves revoked keys revoked (operator/user re-issues them).
+ */
 export async function unsuspendUser(userId: string): Promise<void> {
   const db = getDb();
   await db.update(users).set({ suspendedAt: null }).where(eq(users.id, userId));

@@ -62,14 +62,25 @@ export const requireProjectAuth = (): MiddlewareHandler => async (c, next) => {
     try {
       const payload = await verifyCliToken(token);
       const [row] = await getDb()
-        .select({ id: usersTable.id, email: usersTable.email, name: usersTable.name })
+        .select({
+          id: usersTable.id,
+          email: usersTable.email,
+          name: usersTable.name,
+          deletedAt: usersTable.deletedAt,
+          suspendedAt: usersTable.suspendedAt,
+        })
         .from(usersTable)
         .where(eq(usersTable.id, payload.sub))
         .limit(1);
       if (!row) {
         return c.json({ code: 'unauthorized', message: 'cli token user not found' }, 401);
       }
-      userRow = row as unknown as User;
+      // Self-contained status check — don't rely on a downstream requireAuth
+      // re-validating. A suspended/soft-deleted user must not pass here.
+      if (row.deletedAt || row.suspendedAt) {
+        return c.json({ code: 'unauthorized', message: 'account is no longer active' }, 401);
+      }
+      userRow = { id: row.id, email: row.email, name: row.name } as unknown as User;
     } catch (err) {
       log.warn('project_auth_cli_jwt_rejected', {
         err: err instanceof Error ? err.message : String(err),
