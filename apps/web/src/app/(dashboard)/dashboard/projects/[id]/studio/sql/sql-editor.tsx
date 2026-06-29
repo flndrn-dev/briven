@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
+import { toValidDate } from '@/lib/utils';
+
 interface QueryResult {
   columns: Array<{ name: string; dataType: string }>;
   rows: Array<Record<string, unknown>>;
@@ -264,7 +266,7 @@ function stringifyForCsv(v: unknown): string {
   if (v === null || v === undefined) return '';
   if (typeof v === 'string') return v;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (v instanceof Date) return v.toISOString();
+  if (v instanceof Date) return toValidDate(v)?.toISOString() ?? '';
   return JSON.stringify(v);
 }
 
@@ -281,7 +283,7 @@ function renderValue(v: unknown): string {
   if (v === null || v === undefined) return 'null';
   if (typeof v === 'string') return v;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (v instanceof Date) return v.toISOString();
+  if (v instanceof Date) return toValidDate(v)?.toISOString() ?? '—';
   const s = JSON.stringify(v);
   return s.length > 80 ? `${s.slice(0, 80)}…` : s;
 }

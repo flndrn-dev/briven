@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson, ApiError } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { UploadButton } from './upload-button';
 
 interface ProjectFile {
@@ -121,7 +122,9 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
                       </p>
                       <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
                         {f.contentType} · {formatBytes(Number(f.sizeBytes))} ·{' '}
-                        {new Date(f.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
+                        {toValidDate(f.createdAt)
+                          ? `${toValidDate(f.createdAt)!.toISOString().slice(0, 16).replace('T', ' ')} utc`
+                          : '—'}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

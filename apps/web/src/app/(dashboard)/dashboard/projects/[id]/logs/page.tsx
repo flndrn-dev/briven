@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { ExportLogsLink } from './export-link';
 import { LiveTailToggle } from './live-tail-toggle';
 
@@ -197,7 +198,7 @@ export default async function LogsPage({
                   ) : null}
                 </div>
                 <time className="shrink-0 text-[10px] text-[var(--color-text-subtle)]">
-                  {new Date(log.createdAt).toISOString().replace('T', ' ').slice(0, 19)}
+                  {toValidDate(log.createdAt)?.toISOString().replace('T', ' ').slice(0, 19) ?? '—'}
                 </time>
               </div>
             </li>

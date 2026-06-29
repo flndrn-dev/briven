@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 
 interface AdminProject {
   id: string;
@@ -38,7 +39,7 @@ export default async function AdminProjectsPage() {
               </p>
               <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
                 {p.id} · {p.slug} · owner {p.ownerId} · created{' '}
-                {new Date(p.createdAt).toISOString().slice(0, 10)}
+                {toValidDate(p.createdAt)?.toISOString().slice(0, 10) ?? '—'}
               </p>
             </div>
           </li>

@@ -1,4 +1,5 @@
 import { apiJson } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 import { AllowlistAddForm, AllowlistRemoveButton } from './allowlist-controls';
 
 interface Entry {
@@ -98,5 +99,6 @@ export default async function AllowlistPage() {
 }
 
 function formatTimestamp(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
+  const d = toValidDate(iso);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
 }

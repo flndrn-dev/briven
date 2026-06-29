@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
+import { toValidDate } from '@/lib/utils';
 import { RowDeleteProjectButton } from './row-delete-project-button';
 
 interface Project {
@@ -134,7 +135,7 @@ export function ProjectsList({
               </Link>
               <div className="flex items-center justify-between border-t border-[var(--color-border-subtle)] px-4 py-2">
                 <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-                  {new Date(p.createdAt).toISOString().slice(0, 10)}
+                  {toValidDate(p.createdAt)?.toISOString().slice(0, 10) ?? '—'}
                 </span>
                 <RowDeleteProjectButton
                   projectId={p.id}

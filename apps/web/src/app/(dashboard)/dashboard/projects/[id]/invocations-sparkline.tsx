@@ -1,3 +1,5 @@
+import { toValidDate } from '@/lib/utils';
+
 interface Hour {
   hour: string;
   count: number;
@@ -41,7 +43,7 @@ export function InvocationsSparkline({ hours }: { hours: Hour[] }) {
                 fill="var(--color-primary)"
                 opacity={0.6}
               >
-                <title>{`${new Date(h.hour).toISOString().slice(11, 16)} · ${h.count} invocations${h.errCount > 0 ? ` · ${h.errCount} err` : ''}`}</title>
+                <title>{`${toValidDate(h.hour)?.toISOString().slice(11, 16) ?? '—'} · ${h.count} invocations${h.errCount > 0 ? ` · ${h.errCount} err` : ''}`}</title>
               </rect>
               {errH > 0 ? (
                 <rect

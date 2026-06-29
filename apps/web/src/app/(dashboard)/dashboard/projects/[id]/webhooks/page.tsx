@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { CreateSubscriberForm } from './create-subscriber-form';
 import { CreateWebhookForm } from './create-form';
 import { RotateSecretButton } from './rotate-secret-button';
@@ -402,5 +403,6 @@ function StatusPill({
 }
 
 function formatTimestamp(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
+  const d = toValidDate(iso);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
 }

@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { AddEnvForm } from './add-env-form';
 import { DeleteEnvButton } from './delete-env-button';
 
@@ -69,7 +70,7 @@ export default async function EnvPage({ params }: { params: Promise<{ id: string
               <div>
                 <p className="font-mono text-sm">{v.key}</p>
                 <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-                  •••{v.lastFour} · updated {new Date(v.updatedAt).toISOString().slice(0, 10)}
+                  •••{v.lastFour} · updated {toValidDate(v.updatedAt)?.toISOString().slice(0, 10) ?? '—'}
                 </p>
               </div>
               <DeleteEnvButton envVarId={v.id} envKey={v.key} onDelete={remove} />

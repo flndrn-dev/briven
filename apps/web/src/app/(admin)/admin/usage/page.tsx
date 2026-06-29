@@ -1,4 +1,5 @@
 import { apiJson } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 import { RetrySkippedForm } from './retry-skipped-form';
 
 interface UsageEvent {
@@ -23,10 +24,8 @@ const STATUS_FILTERS = [
 ] as const;
 
 function formatTs(t: string | Date | null): string {
-  if (!t) return '—';
-  const d = typeof t === 'string' ? new Date(t) : t;
-  if (!Number.isFinite(d.getTime())) return String(t);
-  return d.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+  const d = toValidDate(t);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 19) + 'Z' : '—';
 }
 
 function formatValue(metric: UsageEvent['metric'], value: string): string {

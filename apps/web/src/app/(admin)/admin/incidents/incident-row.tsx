@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { StepUpPrompt } from '@/components/step-up-prompt';
+import { toValidDate } from '@/lib/utils';
 
 type Severity = 'critical' | 'major' | 'minor' | 'maintenance';
 
@@ -219,5 +220,6 @@ function severityTone(s: Severity): string {
 }
 
 function formatTimestamp(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
+  const d = toValidDate(iso);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
 }

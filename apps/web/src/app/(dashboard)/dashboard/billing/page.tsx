@@ -1,5 +1,6 @@
 import { apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
+import { toValidDate } from '@/lib/utils';
 import { ManageBillingButton } from './manage-billing-button';
 import { UpgradeButtons } from './upgrade-buttons';
 
@@ -106,8 +107,7 @@ const STATUS_LABEL: Record<SubscriptionSummary['status'], string> = {
 };
 
 function renewalDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toISOString().slice(0, 10);
+  return toValidDate(iso)?.toISOString().slice(0, 10) ?? '—';
 }
 
 export default async function BillingPage({

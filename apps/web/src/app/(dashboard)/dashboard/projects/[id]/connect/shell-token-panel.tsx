@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { toValidDate } from '@/lib/utils';
+
 interface IssuedToken {
   dsn: string;
   role: string;
@@ -71,7 +73,9 @@ export function ShellTokenPanel({ projectId }: { projectId: string }) {
       <div className="flex items-center justify-between">
         <span className="font-mono text-[10px] text-[var(--color-text-muted)]">
           role: <code>{token.role}</code> · expires{' '}
-          {new Date(token.expiresAt).toISOString().slice(11, 19)} UTC
+          {toValidDate(token.expiresAt)
+            ? `${toValidDate(token.expiresAt)!.toISOString().slice(11, 19)} UTC`
+            : '—'}
         </span>
         <div className="flex gap-2">
           <button

@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { ConfirmButton } from './confirm-button';
 import { DiffPanel, type SnapshotDiff } from './diff-panel';
 import { RestorePreview } from './restore-preview';
@@ -200,16 +201,14 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
 
           <p className="font-mono text-[11px] text-[var(--color-text-subtle)]">
             {auto.enabled && auto.nextRunAt
-              ? `next automatic backup around ${new Date(auto.nextRunAt)
-                  .toISOString()
-                  .slice(0, 16)
-                  .replace('T', ' ')} utc.`
+              ? `next automatic backup around ${
+                  toValidDate(auto.nextRunAt)?.toISOString().slice(0, 16).replace('T', ' ') ?? '—'
+                } utc.`
               : 'automatic backups are off — flip the switch above to turn them on.'}
             {auto.lastRunAt
-              ? ` last automatic backup: ${new Date(auto.lastRunAt)
-                  .toISOString()
-                  .slice(0, 16)
-                  .replace('T', ' ')} utc${auto.lastRunStatus === 'error' ? ' (failed — we will retry)' : ''}.`
+              ? ` last automatic backup: ${
+                  toValidDate(auto.lastRunAt)?.toISOString().slice(0, 16).replace('T', ' ') ?? '—'
+                } utc${auto.lastRunStatus === 'error' ? ' (failed — we will retry)' : ''}.`
               : ''}
           </p>
         </form>
@@ -246,7 +245,9 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
                     </p>
                     <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
                       {s.tableCount} {s.tableCount === 1 ? 'table' : 'tables'} ·{' '}
-                      {new Date(s.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
+                      {toValidDate(s.createdAt)
+                        ? `${toValidDate(s.createdAt)!.toISOString().slice(0, 16).replace('T', ' ')} utc`
+                        : '—'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

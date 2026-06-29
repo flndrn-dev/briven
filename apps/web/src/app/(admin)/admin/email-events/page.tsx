@@ -1,4 +1,5 @@
 import { apiJson } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 
 interface EmailEvent {
   id: string;
@@ -42,9 +43,8 @@ function severityClass(t: string): string {
 }
 
 function formatTs(t: string | Date): string {
-  const d = typeof t === 'string' ? new Date(t) : t;
-  if (!Number.isFinite(d.getTime())) return String(t);
-  return d.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+  const d = toValidDate(t);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 19) + 'Z' : '—';
 }
 
 export default async function EmailEventsAdminPage() {

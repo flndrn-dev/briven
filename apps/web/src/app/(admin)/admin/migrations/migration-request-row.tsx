@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { StepUpPrompt } from '@/components/step-up-prompt';
+import { toValidDate } from '@/lib/utils';
 import { ConvexTranslator } from './convex-translator';
 
 interface AdminRequest {
@@ -207,7 +208,10 @@ export function MigrationRequestRow({ request, apiOrigin }: Props) {
           {request.contactEmail}
         </span>
         <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-          · {new Date(request.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
+          ·{' '}
+          {toValidDate(request.createdAt)
+            ? `${toValidDate(request.createdAt)!.toISOString().slice(0, 16).replace('T', ' ')} utc`
+            : '—'}
         </span>
         <span className="ml-auto font-mono text-[10px] text-[var(--color-text-subtle)]">
           {request.id}

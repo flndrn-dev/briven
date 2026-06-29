@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { KeyRow } from './key-row';
 import { NewKeyDialog } from './new-key-dialog';
 
@@ -97,7 +98,7 @@ export default async function KeysPage({ params }: { params: Promise<{ id: strin
             {revoked.map((k) => (
               <li key={k.id} className="px-4 py-2 text-[var(--color-text-subtle)]">
                 {k.name} · brk_•••{k.suffix} · revoked{' '}
-                {new Date(k.revokedAt!).toISOString().slice(0, 10)}
+                {toValidDate(k.revokedAt)?.toISOString().slice(0, 10) ?? '—'}
               </li>
             ))}
           </ul>

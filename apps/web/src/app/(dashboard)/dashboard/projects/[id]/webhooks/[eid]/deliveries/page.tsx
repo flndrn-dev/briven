@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { apiJson } from '../../../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 
 type DeliveryStatus =
   | 'ok'
@@ -175,5 +176,6 @@ function StatusPill({ status }: { status: DeliveryStatus }) {
 }
 
 function formatTimestamp(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' utc';
+  const d = toValidDate(iso);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 19) + ' utc' : '—';
 }

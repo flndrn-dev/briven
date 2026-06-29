@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
+import { toValidDate } from '@/lib/utils';
 import { RevokeButton } from './revoke-button';
 
 interface ApiKey {
@@ -109,12 +110,13 @@ export function KeyRow({ apiKey, onRevoke, onRename }: Props) {
           </div>
         )}
         <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-          brk_•••{apiKey.suffix} · created {new Date(apiKey.createdAt).toISOString().slice(0, 10)}
-          {apiKey.lastUsedAt
-            ? ` · last used ${new Date(apiKey.lastUsedAt).toISOString().slice(0, 10)}`
+          brk_•••{apiKey.suffix} · created{' '}
+          {toValidDate(apiKey.createdAt)?.toISOString().slice(0, 10) ?? '—'}
+          {toValidDate(apiKey.lastUsedAt)
+            ? ` · last used ${toValidDate(apiKey.lastUsedAt)!.toISOString().slice(0, 10)}`
             : ' · never used'}
-          {apiKey.expiresAt
-            ? ` · expires ${new Date(apiKey.expiresAt).toISOString().slice(0, 10)}`
+          {toValidDate(apiKey.expiresAt)
+            ? ` · expires ${toValidDate(apiKey.expiresAt)!.toISOString().slice(0, 10)}`
             : null}
         </p>
         {error ? (

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ApiError, apiJson } from '../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { DeleteMigrationButton } from './delete-migration-button';
 
 export const metadata = { title: 'migration detail' };
@@ -68,7 +69,8 @@ function statusTone(status: string): string {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
+  const d = toValidDate(iso);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
 }
 
 /** Compact one-line variant for the timeline — `May 17 · 08:29`. */

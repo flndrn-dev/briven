@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { apiJson } from '../../../lib/api';
 import { requireUser } from '../../../lib/session';
+import { toValidDate } from '@/lib/utils';
 
 interface Project {
   id: string;
@@ -189,7 +190,8 @@ export default async function DashboardHome() {
                   {m.status.replace(/_/g, ' ')}
                 </span>
                 <p className="font-mono text-sm text-[var(--color-text)]">
-                  {m.urgency.replace(/_/g, ' ')} · submitted {new Date(m.createdAt).toISOString().slice(0, 10)}
+                  {m.urgency.replace(/_/g, ' ')} · submitted{' '}
+                  {toValidDate(m.createdAt)?.toISOString().slice(0, 10) ?? '—'}
                 </p>
               </div>
               <span className="font-mono text-sm text-[var(--color-primary)]">see progress →</span>

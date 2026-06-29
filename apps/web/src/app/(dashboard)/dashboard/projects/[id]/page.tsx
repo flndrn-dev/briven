@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { CopyButton } from '@/components/ui/copy-button';
 
 import { InvocationsSparkline } from './invocations-sparkline';
@@ -143,7 +144,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           label="last deploy"
           value={
             latest
-              ? `${latest.status} · ${new Date(latest.createdAt).toISOString().slice(0, 10)}`
+              ? `${latest.status} · ${toValidDate(latest.createdAt)?.toISOString().slice(0, 10) ?? '—'}`
               : 'never'
           }
         />
@@ -230,7 +231,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                     ) : null}
                   </div>
                   <time className="shrink-0 text-[10px] text-[var(--color-text-subtle)]">
-                    {new Date(log.createdAt).toISOString().replace('T', ' ').slice(11, 19)}
+                    {toValidDate(log.createdAt)?.toISOString().replace('T', ' ').slice(11, 19) ?? '—'}
                   </time>
                 </div>
               </li>
@@ -257,7 +258,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                 <div>
                   <p className="font-mono text-sm">{d.id}</p>
                   <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-                    {new Date(d.createdAt).toISOString().replace('T', ' ').slice(0, 19)}
+                    {toValidDate(d.createdAt)?.toISOString().replace('T', ' ').slice(0, 19) ?? '—'}
                   </p>
                 </div>
                 <span className={`font-mono text-xs ${statusColour(d.status)}`}>{d.status}</span>

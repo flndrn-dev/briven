@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson } from '../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 
 interface Org {
   id: string;
@@ -302,7 +303,7 @@ async function TeamInvites({ teamId }: { teamId: string }) {
                 {m.name ?? m.email}
               </p>
               <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">
-                {m.role} · joined {new Date(m.joinedAt).toISOString().slice(0, 10)}
+                {m.role} · joined {toValidDate(m.joinedAt)?.toISOString().slice(0, 10) ?? '—'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -386,7 +387,7 @@ async function TeamInvites({ teamId }: { teamId: string }) {
               <div className="min-w-0">
                 <p className="font-mono text-xs text-[var(--color-text)]">{inv.email}</p>
                 <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">
-                  {inv.role} · expires {new Date(inv.expiresAt).toISOString().slice(0, 10)}
+                  {inv.role} · expires {toValidDate(inv.expiresAt)?.toISOString().slice(0, 10) ?? '—'}
                 </p>
               </div>
               <form action={revoke.bind(null, inv.id)}>

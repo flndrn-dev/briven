@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { toValidDate } from '@/lib/utils';
+
 interface ColumnMeta {
   name: string;
   dataType: string;
@@ -339,7 +341,7 @@ function stringifyForCsv(v: unknown): string {
   if (v === null || v === undefined) return '';
   if (typeof v === 'string') return v;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (v instanceof Date) return v.toISOString();
+  if (v instanceof Date) return toValidDate(v)?.toISOString() ?? '';
   return JSON.stringify(v);
 }
 

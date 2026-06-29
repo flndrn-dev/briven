@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 
 interface Activity {
   id: string;
@@ -112,7 +113,7 @@ export default async function ActivityPage({
               ) : null}
             </div>
             <time className="font-mono text-xs text-[var(--color-text-subtle)]">
-              {new Date(a.createdAt).toISOString().replace('T', ' ').slice(0, 19)}
+              {toValidDate(a.createdAt)?.toISOString().replace('T', ' ').slice(0, 19) ?? '—'}
             </time>
           </li>
         ))}

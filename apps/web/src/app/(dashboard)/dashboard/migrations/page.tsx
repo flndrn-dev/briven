@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { RowDeleteMigrationButton } from './row-delete-migration-button';
 
 export const metadata = { title: 'my migrations' };
@@ -44,7 +45,8 @@ function statusTone(status: string): string {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
+  const d = toValidDate(iso);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
 }
 
 export default async function MyMigrationsPage() {

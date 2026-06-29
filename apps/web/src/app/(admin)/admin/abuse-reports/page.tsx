@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiJson } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 import { TriageActions } from './triage-actions';
 
 type Resolution = 'no_action' | 'warned' | 'suspended' | 'banned';
@@ -104,7 +105,7 @@ export default async function AbuseReportsAdminPage({
                   {r.reason}
                 </p>
                 <p className="mt-1 font-mono text-xs text-[var(--color-text-subtle)]">
-                  reported {new Date(r.createdAt).toISOString().slice(0, 16).replace('T', ' ')}
+                  reported {toValidDate(r.createdAt)?.toISOString().slice(0, 16).replace('T', ' ') ?? '—'}
                   {r.reporterContact ? ` · contact: ${r.reporterContact}` : ' · anonymous'}
                 </p>
               </div>

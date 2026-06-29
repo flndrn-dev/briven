@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ProfileBillingForm } from '../../../../components/profile-billing-form';
 import { apiFetch, apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
+import { toValidDate } from '@/lib/utils';
 import { ChangeEmailForm } from './change-email-form';
 import { DeleteAccountForm } from './delete-account-form';
 import { DeleteSecretSection } from './delete-secret-section';
@@ -173,7 +174,8 @@ export default async function SettingsPage() {
           <dt className="text-[var(--color-text-subtle)]">at</dt>
           <dd>
             {user.lastSignIn
-              ? new Date(user.lastSignIn.at).toISOString().replace('T', ' ').slice(0, 19)
+              ? (toValidDate(user.lastSignIn.at)?.toISOString().replace('T', ' ').slice(0, 19) ??
+                '—')
               : 'never'}
           </dd>
 
@@ -209,7 +211,7 @@ export default async function SettingsPage() {
                     <span className="text-[var(--color-primary)]">{inv.role}</span>
                   </p>
                   <p className="mt-0.5 text-xs text-[var(--color-text-subtle)]">
-                    expires {new Date(inv.expiresAt).toISOString().slice(0, 10)}
+                    expires {toValidDate(inv.expiresAt)?.toISOString().slice(0, 10) ?? '—'}
                   </p>
                 </div>
               </li>

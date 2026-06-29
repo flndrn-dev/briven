@@ -1,4 +1,5 @@
 import { apiJson } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 import { UserActions } from './user-actions';
 
 interface AdminUser {
@@ -53,7 +54,7 @@ export default async function AdminUsersPage() {
               <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
                 {u.id} · {u.projectCount} project{u.projectCount === 1 ? '' : 's'} ·{' '}
                 {u.emailVerified ? 'verified' : 'unverified'} · joined{' '}
-                {new Date(u.createdAt).toISOString().slice(0, 10)}
+                {toValidDate(u.createdAt)?.toISOString().slice(0, 10) ?? '—'}
               </p>
             </div>
             <UserActions user={u} apiOrigin={apiOrigin} />

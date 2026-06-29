@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { apiJson, ApiError } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 
 interface UserDetail {
   user: {
@@ -187,9 +188,10 @@ function Pill({ tone, label }: { tone: 'warning' | 'error' | 'muted'; label: str
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
+  return toValidDate(iso)?.toISOString().slice(0, 10) ?? '—';
 }
 
 function formatTimestamp(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
+  const d = toValidDate(iso);
+  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
 }

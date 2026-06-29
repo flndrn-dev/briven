@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 import { AddMemberForm } from './add-member-form';
 import { InvitationRow } from './invitation-row';
 import { InviteForm } from './invite-form';
@@ -158,7 +159,7 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
               <div>
                 <p className="font-mono text-sm">{m.name ?? m.userId}</p>
                 <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-                  {m.userId} · joined {new Date(m.createdAt).toISOString().slice(0, 10)}
+                  {m.userId} · joined {toValidDate(m.createdAt)?.toISOString().slice(0, 10) ?? '—'}
                 </p>
               </div>
               <MemberActions
