@@ -60,3 +60,19 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The backend is transiently unreachable — a network error, a 5xx, or the
+ * brief 404 window while a deploy swaps containers. This is distinct from a
+ * real auth failure (401/403): callers should show a calm "reconnecting…"
+ * state and retry, NOT a hard 500 / "something broke" page.
+ */
+export class ApiUnavailableError extends Error {
+  constructor(
+    readonly status: number | null,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiUnavailableError';
+  }
+}
+

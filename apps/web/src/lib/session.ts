@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { ApiError, apiFetch } from './api';
+import { ApiUnavailableError, apiFetch } from './api';
 
 export interface SessionUser {
   id: string;
@@ -59,21 +59,29 @@ export interface SessionUser {
  * must redirect anonymous traffic to /signin.
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
+  let res: Response;
   try {
-    const res = await apiFetch('/v1/me');
-    if (res.status === 401) return null;
-    if (!res.ok) throw new ApiError(res.status, await res.text());
-    const user = (await res.json()) as Partial<SessionUser> & SessionUser;
-    // Default the delete-secret fields if an older api build omits them.
-    return {
-      ...user,
-      hasDeleteSecret: user.hasDeleteSecret ?? false,
-      deleteSecretSetAt: user.deleteSecretSetAt ?? null,
-    };
+    res = await apiFetch('/v1/me');
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) return null;
-    throw err;
+    // Network-level failure (connection refused, DNS, timeout) — almost always
+    // the brief window while a deploy restarts the api. Transient, not anon.
+    throw new ApiUnavailableError(null, err instanceof Error ? err.message : 'network error');
   }
+  // Real auth failure → treat as logged out so the caller redirects to sign-in.
+  if (res.status === 401 || res.status === 403) return null;
+  // Anything else non-OK (5xx, or the 404 window while a deploy swaps
+  // containers) is transient backend-unavailability — surfaced as such so the
+  // UI shows "reconnecting…" instead of a hard 500 / "something broke" page.
+  if (!res.ok) {
+    throw new ApiUnavailableError(res.status, `api responded ${res.status}`);
+  }
+  const user = (await res.json()) as Partial<SessionUser> & SessionUser;
+  // Default the delete-secret fields if an older api build omits them.
+  return {
+    ...user,
+    hasDeleteSecret: user.hasDeleteSecret ?? false,
+    deleteSecretSetAt: user.deleteSecretSetAt ?? null,
+  };
 }
 
 export async function requireUser(redirectTo = '/signin'): Promise<SessionUser> {

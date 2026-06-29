@@ -1,12 +1,14 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { DashboardMobileNav } from './dashboard-mobile-nav';
 import { DashboardSidebar } from './dashboard-sidebar';
+import { Reconnecting } from './reconnecting';
 import { SignOutButton } from './sign-out-button';
 import { LiveRefresh } from '../../components/live-refresh';
-import { apiJson } from '../../lib/api';
-import { requireUser } from '../../lib/session';
+import { ApiUnavailableError, apiJson } from '../../lib/api';
+import { getSessionUser, type SessionUser } from '../../lib/session';
 
 interface BuildInfo {
   buildSha: string;
@@ -24,7 +26,17 @@ async function fetchBuildInfo(): Promise<BuildInfo | null> {
 }
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [user, info] = await Promise.all([requireUser(), fetchBuildInfo()]);
+  let user: SessionUser | null;
+  try {
+    user = await getSessionUser();
+  } catch (err) {
+    // Backend briefly unreachable (the ~1–2 min mid-deploy window) → show a
+    // calm auto-retrying "reconnecting…" page instead of a hard 500.
+    if (err instanceof ApiUnavailableError) return <Reconnecting />;
+    throw err;
+  }
+  if (!user) redirect('/signin');
+  const info = await fetchBuildInfo();
 
   return (
     <div className="flex h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
