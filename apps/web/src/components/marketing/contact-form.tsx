@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { SubjectTagsInput } from './subject-tags-input';
+import { ROUTING_TAGS, SubjectTagsInput } from './subject-tags-input';
 
 interface Props {
   apiOrigin: string;
@@ -76,7 +76,10 @@ export function ContactForm({
   const country = initialCountry ?? null;
   const [subject, setSubject] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  const [topic, setTopic] = useState<Topic>(coerceTopic(initialTopic));
+  // Topic still routes the ticket server-side; it now defaults from the page
+  // (e.g. 'support' on the dashboard) and from the #tags typed in the subject —
+  // the explicit dropdown was redundant, so it was removed.
+  const [topic] = useState<Topic>(coerceTopic(initialTopic));
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,29 +206,32 @@ export function ContactForm({
         </span>
       </label>
 
-      {/* 3 — subject: #tag chips + short line (tags route/triage in the admin dashboard) */}
-      <SubjectTagsInput
-        tags={tags}
-        onTagsChange={setTags}
-        text={subject}
-        onTextChange={setSubject}
-      />
+      {/* 3 — subject (#tag chips) with the available routing topics shown tight
+          beneath it, so the form reads as one clean block. */}
+      <div className="flex flex-col gap-2">
+        <SubjectTagsInput
+          tags={tags}
+          onTagsChange={setTags}
+          text={subject}
+          onTextChange={setSubject}
+        />
 
-      {/* 4 — topic (routing select) */}
-      <label className="flex flex-col gap-2">
-        <span className="font-mono text-xs text-[var(--color-text-muted)]">topic</span>
-        <select
-          value={topic}
-          onChange={(e) => setTopic(e.target.value as Topic)}
-          className={FIELD_CLASS}
-        >
-          {TOPICS.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </label>
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono uppercase tracking-[0.12em] text-[var(--color-text-subtle)] text-[10px]">
+            topic
+          </span>
+          <div className="grid grid-cols-4 gap-2">
+            {ROUTING_TAGS.map((t) => (
+              <span
+                key={t}
+                className="font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]"
+              >
+                #{t}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* 4 — message */}
       <label className="flex flex-col gap-2">

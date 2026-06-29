@@ -14,8 +14,10 @@ interface Props {
 const MAX_TAGS = 4;
 
 /** Only these #tags become chips — they drive priority routing in the admin
- *  dashboard. Typing any other #word is left as ordinary text. */
-const ROUTING_TAGS = ['support', 'billing', 'technical', 'self-hosting'] as const;
+ *  dashboard. Typing any other #word is left as ordinary text. Exported so the
+ *  contact form can show the same set as the "topic" reference grid (single
+ *  source of truth — no drift between the chips and the legend). */
+export const ROUTING_TAGS = ['support', 'billing', 'technical', 'self-hosting'] as const;
 
 /** Strip leading #, lowercase, keep [a-z0-9-]. Returns '' when nothing usable. */
 function normalizeTag(raw: string): string {
@@ -76,10 +78,7 @@ export function SubjectTagsInput({ tags, onTagsChange, text, onTextChange }: Pro
   return (
     <div className="flex flex-col gap-2">
       <span className="font-mono uppercase tracking-[0.12em] text-[var(--color-text-muted)] text-[var(--text-xs)]">
-        subject{' '}
-        <span className="text-[var(--color-text-subtle)]">
-          — add #support, #billing, #technical or #self-hosting for priority routing
-        </span>
+        subject
       </span>
 
       <div
