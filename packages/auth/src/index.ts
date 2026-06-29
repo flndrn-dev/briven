@@ -111,6 +111,18 @@ export interface OtpVerifyInput {
   otp: string;
 }
 
+export interface ResetPasswordInput {
+  /** The reset token from the email link (`?token=…`). */
+  token: string;
+  /** The new password to apply. */
+  newPassword: string;
+}
+
+/** Returned by `sendPasswordReset` and `resetPassword`. */
+export type PasswordResetResult =
+  | { ok: true }
+  | { ok: false; code: SignInErrorCode; message: string };
+
 export interface SocialInput {
   provider: OAuthProvider;
   /** Optional URL the customer's app wants the user to land on post-callback. */
@@ -143,6 +155,42 @@ export interface BrivenAuthClient {
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
   getUser(): Promise<User | null>;
+  /**
+   * Send a password-reset email to the supplied address.
+   * POST /request-password-reset — Better Auth always returns ok to prevent
+   * user enumeration; `{ ok: true }` does NOT confirm the email exists.
+   */
+  sendPasswordReset(email: string): Promise<PasswordResetResult>;
+  /**
+   * Complete a password reset using the token from the email link.
+   * POST /reset-password — pass the `?token=` query param value here.
+   */
+  resetPassword(input: ResetPasswordInput): Promise<PasswordResetResult>;
+  /**
+   * Passkey (WebAuthn) helpers — drive the `@better-auth/passkey@1.6.9` plugin
+   * the Briven API wires per-tenant when `providers.passkey.enabled`.
+   *
+   * Each method runs the real two-step ceremony against the plugin's verified
+   * endpoint ids (confirmed from the installed dist):
+   *   register:  GET  /passkey/generate-register-options      (needs a session)
+   *              → navigator.credentials.create()
+   *              → POST /passkey/verify-registration   body { response }
+   *   signIn:    GET  /passkey/generate-authenticate-options
+   *              → navigator.credentials.get()
+   *              → POST /passkey/verify-authentication body { response }
+   *
+   * The server returns options in @simplewebauthn JSON form (challenge / ids
+   * are base64url strings); we decode them for the WebAuthn call and re-encode
+   * the credential as base64url (no padding) before posting it back wrapped in
+   * `{ response }`. registration MUST include `response.transports` (the plugin
+   * joins it unconditionally).
+   */
+  readonly passkey: {
+    /** Register a new passkey for the currently-signed-in user. */
+    register(): Promise<PasswordResetResult>;
+    /** Sign in via an existing passkey (no password needed). */
+    signIn(): Promise<SignInResult>;
+  };
 }
 
 const DEFAULT_API_ORIGIN = 'https://api.briven.tech';
@@ -160,8 +208,10 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
   const authUrl = opts.authUrl ?? `https://${opts.projectId}.auth.briven.tech`;
   const fetchImpl = opts.fetch ?? globalThis.fetch.bind(globalThis);
 
-  async function post<T>(path: string, body: Record<string, unknown> | null): Promise<T> {
-    const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
+  // Raw variants expose the Response so the passkey ceremony can branch on
+  // status (404/501 → plugin not enabled). The typed get/post wrap them.
+  function rawPost(path: string, body: Record<string, unknown> | null): Promise<Response> {
+    return fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -171,18 +221,24 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       body: body === null ? undefined : JSON.stringify(body),
     });
-    return (await res.json()) as T;
   }
 
-  async function get<T>(path: string): Promise<T> {
-    const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
+  function rawGet(path: string): Promise<Response> {
+    return fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
       credentials: 'include',
       headers: {
         'x-briven-project-id': opts.projectId,
         authorization: `Bearer ${opts.publicKey}`,
       },
     });
-    return (await res.json()) as T;
+  }
+
+  async function post<T>(path: string, body: Record<string, unknown> | null): Promise<T> {
+    return (await (await rawPost(path, body)).json()) as T;
+  }
+
+  async function get<T>(path: string): Promise<T> {
+    return (await (await rawGet(path)).json()) as T;
   }
 
   function asSignInResult(body: unknown): SignInResult {
@@ -325,6 +381,190 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
         return null;
       }
     },
+    async sendPasswordReset(email: string) {
+      try {
+        await post<unknown>('/request-password-reset', { email });
+        return { ok: true as const };
+      } catch {
+        return { ok: false as const, code: 'network_error' as SignInErrorCode, message: 'network error' };
+      }
+    },
+    async resetPassword(input: ResetPasswordInput) {
+      try {
+        const body = await post<unknown>(
+          '/reset-password',
+          input as unknown as Record<string, unknown>,
+        );
+        if (body && typeof body === 'object' && (body as { status?: boolean }).status === true) {
+          return { ok: true as const };
+        }
+        const b = body as {
+          error?: { code?: string; message?: string };
+          code?: string;
+          message?: string;
+        };
+        return {
+          ok: false as const,
+          code: knownCode(b?.error?.code ?? b?.code ?? 'unknown'),
+          message: b?.error?.message ?? b?.message ?? 'reset failed',
+        };
+      } catch {
+        return { ok: false as const, code: 'network_error' as SignInErrorCode, message: 'network error' };
+      }
+    },
+    passkey: {
+      async register() {
+        if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+          return {
+            ok: false as const,
+            code: 'unknown' as SignInErrorCode,
+            message: 'WebAuthn not supported in this environment',
+          };
+        }
+        try {
+          // Step 1: registration options (needs a fresh session cookie). GET.
+          const optRes = await rawGet('/passkey/generate-register-options');
+          if (!optRes.ok) {
+            return {
+              ok: false as const,
+              code: 'unknown' as SignInErrorCode,
+              message:
+                optRes.status === 404 || optRes.status === 501
+                  ? 'passkey registration is not enabled for this account'
+                  : 'could not start passkey registration',
+            };
+          }
+          const options = (await optRes.json()) as PasskeyRegistrationOptionsJSON;
+          // Step 2: browser creates the credential.
+          const credential = (await navigator.credentials.create({
+            publicKey: {
+              challenge: b64urlToBytes(options.challenge),
+              rp: options.rp,
+              user: {
+                id: b64urlToBytes(options.user.id),
+                name: options.user.name,
+                displayName: options.user.displayName,
+              },
+              pubKeyCredParams: options.pubKeyCredParams,
+              timeout: options.timeout,
+              excludeCredentials: (options.excludeCredentials ?? []).map((c) => ({
+                id: b64urlToBytes(c.id),
+                type: c.type as PublicKeyCredentialType,
+                transports: c.transports,
+              })),
+              authenticatorSelection: options.authenticatorSelection,
+              attestation: options.attestation,
+            },
+          })) as PublicKeyCredential | null;
+          if (!credential) {
+            return {
+              ok: false as const,
+              code: 'unknown' as SignInErrorCode,
+              message: 'passkey registration cancelled',
+            };
+          }
+          const att = credential.response as AuthenticatorAttestationResponse;
+          // Step 3: serialise the credential to @simplewebauthn JSON and verify.
+          const response = {
+            id: credential.id,
+            rawId: bytesToB64url(new Uint8Array(credential.rawId)),
+            type: credential.type,
+            clientExtensionResults: credential.getClientExtensionResults(),
+            authenticatorAttachment: credential.authenticatorAttachment ?? undefined,
+            response: {
+              clientDataJSON: bytesToB64url(new Uint8Array(att.clientDataJSON)),
+              attestationObject: bytesToB64url(new Uint8Array(att.attestationObject)),
+              transports: att.getTransports ? att.getTransports() : [],
+            },
+          };
+          const verRes = await rawPost('/passkey/verify-registration', { response });
+          if (!verRes.ok) {
+            return {
+              ok: false as const,
+              code: 'unknown' as SignInErrorCode,
+              message: 'passkey registration failed',
+            };
+          }
+          return { ok: true as const };
+        } catch {
+          return {
+            ok: false as const,
+            code: 'network_error' as SignInErrorCode,
+            message: 'passkey registration failed',
+          };
+        }
+      },
+      async signIn() {
+        if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+          return {
+            ok: false as const,
+            code: 'unknown' as SignInErrorCode,
+            message: 'WebAuthn not supported in this environment',
+          };
+        }
+        try {
+          // Step 1: authentication options. GET.
+          const optRes = await rawGet('/passkey/generate-authenticate-options');
+          if (!optRes.ok) {
+            return {
+              ok: false as const,
+              code: 'unknown' as SignInErrorCode,
+              message:
+                optRes.status === 404 || optRes.status === 501
+                  ? 'passkey sign-in is not enabled for this account'
+                  : 'could not start passkey sign-in',
+            };
+          }
+          const options = (await optRes.json()) as PasskeyAuthenticationOptionsJSON;
+          // Step 2: browser produces the assertion.
+          const assertion = (await navigator.credentials.get({
+            publicKey: {
+              challenge: b64urlToBytes(options.challenge),
+              timeout: options.timeout,
+              rpId: options.rpId,
+              userVerification: options.userVerification,
+              allowCredentials: (options.allowCredentials ?? []).map((c) => ({
+                id: b64urlToBytes(c.id),
+                type: c.type as PublicKeyCredentialType,
+                transports: c.transports,
+              })),
+            },
+          })) as PublicKeyCredential | null;
+          if (!assertion) {
+            return {
+              ok: false as const,
+              code: 'unknown' as SignInErrorCode,
+              message: 'passkey sign-in cancelled',
+            };
+          }
+          const asr = assertion.response as AuthenticatorAssertionResponse;
+          // Step 3: serialise the assertion to @simplewebauthn JSON and verify.
+          const response = {
+            id: assertion.id,
+            rawId: bytesToB64url(new Uint8Array(assertion.rawId)),
+            type: assertion.type,
+            clientExtensionResults: assertion.getClientExtensionResults(),
+            authenticatorAttachment: assertion.authenticatorAttachment ?? undefined,
+            response: {
+              clientDataJSON: bytesToB64url(new Uint8Array(asr.clientDataJSON)),
+              authenticatorData: bytesToB64url(new Uint8Array(asr.authenticatorData)),
+              signature: bytesToB64url(new Uint8Array(asr.signature)),
+              userHandle: asr.userHandle
+                ? bytesToB64url(new Uint8Array(asr.userHandle))
+                : undefined,
+            },
+          };
+          const body = await post<unknown>('/passkey/verify-authentication', { response });
+          return asSignInResult(body);
+        } catch {
+          return {
+            ok: false as const,
+            code: 'network_error' as SignInErrorCode,
+            message: 'passkey sign-in failed',
+          };
+        }
+      },
+    },
   };
 }
 
@@ -341,4 +581,50 @@ const KNOWN_CODES: ReadonlySet<SignInErrorCode> = new Set<SignInErrorCode>([
 
 function knownCode(value: string): SignInErrorCode {
   return KNOWN_CODES.has(value as SignInErrorCode) ? (value as SignInErrorCode) : 'unknown';
+}
+
+// ─── passkey (WebAuthn) option shapes + base64url codec ──────────────────
+//
+// The server returns options in @simplewebauthn JSON form: every buffer
+// (challenge, user.id, credential ids) is a base64url string. We decode them
+// to byte arrays for the WebAuthn call, then re-encode the resulting
+// credential as unpadded base64url for the verify POST.
+
+interface PasskeyCredentialDescriptorJSON {
+  id: string;
+  type: string;
+  transports?: AuthenticatorTransport[];
+}
+
+interface PasskeyRegistrationOptionsJSON {
+  challenge: string;
+  rp: { name: string; id?: string };
+  user: { id: string; name: string; displayName: string };
+  pubKeyCredParams: PublicKeyCredentialParameters[];
+  timeout?: number;
+  excludeCredentials?: PasskeyCredentialDescriptorJSON[];
+  authenticatorSelection?: AuthenticatorSelectionCriteria;
+  attestation?: AttestationConveyancePreference;
+}
+
+interface PasskeyAuthenticationOptionsJSON {
+  challenge: string;
+  timeout?: number;
+  rpId?: string;
+  allowCredentials?: PasskeyCredentialDescriptorJSON[];
+  userVerification?: UserVerificationRequirement;
+}
+
+function b64urlToBytes(b64url: string): Uint8Array<ArrayBuffer> {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length) as Uint8Array<ArrayBuffer>;
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToB64url(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i] as number);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
