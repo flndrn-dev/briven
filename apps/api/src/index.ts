@@ -100,6 +100,20 @@ app.use('*', csrfOriginCheck());
 // identified for the whitelist branch.
 app.use('*', maintenanceMode());
 
+// The public branding logo (served by brandingPublicRouter below) is embedded
+// cross-origin via a plain <img src>: the dashboard (briven.tech) and the
+// hosted auth pages load it from api.briven.tech. secureHeaders() sets
+// `Cross-Origin-Resource-Policy: same-origin` on every response, which makes
+// the browser refuse the image (it renders as a broken-image icon even though
+// the bytes serve 200/image-png). This path-scoped override is registered
+// BEFORE secureHeaders so its post-`next()` write is the OUTERMOST one — it has
+// the final say and flips just this one logo route to `cross-origin`, leaving
+// every other API response same-origin.
+app.use('/v1/projects/:id/auth/branding/logo', async (c, next) => {
+  await next();
+  c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+});
+
 // Security response headers (HSTS, nosniff, frame deny, etc.) on every
 // API response. Placed after the global middleware chain and before the
 // route mounts so all handlers inherit it.
