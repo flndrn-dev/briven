@@ -22,7 +22,7 @@ interface Tier {
  * you've loaded (no surprise bills). Paid top-ups run through mavi-pay.
  * Limits are tuned to beat Neon/Supabase on room-per-euro (see pricing research
  * 2026-06-15): Briven free = 1 GB + never pauses (Supabase free pauses at 1 wk,
- * gives 500 MB); Briven Pro = 50 GB db vs Supabase Pro 8 GB; Team €99 vs $599.
+ * gives 500 MB); Briven Pro = 100 GB db vs Supabase Pro 8 GB; Team $99.99 vs $599.
  */
 // NOTE: tier prices (€0/29/99) approved by Jürgen 2026-06-15; limits competitor-
 // tuned. Paid billing activates when mavi-pay ships (parked until then).
@@ -30,7 +30,7 @@ const TIERS: readonly Tier[] = [
   {
     id: 'free',
     name: 'free',
-    price: '€0',
+    price: '$0',
     cadence: '/month',
     pitch: 'real projects, no credit card, never pauses. perfect for trying briven or a small database.',
     included: [
@@ -53,13 +53,13 @@ const TIERS: readonly Tier[] = [
   {
     id: 'pro',
     name: 'pro',
-    price: '€29',
+    price: '$29.99',
     cadence: '/month',
-    pitch: 'growing apps. 50 gb database — over 6× what Supabase Pro gives you.',
+    pitch: 'growing apps. 100 gb database — over 12× what Supabase Pro gives you.',
     included: [
-      { label: 'projects', value: '10' },
-      { label: 'database size', value: '50 gb' },
-      { label: 'file storage', value: '100 gb' },
+      { label: 'projects', value: '20' },
+      { label: 'database size', value: '100 gb' },
+      { label: 'file storage', value: '150 gb' },
       { label: 'history / undo', value: '30 days' },
       { label: 'logins / users', value: '100,000' },
       { label: 'live updates', value: '100 at once' },
@@ -77,9 +77,9 @@ const TIERS: readonly Tier[] = [
   {
     id: 'team',
     name: 'team',
-    price: '€99',
+    price: '$99.99',
     cadence: '/month',
-    pitch: 'teams + bigger workloads. €99 where Supabase charges $599 for their team plan.',
+    pitch: 'teams + bigger workloads. $99.99 where Supabase charges $599 for their team plan.',
     included: [
       { label: 'projects', value: 'unlimited' },
       { label: 'database size', value: '500 gb' },
@@ -123,7 +123,8 @@ export function PricingSection() {
 
       <div className="flex flex-col gap-1 pt-6 font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]">
         <p>
-          prices in EUR · vat added at checkout for EU customers (reverse-charge for valid vat id) ·
+          prices in USD · VAT / sales tax is calculated and added at checkout based on your country
+          (reverse-charge for valid EU VAT ids) ·
           free tier needs no card · paid is prepaid — no surprise bills
         </p>
         <p>

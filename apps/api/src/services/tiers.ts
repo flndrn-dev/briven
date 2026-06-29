@@ -61,7 +61,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     projectsPerOrg: 20,
     functionsPerProject: 200,
     invokesPerMonth: 1_000_000,
-    storageBytes: 10_737_418_240, // 10 GiB
+    storageBytes: 107_374_182_400, // 100 GiB — matches the pricing card's "100 gb" Pro database promise
     connectionSecondsPerMonth: 10_000_000, // ~115 days = roughly 4 always-on subs
     concurrentSubscriptions: 1_000,
     authMauPerMonth: 25_000, // placeholder per BUILD_PLAN.md "Decisions locked" Q5
@@ -70,7 +70,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     projectsPerOrg: 100,
     functionsPerProject: 2_000,
     invokesPerMonth: 10_000_000,
-    storageBytes: 107_374_182_400, // 100 GiB
+    storageBytes: 536_870_912_000, // 500 GiB — matches the pricing card's "500 gb" Team database promise
     connectionSecondsPerMonth: 100_000_000, // ~1158 days = roughly 38 always-on
     concurrentSubscriptions: 10_000,
     authMauPerMonth: 250_000, // locked: BUILD_PLAN.md "Decisions locked" Q5
