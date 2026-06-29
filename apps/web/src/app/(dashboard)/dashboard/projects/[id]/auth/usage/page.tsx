@@ -58,9 +58,10 @@ export default async function AuthUsagePage({
         <h2 className="font-mono text-lg tracking-tight">auth · usage</h2>
         <p className="mt-1 max-w-2xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
           monthly active users — distinct end-user accounts with at least one
-          session in the trailing 30 days. soft cap for v1: surfaced here, fed
-          to polar overage billing once the meter goes live. deliverability +
-          bounce panel lands alongside the mittera sender-domain wizard.
+          session this utc calendar month (resets on the 1st, aligned to your
+          invoice). going over the plan ceiling never blocks logins — overage
+          is billed once the polar meter is live. deliverability + bounce panel
+          lands alongside the mittera sender-domain wizard.
         </p>
       </header>
 
@@ -68,7 +69,7 @@ export default async function AuthUsagePage({
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
-              mau · trailing 30 days
+              mau · this calendar month
             </p>
             <p className="mt-1 font-mono text-2xl text-[var(--color-text)]">
               {mau.count.toLocaleString()}
@@ -96,7 +97,8 @@ export default async function AuthUsagePage({
           window {mau.windowStart.slice(0, 10)} → {mau.windowEnd.slice(0, 10)} (utc)
           {over ? (
             <span className="ml-2 text-[var(--color-error)]">
-              over plan ceiling — polar overage will bill once the meter is live
+              over plan ceiling — overage charges apply (logins are never
+              blocked) once the meter is live
             </span>
           ) : null}
         </p>

@@ -1,7 +1,14 @@
 import { and, asc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { projects, subscriptions, usageEvents, type UsageEvent, type UsageMetric } from '../db/schema.js';
+import {
+  isGaugeMetric,
+  projects,
+  subscriptions,
+  usageEvents,
+  type UsageEvent,
+  type UsageMetric,
+} from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 
@@ -18,9 +25,45 @@ import { log } from '../lib/logger.js';
  * so they don't pile up forever (and a follow-up env config flip can
  * re-enable them by resetting status='pending').
  *
+ * ── COUNTER vs GAUGE billing (money-critical) ────────────────────────
+ * Every Polar meter created below uses SUM aggregation over the event
+ * `value`. That is SAFE for both metric kinds because of HOW we emit:
+ *
+ *   COUNTER (invocations, connection_seconds): one event per hourly row
+ *   carrying that hour's absolute delta. SUM across the month = the
+ *   monthly total. Unchanged.
+ *
+ *   GAUGE (storage_bytes, auth_mau): exactly ONE durable row per
+ *   (project, month) holding the latest level. We push the DELTA-TO-LATEST
+ *   = value − pushed_value, then advance pushed_value to value. SUM of the
+ *   deltas Polar receives over the month therefore equals the latest gauge
+ *   value — never the ~720-snapshot sum. Re-pushing an unchanged row is a
+ *   0-delta no-op, so a duplicate drain can't double-bill.
+ *
+ * ── EXACT POLAR METER CONFIG flndrn must create (auth_mau) ───────────
+ * The push posts events to `/v1/meters/{meter_id}/events` with body
+ * `{ customer_id, value:<number>, timestamp }`. For overage to bill
+ * correctly the auth MAU meter MUST be:
+ *
+ *   • Meter name:        briven_auth_mau   (any label; this is the human name)
+ *   • Aggregation:       SUM over the event `value`  (func: "sum")
+ *   • Unit:              scalar
+ *   • Billing period:    monthly (matches our UTC-calendar-month window)
+ *
+ * SUM + delta-to-latest = the meter reads the final monthly MAU exactly
+ * once. (MAX over `value` would ALSO be correct given we post absolute
+ * snapshots — but we post deltas, so the meter MUST be SUM.) Then set
+ * env `BRIVEN_POLAR_METER_AUTH_MAU_ID=<meter id>` and re-arm any rows the
+ * worker already marked 'skipped':
+ *     UPDATE usage_events SET polar_push_status='pending', pushed_value=NULL
+ *     WHERE metric='auth_mau' AND polar_push_status='skipped';
+ * Resetting pushed_value→NULL makes the first post bill the full current
+ * month value, then deltas from there. storage_bytes is configured the
+ * same way (SUM + delta-to-latest).
+ *
  * Push status transitions (see usageEvents.polarPushStatus):
- *   pending → pushed   (HTTP 2xx from Polar)
- *   pending → skipped  (no meter id configured for the metric)
+ *   pending → pushed   (HTTP 2xx from Polar, or a 0-delta gauge no-op)
+ *   pending → skipped  (no meter id / token / customer configured)
  *   pending → pending  (transient failure, retried next tick)
  */
 
@@ -89,6 +132,16 @@ function meterIdFor(metric: UsageMetric): string | null {
 }
 
 /**
+ * Result of attempting to push one row. `billedValue` is set only for a
+ * GAUGE that was successfully delivered: it's the new running total to
+ * persist into `pushed_value`, so the next push computes the delta from it.
+ */
+interface PushResult {
+  status: 'pushed' | 'skipped' | 'pending';
+  billedValue?: string;
+}
+
+/**
  * Push one row. Returns the new status — caller writes it back.
  *
  * Without an access token + meter id + customer id the row is marked
@@ -96,19 +149,25 @@ function meterIdFor(metric: UsageMetric): string | null {
  * Network or 5xx → 'pending' (retried on the next tick); 4xx → 'skipped'
  * (operator must intervene — a 400 from Polar is durable, not transient).
  *
+ * GAUGE rows post the DELTA-TO-LATEST (value − pushed_value) so a SUM
+ * meter bills the final value exactly once. A 0 delta means the latest
+ * value is already billed → mark 'pushed' WITHOUT hitting Polar (idempotent
+ * no-op; protects against double-bill on a re-drain). COUNTER rows post
+ * their absolute hourly value unchanged.
+ *
  * Operator-visible logs:
- *   polar_push_pushed      — 2xx response, row → 'pushed'
+ *   polar_push_pushed      — 2xx response (or 0-delta no-op), row → 'pushed'
  *   polar_push_skipped_*   — see reason field; row → 'skipped'
  *   polar_push_retry       — transient failure; row stays 'pending'
  */
-async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending'> {
+async function pushOne(row: UsageEvent): Promise<PushResult> {
   if (!env.BRIVEN_POLAR_ACCESS_TOKEN) {
     log.info('polar_push_skipped_no_token', {
       eventId: row.id,
       projectId: row.projectId,
       metric: row.metric,
     });
-    return 'skipped';
+    return { status: 'skipped' };
   }
   const meterId = meterIdFor(row.metric);
   if (!meterId) {
@@ -117,7 +176,7 @@ async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending
       projectId: row.projectId,
       metric: row.metric,
     });
-    return 'skipped';
+    return { status: 'skipped' };
   }
   const customerId = await polarCustomerForProject(row.projectId);
   if (!customerId) {
@@ -126,20 +185,43 @@ async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending
       projectId: row.projectId,
       metric: row.metric,
     });
-    return 'skipped';
+    return { status: 'skipped' };
   }
 
   // Polar Meters API — POST {base}/v1/meters/{meter_id}/events
   //   { customer_id, value: number, timestamp: ISO8601 }
-  const value = Number.parseFloat(row.value);
-  if (!Number.isFinite(value)) {
+  const current = Number.parseFloat(row.value);
+  if (!Number.isFinite(current)) {
     log.warn('polar_push_skipped_bad_value', {
       eventId: row.id,
       projectId: row.projectId,
       metric: row.metric,
       raw: row.value,
     });
-    return 'skipped';
+    return { status: 'skipped' };
+  }
+
+  // Gauge → bill the delta since the last successful push; counter → the
+  // absolute hourly value. `billedValue` advances pushed_value on success.
+  const gauge = isGaugeMetric(row.metric);
+  let value = current;
+  let billedValue: string | undefined;
+  if (gauge) {
+    const alreadyRaw = row.pushedValue ? Number.parseFloat(row.pushedValue) : 0;
+    const already = Number.isFinite(alreadyRaw) ? alreadyRaw : 0;
+    value = current - already;
+    billedValue = row.value;
+    if (value === 0) {
+      // Latest value already billed for this period — nothing to send.
+      // Clear pending without a redundant Polar event (idempotent no-op).
+      log.info('polar_push_gauge_noop', {
+        eventId: row.id,
+        projectId: row.projectId,
+        metric: row.metric,
+        value: current,
+      });
+      return { status: 'pushed', billedValue };
+    }
   }
 
   let res: Response;
@@ -164,7 +246,7 @@ async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending
       reason: 'network',
       message: err instanceof Error ? err.message : String(err),
     });
-    return 'pending';
+    return { status: 'pending' };
   }
 
   if (res.ok) {
@@ -174,8 +256,9 @@ async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending
       metric: row.metric,
       meterId,
       value,
+      ...(gauge ? { gaugeLatest: current } : {}),
     });
-    return 'pushed';
+    return { status: 'pushed', billedValue };
   }
 
   // 5xx is transient (Polar restarted, rate-limited, etc.) — leave the
@@ -191,7 +274,7 @@ async function pushOne(row: UsageEvent): Promise<'pushed' | 'skipped' | 'pending
     status: res.status,
     body: body.slice(0, 256),
   });
-  return transient ? 'pending' : 'skipped';
+  return { status: transient ? 'pending' : 'skipped' };
 }
 
 export async function drainPendingPolarPushes(): Promise<{
@@ -224,13 +307,19 @@ export async function drainPendingPolarPushes(): Promise<{
     for (const row of rows) {
       try {
         const next = await pushOne(row);
-        if (next === 'pushed') {
+        if (next.status === 'pushed') {
           await tx
             .update(usageEvents)
-            .set({ polarPushStatus: 'pushed', polarPushedAt: new Date() })
+            .set({
+              polarPushStatus: 'pushed',
+              polarPushedAt: new Date(),
+              // Gauge: advance the running total billed to Polar so the next
+              // push computes the delta from here. Counter: leave NULL.
+              ...(next.billedValue !== undefined ? { pushedValue: next.billedValue } : {}),
+            })
             .where(and(eq(usageEvents.id, row.id)));
           pushed += 1;
-        } else if (next === 'skipped') {
+        } else if (next.status === 'skipped') {
           await tx
             .update(usageEvents)
             .set({ polarPushStatus: 'skipped' })

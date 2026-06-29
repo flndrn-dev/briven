@@ -66,6 +66,17 @@ export function renderAuthProvisioningSql(): string[] {
        ON "_briven_auth_sessions" (user_id)`,
     `CREATE INDEX IF NOT EXISTS "_briven_auth_sessions_expires_idx"
        ON "_briven_auth_sessions" (expires_at)`,
+    // Covering index for the MAU distinct-count (services/auth-mau.ts):
+    //   COUNT(DISTINCT user_id) WHERE created_at >= <month start>.
+    // Leading on created_at lets the planner range-scan the month instead
+    // of a full table scan; including user_id makes it index-only.
+    // NOTE: this is emitted for NEW provisions only. Tenant DBs provisioned
+    // before this change need a ONE-TIME backfill (run per existing tenant
+    // DB, not as a cross-tenant control-plane migration):
+    //   CREATE INDEX IF NOT EXISTS "_briven_auth_sessions_created_at_idx"
+    //     ON "_briven_auth_sessions" (created_at, user_id);
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_sessions_created_at_idx"
+       ON "_briven_auth_sessions" (created_at, user_id)`,
 
     // _briven_auth_accounts — Better-Auth account shape. The email/password
     // "credential" account stores the password hash in `password`. OAuth token

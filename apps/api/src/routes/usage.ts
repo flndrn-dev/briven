@@ -4,6 +4,7 @@ import { requireProjectAuth } from '../middleware/project-auth.js';
 import { fetchProjectRealtimeStats } from '../services/realtime-stats.js';
 import {
   getConnectionSecondsUsage,
+  getCurrentMonthAuthMau,
   getCurrentMonthConnectionSecondsUsage,
   getCurrentMonthInvocationUsage,
   getInvocationUsage,
@@ -37,6 +38,10 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
   let connection;
   let periodStart: string;
   let periodEnd: string;
+  // auth MAU is a monthly gauge — read the durable usage_events row for the
+  // month the requested window falls in (the `from` month for a custom
+  // range, else the current month). Reference instant computed below.
+  let mauRef = new Date();
   if (fromParam || untilParam) {
     if (!fromParam || !untilParam) {
       return c.json(
@@ -62,6 +67,7 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
     connection = await getConnectionSecondsUsage(projectId, from, until);
     periodStart = from.toISOString();
     periodEnd = until.toISOString();
+    mauRef = from;
   } else {
     invocations = await getCurrentMonthInvocationUsage(projectId);
     connection = await getCurrentMonthConnectionSecondsUsage(projectId);
@@ -82,6 +88,11 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
   // 5 min by the same cron that will push to Polar metering.
   const storage = await getStorageUsage(projectId);
 
+  // Auth MAU from the durable monthly roll-up (the exact value billed to
+  // Polar), so the primary usage widget can show it without a live
+  // tenant-DB distinct-count. 0 when auth is off / no row yet.
+  const authMauCount = await getCurrentMonthAuthMau(projectId, mauRef);
+
   return c.json({
     projectId,
     periodStart,
@@ -99,11 +110,15 @@ usageRouter.get('/v1/projects/:id/usage', async (c) => {
     connection: {
       seconds: connection.seconds,
     },
+    authMau: {
+      count: authMauCount,
+    },
     limits: {
       invokesPerMonth: limits.invokesPerMonth,
       storageBytes: limits.storageBytes,
       connectionSecondsPerMonth: limits.connectionSecondsPerMonth,
       concurrentSubscriptions: limits.concurrentSubscriptions,
+      authMauPerMonth: limits.authMauPerMonth,
     },
   });
 });

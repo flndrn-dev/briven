@@ -613,12 +613,34 @@ export const usageMetric = [
   'invocations',
   'storage_bytes',
   'connection_seconds',
-  // briven auth MAU — distinct end-users active in the trailing 30 days.
+  // briven auth MAU — distinct end-users active in the current UTC calendar
+  // month (the single canonical MAU window — see services/auth-mau.ts).
   // Gauge sample (not a delta) snapshotted by the hourly aggregator and
   // pushed to Polar's `briven_auth_mau` meter for overage billing.
   'auth_mau',
 ] as const;
 export type UsageMetric = (typeof usageMetric)[number];
+
+/**
+ * Gauge vs counter — the single source of truth for how a metric bills.
+ *
+ *  - GAUGE  (storage_bytes, auth_mau): a point-in-time snapshot. The value
+ *    is only meaningful as "the level right now", so the billable quantity
+ *    for a period is the period's representative value (latest), NOT the sum
+ *    of every hourly snapshot. These are stored as ONE row per
+ *    (project, BILLING-MONTH, metric) — UPSERTed to the latest value — and
+ *    pushed to Polar as a delta-to-latest so a SUM-type meter bills the
+ *    final value exactly once and can never over-count the ~720 hourly
+ *    snapshots a month produces. (See workers/usage-aggregator.ts +
+ *    workers/polar-meter-push.ts.)
+ *  - COUNTER (invocations, connection_seconds): an additive delta for the
+ *    hour. Stored one row per (project, HOUR, metric) and SUM-aggregated by
+ *    Polar across the month — the existing behaviour, unchanged.
+ */
+export const GAUGE_METRICS = new Set<UsageMetric>(['storage_bytes', 'auth_mau']);
+export function isGaugeMetric(metric: UsageMetric): boolean {
+  return GAUGE_METRICS.has(metric);
+}
 
 export const usageEvents = pgTable(
   'usage_events',
@@ -626,11 +648,21 @@ export const usageEvents = pgTable(
     id: id(),
     projectId: text('project_id').notNull(),
     metric: text('metric', { enum: usageMetric }).notNull(),
-    // First millisecond of the UTC hour this row covers.
+    // Counters: first millisecond of the UTC hour this row covers.
+    // Gauges (storage_bytes, auth_mau): first millisecond of the UTC
+    // billing month — so there is exactly ONE row per (project, month,
+    // gauge-metric) instead of ~720 hourly snapshots.
     periodStart: ts('period_start').notNull(),
-    // For counters (invocations, connection_seconds): the delta in this
-    // window. For gauges (storage_bytes): the sample value at period_end.
+    // For counters (invocations, connection_seconds): the additive delta in
+    // this hour. For gauges (storage_bytes, auth_mau): the latest snapshot
+    // value for the billing month (UPSERTed in place).
     value: text('value').notNull(),
+    // For GAUGES only: the running total already delivered to Polar for this
+    // period. The push sends `value - pushedValue` (delta-to-latest) and, on
+    // success, advances pushedValue to `value`. A SUM-type meter then bills
+    // the latest value exactly once — re-pushing the same row is a no-op
+    // (delta 0). NULL for counters, which push their absolute hourly value.
+    pushedValue: text('pushed_value'),
     // 'pushed' once the Polar meter accepts it. Until then, 'pending'.
     // The push worker scans for pending rows and batches them.
     polarPushStatus: text('polar_push_status', {

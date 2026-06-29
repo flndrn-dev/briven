@@ -80,6 +80,10 @@ export const authSessions = pgTable(
     tokenUniq: uniqueIndex('_briven_auth_sessions_token_uniq').on(t.token),
     userIdx: index('_briven_auth_sessions_user_idx').on(t.userId),
     expiresIdx: index('_briven_auth_sessions_expires_idx').on(t.expiresAt),
+    // Covering index for the monthly MAU distinct-count
+    // (services/auth-mau.ts). Mirrors the provisioning DDL in
+    // services/auth-provisioning.ts — keep both in sync.
+    createdAtIdx: index('_briven_auth_sessions_created_at_idx').on(t.createdAt, t.userId),
   }),
 );
 
