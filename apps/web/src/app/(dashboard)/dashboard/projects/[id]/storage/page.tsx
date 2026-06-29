@@ -101,7 +101,13 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
               </h3>
               {files.length > 0 ? (
                 <p className="font-mono text-xs text-[var(--color-text-muted)]">
-                  {formatBytes(files.reduce((sum, f) => sum + Number(f.sizeBytes), 0))} total
+                  {formatBytes(
+                    files.reduce((sum, f) => {
+                      const b = Number(f.sizeBytes);
+                      return sum + (Number.isFinite(b) && b > 0 ? b : 0);
+                    }, 0),
+                  )}{' '}
+                  total
                 </p>
               ) : null}
             </div>
@@ -159,6 +165,9 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
 }
 
 function formatBytes(n: number): string {
+  // A missing/garbage sizeBytes becomes NaN via Number(...) — guard it so the
+  // file row shows '—' instead of an ugly "NaN GiB".
+  if (!Number.isFinite(n) || n < 0) return '—';
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MiB`;

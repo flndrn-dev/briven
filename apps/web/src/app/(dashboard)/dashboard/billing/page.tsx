@@ -133,7 +133,15 @@ export default async function BillingPage({
   // Fetch billing address from the profile endpoint
   const profile = await apiJson<BillingProfile>('/v1/me').catch(() => null);
 
-  const tier = subscription.tier;
+  // Clamp the tier to one the UI actually has tables for. The API is the source
+  // of truth and could one day return a tier this build doesn't know yet (e.g. a
+  // new plan shipped server-side first); an unknown key makes TIER_INCLUDED[tier]
+  // /TIER_SLA[tier] undefined, and the .map()/.uptime below would crash the whole
+  // billing page into a 500. Fall back to 'free' so the page always renders.
+  const KNOWN_TIERS = ['free', 'pro', 'team'] as const;
+  const tier: SubscriptionSummary['tier'] = KNOWN_TIERS.includes(subscription.tier)
+    ? subscription.tier
+    : 'free';
   const isCheckoutSuccess = checkout === 'success';
 
   return (
