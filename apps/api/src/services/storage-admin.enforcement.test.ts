@@ -63,6 +63,12 @@ const runInProjectDatabase = mock(async () => ({
 }));
 
 mock.module('../db/client.js', () => ({ getDb: () => makeBuilder() }));
+// NOTE: mock.module() is process-global and is not reverted between files, so
+// this data-plane stub shadows the real module for later files too. It is
+// intentionally minimal because the integration suites that need the REAL
+// data-plane run in their own process via `bun test integration` (which never
+// loads this unit file). Keep them split — do not run integration with a DB in
+// the same `bun test` invocation as the mock-based unit tests.
 mock.module('../db/data-plane.js', () => ({ runInProjectDatabase }));
 
 let svc: typeof import('./storage-admin.js');

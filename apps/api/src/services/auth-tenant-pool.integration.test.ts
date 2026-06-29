@@ -13,7 +13,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import {
-  closeProjectDbPools,
+  closeProjectDbPool,
   dropProjectDatabase,
   provisionProjectDatabase,
   runInProjectDatabase,
@@ -43,7 +43,7 @@ describe.skipIf(!HAS_DB)('customer auth on real DoltGres (S2.1 + S2.3)', () => {
   afterAll(async () => {
     await clearAuthInstancePool().catch(() => {});
     await dropProjectDatabase(PROJECT_ID).catch(() => {});
-    await closeProjectDbPools().catch(() => {});
+    await closeProjectDbPool(PROJECT_ID).catch(() => {});
   });
 
   test('sign up, then sign in with a DIFFERENT email case', async () => {

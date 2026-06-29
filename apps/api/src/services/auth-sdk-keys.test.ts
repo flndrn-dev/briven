@@ -119,17 +119,22 @@ mock.module('../middleware/project-auth.js', () => ({
       await next();
     },
 }));
+// IMPORTANT: bun's mock.module() is process-GLOBAL and is NOT reverted between
+// test files (mock.restore() does not undo module mocks in bun 1.3.x). A stub
+// here therefore shadows the real module for EVERY later test file in the same
+// `bun test` process. Consequences we must respect:
+//   1. Stub auth-tenant-pool because the router pulls in `better-auth` (heavy).
+//      Mirror its FULL export surface — the integration suite imports
+//      `clearAuthInstancePool`, and a missing export fails that file's load
+//      with "Export named … not found". (Its bodies skip without a DB.)
+//   2. Do NOT stub auth-branding-logo: it is lightweight (env + s3-presign +
+//      storage) and `auth-branding-logo.test.ts` needs the REAL module to
+//      assert real logic. Stubbing it globally would make that sibling test
+//      fail. The router importing the real module is harmless here.
 mock.module('../services/auth-tenant-pool.js', () => ({
   getAuthInstance: async () => ({ betterAuth: { handler: async () => new Response() } }),
   invalidateAuthInstance: async () => undefined,
-}));
-mock.module('../services/auth-branding-logo.js', () => ({
-  brandingLogoPublicUrl: () => '',
-  deleteBrandingLogo: async () => undefined,
-  getBrandingLogo: async () => null,
-  isStorageConfigured: () => false,
-  putBrandingLogo: async () => undefined,
-  validateLogoUpload: () => undefined,
+  clearAuthInstancePool: async () => undefined,
 }));
 
 let svc: typeof import('./auth-sdk-keys.js');
@@ -137,6 +142,16 @@ let schema: typeof import('../db/schema.js');
 let router: typeof import('../routes/auth-service.js');
 
 beforeAll(async () => {
+  // env.ts is read (and its values captured) the first time ANY test file in
+  // this shared `bun test` process imports it — which can happen before the
+  // top-of-file `process.env` assignment above runs. `project-env.ts:key()`
+  // reads `env.BRIVEN_ENCRYPTION_KEY` at call time, so set it on the live
+  // (unfrozen) env object here to win the import-order race deterministically.
+  const envMod = await import('../env.js');
+  if (!envMod.env.BRIVEN_ENCRYPTION_KEY) {
+    (envMod.env as { BRIVEN_ENCRYPTION_KEY?: string }).BRIVEN_ENCRYPTION_KEY =
+      process.env.BRIVEN_ENCRYPTION_KEY;
+  }
   svc = await import('./auth-sdk-keys.js');
   schema = await import('../db/schema.js');
   router = await import('../routes/auth-service.js');

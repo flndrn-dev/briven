@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import pg from 'pg';
 
 import {
-  closeProjectDbPools,
+  closeProjectDbPool,
   dropProjectDatabase,
   provisionProjectDatabase,
   runInProjectDatabase,
@@ -39,7 +39,7 @@ describe.skipIf(!HAS_DB)('storage-admin getProjectRowCount on real DoltGres (Spr
 
   afterAll(async () => {
     await dropProjectDatabase(PROJECT_ID).catch(() => {});
-    await closeProjectDbPools().catch(() => {});
+    await closeProjectDbPool(PROJECT_ID).catch(() => {});
   });
 
   test('counts user tables + total rows, excluding _briven_*', async () => {

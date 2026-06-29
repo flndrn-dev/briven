@@ -335,6 +335,21 @@ export async function closeProjectDbPools(): Promise<void> {
   await Promise.all(pools.map((p) => p.end()));
 }
 
+/**
+ * Close + drop the cached pool for a SINGLE project. Use this for per-test
+ * teardown so one integration test file's cleanup doesn't `.end()` pools that
+ * a sibling file — sharing the same process under `bun test` — is still using.
+ * That cross-file collision is what made the storage-count tests flakily see
+ * `tableCount: 0`. Process shutdown still uses `closeProjectDbPools()` (all).
+ */
+export async function closeProjectDbPool(projectId: string): Promise<void> {
+  const dbName = dbNameFor(projectId);
+  const pool = _projPools.get(dbName);
+  if (!pool) return;
+  _projPools.delete(dbName);
+  await pool.end();
+}
+
 export async function pingDataPlane(): Promise<boolean> {
   if (!env.BRIVEN_DATA_PLANE_URL) return false;
   try {

@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { ValidationError } from '@briven/shared';
 
 import {
-  closeProjectDbPools,
+  closeProjectDbPool,
   dropProjectDatabase,
   provisionProjectDatabase,
   runInProjectDatabase,
@@ -50,7 +50,7 @@ describe.skipIf(!HAS_DB)('studio against real DoltGres (S1.1–S1.4)', () => {
 
   afterAll(async () => {
     await dropProjectDatabase(PROJECT_ID).catch(() => {});
-    await closeProjectDbPools().catch(() => {});
+    await closeProjectDbPool(PROJECT_ID).catch(() => {});
   });
 
   // S3 ISY-live regression: the full customer data path through the studio
