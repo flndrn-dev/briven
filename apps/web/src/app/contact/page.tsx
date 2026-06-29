@@ -30,7 +30,7 @@ const HELP_LINKS: readonly HelpLink[] = [
     body: 'guides, troubleshooting and the support handbook — the fastest path for most questions.',
   },
   {
-    href: 'https://codeberg.org/flndrn/briven',
+    href: 'https://github.com/flndrn-dev/briven',
     title: 'source & issues',
     body: 'briven is open. read the code, file a bug, or follow along with what we’re building.',
   },

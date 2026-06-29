@@ -104,12 +104,11 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
               dashboard
             </Link>
             <Link
-              href="https://codeberg.org/flndrn/briven"
-              className="inline-flex items-center opacity-80 transition-opacity hover:opacity-100"
-              aria-label="Codeberg"
+              href="https://github.com/flndrn-dev/briven"
+              className="inline-flex items-center font-mono text-sm text-[var(--color-text-muted)] opacity-80 transition-opacity hover:text-[var(--color-text)] hover:opacity-100"
+              aria-label="briven source on GitHub"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/codeberg.svg" alt="Codeberg" className="h-5 w-auto" />
+              github
             </Link>
           </nav>
         </div>
@@ -146,7 +145,7 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
           briven · open-core reactive postgres · ©{' '}
           {new Date().getFullYear()} flndrn ·{' '}
           <Link
-            href="https://codeberg.org/flndrn/briven"
+            href="https://github.com/flndrn-dev/briven"
             className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
           >
             source

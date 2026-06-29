@@ -60,8 +60,8 @@ export default function TermsPage() {
         <strong>AGPL-3.0</strong> and is freely self-hostable; the CLI and client SDKs
         (@briven/cli, @briven/react, @briven/svelte, @briven/vue, @briven/client) are licensed
         under <strong>MIT</strong>. Source lives at{' '}
-        <a href="https://codeberg.org/flndrn/briven" className="text-[var(--color-text-link)]">
-          codeberg.org/flndrn/briven
+        <a href="https://github.com/flndrn-dev/briven" className="text-[var(--color-text-link)]">
+          github.com/flndrn-dev/briven
         </a>
         .
       </p>

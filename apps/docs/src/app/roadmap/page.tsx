@@ -56,8 +56,8 @@ export default function RoadmapPage() {
 
       <p className="mt-12 font-mono text-xs text-[var(--color-text-subtle)]">
         miss something? open an issue on{' '}
-        <a href="https://codeberg.org/flndrn/briven" className="underline">
-          codeberg.org/flndrn/briven
+        <a href="https://github.com/flndrn-dev/briven" className="underline">
+          github.com/flndrn-dev/briven
         </a>
         .
       </p>
