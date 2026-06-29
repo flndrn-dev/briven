@@ -32,7 +32,9 @@ export const dynamic = 'force-dynamic';
 export default async function MembersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [{ members }, invitesRes] = await Promise.all([
-    apiJson<{ members: Member[] }>(`/v1/projects/${id}/members`),
+    apiJson<{ members: Member[] }>(`/v1/projects/${id}/members`).catch(() => ({
+      members: [] as Member[],
+    })),
     apiJson<{ invitations: Invitation[] }>(`/v1/projects/${id}/invitations`).catch(() => ({
       invitations: [] as Invitation[],
     })),

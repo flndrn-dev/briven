@@ -335,7 +335,9 @@ export default async function TablePage({
                 const canEdit = pkUsable && pkPairs.length > 0;
                 return (
                   <tr
-                    key={i}
+                    key={pkPairs.length > 0
+                      ? pkPairs.map((p) => `${p.column}:${String(p.value)}`).join('|')
+                      : i}
                     className="border-t border-[var(--color-border-subtle)] hover:bg-[var(--color-surface)]"
                   >
                     {data.columns.map((col) => {

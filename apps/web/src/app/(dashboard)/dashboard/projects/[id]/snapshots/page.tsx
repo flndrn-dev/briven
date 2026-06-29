@@ -36,8 +36,18 @@ export default async function SnapshotsPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
 
   const [{ snapshots }, auto] = await Promise.all([
-    apiJson<SnapshotsResult>(`/v1/projects/${id}/studio/snapshots`),
-    apiJson<AutoSnapshotSettings>(`/v1/projects/${id}/studio/auto-snapshots`),
+    apiJson<SnapshotsResult>(`/v1/projects/${id}/studio/snapshots`).catch(() => ({
+      snapshots: [] as Snapshot[],
+    })),
+    apiJson<AutoSnapshotSettings>(`/v1/projects/${id}/studio/auto-snapshots`).catch(() => ({
+      enabled: false,
+      frequency: 'daily' as AutoFrequency,
+      retentionCount: 7,
+      nextRunAt: null,
+      lastRunAt: null,
+      lastRunStatus: null,
+      lastRunError: null,
+    })),
   ]);
 
   async function save(formData: FormData) {

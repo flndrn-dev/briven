@@ -75,7 +75,8 @@ function formatTime(iso: string): string {
 
 /** Compact one-line variant for the timeline — `May 17 · 08:29`. */
 function formatTimeShort(iso: string): string {
-  const d = new Date(iso);
+  const d = toValidDate(iso);
+  if (!d) return '—';
   const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
   const day = d.getUTCDate().toString().padStart(2, '0');
   const hh = d.getUTCHours().toString().padStart(2, '0');

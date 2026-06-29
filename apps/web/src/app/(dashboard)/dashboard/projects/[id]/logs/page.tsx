@@ -39,7 +39,9 @@ export default async function LogsPage({
   if (sp.before) qs.set('before', sp.before);
 
   const [{ logs }, { names }] = await Promise.all([
-    apiJson<{ logs: FunctionLog[] }>(`/v1/projects/${id}/function-logs?${qs.toString()}`),
+    apiJson<{ logs: FunctionLog[] }>(`/v1/projects/${id}/function-logs?${qs.toString()}`).catch(
+      () => ({ logs: [] as FunctionLog[] }),
+    ),
     apiJson<{ names: string[] }>(`/v1/projects/${id}/function-names`).catch(() => ({
       names: [] as string[],
     })),

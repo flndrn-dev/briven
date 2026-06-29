@@ -62,9 +62,14 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
     'use server';
     const { id } = await params;
     const fileId = String(formData.get('fileId') ?? '');
-    const result = await apiJson<{ downloadUrl: string }>(
-      `/v1/projects/${id}/files/${fileId}/download-url`,
-    );
+    let result: { downloadUrl: string };
+    try {
+      result = await apiJson<{ downloadUrl: string }>(
+        `/v1/projects/${id}/files/${fileId}/download-url`,
+      );
+    } catch {
+      throw new Error('Could not generate a download link. Please try again.');
+    }
     redirect(result.downloadUrl);
   }
 

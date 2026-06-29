@@ -2,6 +2,7 @@ import { CreditCardIcon } from '@/components/ui/credit-card';
 import { UsersIcon } from '@/components/ui/users';
 
 import { apiJson } from '@/lib/api';
+import { toValidDate } from '@/lib/utils';
 
 export const metadata = { title: 'subscribers & billing · admin' };
 export const dynamic = 'force-dynamic';
@@ -51,17 +52,29 @@ function fmtMrr(mrr: number | null, currency: string | null): string | null {
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, {
+  const d = toValidDate(iso);
+  if (!d) return '—';
+  return d.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   });
 }
 
+const TOTALS_FALLBACK: BillingTotals = {
+  subscribers: null,
+  mrr: null,
+  currency: null,
+  planMix: null,
+  churn30d: null,
+};
+
 export default async function AdminBillingPage() {
   const [totals, subsResp] = await Promise.all([
-    apiJson<BillingTotals>('/v1/admin/billing/totals'),
-    apiJson<{ subscribers: SubscriberRow[] }>('/v1/admin/billing/subscribers'),
+    apiJson<BillingTotals>('/v1/admin/billing/totals').catch(() => TOTALS_FALLBACK),
+    apiJson<{ subscribers: SubscriberRow[] }>('/v1/admin/billing/subscribers').catch(() => ({
+      subscribers: [] as SubscriberRow[],
+    })),
   ]);
   const subscribers = subsResp.subscribers;
   const mrr = fmtMrr(totals.mrr, totals.currency);
@@ -207,7 +220,7 @@ function PlanMixCard({ planMix }: { planMix: Record<Tier, number> | null }) {
           {(['free', 'pro', 'team'] as const).map((tier) => (
             <div key={tier} className="flex items-center justify-between">
               <dt className="text-[var(--color-text-muted)]">{tier}</dt>
-              <dd className="text-[var(--color-text)]">{planMix[tier].toLocaleString()}</dd>
+              <dd className="text-[var(--color-text)]">{(planMix[tier] ?? 0).toLocaleString()}</dd>
             </div>
           ))}
         </dl>

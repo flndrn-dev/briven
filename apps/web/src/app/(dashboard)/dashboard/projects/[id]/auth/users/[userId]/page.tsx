@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { apiJson } from '../../../../../../../../lib/api';
+import { toValidDate } from '@/lib/utils';
 
 interface UserDetailResponse {
   user: {
@@ -65,7 +66,7 @@ export default async function AuthUserDetailPage({
             )}
           </p>
           <p className="mt-1 font-mono text-[11px] text-[var(--color-text-subtle)]">
-            joined {user.createdAt.slice(0, 10)} (utc)
+            joined {toValidDate(user.createdAt)?.toISOString().slice(0, 10) ?? '—'} (utc)
           </p>
         </div>
         <Link

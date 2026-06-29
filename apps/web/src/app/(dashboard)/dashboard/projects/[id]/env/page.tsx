@@ -17,7 +17,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function EnvPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { env } = await apiJson<{ env: EnvVar[] }>(`/v1/projects/${id}/env`);
+  const { env } = await apiJson<{ env: EnvVar[] }>(`/v1/projects/${id}/env`).catch(() => ({
+    env: [] as EnvVar[],
+  }));
 
   async function upsert(formData: FormData) {
     'use server';

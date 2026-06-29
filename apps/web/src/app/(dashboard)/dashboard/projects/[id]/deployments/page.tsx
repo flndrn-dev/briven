@@ -19,7 +19,7 @@ export default async function DeploymentsPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const { deployments } = await apiJson<{ deployments: Deployment[] }>(
     `/v1/projects/${id}/deployments?limit=100`,
-  );
+  ).catch(() => ({ deployments: [] as Deployment[] }));
 
   if (deployments.length === 0) {
     return (

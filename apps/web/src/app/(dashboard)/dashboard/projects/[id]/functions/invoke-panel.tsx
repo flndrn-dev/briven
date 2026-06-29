@@ -40,7 +40,18 @@ export function InvokePanel({ projectId, functionName }: Props) {
         credentials: 'include',
         body: JSON.stringify(parsed),
       });
-      const body = (await res.json()) as Result | { code: string; message: string };
+      let body: Result | { code: string; message: string };
+      try {
+        body = (await res.json()) as Result | { code: string; message: string };
+      } catch {
+        setResult({
+          ok: false,
+          code: 'ERR_PARSE',
+          message: `unexpected response: ${res.status}`,
+          durationMs: 0,
+        });
+        return;
+      }
       if ('ok' in body) {
         setResult(body);
       } else {

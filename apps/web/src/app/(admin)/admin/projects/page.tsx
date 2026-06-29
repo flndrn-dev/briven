@@ -15,7 +15,9 @@ interface AdminProject {
 export const dynamic = 'force-dynamic';
 
 export default async function AdminProjectsPage() {
-  const { projects } = await apiJson<{ projects: AdminProject[] }>('/v1/admin/projects');
+  const { projects } = await apiJson<{ projects: AdminProject[] }>('/v1/admin/projects').catch(
+    () => ({ projects: [] as AdminProject[] }),
+  );
 
   return (
     <div className="flex flex-col gap-2">

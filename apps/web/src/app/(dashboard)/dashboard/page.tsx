@@ -369,13 +369,14 @@ function QuickLink({
 }
 
 function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffSec = Math.round((Date.now() - then) / 1000);
+  const d = toValidDate(iso);
+  if (!d) return '—';
+  const diffSec = Math.round((Date.now() - d.getTime()) / 1000);
   if (diffSec < 60) return `${diffSec}s ago`;
   if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
   if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
   if (diffSec < 86400 * 7) return `${Math.round(diffSec / 86400)}d ago`;
-  return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
 }
 
 /**

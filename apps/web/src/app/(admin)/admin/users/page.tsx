@@ -20,7 +20,9 @@ function publicApiOrigin(): string {
 }
 
 export default async function AdminUsersPage() {
-  const { users } = await apiJson<{ users: AdminUser[] }>('/v1/admin/users');
+  const { users } = await apiJson<{ users: AdminUser[] }>('/v1/admin/users').catch(() => ({
+    users: [] as AdminUser[],
+  }));
   const apiOrigin = publicApiOrigin();
 
   return (

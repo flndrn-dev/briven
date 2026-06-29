@@ -65,7 +65,9 @@ export default async function AdminUsagePage({
 }) {
   const { status } = await searchParams;
   const qs = status && status !== '' ? `?status=${encodeURIComponent(status)}` : '';
-  const { events } = await apiJson<{ events: UsageEvent[] }>(`/v1/admin/usage-events${qs}`);
+  const { events } = await apiJson<{ events: UsageEvent[] }>(`/v1/admin/usage-events${qs}`).catch(
+    () => ({ events: [] as UsageEvent[] }),
+  );
   const apiOrigin = publicApiOrigin();
 
   const counts = events.reduce<Record<string, number>>((acc, e) => {
