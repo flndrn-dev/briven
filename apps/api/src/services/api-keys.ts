@@ -38,12 +38,13 @@ export async function createApiKey(input: {
    * Effective role this key carries when authenticating a request. Must be
    * one of the assignable tiers (viewer / developer / admin) — `owner` is
    * reserved for human owners and cannot be issued as a key role. Defaults
-   * to 'admin' for backward-compat with callers that don't specify.
+   * to 'developer' (least-privilege: read+write data + run functions, but no
+   * billing / project-delete / key-management) when the caller doesn't specify.
    */
   role?: AssignableKeyRole;
   expiresAt?: Date;
 }): Promise<CreatedApiKey> {
-  const role = input.role ?? 'admin';
+  const role = input.role ?? 'developer';
   if (!isAssignableKeyRole(role)) {
     throw new ValidationError(`api key role must be one of ${ASSIGNABLE_KEY_ROLES.join(' | ')}`, {
       role,
