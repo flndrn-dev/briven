@@ -146,7 +146,7 @@ export async function softDeleteAccount(args: {
         .where(eq(organizations.id, m.orgId))
         .limit(1);
       if (!org) continue;
-      const sole = await isSoleOwner(org, args.userId);
+      const sole = await isSoleOwner(org, args.userId, tx);
       if (sole) {
         // 4. Revoke api_keys on this org's projects.
         const orgProjects = await tx
@@ -327,7 +327,7 @@ export async function restoreAccount(userId: string): Promise<{
         .where(eq(organizations.id, m.orgId))
         .limit(1);
       if (!org || !org.deletedAt) continue;
-      if (!(await isSoleOwner(org, userId))) continue;
+      if (!(await isSoleOwner(org, userId, tx))) continue;
       await tx
         .update(organizations)
         .set({ deletedAt: null, updatedAt: new Date() })
@@ -361,13 +361,26 @@ export async function restoreAccount(userId: string): Promise<{
 }
 
 /**
+ * Minimal executor surface shared by the lazy db handle and a live
+ * `db.transaction` tx — enough for the read isSoleOwner needs. Threading
+ * the tx in lets the ownership read run INSIDE the enclosing transaction
+ * (no getDb() second-connection TOCTOU between the check and the cascade).
+ */
+type DbExecutor = Pick<ReturnType<typeof getDb>, 'select'>;
+
+/**
  * True when the user is the only role='owner' member of the org, or
  * when the org is the user's personal org (always sole-owner by design).
+ * Pass the enclosing `tx` so the read is consistent with the surrounding
+ * mutations; defaults to a fresh getDb() handle for read-only callers.
  */
-async function isSoleOwner(org: Organization, userId: string): Promise<boolean> {
+async function isSoleOwner(
+  org: Organization,
+  userId: string,
+  executor: DbExecutor = getDb(),
+): Promise<boolean> {
   if (org.personal) return org.createdBy === userId;
-  const db = getDb();
-  const owners = await db
+  const owners = await executor
     .select({ userId: orgMembers.userId })
     .from(orgMembers)
     .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.role, 'owner')));
@@ -411,13 +424,35 @@ export async function hardDeleteExpiredAccounts(opts: { graceDays?: number } = {
     // 1. Hard-delete the expiring users' own soft-deleted orgs first.
     // Projects (and their api_keys / env vars / deployments / invitations)
     // cascade via projects.org_id ON DELETE CASCADE.
+    //
+    // Select the orgs to purge by OWNERSHIP (org_members role='owner'),
+    // mirroring isSoleOwner — NOT by organizations.created_by. created_by
+    // is the WRONG qualifier here: 0042/0044 flip the org → user FKs to
+    // ON DELETE SET NULL, so a prior purge nulls created_by and those
+    // soft-deleted orgs would then never match → zombie orgs accumulate
+    // and keep blocking the cascade. The created_by clause is retained
+    // only as a defensive fallback for orgs that predate the membership
+    // backfill. Both expiring-user subqueries are identical and computed
+    // in SQL (no JS date drift).
     await tx.execute(sql`
-      DELETE FROM organizations
-      WHERE deleted_at IS NOT NULL
-        AND created_by IN (
-          SELECT id FROM users
-          WHERE deleted_at IS NOT NULL
-            AND deleted_at < now() - (${graceDays} || ' days')::interval
+      DELETE FROM organizations o
+      WHERE o.deleted_at IS NOT NULL
+        AND (
+          EXISTS (
+            SELECT 1 FROM org_members m
+            WHERE m.org_id = o.id
+              AND m.role = 'owner'
+              AND m.user_id IN (
+                SELECT id FROM users
+                WHERE deleted_at IS NOT NULL
+                  AND deleted_at < now() - (${graceDays} || ' days')::interval
+              )
+          )
+          OR o.created_by IN (
+            SELECT id FROM users
+            WHERE deleted_at IS NOT NULL
+              AND deleted_at < now() - (${graceDays} || ' days')::interval
+          )
         )
     `);
 

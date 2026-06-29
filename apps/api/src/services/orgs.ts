@@ -448,23 +448,29 @@ export async function deleteOrg(args: {
     return { ok: false, reason: 'only an owner can delete a team' };
   }
 
-  // Bounce if there are live projects in the org. The dashboard surfaces
-  // this with a friendly "delete or move projects first" message.
-  const liveProjects = await db.execute(sql`
-    select 1 from projects
-    where org_id = ${args.orgId}
-      and deleted_at is null
-    limit 1
-  `);
-  if (liveProjects.length > 0) {
-    return { ok: false, reason: 'team still has projects — delete or move them first' };
-  }
+  // Bounce if there are live projects in the org, then soft-delete — both in
+  // ONE transaction so a project created in the gap between the check and the
+  // update can't be orphaned under a now-deleted org. The live-projects probe
+  // takes a FOR UPDATE lock on any matching row so a concurrent create
+  // serialises against this delete.
+  return db.transaction(async (tx) => {
+    const liveProjects = await tx.execute(sql`
+      select 1 from projects
+      where org_id = ${args.orgId}
+        and deleted_at is null
+      limit 1
+      for update
+    `);
+    if (liveProjects.length > 0) {
+      return { ok: false, reason: 'team still has projects — delete or move them first' };
+    }
 
-  await db
-    .update(organizations)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(eq(organizations.id, args.orgId));
-  return { ok: true };
+    await tx
+      .update(organizations)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(organizations.id, args.orgId));
+    return { ok: true };
+  });
 }
 
 /**
@@ -483,7 +489,7 @@ export async function changeOrgMemberRole(args: {
     .from(organizations)
     .where(eq(organizations.id, args.orgId))
     .limit(1);
-  if (!org) return { ok: false, reason: 'org not found' };
+  if (!org || org.deletedAt) return { ok: false, reason: 'org not found' };
   if (org.personal) return { ok: false, reason: 'cannot change roles in a personal org' };
 
   const [target] = await db
@@ -526,7 +532,7 @@ export async function removeOrgMember(args: {
     .from(organizations)
     .where(eq(organizations.id, args.orgId))
     .limit(1);
-  if (!org) return { removed: false, reason: 'org not found' };
+  if (!org || org.deletedAt) return { removed: false, reason: 'org not found' };
   if (org.personal) return { removed: false, reason: 'cannot remove members from a personal org' };
 
   const [target] = await db

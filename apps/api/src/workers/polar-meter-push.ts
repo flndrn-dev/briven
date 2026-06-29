@@ -200,49 +200,62 @@ export async function drainPendingPolarPushes(): Promise<{
   skipped: number;
 }> {
   const db = getDb();
-  const rows = await db
-    .select()
-    .from(usageEvents)
-    .where(eq(usageEvents.polarPushStatus, 'pending'))
-    .orderBy(asc(usageEvents.periodStart))
-    .limit(BATCH_SIZE);
 
+  // Claim the batch with FOR UPDATE SKIP LOCKED inside a transaction so a
+  // second drainer instance (or an overlapping tick) can NEVER select the
+  // same pending rows — that would push the same usage to Polar twice and
+  // double-bill the customer. SKIP LOCKED means the other instance simply
+  // grabs a different batch instead of blocking. The row locks are held for
+  // the batch's lifetime (incl. the Polar HTTP calls); acceptable here — this
+  // is a low-volume background metering drainer, not a hot path.
   let pushed = 0;
   let skipped = 0;
-  for (const row of rows) {
-    try {
-      const next = await pushOne(row);
-      if (next === 'pushed') {
-        await db
-          .update(usageEvents)
-          .set({ polarPushStatus: 'pushed', polarPushedAt: new Date() })
-          .where(and(eq(usageEvents.id, row.id)));
-        pushed += 1;
-      } else if (next === 'skipped') {
-        await db
-          .update(usageEvents)
-          .set({ polarPushStatus: 'skipped' })
-          .where(and(eq(usageEvents.id, row.id)));
-        skipped += 1;
-      }
-      // 'pending' = retry next tick — don't touch the row.
-    } catch (err) {
-      log.warn('polar_push_row_failed', {
-        eventId: row.id,
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
+  let scanned = 0;
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(usageEvents)
+      .where(eq(usageEvents.polarPushStatus, 'pending'))
+      .orderBy(asc(usageEvents.periodStart))
+      .limit(BATCH_SIZE)
+      .for('update', { skipLocked: true });
+    scanned = rows.length;
 
-  if (rows.length > 0) {
+    for (const row of rows) {
+      try {
+        const next = await pushOne(row);
+        if (next === 'pushed') {
+          await tx
+            .update(usageEvents)
+            .set({ polarPushStatus: 'pushed', polarPushedAt: new Date() })
+            .where(and(eq(usageEvents.id, row.id)));
+          pushed += 1;
+        } else if (next === 'skipped') {
+          await tx
+            .update(usageEvents)
+            .set({ polarPushStatus: 'skipped' })
+            .where(and(eq(usageEvents.id, row.id)));
+          skipped += 1;
+        }
+        // 'pending' = retry next tick — don't touch the row.
+      } catch (err) {
+        log.warn('polar_push_row_failed', {
+          eventId: row.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  });
+
+  if (scanned > 0) {
     log.info('polar_push_drain', {
-      scanned: rows.length,
+      scanned,
       pushed,
       skipped,
-      pending: rows.length - pushed - skipped,
+      pending: scanned - pushed - skipped,
     });
   }
-  return { scanned: rows.length, pushed, skipped };
+  return { scanned, pushed, skipped };
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

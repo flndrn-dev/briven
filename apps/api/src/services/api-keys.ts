@@ -5,6 +5,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { apiKeys, type ApiKey, type MemberRole } from '../db/schema.js';
+import { log } from '../lib/logger.js';
 
 const ASSIGNABLE_KEY_ROLES = [
   'viewer',
@@ -92,7 +93,17 @@ export async function resolveApiKey(
   if (!row) return null;
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
 
-  await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id));
+  // Bump last-used as a best-effort side-effect — the key has ALREADY
+  // resolved valid, so a transient DB hiccup on this write must NOT fail the
+  // authenticated request. Swallow + log; it's telemetry, not auth state.
+  try {
+    await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id));
+  } catch (err) {
+    log.warn('api_key_last_used_bump_failed', {
+      keyId: row.id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
   return { projectId: row.projectId, keyId: row.id, role: row.role };
 }
 

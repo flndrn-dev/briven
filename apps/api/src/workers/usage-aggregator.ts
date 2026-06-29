@@ -141,7 +141,7 @@ async function rollUpProject(
     await db
       .insert(usageEvents)
       .values({
-        id: newId('au'),
+        id: newId('ue'),
         projectId,
         metric: row.metric,
         periodStart,

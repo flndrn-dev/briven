@@ -52,7 +52,6 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   }
 
   const tier = await getTierForOrg(input.orgId);
-  await assertProjectCreateAllowed(input.orgId, tier);
 
   const projectId = newId('p');
   const row: NewProject = {
@@ -61,22 +60,33 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     name: input.name,
     orgId: input.orgId,
     region: input.region ?? 'eu-west-1',
-    tier: 'free',
+    // Stamp the org's REAL tier at create time (getTierForOrg folds in the
+    // founder comp + active subscription). Was hardcoded 'free', so a
+    // project under a paying org ran on free limits until the next Polar
+    // webhook re-tiered it.
+    tier,
     // Field name kept for API/schema stability; value is now the per-project
     // DoltGres database name (database-per-project), not a schema name.
     dataSchemaName: dbNameFor(projectId),
   };
 
   const db = getDb();
-  const [created] = await db.insert(projects).values(row).returning();
-  if (!created) throw new Error('project insert returned no row');
-
-  // Owner is automatically a member with role=owner. Phase 3 RBAC fleshes
-  // out the other roles; the row exists from day one for consistency.
-  await db.insert(projectMembers).values({
-    projectId: created.id,
-    userId: input.createdByUserId,
-    role: 'owner',
+  // Control-plane rows (project + owner member) go in ONE transaction, and
+  // the tier cap-check takes a FOR UPDATE lock on the org row in the SAME tx
+  // (race-safe — see assertProjectCreateAllowed). Either both rows commit or
+  // neither does; a crash can no longer orphan a project with no owner row.
+  const created = await db.transaction(async (tx) => {
+    await assertProjectCreateAllowed(input.orgId, tier, tx);
+    const [c] = await tx.insert(projects).values(row).returning();
+    if (!c) throw new Error('project insert returned no row');
+    // Owner is automatically a member with role=owner. Phase 3 RBAC fleshes
+    // out the other roles; the row exists from day one for consistency.
+    await tx.insert(projectMembers).values({
+      projectId: c.id,
+      userId: input.createdByUserId,
+      role: 'owner',
+    });
+    return c;
   });
 
   // Provision the data-plane DATABASE (database-per-project on DoltGres).

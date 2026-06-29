@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -80,9 +81,12 @@ export const users = pgTable(
     addressRegion: text('address_region'),
     // ISO 3166-1 alpha-2 (e.g. 'BE', 'NL'). Determines VAT treatment.
     addressCountry: text('address_country'),
-    // KYC — required before paid checkout under EU AML. Stored as
-    // ISO yyyy-mm-dd text; the underlying column is DATE.
-    dateOfBirth: text('date_of_birth'),
+    // KYC — required before paid checkout under EU AML. The underlying
+    // column is DATE; drizzle `date` (default mode 'string') returns the
+    // ISO yyyy-mm-dd as a string, matching the existing storage without a
+    // destructive ALTER (was declared `text` here, which drifted from the
+    // DB and would make db:generate emit a column-type ALTER — audit Theme).
+    dateOfBirth: date('date_of_birth'),
     // ISO 3166-1 alpha-2 (e.g. 'BE'). Separate from address_country —
     // residency drives VAT, birth drives KYC.
     countryOfBirth: text('country_of_birth'),
@@ -268,6 +272,12 @@ export const projects = pgTable(
   (t) => ({
     slugIdx: uniqueIndex('projects_slug_idx').on(t.slug),
     orgIdx: index('projects_org_idx').on(t.orgId),
+    // Partial index over the suspended subset so the admin suspension scan
+    // stays cheap. Declared here to match the index already present in the
+    // live DB (audit: schema was missing this declaration).
+    suspendedAtIdx: index('projects_suspended_at_idx')
+      .on(t.suspendedAt)
+      .where(sql`suspended_at IS NOT NULL`),
   }),
 );
 
@@ -303,6 +313,10 @@ export const projectMembers = pgTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.projectId, t.userId] }),
+    // Reverse lookup "all projects a user belongs to" (membership scans in
+    // access checks + the account-deletion sole-owner sweep). The composite
+    // PK is (project_id, user_id) so user_id alone is not index-covered.
+    userIdx: index('project_members_user_id_idx').on(t.userId),
   }),
 );
 
@@ -347,7 +361,7 @@ export const projectInvitations = pgTable(
     // SHA-256 hash of the single-use accept token; plaintext only rides
     // in the invite email and the recipient's URL.
     tokenHash: text('token_hash').notNull(),
-    invitedBy: text('invited_by').references(() => users.id),
+    invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
     expiresAt: ts('expires_at').notNull(),
     acceptedAt: ts('accepted_at'),
     revokedAt: ts('revoked_at'),
@@ -379,7 +393,7 @@ export const orgInvitations = pgTable(
     // SHA-256 hash of the single-use accept token; plaintext only rides
     // in the invite email and the recipient's URL.
     tokenHash: text('token_hash').notNull(),
-    invitedBy: text('invited_by').references(() => users.id),
+    invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
     expiresAt: ts('expires_at').notNull(),
     acceptedAt: ts('accepted_at'),
     revokedAt: ts('revoked_at'),
@@ -406,7 +420,7 @@ export const projectEnvVars = pgTable(
     // AES-256-GCM ciphertext of the value, base64. Never read directly —
     // always through services/project-env.ts which wraps decrypt.
     encryptedValue: text('encrypted_value').notNull(),
-    createdBy: text('created_by').references(() => users.id),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -425,9 +439,11 @@ export const apiKeys = pgTable(
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    createdBy: text('created_by')
-      .notNull()
-      .references(() => users.id),
+    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
+    // user doesn't 23503-block on this key (the key stays scoped to its
+    // project; only the creator attribution is severed). Was NOT NULL +
+    // NO ACTION — a blocker of the account purge (audit Theme 0).
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     // SHA-256 of the plaintext key — we never store the plaintext after creation.
     hash: text('hash').notNull(),
@@ -460,7 +476,7 @@ export const deployments = pgTable(
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    triggeredBy: text('triggered_by').references(() => users.id),
+    triggeredBy: text('triggered_by').references(() => users.id, { onDelete: 'set null' }),
     apiKeyId: text('api_key_id').references(() => apiKeys.id),
     status: text('status').$type<DeploymentStatus>().notNull().default('pending'),
     schemaDiffSummary: jsonb('schema_diff_summary'),
@@ -532,7 +548,9 @@ export const auditLogs = pgTable(
     // audit row (action + timestamp survive) while severing the FK — keeps
     // the immutable audit trail intact without blocking the purge DELETE.
     actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }),
-    projectId: text('project_id').references(() => projects.id),
+    // ON DELETE SET NULL so a project hard-delete during a GDPR purge
+    // doesn't 23503-block on retained audit rows (sibling of actor_id).
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
     action: text('action').notNull(),
     // SHA-256 hash of the caller IP — we never store raw IPs (CLAUDE.md §5.1).
     ipHash: varchar('ip_hash', { length: 64 }),
@@ -1232,9 +1250,10 @@ export const brivenAuthSdkKeys = pgTable(
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    createdBy: text('created_by')
-      .notNull()
-      .references(() => users.id),
+    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
+    // user doesn't 23503-block on this key (audit Theme 0). Was NOT NULL +
+    // NO ACTION.
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     // sha-256 hex digest of the plaintext token. Never the plaintext itself.
     hash: text('hash').notNull(),
@@ -1296,9 +1315,10 @@ export const mcpKeys = pgTable(
     suffix: varchar('suffix', { length: 4 }).notNull(),
     scope: text('scope').$type<McpKeyScope>().notNull().default('read'),
     enabled: boolean('enabled').notNull().default(true),
-    createdBy: text('created_by')
-      .notNull()
-      .references(() => users.id),
+    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
+    // user doesn't 23503-block on this key (audit Theme 0). Was NOT NULL +
+    // NO ACTION.
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     lastUsedAt: ts('last_used_at'),
     revokedAt: ts('revoked_at'),
@@ -1388,7 +1408,7 @@ export const tenantSecrets = pgTable(
     name: text('name').notNull(),
     // base64 ciphertext from encryptTenantSecret. Never read directly.
     encryptedValue: text('encrypted_value').notNull(),
-    createdBy: text('created_by').references(() => users.id),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

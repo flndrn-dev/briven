@@ -10,6 +10,7 @@ import {
   type BrivenAuthSdkKey,
   type BrivenAuthSdkKeyScope,
 } from '../db/schema.js';
+import { log } from '../lib/logger.js';
 import { decryptValue, encryptValue } from './project-env.js';
 
 /**
@@ -162,10 +163,19 @@ export async function resolveAuthSdkKey(
   if (row.revokedAt) return null;
   if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
 
-  await db
-    .update(brivenAuthSdkKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(brivenAuthSdkKeys.id, row.id));
+  // Best-effort last-used bump — the key has ALREADY resolved valid, so a
+  // transient DB hiccup here must NOT 500 the authenticated request.
+  try {
+    await db
+      .update(brivenAuthSdkKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(brivenAuthSdkKeys.id, row.id));
+  } catch (err) {
+    log.warn('auth_sdk_key_last_used_bump_failed', {
+      keyId: row.id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
   return { projectId: row.projectId, keyId: row.id, scope: row.scope };
 }
 

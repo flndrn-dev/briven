@@ -2,7 +2,10 @@ import { brivenError } from '@briven/shared';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { projects, type ProjectTier } from '../db/schema.js';
+import { organizations, projects, type ProjectTier } from '../db/schema.js';
+
+/** Minimal executor surface — the lazy db handle OR a live tx. */
+type DbExecutor = Pick<ReturnType<typeof getDb>, 'select'>;
 
 /**
  * Tier limits. Single source of truth for every hard cap enforced at
@@ -183,15 +186,32 @@ export class TierLimitExceeded extends brivenError {
 }
 
 /**
- * Count a user's non-deleted projects. Called by services/projects.ts
- * before inserting a new row.
+ * Count an org's non-deleted projects and enforce the per-tier cap before
+ * inserting a new row. Pass the enclosing `executor` (the create
+ * transaction's `tx`) so the check is race-safe: we take a FOR UPDATE row
+ * lock on the parent org so concurrent creates for the same org serialise
+ * through here — two parallel creates can no longer both read count=N and
+ * both slip past the cap.
+ *
+ * NB: we lock the ORG row, not the count query. Postgres rejects
+ * `SELECT count(*) … FOR UPDATE` (FOR UPDATE is not allowed with aggregate
+ * functions), and FOR UPDATE on the existing project rows wouldn't stop a
+ * concurrent INSERT of a brand-new project (phantom). Contending on the
+ * single parent org row is the correct serialization point. Outside a
+ * transaction (default getDb() executor) the lock is a no-op self-release,
+ * which is fine for the legacy non-transactional callers.
  */
 export async function assertProjectCreateAllowed(
   orgId: string,
   orgTier: ProjectTier = 'free',
+  executor: DbExecutor = getDb(),
 ): Promise<void> {
-  const db = getDb();
-  const [row] = await db
+  await executor
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .for('update');
+  const [row] = await executor
     .select({ count: sql<number>`count(*)::int` })
     .from(projects)
     .where(and(eq(projects.orgId, orgId), isNull(projects.deletedAt)));

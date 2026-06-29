@@ -82,10 +82,15 @@ export async function listProjects(limit = 500): Promise<AdminProjectRow[]> {
  * `isSoleOwner` in services/account-deletion.ts so suspension scopes its
  * api-key revocation to EXACTLY the projects deletion would.
  */
-async function isSoleOwner(org: Organization, userId: string): Promise<boolean> {
+type DbExecutor = Pick<ReturnType<typeof getDb>, 'select'>;
+
+async function isSoleOwner(
+  org: Organization,
+  userId: string,
+  executor: DbExecutor = getDb(),
+): Promise<boolean> {
   if (org.personal) return org.createdBy === userId;
-  const db = getDb();
-  const owners = await db
+  const owners = await executor
     .select({ userId: orgMembers.userId })
     .from(orgMembers)
     .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.role, 'owner')));
@@ -122,7 +127,7 @@ export async function suspendUser(userId: string): Promise<void> {
         .where(eq(organizations.id, m.orgId))
         .limit(1);
       if (!org) continue;
-      if (!(await isSoleOwner(org, userId))) continue;
+      if (!(await isSoleOwner(org, userId, tx))) continue;
       const orgProjects = await tx
         .select({ id: projects.id })
         .from(projects)
@@ -291,7 +296,7 @@ export async function adminStats(): Promise<{
     sql`SELECT count(*)::int AS c FROM migration_requests WHERE status NOT IN ('completed', 'cancelled')`,
   );
   const [oa] = await db.execute<{ c: number }>(
-    sql`SELECT count(*)::int AS c FROM abuse_reports WHERE status IN ('open', 'investigating')`,
+    sql`SELECT count(*)::int AS c FROM abuse_reports WHERE status IN ('open', 'triaged')`,
   );
   const [sup] = await db.execute<{ c: number }>(
     sql`SELECT count(*)::int AS c FROM email_suppressions`,

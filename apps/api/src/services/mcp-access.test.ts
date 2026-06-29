@@ -53,7 +53,7 @@ function makeFake(planByProject: Record<string, ProjectTier | null>): Fake {
         suffix: row.suffix,
         scope: row.scope ?? 'read',
         enabled: row.enabled ?? true,
-        createdBy: row.createdBy,
+        createdBy: row.createdBy ?? null,
         createdAt: new Date(),
         lastUsedAt: null,
         revokedAt: null,
