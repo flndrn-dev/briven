@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../../lib/api';
+import { toValidDate } from '../../../../../../../lib/utils';
 import { DeleteRowButton } from './delete-row-button';
 import { EditableCell } from './editable-cell';
 import { FilterBar } from './filter-bar';
@@ -444,7 +445,10 @@ function renderCell(value: unknown): React.ReactNode {
     return <span className="text-[var(--color-text-subtle)]">null</span>;
   }
   if (value instanceof Date) {
-    return <span>{value.toISOString()}</span>;
+    // A malformed timestamp in a customer's table is an Invalid Date — calling
+    // .toISOString() on it throws and 500s the whole Studio view. Guard it.
+    const d = toValidDate(value);
+    return <span>{d ? d.toISOString() : 'invalid date'}</span>;
   }
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return <span>{String(value)}</span>;
