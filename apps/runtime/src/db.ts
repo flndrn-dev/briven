@@ -31,6 +31,14 @@ function baseUrl(): URL {
 function poolFor(projectId: string): pg.Pool {
   const db = dbNameFor(projectId);
   let pool = _pools.get(db);
+  // If a previous `closeProjectClient` (or a racing retire) ended this pool,
+  // never hand it back — `pool.connect()` on an ended pool throws. Drop the
+  // stale reference and lazily rebuild a fresh one below.
+  if (pool && ((pool as unknown as { ending?: boolean }).ending ||
+    (pool as unknown as { ended?: boolean }).ended)) {
+    _pools.delete(db);
+    pool = undefined;
+  }
   if (!pool) {
     const base = baseUrl();
     pool = new pg.Pool({
@@ -113,6 +121,26 @@ export async function withProjectTx<T>(
     throw err;
   } finally {
     client.release();
+  }
+}
+
+/**
+ * End the cached pool for a single project and forget it, so connections
+ * are released when a project is retired/evicted from the pool manager
+ * (otherwise each distinct project ever invoked leaks a pool forever).
+ * Removes the map entry FIRST so a concurrent `withProjectTx` rebuilds a
+ * fresh pool rather than grabbing the one we're ending. Best-effort: a
+ * failed `end()` must not throw on the retire path.
+ */
+export async function closeProjectClient(projectId: string): Promise<void> {
+  const db = dbNameFor(projectId);
+  const pool = _pools.get(db);
+  if (!pool) return;
+  _pools.delete(db);
+  try {
+    await pool.end();
+  } catch {
+    // Pool may already be ending/ended (double retire) — ignore.
   }
 }
 

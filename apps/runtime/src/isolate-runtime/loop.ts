@@ -562,7 +562,16 @@ export async function runIsolateLoop(
         // it concurrently lets the loop keep reading; handleInvoke writes its
         // own result/error frame to stdout when it finishes. The host
         // serialises one invocation per isolate, so at most one is in flight.
-        void handleInvoke(msg as never, dispatch).catch(() => undefined);
+        // handleInvoke writes its own result/error frame on the normal paths;
+        // this .catch only fires for an UNEXPECTED throw (e.g. the error-frame
+        // write itself failed). Log it rather than swallowing silently so the
+        // host's stderr reader surfaces it instead of the invoke vanishing.
+        void handleInvoke(msg as never, dispatch).catch((err) => {
+          emitLog('error', [
+            'unexpected handleInvoke failure',
+            err instanceof Error ? err.message : String(err),
+          ]);
+        });
       } else if (msg.type === 'query_result') {
         const m = msg as { qid: string; rows?: readonly unknown[]; error?: { code: string; message: string } };
         const pending = pendingQueries.get(m.qid);

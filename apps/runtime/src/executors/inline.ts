@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { newId } from '@briven/shared';
 
 import { withProjectTx } from '../db.js';
+import { env } from '../env.js';
 import { createLogCollector, installConsolePatch, runWithCollector } from '../log-collector.js';
 import { publishInvocation } from '../log-publisher.js';
 import { makeCtx } from '../query-builder.js';
@@ -11,6 +12,14 @@ import type { Bundle, InvokeRequest, InvokeResult } from '../types.js';
 
 // One-time install at module load — no-op on re-import.
 installConsolePatch();
+
+/** Thrown when user code exceeds the invocation timeout (see invokeInline). */
+class InvocationTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`invocation exceeded ${timeoutMs}ms`);
+    this.name = 'InvocationTimeoutError';
+  }
+}
 
 /**
  * Phase 1 executor — runs user code inline in the runtime host process,
@@ -60,8 +69,28 @@ export async function invokeInline(bundle: Bundle, request: InvokeRequest): Prom
           env: request.env,
           log: collector,
         });
-        const v = await runWithCollector(collector, () => fn(ctx, request.args));
-        return { value: v, touched };
+        // Cap how long user code may run. Inline is the DEFAULT executor and
+        // runs in this host process, so a user infinite-loop would otherwise
+        // hang the whole runtime. Promise.race trips a timeout that rejects
+        // (rolling back the tx via withProjectTx's catch) and surfaces as an
+        // `invocation_timeout` result below. NOTE: with `inline` we cannot
+        // truly kill the runaway promise — it keeps running in the background
+        // — but the invocation returns and the DB client is released. The
+        // `deno` executor (Phase 2, customer-facing) hard-kills the isolate.
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const v = await Promise.race([
+            runWithCollector(collector, () => fn(ctx, request.args)),
+            new Promise<never>((_, reject) => {
+              timeoutHandle = setTimeout(() => {
+                reject(new InvocationTimeoutError(env.BRIVEN_RUNTIME_INVOCATION_TIMEOUT_MS));
+              }, env.BRIVEN_RUNTIME_INVOCATION_TIMEOUT_MS);
+            }),
+          ]);
+          return { value: v, touched };
+        } finally {
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+        }
       });
       result = {
         ok: true,
@@ -73,7 +102,9 @@ export async function invokeInline(bundle: Bundle, request: InvokeRequest): Prom
   } catch (err) {
     result = {
       ok: false,
-      code: 'function_threw',
+      // A timeout is its own code so callers/metrics can distinguish a
+      // runaway loop from an ordinary thrown error.
+      code: err instanceof InvocationTimeoutError ? 'invocation_timeout' : 'function_threw',
       // Never leak stack traces to the caller — only the type+message.
       message: err instanceof Error ? err.message : String(err),
       durationMs: Math.round(performance.now() - started),

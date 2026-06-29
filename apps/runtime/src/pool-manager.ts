@@ -5,6 +5,7 @@ import {
   materializeIsolate,
   sweepOrphans,
 } from './bundle-materializer.js';
+import { closeProjectClient } from './db.js';
 import { sanitizeErrorMessage } from './error-sanitizer.js';
 import type { LogLine, RuntimeErrorCode } from './isolate-runtime/types.js';
 import { incCounter, observeHistogram } from './metrics.js';
@@ -725,6 +726,21 @@ export class IsolatePoolImpl implements PoolManager {
     this.resultResolvers.clear();
   }
 
+  /**
+   * Wake every caller parked in `waitForReady(projectId)` and clear the
+   * queue. They re-check the map and (finding the entry gone) cold-start a
+   * fresh isolate. MUST be called whenever a project's entry is removed
+   * outside the normal invoke-complete path — otherwise a queued invoke
+   * holding an HTTP connection hangs forever (it only resolves on
+   * invoke-complete, which never comes once the isolate is dead).
+   */
+  private drainReadyWaiters(projectId: string): void {
+    const waiters = this.readyWaiters.get(projectId);
+    if (!waiters || waiters.length === 0) return;
+    this.readyWaiters.delete(projectId);
+    for (const w of waiters) w();
+  }
+
   private recordCrash(key: string): void {
     const now = Date.now();
     const hist = this.crashHistory.get(key) ?? { crashes: [] };
@@ -794,6 +810,13 @@ export class IsolatePoolImpl implements PoolManager {
           'isolate_crashed',
           `isolate exited (code=${exitCode}, signal=${signal})`,
         );
+        // The isolate died unexpectedly — wake any invoke queued behind it so
+        // it cold-starts a fresh one instead of hanging on a result that will
+        // never arrive (the resolver drain above only covers in-flight ones).
+        this.drainReadyWaiters(entry.projectId);
+        // Release the project's data-plane pool — the isolate is gone and the
+        // next invoke lazily rebuilds it on cold start.
+        void closeProjectClient(entry.projectId).catch(() => {});
         void cleanupIsolate(entry.tmpDir);
       }
     });
@@ -905,8 +928,18 @@ export class IsolatePoolImpl implements PoolManager {
       if (typeof sigkillHandle === 'object' && sigkillHandle && 'unref' in sigkillHandle) {
         (sigkillHandle as { unref: () => void }).unref();
       }
+      // Defer tmp-dir removal until the child has ACTUALLY exited. Removing it
+      // while the process is still alive races the isolate's own fs access and
+      // produces ENOENT noise. child.wait() resolves on exit (graceful, or via
+      // the SIGKILL timer above), then we unlink. Fire-and-forget so awaited
+      // callers (deploy-invalidation / evict) aren't blocked up to 7s.
+      void child.wait().finally(() => {
+        void cleanupIsolate(entry.tmpDir).catch(() => {});
+      });
+    } else {
+      // No child handle — nothing holds the dir open, clean up immediately.
+      await cleanupIsolate(entry.tmpDir);
     }
-    await cleanupIsolate(entry.tmpDir);
     // Only remove if still pointing at this entry (a re-spawn may have
     // already replaced it under our feet).
     const current = this.map.get(entry.projectId);
@@ -914,6 +947,13 @@ export class IsolatePoolImpl implements PoolManager {
       this.map.delete(entry.projectId);
     }
     this.children.delete(entry.isolateId);
+    // Wake anything queued on this project so it cold-starts rather than
+    // waiting for an invoke-complete that won't come (entry is now gone).
+    this.drainReadyWaiters(entry.projectId);
+    // Release the project's data-plane pool. The `poolFor` ended-guard makes
+    // this safe even if a fresh invoke for the same project is already
+    // rebuilding the pool concurrently.
+    void closeProjectClient(entry.projectId).catch(() => {});
   }
 
   describeForMetrics() {
@@ -939,8 +979,17 @@ export class IsolatePoolImpl implements PoolManager {
     this.drainResolversWith('isolate_crashed', 'runtime shutting down');
     for (const child of this.children.values()) {
       try { await child.stdin.write('{"type":"shutdown"}\n'); } catch { /* ignore */ }
-      setTimeout(() => child.kill('SIGTERM'), 5000);
-      setTimeout(() => child.kill('SIGKILL'), 7000);
+      // .unref() the escalation timers (same pattern as retireAndAwait) so a
+      // clean shutdown doesn't hold the event loop alive for the full 7s after
+      // every child has already exited gracefully.
+      const sigtermHandle = setTimeout(() => child.kill('SIGTERM'), 5000);
+      const sigkillHandle = setTimeout(() => child.kill('SIGKILL'), 7000);
+      if (typeof sigtermHandle === 'object' && sigtermHandle && 'unref' in sigtermHandle) {
+        (sigtermHandle as { unref: () => void }).unref();
+      }
+      if (typeof sigkillHandle === 'object' && sigkillHandle && 'unref' in sigkillHandle) {
+        (sigkillHandle as { unref: () => void }).unref();
+      }
     }
     this.crashHistory.clear();
     await sweepOrphans(this.config.isolateBaseDir, new Set());

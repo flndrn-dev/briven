@@ -17,6 +17,8 @@ const registry = createMetricsRegistry({
       'Total poll cycles that errored or fell back, by reason',
     briven_realtime_fanout_latency_ms:
       'Latency from change detection to all frames shipped for a channel, in ms',
+    briven_realtime_ws_backpressure_total:
+      'WebSocket send outcomes under backpressure, by result (backpressure/dropped/overflow/replayed)',
   },
 });
 

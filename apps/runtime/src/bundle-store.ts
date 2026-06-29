@@ -61,15 +61,30 @@ export async function loadDeployment(
     await writeFile(target, source, 'utf8');
   }
 
+  const functionNames = payload.functionNames.map(stripExt);
+  // Validate at ingest: function names are interpolated unescaped into the
+  // generated isolate entry (`dispatch.<name> = …`, `import … from
+  // './briven/functions/<name>.ts'`). Restricting to JS identifier characters
+  // closes any code/path-injection vector if the api's trust boundary ever
+  // relaxes — the runtime is the last line of defense.
+  for (const name of functionNames) {
+    if (!VALID_FUNCTION_NAME.test(name)) {
+      throw new Error(`bundle contains invalid function name: ${JSON.stringify(name)}`);
+    }
+  }
+
   const bundle: Bundle = {
     projectId,
     deploymentId,
-    functionNames: payload.functionNames.map(stripExt),
+    functionNames,
     directory: dir,
   };
   cache.set(deploymentId, bundle);
   return bundle;
 }
+
+/** A safe JavaScript identifier — see the validation note in loadDeployment. */
+const VALID_FUNCTION_NAME = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 
 function stripExt(name: string): string {
   return name.endsWith('.ts') ? name.slice(0, -'.ts'.length) : name;

@@ -42,7 +42,9 @@ export class PollManager {
   private baseUrl: string | null = null;
   /** Per-project `pg` pools, each bound to proj_<id>. */
   private readonly clients = new Map<string, pg.Pool>();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  /** True between tryStartPolling() and stopPolling(); gates rescheduling. */
+  private polling = false;
   private readonly lastHashes = new Map<string, string>();
   private readonly activeProjects = new Set<string>();
   private readonly intervalMs: number;
@@ -130,20 +132,33 @@ export class PollManager {
   }
 
   private tryStartPolling(): void {
-    if (this.timer || this.activeProjects.size === 0) return;
-    this.timer = setInterval(() => {
-      this.poll().catch(() => {
-        /* errors logged inside poll() */
-      });
-    }, this.intervalMs);
-    // Run an immediate first poll so a fresh subscription gets its
-    // initial hash seeded without waiting for the interval.
-    this.poll().catch(() => undefined);
+    if (this.polling || this.activeProjects.size === 0) return;
+    this.polling = true;
+    // Self-rescheduling loop: the NEXT poll is scheduled only AFTER the
+    // current one resolves. A fixed setInterval re-enters poll() before a
+    // slow DoltGres query returns, which fires duplicate change frames and
+    // piles overlapping queries. Chaining via setTimeout guarantees at most
+    // one poll in flight per manager.
+    const tick = (): void => {
+      if (!this.polling) return;
+      this.poll()
+        .catch(() => {
+          /* errors logged inside poll() */
+        })
+        .finally(() => {
+          if (!this.polling) return;
+          this.timer = setTimeout(tick, this.intervalMs);
+        });
+    };
+    // Run an immediate first poll so a fresh subscription gets its initial
+    // hash seeded without waiting for the interval; subsequent ticks chain.
+    tick();
   }
 
   private stopPolling(): void {
+    this.polling = false;
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
   }

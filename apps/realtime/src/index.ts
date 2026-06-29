@@ -83,6 +83,37 @@ interface Subscription {
 const subscriptions = new Map<string, Subscription>(); // subscriptionId → sub
 const registry = new SubscriptionRegistry(); // channel ↔ subId, ref-counted
 const sockets = new WeakMap<object, Set<string>>(); // ws → set of subscriptionIds it owns
+
+// ── WebSocket backpressure handling ───────────────────────────────────
+// Bun's `ws.send()` returns the bytes written, OR a non-positive status when
+// the socket is backpressured/closed and the frame was NOT delivered. Left
+// unchecked, frames to a slow client are silently lost. We buffer dropped
+// frames per-socket and replay them from the `drain` handler (fired when the
+// socket becomes writable again). The buffer is capped so a permanently-stuck
+// client can't grow memory without bound — overflow is counted, not retained.
+const outboxes = new WeakMap<object, string[]>();
+const MAX_OUTBOX_FRAMES = 1000;
+
+function wsSend(ws: SocketHandle, data: string): void {
+  const status = (ws as unknown as { send: (d: string) => number }).send(data);
+  // > 0 → delivered. -1 → uWS enqueued it internally; it flushes on drain
+  // automatically, so we only observe it (re-buffering would double-send).
+  if (typeof status !== 'number' || status > 0) return;
+  if (status === -1) {
+    incCounter('briven_realtime_ws_backpressure_total', { result: 'backpressure' });
+    return;
+  }
+  // status === 0 → dropped: couldn't even enqueue. Buffer for replay on drain.
+  const key = ws as unknown as object;
+  const buf = outboxes.get(key) ?? [];
+  if (buf.length >= MAX_OUTBOX_FRAMES) {
+    incCounter('briven_realtime_ws_backpressure_total', { result: 'overflow' });
+    return;
+  }
+  buf.push(data);
+  outboxes.set(key, buf);
+  incCounter('briven_realtime_ws_backpressure_total', { result: 'dropped' });
+}
 // projectId → live sub count. Maintained inline with the subscriptions
 // map so the per-project cap can be enforced in O(1) without scanning.
 const subsByProject = new Map<string, number>();
@@ -236,7 +267,36 @@ async function fireChannel(channel: string): Promise<void> {
   observeHistogram('briven_realtime_fanout_latency_ms', Date.now() - fanoutStart);
 }
 
+// Per-subscription serialization for invokeOnce. Two concurrent re-invokes
+// for the SAME subscription (e.g. the initial subscribe racing a poll-driven
+// fan-out, or two rapid HEAD changes) would each read the same `sub.channels`
+// snapshot, diff against it, and leak/duplicate channel registrations. We
+// chain calls per subscriptionId so the second sees the channel set the first
+// committed. The map holds the tail of each chain; it's deleted once settled
+// and no newer call has chained on, so it doesn't grow with dormant subs.
+const invokeChains = new Map<string, Promise<unknown>>();
+
 async function invokeOnce(sub: Subscription): Promise<Record<string, unknown>> {
+  const subId = sub.subscriptionId;
+  const prior = invokeChains.get(subId) ?? Promise.resolve();
+  // Run after the prior call settles (success OR failure — never let one
+  // failed re-invoke wedge the chain).
+  const result = prior.then(
+    () => invokeOnceInner(sub),
+    () => invokeOnceInner(sub),
+  );
+  const chain: Promise<unknown> = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  invokeChains.set(subId, chain);
+  void chain.finally(() => {
+    if (invokeChains.get(subId) === chain) invokeChains.delete(subId);
+  });
+  return result;
+}
+
+async function invokeOnceInner(sub: Subscription): Promise<Record<string, unknown>> {
   // why: the public /v1/projects/:id/functions/:name route requires a
   // session or api-key with developer role. Realtime is a system caller,
   // not a user — it authenticates as the runtime via the shared secret
@@ -390,6 +450,20 @@ async function verifyProjectKey(projectId: string, token: string): Promise<boole
   return ok;
 }
 
+// Both caches are keyed by project id / project-id+token and are only ever
+// refreshed on lookup. Without a sweep, an entry for a project (or revoked
+// key) that's never queried again lingers forever. A periodic sweep drops
+// expired entries. Unref'd so it never keeps the process alive by itself.
+const CACHE_SWEEP_MS = 5 * 60_000;
+const cacheSweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of capByProject) if (v.expiresAt <= now) capByProject.delete(k);
+  for (const [k, v] of keyVerifyCache) if (v.exp <= now) keyVerifyCache.delete(k);
+}, CACHE_SWEEP_MS);
+if (typeof cacheSweeper === 'object' && cacheSweeper && 'unref' in cacheSweeper) {
+  (cacheSweeper as { unref: () => void }).unref();
+}
+
 if (!env.BRIVEN_RUNTIME_SHARED_SECRET) {
   log.warn(
     'realtime_boot_warning: BRIVEN_RUNTIME_SHARED_SECRET is unset — every WS upgrade will be rejected with 401 until configured',
@@ -532,7 +606,20 @@ export default {
     sendPings: true,
     open(ws: SocketHandle) {
       sockets.set(ws as unknown as object, new Set<string>());
-      ws.send(JSON.stringify({ type: 'hello', protocol: 1 }));
+      wsSend(ws, JSON.stringify({ type: 'hello', protocol: 1 }));
+    },
+    // Fired when a backpressured socket becomes writable again. Replay any
+    // frames we buffered while it was stuck so a slow consumer doesn't lose
+    // change updates. Re-attempts via wsSend, which re-buffers if still stuck.
+    drain(ws: SocketHandle) {
+      const key = ws as unknown as object;
+      const buf = outboxes.get(key);
+      if (!buf || buf.length === 0) return;
+      outboxes.delete(key);
+      for (const data of buf) {
+        incCounter('briven_realtime_ws_backpressure_total', { result: 'replayed' });
+        wsSend(ws, data);
+      }
     },
     async message(ws: SocketHandle, raw: string | Buffer) {
       const text = typeof raw === 'string' ? raw : raw.toString('utf8');
@@ -540,7 +627,7 @@ export default {
       try {
         parsed = clientMessage.parse(JSON.parse(text));
       } catch {
-        ws.send(JSON.stringify({ type: 'error', code: 'malformed_message' }));
+        wsSend(ws, JSON.stringify({ type: 'error', code: 'malformed_message' }));
         return;
       }
 
@@ -550,7 +637,7 @@ export default {
       if (parsed.type === 'unsubscribe') {
         owned.delete(parsed.subscriptionId);
         await dropSubscription(parsed.subscriptionId);
-        ws.send(JSON.stringify({ type: 'unsubscribed', subscriptionId: parsed.subscriptionId }));
+        wsSend(ws, JSON.stringify({ type: 'unsubscribed', subscriptionId: parsed.subscriptionId }));
         return;
       }
 
@@ -569,7 +656,8 @@ export default {
         const allowed = connToken ? await verifyProjectKey(parsed.projectId, connToken) : false;
         if (!allowed) {
           incCounter('briven_realtime_subscribe_rejected_total', { reason: 'forbidden_project' });
-          ws.send(
+          wsSend(
+            ws,
             JSON.stringify({
               type: 'error',
               code: 'forbidden',
@@ -580,6 +668,16 @@ export default {
         }
       }
 
+      // Duplicate subscribe for an id we already track: drop the prior one
+      // FIRST so we don't overwrite the entry (orphaning its channel refs) or
+      // double-increment subsByProject (which drifts the per-project counter
+      // upward and trips a false cap). Done before the cap checks below so the
+      // counts they read are accurate.
+      if (subscriptions.has(parsed.subscriptionId)) {
+        owned.delete(parsed.subscriptionId);
+        await dropSubscription(parsed.subscriptionId);
+      }
+
       if (owned.size >= env.BRIVEN_REALTIME_MAX_SUBS_PER_WS) {
         // Defensive cap so a single client (bug or malicious) can't open
         // unbounded subscriptions and degrade the service for everyone.
@@ -587,7 +685,8 @@ export default {
         // id so it can correlate; the server-side counter has already
         // ignored this sub, so unsubscribe isn't required.
         incCounter('briven_realtime_subscribe_rejected_total', { reason: 'ws_limit' });
-        ws.send(
+        wsSend(
+          ws,
           JSON.stringify({
             type: 'error',
             code: 'subscription_limit_ws',
@@ -604,7 +703,8 @@ export default {
       const projectLimit = tierCap ?? env.BRIVEN_REALTIME_MAX_SUBS_PER_PROJECT;
       if (projectCount >= projectLimit) {
         incCounter('briven_realtime_subscribe_rejected_total', { reason: 'project_limit' });
-        ws.send(
+        wsSend(
+          ws,
           JSON.stringify({
             type: 'error',
             code: 'subscription_limit_project',
@@ -622,20 +722,22 @@ export default {
         functionName: parsed.functionName,
         args: parsed.args,
         channels: new Set<string>(),
-        send: (frame) => ws.send(JSON.stringify(frame)),
+        send: (frame) => wsSend(ws, JSON.stringify(frame)),
         startedAt: Date.now(),
       };
       subscriptions.set(sub.subscriptionId, sub);
       owned.add(sub.subscriptionId);
       subsByProject.set(sub.projectId, projectCount + 1);
       const result = await invokeOnce(sub);
-      ws.send(JSON.stringify({ type: 'data', subscriptionId: sub.subscriptionId, ...result }));
+      wsSend(ws, JSON.stringify({ type: 'data', subscriptionId: sub.subscriptionId, ...result }));
     },
     async close(ws: object) {
       const owned = sockets.get(ws);
       if (!owned) return;
       for (const subId of owned) await dropSubscription(subId);
       sockets.delete(ws);
+      // Drop any buffered-but-undelivered frames; the socket is gone.
+      outboxes.delete(ws);
     },
   },
 };
