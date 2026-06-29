@@ -98,6 +98,19 @@ projectsRouter.use('/v1/projects/:id/realtime-stats', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/export', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/studio/*', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/ai/*', requireProjectAuth());
+// Same carve-out for the storage / schedules / outbound-webhooks / webhooks
+// surfaces — their owning routers (storageRouter, schedulesRouter, …) mount
+// only requireAuth(), so without authenticating the brk_ key here first the
+// broad `/v1/projects/*` requireAuth below rejects API-key calls with
+// "invalid cli token". Each owning router still runs its own role check.
+projectsRouter.use('/v1/projects/:id/files', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/files/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/schedules', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/schedules/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/outbound-webhooks', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/outbound-webhooks/*', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/webhooks', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/webhooks/*', requireProjectAuth());
 
 projectsRouter.use('/v1/projects', requireAuth());
 projectsRouter.use('/v1/projects/*', requireAuth());

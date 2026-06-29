@@ -19,13 +19,33 @@ import { log } from '../lib/logger.js';
 import { audit } from '../services/audit.js';
 import { getDefaultOrgForUser } from '../services/orgs.js';
 
+/**
+ * Constrain a caller-supplied redirect URL to the trusted web origin.
+ * Validating it merely parses as a URL is NOT enough — `.startsWith(origin)`
+ * would wrongly accept `https://briven.tech.evil.com`, so we compare the
+ * parsed ORIGIN exactly. Closes the open-redirect on checkout/portal URLs.
+ */
+function isTrustedWebRedirect(value: string): boolean {
+  try {
+    return new URL(value).origin === new URL(env.BRIVEN_WEB_ORIGIN).origin;
+  } catch {
+    return false;
+  }
+}
+
 const checkoutSchema = z.object({
   tier: z.enum(['pro', 'team']),
-  successURL: z.string().url(),
+  successURL: z
+    .string()
+    .url()
+    .refine(isTrustedWebRedirect, 'successURL must be on the trusted web origin'),
 });
 
 const portalSchema = z.object({
-  returnURL: z.string().url(),
+  returnURL: z
+    .string()
+    .url()
+    .refine(isTrustedWebRedirect, 'returnURL must be on the trusted web origin'),
 });
 
 // Polar's webhook payload has evolved — some events carry flat ids

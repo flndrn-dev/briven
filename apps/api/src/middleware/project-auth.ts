@@ -34,8 +34,10 @@ import type { Session, User } from './session.js';
  * Routes that need stricter gating chain `requireProjectRole(min)` after
  * this middleware.
  */
-export const requireProjectAuth = (): MiddlewareHandler => async (c, next) => {
-  const projectId = c.req.param('id');
+export const requireProjectAuth =
+  (paramName = 'id'): MiddlewareHandler =>
+  async (c, next) => {
+  const projectId = c.req.param(paramName);
   if (!projectId) throw new ForbiddenError('missing project id');
 
   const user = c.get('user') as User | null;

@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
+import { env } from '../env.js';
 import { memberRole } from '../db/schema.js';
 import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireAuth } from '../middleware/session.js';
@@ -16,10 +17,27 @@ import {
   revokeInvitation,
 } from '../services/invitations.js';
 
+/**
+ * Constrain a caller-supplied callback URL to the trusted web origin.
+ * Validating it parses as a URL is NOT enough — `.startsWith(origin)` would
+ * wrongly accept `https://briven.tech.evil.com`, so we compare the parsed
+ * ORIGIN exactly. Closes the open-redirect on invite callbackURLs.
+ */
+function isTrustedWebRedirect(value: string): boolean {
+  try {
+    return new URL(value).origin === new URL(env.BRIVEN_WEB_ORIGIN).origin;
+  } catch {
+    return false;
+  }
+}
+
 const createSchema = z.object({
   email: z.string().email().max(320),
   role: z.enum(memberRole),
-  callbackURL: z.string().url(),
+  callbackURL: z
+    .string()
+    .url()
+    .refine(isTrustedWebRedirect, 'callbackURL must be on the trusted web origin'),
 });
 
 const acceptSchema = z.object({

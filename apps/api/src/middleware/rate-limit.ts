@@ -135,15 +135,18 @@ export function ipKey(c: Parameters<MiddlewareHandler>[0]): string | null {
  * the auth middleware downstream returns 404 either way, but skipping
  * here avoids amplifying an unknown-project lookup into a DoS vector.
  */
-export function projectRateLimit(scope: RateLimitScope): MiddlewareHandler {
+export function projectRateLimit(
+  scope: RateLimitScope,
+  paramName = 'id',
+): MiddlewareHandler {
   return rateLimit({
     scope,
     limit: (c) => {
-      const id = c.req.param('id');
+      const id = c.req.param(paramName);
       return id ? resolveProjectRateLimit(id, scope) : null;
     },
     windowMs: RATE_LIMIT_WINDOW_MS,
-    key: (c) => c.req.param('id') ?? null,
+    key: (c) => c.req.param(paramName) ?? null,
   });
 }
 

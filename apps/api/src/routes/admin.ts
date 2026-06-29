@@ -167,7 +167,7 @@ adminRouter.get('/v1/admin/users/:id', async (c) => {
     const detail = await getUserDetailForAdmin(userId);
     return c.json(detail);
   } catch (err) {
-    if (err instanceof Error && /not found/i.test(err.message)) {
+    if (err instanceof NotFoundError) {
       return c.json({ code: 'not_found' }, 404);
     }
     throw err;

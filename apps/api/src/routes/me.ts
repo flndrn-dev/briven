@@ -7,7 +7,7 @@ import { getDb } from '../db/client.js';
 import { users } from '../db/schema.js';
 import { auth } from '../lib/auth.js';
 import { requireAuth } from '../middleware/session.js';
-import { rateLimit } from '../middleware/rate-limit.js';
+import { ipKey, rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types/app-env.js';
 import { previewAccountDeletion, softDeleteAccount } from '../services/account-deletion.js';
 import { audit, hashIp } from '../services/audit.js';
@@ -242,7 +242,7 @@ meRouter.post(
     scope: 'me-delete-account',
     limit: 3,
     windowMs: 60 * 60_000,
-    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+    key: ipKey,
   }),
   async (c) => {
     const user = c.get('user');
@@ -302,7 +302,7 @@ meRouter.post(
     scope: 'me-step-up',
     limit: 10,
     windowMs: 5 * 60_000,
-    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+    key: ipKey,
   }),
   async (c) => {
     const user = c.get('user');
@@ -370,7 +370,7 @@ meRouter.post(
     scope: 'me-password',
     limit: 10,
     windowMs: 5 * 60_000,
-    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+    key: ipKey,
   }),
   async (c) => {
     const user = c.get('user');
@@ -505,7 +505,7 @@ meRouter.post(
     scope: 'me-delete-secret-reveal',
     limit: 10,
     windowMs: 5 * 60_000,
-    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+    key: ipKey,
   }),
   async (c) => {
     const user = c.get('user');
@@ -541,7 +541,7 @@ meRouter.post(
     scope: 'me-delete-secret-verify',
     limit: 10,
     windowMs: 5 * 60_000,
-    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
+    key: ipKey,
   }),
   async (c) => {
     const user = c.get('user');

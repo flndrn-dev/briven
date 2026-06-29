@@ -101,7 +101,11 @@ internalRouter.post('/v1/internal/projects/:projectId/functions/:functionName', 
     requestId,
     auth: null,
   });
-  const status = result.ok ? 200 : 500;
+  // A function that ran but returned an error is a 422 (unprocessable) —
+  // same as the public /invoke route — so the realtime caller can tell a
+  // function-level failure apart from a 500 infra error. Only true infra
+  // faults throw and surface as 5xx via the error handler.
+  const status = result.ok ? 200 : 422;
   return c.json(result, status);
 });
 

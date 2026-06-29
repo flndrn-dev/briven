@@ -28,7 +28,28 @@ import {
   revokeOrgInvitation,
 } from '../services/org-invitations.js';
 import { getTierForOrg } from '../services/billing.js';
-import { orgRole } from '../db/schema.js';
+import { env } from '../env.js';
+import { getDb } from '../db/client.js';
+import { and, eq } from 'drizzle-orm';
+import { hasRoleAtLeast } from '../services/access.js';
+import { orgMembers, orgRole, type OrgRole } from '../db/schema.js';
+
+/**
+ * Resolve the caller's role inside an org, or null when they aren't a
+ * member. Org-member mutations (role change, member removal, invite) gate
+ * on `admin`+ via this — a plain member or viewer must NOT be able to
+ * change roles, remove the owner, or invite. Mirrors the project-side
+ * `assertProjectRole` tiering; `OrgRole` shares the same rank table as
+ * `MemberRole` so `hasRoleAtLeast` applies directly.
+ */
+async function getOrgRole(userId: string, orgId: string): Promise<OrgRole | null> {
+  const [row] = await getDb()
+    .select({ role: orgMembers.role })
+    .from(orgMembers)
+    .where(and(eq(orgMembers.userId, userId), eq(orgMembers.orgId, orgId)))
+    .limit(1);
+  return row?.role ?? null;
+}
 
 /**
  * Multi-org surface — team creation + list. Personal orgs are auto-
@@ -270,8 +291,12 @@ orgsRouter.patch('/v1/orgs/:id/members/:userId', userRateLimit('org-mutate', 30)
   const actor = c.get('user')!;
   const orgId = c.req.param('id');
   const targetUserId = c.req.param('userId');
-  if (!(await isOrgMember(actor.id, orgId))) {
-    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  const actorRole = await getOrgRole(actor.id, orgId);
+  if (!actorRole || !hasRoleAtLeast(actorRole, 'admin')) {
+    return c.json(
+      { code: 'forbidden', message: 'requires org admin or owner' },
+      403,
+    );
   }
   const body = await c.req.json().catch(() => null);
   const parsed = changeRoleSchema.safeParse(body);
@@ -301,8 +326,12 @@ orgsRouter.delete('/v1/orgs/:id/members/:userId', userRateLimit('org-mutate', 30
   const actor = c.get('user')!;
   const orgId = c.req.param('id');
   const targetUserId = c.req.param('userId');
-  if (!(await isOrgMember(actor.id, orgId))) {
-    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  const actorRole = await getOrgRole(actor.id, orgId);
+  if (!actorRole || !hasRoleAtLeast(actorRole, 'admin')) {
+    return c.json(
+      { code: 'forbidden', message: 'requires org admin or owner' },
+      403,
+    );
   }
   const result = await removeOrgMember({ orgId, userId: targetUserId });
   if (!result.removed) {
@@ -326,10 +355,28 @@ orgsRouter.use('/v1/orgs/:id/invitations/*', requireAuth());
 orgsRouter.use('/v1/me/org-invitations', requireAuth());
 orgsRouter.use('/v1/org-invitations/accept', requireAuth());
 
+/**
+ * Constrain a caller-supplied redirect/callback URL to the trusted web
+ * origin. Validating it parses as a URL is NOT enough — an attacker could
+ * pass `https://briven.tech.evil.com` (which `.startsWith(origin)` would
+ * also wrongly accept), so we compare the parsed ORIGIN exactly. Closes
+ * the open-redirect on invite callbackURLs.
+ */
+function isTrustedWebRedirect(value: string): boolean {
+  try {
+    return new URL(value).origin === new URL(env.BRIVEN_WEB_ORIGIN).origin;
+  } catch {
+    return false;
+  }
+}
+
 const inviteSchema = z.object({
   email: z.string().email(),
   role: z.enum(orgRole).default('developer'),
-  callbackURL: z.string().url(),
+  callbackURL: z
+    .string()
+    .url()
+    .refine(isTrustedWebRedirect, 'callbackURL must be on the trusted web origin'),
 });
 
 orgsRouter.get('/v1/orgs/:id/invitations', async (c) => {
@@ -355,8 +402,12 @@ orgsRouter.get('/v1/orgs/:id/invitations', async (c) => {
 orgsRouter.post('/v1/orgs/:id/invitations', userRateLimit('org-mutate', 30), async (c) => {
   const user = c.get('user')!;
   const orgId = c.req.param('id');
-  if (!(await isOrgMember(user.id, orgId))) {
-    return c.json({ code: 'forbidden', message: 'not a member of that org' }, 403);
+  const inviterRole = await getOrgRole(user.id, orgId);
+  if (!inviterRole || !hasRoleAtLeast(inviterRole, 'admin')) {
+    return c.json(
+      { code: 'forbidden', message: 'requires org admin or owner' },
+      403,
+    );
   }
   const body = await c.req.json().catch(() => null);
   const parsed = inviteSchema.safeParse(body);
