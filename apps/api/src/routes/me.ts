@@ -9,7 +9,7 @@ import { auth } from '../lib/auth.js';
 import { requireAuth } from '../middleware/session.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types/app-env.js';
-import { softDeleteAccount } from '../services/account-deletion.js';
+import { previewAccountDeletion, softDeleteAccount } from '../services/account-deletion.js';
 import { audit, hashIp } from '../services/audit.js';
 import { checkVatWithVies } from '../services/billing.js';
 import {
@@ -212,6 +212,15 @@ meRouter.delete('/v1/me/avatar', requireAuth(), async (c) => {
   await setAvatar(user.id, null);
   const profile = await getProfile(user.id);
   return c.json(profile);
+});
+
+// Read-only blast-radius preview so the UI can warn the user EXACTLY what a
+// deletion destroys (all projects + workspaces) before they confirm.
+meRouter.get('/v1/me/delete-account/preview', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  const preview = await previewAccountDeletion(user.id);
+  return c.json(preview);
 });
 
 const deleteAccountSchema = z.object({

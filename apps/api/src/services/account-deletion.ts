@@ -234,6 +234,49 @@ export async function softDeleteAccount(args: {
   return counts;
 }
 
+export interface AccountDeletionPreview {
+  projects: { id: string; name: string; slug: string }[];
+  orgs: { id: string; name: string }[];
+  apiKeysToRevoke: number;
+}
+
+/**
+ * Read-only preview of EXACTLY what `softDeleteAccount` would destroy, so
+ * the UI can show "this deletes isy, katsuro, konnos + 2 workspaces" before
+ * the user confirms. Mirrors the sole-owner cascade walk without mutating.
+ */
+export async function previewAccountDeletion(userId: string): Promise<AccountDeletionPreview> {
+  const db = getDb();
+  const preview: AccountDeletionPreview = { projects: [], orgs: [], apiKeysToRevoke: 0 };
+  const memberships = await db
+    .select({ orgId: orgMembers.orgId })
+    .from(orgMembers)
+    .where(eq(orgMembers.userId, userId));
+  for (const m of memberships) {
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, m.orgId))
+      .limit(1);
+    if (!org || org.deletedAt) continue;
+    if (!(await isSoleOwner(org, userId))) continue;
+    preview.orgs.push({ id: org.id, name: org.name });
+    const orgProjects = await db
+      .select({ id: projects.id, name: projects.name, slug: projects.slug })
+      .from(projects)
+      .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)));
+    preview.projects.push(...orgProjects);
+    for (const p of orgProjects) {
+      const keys = await db
+        .select({ id: apiKeys.id })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.projectId, p.id), isNull(apiKeys.revokedAt)));
+      preview.apiKeysToRevoke += keys.length;
+    }
+  }
+  return preview;
+}
+
 /**
  * Reverse a soft-deletion within the grace window — the "30-day reversal"
  * the confirmation email promises but which previously had NO code path

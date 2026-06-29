@@ -128,8 +128,8 @@ export default async function SettingsPage() {
         <h2 className="text-base font-semibold text-[var(--color-text)]">Security</h2>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
           {user.hasDeleteSecret
-            ? 'Your delete secret confirms destructive actions like deleting a project. Reveal, copy, or reset it below.'
-            : 'Set a delete secret — a separate phrase used to confirm destructive actions like deleting a project.'}
+            ? 'Your delete secret is an extra phrase that confirms destructive actions — from deleting a single project to deleting your whole account. Setting or holding it does NOT delete anything on its own. Reveal, copy, or reset it below.'
+            : 'Set a delete secret — an extra phrase used later to confirm destructive actions, from deleting a single project to deleting your whole account. Setting it does NOT delete anything; deleting a single project is done from that project’s own settings.'}
         </p>
         <DeleteSecretSection
           hasDeleteSecret={user.hasDeleteSecret}
