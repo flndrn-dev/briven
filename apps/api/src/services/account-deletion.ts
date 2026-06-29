@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 
 import { brivenError, NotFoundError } from '@briven/shared';
 
@@ -94,117 +94,123 @@ export async function softDeleteAccount(args: {
     sessionsRevoked: 0,
   };
 
-  // 2. Revoke sessions
-  const sessionRows = await db
-    .delete(sessions)
-    .where(eq(sessions.userId, args.userId))
-    .returning({ id: sessions.id });
-  counts.sessionsRevoked = sessionRows.length;
+  // Steps 2–8 run in ONE transaction so a mid-way failure can't leave a
+  // half-deleted account (sessions gone but deletedAt unset → invisible to
+  // the GC, re-loginable, and tripping ensurePersonalOrg). The email send
+  // above stays outside the tx on purpose.
+  await db.transaction(async (tx) => {
+    // 2. Revoke sessions
+    const sessionRows = await tx
+      .delete(sessions)
+      .where(eq(sessions.userId, args.userId))
+      .returning({ id: sessions.id });
+    counts.sessionsRevoked = sessionRows.length;
 
-  // 3. Revoke invitations sent by this user (project + org)
-  const projInvRows = await db
-    .update(projectInvitations)
-    .set({ revokedAt: new Date() })
-    .where(
-      and(
-        eq(projectInvitations.invitedBy, args.userId),
-        isNull(projectInvitations.acceptedAt),
-        isNull(projectInvitations.revokedAt),
-      ),
-    )
-    .returning({ id: projectInvitations.id });
-  const orgInvRows = await db
-    .update(orgInvitations)
-    .set({ revokedAt: new Date() })
-    .where(
-      and(
-        eq(orgInvitations.invitedBy, args.userId),
-        isNull(orgInvitations.acceptedAt),
-        isNull(orgInvitations.revokedAt),
-      ),
-    )
-    .returning({ id: orgInvitations.id });
-  counts.invitationsRevoked = projInvRows.length + orgInvRows.length;
+    // 3. Revoke invitations sent by this user (project + org)
+    const projInvRows = await tx
+      .update(projectInvitations)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(projectInvitations.invitedBy, args.userId),
+          isNull(projectInvitations.acceptedAt),
+          isNull(projectInvitations.revokedAt),
+        ),
+      )
+      .returning({ id: projectInvitations.id });
+    const orgInvRows = await tx
+      .update(orgInvitations)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(orgInvitations.invitedBy, args.userId),
+          isNull(orgInvitations.acceptedAt),
+          isNull(orgInvitations.revokedAt),
+        ),
+      )
+      .returning({ id: orgInvitations.id });
+    counts.invitationsRevoked = projInvRows.length + orgInvRows.length;
 
-  // 4–7. Iterate every org the user is a member of. For sole-owner orgs,
-  // cascade through (revoke keys → soft-delete projects → soft-delete
-  // org). For shared orgs, just remove this user's orgMembers row.
-  const memberships = await db
-    .select({ orgId: orgMembers.orgId, role: orgMembers.role })
-    .from(orgMembers)
-    .where(eq(orgMembers.userId, args.userId));
+    // 4–7. Iterate every org the user is a member of. For sole-owner orgs,
+    // cascade through (revoke keys → soft-delete projects → soft-delete
+    // org). For shared orgs, just remove this user's orgMembers row.
+    const memberships = await tx
+      .select({ orgId: orgMembers.orgId, role: orgMembers.role })
+      .from(orgMembers)
+      .where(eq(orgMembers.userId, args.userId));
 
-  for (const m of memberships) {
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, m.orgId))
-      .limit(1);
-    if (!org) continue;
-    const sole = await isSoleOwner(org, args.userId);
-    if (sole) {
-      // 4. Revoke api_keys on this org's projects.
-      const orgProjects = await db
-        .select({ id: projects.id })
-        .from(projects)
-        .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)));
-      for (const p of orgProjects) {
-        const revokedKeys = await db
-          .update(apiKeys)
-          .set({ revokedAt: new Date() })
-          .where(and(eq(apiKeys.projectId, p.id), isNull(apiKeys.revokedAt)))
-          .returning({ id: apiKeys.id });
-        counts.apiKeysRevoked += revokedKeys.length;
+    for (const m of memberships) {
+      const [org] = await tx
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, m.orgId))
+        .limit(1);
+      if (!org) continue;
+      const sole = await isSoleOwner(org, args.userId);
+      if (sole) {
+        // 4. Revoke api_keys on this org's projects.
+        const orgProjects = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)));
+        for (const p of orgProjects) {
+          const revokedKeys = await tx
+            .update(apiKeys)
+            .set({ revokedAt: new Date() })
+            .where(and(eq(apiKeys.projectId, p.id), isNull(apiKeys.revokedAt)))
+            .returning({ id: apiKeys.id });
+          counts.apiKeysRevoked += revokedKeys.length;
+        }
+
+        // 5. Soft-delete the org's projects.
+        const nowProjects = new Date();
+        const deletedProjects = await tx
+          .update(projects)
+          .set({ deletedAt: nowProjects, updatedAt: nowProjects })
+          .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)))
+          .returning({ id: projects.id });
+        counts.projectsDeleted += deletedProjects.length;
+
+        // 6. Soft-delete the org itself.
+        const nowOrg = new Date();
+        await tx
+          .update(organizations)
+          .set({ deletedAt: nowOrg, updatedAt: nowOrg })
+          .where(eq(organizations.id, org.id));
+        counts.soloOrgsDeleted += 1;
+      } else {
+        // 7. Shared team org — just remove this user from membership.
+        await tx
+          .delete(orgMembers)
+          .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, args.userId)));
+        counts.removedFromOrgs += 1;
       }
-
-      // 5. Soft-delete the org's projects.
-      const nowProjects = new Date();
-      const deletedProjects = await db
-        .update(projects)
-        .set({ deletedAt: nowProjects, updatedAt: nowProjects })
-        .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)))
-        .returning({ id: projects.id });
-      counts.projectsDeleted += deletedProjects.length;
-
-      // 6. Soft-delete the org itself.
-      const nowOrg = new Date();
-      await db
-        .update(organizations)
-        .set({ deletedAt: nowOrg, updatedAt: nowOrg })
-        .where(eq(organizations.id, org.id));
-      counts.soloOrgsDeleted += 1;
-    } else {
-      // 7. Shared team org — just remove this user from membership.
-      await db
-        .delete(orgMembers)
-        .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, args.userId)));
-      counts.removedFromOrgs += 1;
     }
-  }
 
-  // 8. Pseudonymise PII + mark deleted. Email stays so the user can
-  // re-sign-up later (same email = new fresh account; no merge).
-  const now = new Date();
-  await db
-    .update(users)
-    .set({
-      legalName: null,
-      companyName: null,
-      vatId: null,
-      vatVerifiedAt: null,
-      addressLine1: null,
-      addressLine2: null,
-      addressCity: null,
-      addressPostalCode: null,
-      addressRegion: null,
-      addressCountry: null,
-      name: null,
-      image: null,
-      deletedAt: now,
-      deletionReason: args.reason ?? null,
-      updatedAt: now,
-    })
-    .where(eq(users.id, args.userId));
+    // 8. Pseudonymise PII + mark deleted. Email stays so the user can
+    // re-sign-up later (same email = new fresh account; no merge).
+    const now = new Date();
+    await tx
+      .update(users)
+      .set({
+        legalName: null,
+        companyName: null,
+        vatId: null,
+        vatVerifiedAt: null,
+        addressLine1: null,
+        addressLine2: null,
+        addressCity: null,
+        addressPostalCode: null,
+        addressRegion: null,
+        addressCountry: null,
+        name: null,
+        image: null,
+        deletedAt: now,
+        deletionReason: args.reason ?? null,
+        updatedAt: now,
+      })
+      .where(eq(users.id, args.userId));
+  });
 
   // 9. Audit.
   await audit({
@@ -226,6 +232,89 @@ export async function softDeleteAccount(args: {
 
   log.info('account_soft_deleted', counts);
   return counts;
+}
+
+/**
+ * Reverse a soft-deletion within the grace window — the "30-day reversal"
+ * the confirmation email promises but which previously had NO code path
+ * (the deletion incident had to be undone by hand-editing the DB).
+ *
+ * Clears `users.deletedAt` and revives the cascaded sole-owner orgs
+ * (including the personal org) plus the projects soft-deleted in the SAME
+ * cascade — matched by a ±2-minute window around the account's `deletedAt`
+ * so projects the user had intentionally deleted earlier stay deleted.
+ * Revoked api-keys and invitations are NOT auto-restored (re-issue those).
+ */
+export async function restoreAccount(userId: string): Promise<{
+  userId: string;
+  orgsRestored: number;
+  projectsRestored: number;
+}> {
+  const db = getDb();
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) throw new NotFoundError('user', userId);
+  if (!user.deletedAt) {
+    throw new brivenError('not_deleted', 'this account is not in the deletion grace window', {
+      status: 409,
+    });
+  }
+  const deletedAt = user.deletedAt;
+  const windowStart = new Date(deletedAt.getTime() - 120_000);
+  const windowEnd = new Date(deletedAt.getTime() + 120_000);
+
+  let orgsRestored = 0;
+  let projectsRestored = 0;
+  await db.transaction(async (tx) => {
+    // 1. Reactivate the account.
+    await tx
+      .update(users)
+      .set({ deletedAt: null, deletionReason: null, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+
+    // 2. Revive every soft-deleted sole-owner org the user still belongs to
+    //    (incl. the personal org) + that org's projects from the same cascade.
+    const memberships = await tx
+      .select({ orgId: orgMembers.orgId })
+      .from(orgMembers)
+      .where(eq(orgMembers.userId, userId));
+    for (const m of memberships) {
+      const [org] = await tx
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, m.orgId))
+        .limit(1);
+      if (!org || !org.deletedAt) continue;
+      if (!(await isSoleOwner(org, userId))) continue;
+      await tx
+        .update(organizations)
+        .set({ deletedAt: null, updatedAt: new Date() })
+        .where(eq(organizations.id, org.id));
+      orgsRestored += 1;
+      const revivedProjects = await tx
+        .update(projects)
+        .set({ deletedAt: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(projects.orgId, org.id),
+            gte(projects.deletedAt, windowStart),
+            lte(projects.deletedAt, windowEnd),
+          ),
+        )
+        .returning({ id: projects.id });
+      projectsRestored += revivedProjects.length;
+    }
+  });
+
+  await audit({
+    actorId: userId,
+    projectId: null,
+    action: 'account.restored',
+    ipHash: null,
+    userAgent: 'briven-api',
+    metadata: { orgsRestored, projectsRestored },
+  });
+  log.info('account_restored', { userId, orgsRestored, projectsRestored });
+  return { userId, orgsRestored, projectsRestored };
 }
 
 /**

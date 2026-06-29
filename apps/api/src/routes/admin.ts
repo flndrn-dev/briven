@@ -48,6 +48,7 @@ import {
 } from '../services/migration-requests.js';
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
+import { restoreAccount } from '../services/account-deletion.js';
 import {
   getTierStorageCaps,
   listStorageUsage,
@@ -464,6 +465,24 @@ adminRouter.post('/v1/admin/users/unsuspend', async (c) => {
     metadata: { userId: parsed.userId },
   });
   return c.json({ unsuspended: parsed.userId });
+});
+
+adminRouter.post('/v1/admin/users/restore', async (c) => {
+  const actor = c.get('user')!;
+  const parsed = await parseUserAction(c);
+  if (!parsed.ok) return c.json({ code: 'validation_failed', issues: parsed.error }, 400);
+  // Reverses a soft-deletion within the grace window (the previously-missing
+  // restore path). Throws not_deleted (409) when the account isn't deletable.
+  const result = await restoreAccount(parsed.userId);
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.user.restore',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { ...result },
+  });
+  return c.json(result);
 });
 
 adminRouter.post('/v1/admin/users/force-sign-out', async (c) => {

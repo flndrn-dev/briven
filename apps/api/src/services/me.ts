@@ -103,7 +103,9 @@ export async function getProfile(userId: string) {
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  if (!row) throw new Error('user vanished mid-request');
+  // Structured so the error middleware emits a clean 404 (→ the client
+  // redirects to sign-in) instead of an opaque 500.
+  if (!row) throw new NotFoundError('user', userId);
 
   // Split the delete-secret status off the row so the hash never leaks
   // into the returned profile — only the boolean + set-at timestamp do.
