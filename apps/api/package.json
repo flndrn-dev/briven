@@ -19,6 +19,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@better-auth/passkey": "^1.6.9",
     "@briven/config": "workspace:*",
     "@briven/schema": "workspace:^",
     "@briven/shared": "workspace:*",

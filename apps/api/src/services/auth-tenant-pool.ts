@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
 
-import { betterAuth } from 'better-auth';
+import { passkey } from '@better-auth/passkey';
+import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { genericOAuth } from 'better-auth/plugins';
+import { emailOTP, genericOAuth, magicLink } from 'better-auth/plugins';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 
@@ -12,9 +13,12 @@ import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import {
   sendBrivenAuthEmailVerification,
+  sendBrivenAuthMagicLink,
+  sendBrivenAuthOtp,
   sendBrivenAuthPasswordReset,
 } from './auth-mailer.js';
-import { getAuthConfig } from './tenant-config-store.js';
+import { publishEvent, type AuthEventType } from './outbound-webhooks.js';
+import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
 import { getTenantSecret } from './tenant-secrets.js';
 import { TenantInstancePool } from './tenant-instance-pool.js';
 
@@ -40,8 +44,20 @@ import { TenantInstancePool } from './tenant-instance-pool.js';
  * Provider configuration: email + password, plus per-tenant OAuth wired
  * from the project's config store + encrypted tenant-secret store
  * (google/github/discord/microsoft via Better Auth's socialProviders;
- * konnos via the genericOAuth plugin). Magic link, OTP, and passkeys land
- * in a later step (BUILD_PLAN.md §13 step 4).
+ * konnos via the genericOAuth plugin). Magic link + email OTP ride their
+ * Better Auth plugins (gated per-tenant via config); both wire to the
+ * existing branded mailer callbacks.
+ *
+ * PASSKEY (WebAuthn) — wired via the `@better-auth/passkey` plugin (matched
+ * to better-auth@1.6.9). Gated per-tenant on `config.providers.passkey.enabled`
+ * and bound to the hosted-pages relying-party identity (`passkeyRelyingParty`).
+ * The plugin drives a 2-step ceremony: GET generate-(register|authenticate)-
+ * options → POST verify-(registration|authentication).
+ *
+ * Outbound auth webhooks — Better Auth `databaseHooks` fan signup / signin /
+ * signout / session-revoked lifecycle points out to customer webhook
+ * subscribers via `publishEvent`. Dispatch is fire-and-forget and never
+ * breaks the auth request (see `buildAuthDatabaseHooks`).
  */
 
 /**
@@ -76,6 +92,230 @@ function authSecret(): string {
     });
   }
   return processSecret;
+}
+
+// ─── hosted-pages base URL + password-reset contract ────────────────────
+
+/**
+ * Base URL of a tenant's HOSTED auth pages — the Next.js `(hosted)` route
+ * group at `apps/web/src/app/(hosted)/auth/[projectId]/[flow]`.
+ *
+ * Always the path-based `BRIVEN_WEB_ORIGIN` origin. The per-tenant
+ * `<projectId>.auth.briven.tech` subdomain is NOT routed yet (deferred), so
+ * EVERY hosted flow — the password-reset link AND the passkey WebAuthn
+ * origin/rpID — must resolve to this single origin, which is also what the
+ * hosted reset form uses as its `redirectTo` (`window.location.origin`). When
+ * subdomain routing later lands this branches on env again — and the passkey
+ * rpID migrates with it (security-critical, see `passkeyRelyingParty`).
+ */
+export function hostedAuthBaseUrl(_projectId: string): string {
+  return env.BRIVEN_WEB_ORIGIN;
+}
+
+/**
+ * CONTRACT with the hosted-pages builder (Phase 3 — password reset):
+ *
+ *   `${hostedAuthBaseUrl(projectId)}/auth/${projectId}/new-password?token=<token>`
+ *
+ * The `new-password` page reads `?token` and posts it to Better Auth's
+ * reset-password endpoint under `/v1/auth-tenant`. We build the link off the
+ * raw `token` (not Better Auth's default `url`) so it points at OUR hosted
+ * page instead of the API's built-in redirect.
+ */
+export function resetPasswordUrl(projectId: string, token: string): string {
+  return `${hostedAuthBaseUrl(projectId)}/auth/${projectId}/new-password?token=${encodeURIComponent(token)}`;
+}
+
+// ─── passkey relying-party (WebAuthn) — computed, plugin load BLOCKED ─────
+
+/**
+ * WebAuthn relying-party identity for a tenant's passkeys. The relying-party
+ * ID (`rpID`) MUST be the registrable domain the hosted login page is served
+ * from — the browser binds each passkey to it and it cannot be changed later
+ * without invalidating every credential, so this is security-critical.
+ *
+ * Derived from `hostedAuthBaseUrl` so it ALWAYS tracks the origin the hosted
+ * pages actually serve from (currently `BRIVEN_WEB_ORIGIN`'s host — `briven.tech`
+ * in prod, `localhost` in dev — because the per-tenant `*.auth.briven.tech`
+ * subdomain is deferred). The plugin's `expectedOrigin`/`expectedRPID` verify
+ * against exactly this, so registration and authentication match what the
+ * browser sees. `origin` is the full scheme+host.
+ *
+ * NEEDS HUMAN REVIEW: when the per-tenant subdomain routing lands, this rpID
+ * changes and existing passkeys registered against the path-based host stop
+ * working — plan a credential migration before flipping subdomains on.
+ */
+export function passkeyRelyingParty(projectId: string): {
+  rpName: string;
+  rpID: string;
+  origin: string;
+} {
+  const origin = hostedAuthBaseUrl(projectId);
+  const rpID = new URL(origin).hostname;
+  return { rpName: 'briven auth', rpID, origin };
+}
+
+// ─── per-tenant plugin loader (magic link + email OTP) ───────────────────
+
+/**
+ * Build the per-tenant Better Auth plugins that are gated on the project's
+ * auth config: magic-link and email-OTP sign-in. Both wire to the existing
+ * branded mailer callbacks (auth-mailer.ts). Exported so the loader logic is
+ * unit-testable without a real Better Auth + postgres roundtrip.
+ *
+ *   - magicLink → POST /v1/auth-tenant/sign-in/magic-link
+ *   - emailOTP  → POST /v1/auth-tenant/sign-in/email-otp/send-verification-otp
+ *                 + /v1/auth-tenant/sign-in/email-otp/verify
+ *
+ * Plugin import names confirmed against better-auth@1.6.9:
+ *   `magicLink` and `emailOTP` (capital OTP) from `better-auth/plugins`.
+ */
+export function buildTenantAuthPlugins(
+  projectId: string,
+  config: AuthConfig,
+): BetterAuthPlugin[] {
+  const plugins: BetterAuthPlugin[] = [];
+
+  if (config.providers.magicLink.enabled) {
+    plugins.push(
+      magicLink({
+        expiresIn: config.providers.magicLink.expiryMinutes * 60,
+        sendMagicLink: async ({ email, url }) => {
+          await sendBrivenAuthMagicLink(projectId, email, url);
+        },
+      }),
+    );
+  }
+
+  if (config.providers.emailOtp.enabled) {
+    plugins.push(
+      emailOTP({
+        otpLength: config.providers.emailOtp.codeLength,
+        expiresIn: config.providers.emailOtp.expiryMinutes * 60,
+        // One branded OTP template serves every OTP type. In this config the
+        // OTP flow is sign-in only (email-verification + password-reset keep
+        // their link emails), so the "sign-in code" copy is always correct.
+        sendVerificationOTP: async ({ email, otp }) => {
+          await sendBrivenAuthOtp(projectId, email, otp);
+        },
+      }),
+    );
+  }
+
+  if (config.providers.passkey.enabled) {
+    // WebAuthn passkeys. rpName/rpID/origin are the relying-party identity the
+    // browser binds each credential to, derived from the hosted-pages origin
+    // (passkeyRelyingParty). The plugin exposes a 2-step ceremony:
+    //   GET  /passkey/generate-register-options      → POST /passkey/verify-registration
+    //   GET  /passkey/generate-authenticate-options  → POST /passkey/verify-authentication
+    const { rpName, rpID, origin } = passkeyRelyingParty(projectId);
+    plugins.push(passkey({ rpName, rpID, origin }));
+  }
+
+  return plugins;
+}
+
+// ─── outbound auth webhook dispatch (lifecycle hooks) ────────────────────
+
+/**
+ * Injectable dispatcher so the lifecycle hooks can be unit-tested with a mock.
+ * The production default (`defaultAuthEventDispatcher`) fans the event out to
+ * customer webhook subscribers via `publishEvent`.
+ */
+export type AuthEventDispatcher = (
+  projectId: string,
+  eventType: AuthEventType,
+  payload: Record<string, unknown>,
+) => void;
+
+/**
+ * Production dispatcher. FIRE-AND-FORGET on purpose: a lifecycle hook runs
+ * inside the auth request, and a slow or failing webhook enqueue must never
+ * delay or break sign-up / sign-in. `publishEvent` only writes `pending`
+ * delivery rows; the dispatcher worker does the real POST + retries.
+ */
+function defaultAuthEventDispatcher(
+  projectId: string,
+  eventType: AuthEventType,
+  payload: Record<string, unknown>,
+): void {
+  void publishEvent({ projectId, eventType, payload }).catch((err) => {
+    log.warn('briven_auth_webhook_dispatch_failed', {
+      projectId,
+      eventType,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
+}
+
+function toIso(d: unknown): string | undefined {
+  if (d instanceof Date) return d.toISOString();
+  if (typeof d === 'string' || typeof d === 'number') {
+    const dt = new Date(d);
+    return Number.isNaN(dt.getTime()) ? undefined : dt.toISOString();
+  }
+  return undefined;
+}
+
+/**
+ * Better Auth `databaseHooks` that fan authentication lifecycle events out to
+ * customer outbound-webhook subscribers. Exported (with an injectable
+ * `dispatch`) so the hook logic is unit-testable without a live Better Auth.
+ *
+ * Mapping:
+ *   - user.create.after     → auth.signup
+ *   - session.create.after  → auth.signin
+ *   - session.delete.after  → auth.signout | auth.session.revoked
+ *
+ * Payloads are deliberately minimal + non-sensitive: ids, email, timestamps
+ * only — never password hashes, session tokens, or raw IPs (CLAUDE.md §5.1).
+ */
+export function buildAuthDatabaseHooks(
+  projectId: string,
+  dispatch: AuthEventDispatcher = defaultAuthEventDispatcher,
+): NonNullable<BetterAuthOptions['databaseHooks']> {
+  return {
+    user: {
+      create: {
+        after: async (user) => {
+          dispatch(projectId, 'auth.signup', {
+            userId: user.id,
+            email: user.email,
+            createdAt: toIso(user.createdAt),
+          });
+        },
+      },
+    },
+    session: {
+      create: {
+        after: async (session) => {
+          // A freshly-created session row means a successful sign-in.
+          dispatch(projectId, 'auth.signin', {
+            userId: session.userId,
+            sessionId: session.id,
+            createdAt: toIso(session.createdAt),
+          });
+        },
+      },
+      delete: {
+        after: async (session, ctx) => {
+          // Session deletion covers BOTH explicit sign-out and session
+          // revocation; Better Auth routes them through different endpoints.
+          // ASSUMPTION (needs review): sign-out hits `/sign-out`; revocation
+          // hits a `/revoke-session(s)`-style path. Any path containing
+          // "revoke" is treated as a revocation, everything else as sign-out.
+          const path = ctx?.path ?? '';
+          const eventType: AuthEventType = path.includes('revoke')
+            ? 'auth.session.revoked'
+            : 'auth.signout';
+          dispatch(projectId, eventType, {
+            userId: session.userId,
+            sessionId: session.id,
+          });
+        },
+      },
+    },
+  };
 }
 
 async function createAuthInstance(projectId: string) {
@@ -216,8 +456,15 @@ async function createAuthInstance(projectId: string) {
       minPasswordLength: 10,
       maxPasswordLength: 128,
       autoSignIn: true,
-      sendResetPassword: async ({ user, url }) => {
-        await sendBrivenAuthPasswordReset(projectId, user.email, url);
+      // Build the reset link off the raw `token` so it points at our HOSTED
+      // new-password page (resetPasswordUrl contract) instead of Better Auth's
+      // default API redirect URL.
+      sendResetPassword: async ({ user, token }) => {
+        await sendBrivenAuthPasswordReset(
+          projectId,
+          user.email,
+          resetPasswordUrl(projectId, token),
+        );
       },
     },
     emailVerification: {
@@ -232,7 +479,12 @@ async function createAuthInstance(projectId: string) {
     // enabled + clientId + a stored secret above, so an empty object / empty
     // array here simply means "no OAuth configured for this tenant yet".
     socialProviders,
-    plugins: [...konnosPlugins],
+    // konnos (generic OAuth) + the per-tenant magic-link / email-OTP plugins,
+    // each gated on the project's auth config.
+    plugins: [...konnosPlugins, ...buildTenantAuthPlugins(projectId, config)],
+    // Fan signup / signin / signout / session-revoked out to customer webhook
+    // subscribers. Dispatch is fire-and-forget and cannot break the request.
+    databaseHooks: buildAuthDatabaseHooks(projectId),
     session: {
       expiresIn: 60 * 60 * 24 * 30, // 30 days
       updateAge: 60 * 60 * 24 * 7, // refresh if older than 7 days
