@@ -63,8 +63,17 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   try {
     res = await apiFetch('/v1/me');
   } catch (err) {
-    // Network-level failure (connection refused, DNS, timeout) — almost always
-    // the brief window while a deploy restarts the api. Transient, not anon.
+    // Re-throw Next.js internal control-flow signals UNTOUCHED. `cookies()`
+    // throws a DynamicServerError (digest 'DYNAMIC_SERVER_USAGE') during the
+    // build's static-prerender pass to mark the route dynamic; redirect() and
+    // notFound() throw similarly. They all carry a string `digest`. Wrapping
+    // them as ApiUnavailableError breaks `next build` (it can't see the
+    // signal) — which is exactly what failed the f502eb96 deploy.
+    if (err && typeof err === 'object' && typeof (err as { digest?: unknown }).digest === 'string') {
+      throw err;
+    }
+    // A genuine network-level failure (connection refused, DNS, timeout) —
+    // almost always the brief window while a deploy restarts the api.
     throw new ApiUnavailableError(null, err instanceof Error ? err.message : 'network error');
   }
   // Real auth failure → treat as logged out so the caller redirects to sign-in.
