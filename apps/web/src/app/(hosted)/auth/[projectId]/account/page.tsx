@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+import { PasskeyRegister } from '../passkey-register';
 import { SignOutButton } from './sign-out-button';
 
 interface SessionResponse {
@@ -93,6 +94,8 @@ export default async function HostedAccountPage({
           </>
         ) : null}
       </dl>
+
+      <PasskeyRegister projectId={projectId} />
 
       <SignOutButton projectId={projectId} />
     </article>

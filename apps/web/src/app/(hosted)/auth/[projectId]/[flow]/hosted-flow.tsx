@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { PasskeySignIn } from '../passkey-sign-in';
+
 type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp';
 
 interface Props {
@@ -150,17 +152,28 @@ export function HostedFlow({ projectId, flow }: Props) {
       </header>
 
       {flow === 'sign-in' ? (
-        <form className="flex flex-col gap-3" onSubmit={handleSignIn}>
-          <Field label="email" type="email" value={email} onChange={setEmail} autoComplete="email" />
-          <Field
-            label="password"
-            type="password"
-            value={password}
-            onChange={setPassword}
-            autoComplete="current-password"
-          />
-          <Submit pending={pending} idle="sign in" busy="signing in…" />
-        </form>
+        <div className="flex flex-col gap-3">
+          <form className="flex flex-col gap-3" onSubmit={handleSignIn}>
+            <Field label="email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+            <Field
+              label="password"
+              type="password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="current-password"
+            />
+            <Submit pending={pending} idle="sign in" busy="signing in…" />
+          </form>
+          <div className="flex justify-end">
+            <Link
+              href={`/auth/${projectId}/reset-password`}
+              className="font-mono text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
+            >
+              forgot password?
+            </Link>
+          </div>
+          <PasskeySignIn projectId={projectId} />
+        </div>
       ) : null}
 
       {flow === 'sign-up' ? (
