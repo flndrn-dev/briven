@@ -285,4 +285,17 @@ if (env.BRIVEN_ENV !== 'development') {
       'BRIVEN_DATA_PLANE_URL must be set outside development (per-project schemas live in this cluster)',
     );
   }
+  // why: when the briven auth product is switched ON (BRIVEN_AUTH_ENABLED), its
+  // per-tenant secret store needs BRIVEN_AUTH_MASTER_KEY (32-byte hex) to derive
+  // per-project AES-256-GCM keys (services/tenant-secret-store.ts). The key is
+  // .optional() so dev/tests boot, and the secret store already fails-closed at
+  // first use — but a production deploy that flipped the switch ON while
+  // forgetting the key would only break when a customer first saves an OAuth
+  // secret. Fail at boot instead so a half-configured auth product is loud and
+  // immediate, never a silent landmine.
+  if (env.BRIVEN_AUTH_ENABLED && !env.BRIVEN_AUTH_MASTER_KEY) {
+    throw new Error(
+      'BRIVEN_AUTH_MASTER_KEY must be set when BRIVEN_AUTH_ENABLED=true outside development (32-byte hex master key for per-tenant auth secret encryption)',
+    );
+  }
 }
