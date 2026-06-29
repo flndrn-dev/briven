@@ -43,13 +43,29 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
     return 0;
   }
 
-  // Reset module-level state — runDoctor can be called multiple times
-  // from the same process during tests.
-  warnings = 0;
-  errors = 0;
-  checks = [];
+  // Per-call state. Kept as locals (not module-level) so concurrent /
+  // repeated runDoctor() calls in the same process — e.g. parallel test
+  // runs — never clobber each other's counters.
+  let warnings = 0;
+  let errors = 0;
+  const checks: CheckRow[] = [];
+  const jsonMode = argv.includes('--json');
 
-  jsonMode = argv.includes('--json');
+  function check(name: string, level: 'ok' | 'warn' | 'fail', detail: string): void {
+    if (level === 'warn') warnings += 1;
+    if (level === 'fail') errors += 1;
+    checks.push({ name: name.trim(), level, detail });
+
+    if (jsonMode) return;
+
+    const tag =
+      level === 'ok'
+        ? pc.green('ok  ')
+        : level === 'warn'
+          ? pc.yellow('warn')
+          : pc.red('fail');
+    step(`${tag}  ${name.padEnd(22)} ${pc.dim(detail)}`);
+  }
 
   const flag = argv.findIndex((a) => a === '--origin');
   const cliOrigin = flag !== -1 && flag + 1 < argv.length ? argv[flag + 1] : undefined;
@@ -195,30 +211,10 @@ export async function runDoctor(argv: readonly string[]): Promise<number> {
   return 0;
 }
 
-let warnings = 0;
-let errors = 0;
-let jsonMode = false;
 interface CheckRow {
   name: string;
   level: 'ok' | 'warn' | 'fail';
   detail: string;
-}
-let checks: CheckRow[] = [];
-
-function check(name: string, level: 'ok' | 'warn' | 'fail', detail: string): void {
-  if (level === 'warn') warnings += 1;
-  if (level === 'fail') errors += 1;
-  checks.push({ name: name.trim(), level, detail });
-
-  if (jsonMode) return;
-
-  const tag =
-    level === 'ok'
-      ? pc.green('ok  ')
-      : level === 'warn'
-        ? pc.yellow('warn')
-        : pc.red('fail');
-  step(`${tag}  ${name.padEnd(22)} ${pc.dim(detail)}`);
 }
 
 interface ApiOk<T> {

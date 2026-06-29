@@ -76,7 +76,7 @@ export default schema({
   todos: table({
     id: text().primaryKey(),
     body: text().notNull(),
-    done: boolean().default(false).notNull(),
+    done: boolean().default('false').notNull(),
     createdAt: timestamp().default('now()').notNull(),
     completedAt: timestamp().nullable(),
   }),
@@ -387,7 +387,7 @@ export default schema({
     id: text().primaryKey(),
     userId: text().notNull(),
     body: text().notNull(),
-    done: boolean().default(false).notNull(),
+    done: boolean().default('false').notNull(),
     createdAt: timestamp().default('now()').notNull(),
     completedAt: timestamp().nullable(),
   }),

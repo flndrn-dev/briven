@@ -24,7 +24,16 @@ export type IdPrefix =
   | 'iso' // isolate — per-process id used by the runtime pool
   | 'sup' // email suppression entry
   | 'dh' // deploy history entry
-  | 'au' // usage event (aggregator row)
+  | 'ue' // usage event (aggregator row)
+  // NOTE: 'au' (above) is the audit-log prefix and stays as-is — it is the
+  // natural fit and audit.ts already persists rows with it. The usage-event
+  // row previously also used 'au' (a duplicate). New usage events should use
+  // 'ue'; existing usage rows persisted with 'au_<ulid>' remain valid PKs
+  // (ULIDs are globally unique regardless of prefix, and usage-event ids are
+  // never validated by prefix), so no data migration is needed. The emitter
+  // apps/api/src/workers/usage-aggregator.ts still calls newId('au') and
+  // should be switched to newId('ue') in a coordinated apps-side change
+  // (outside packages/* ownership).
   | 'br' // project branch (preview environment)
   | 'wf' // workflow definition
   | 'wfr' // workflow run

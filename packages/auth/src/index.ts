@@ -121,6 +121,14 @@ export interface BrivenAuthClient {
   readonly projectId: string;
   readonly authUrl: string;
   readonly apiOrigin: string;
+  /**
+   * SDK public key. Exposed so server-side helpers (`@briven/auth/server`)
+   * can forward `authorization: Bearer <publicKey>` — the same header the
+   * browser get()/post() calls send — when validating a session off the
+   * incoming cookie. Without it the api can't resolve the tenant and the
+   * server session is always null.
+   */
+  readonly publicKey: string;
   readonly signIn: {
     email(input: SignInEmailInput): Promise<SignInResult>;
     magicLink(input: MagicLinkInput): Promise<MagicLinkResult>;
@@ -209,6 +217,7 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     projectId: opts.projectId,
     authUrl,
     apiOrigin,
+    publicKey: opts.publicKey,
     signIn: {
       async email(input) {
         try {

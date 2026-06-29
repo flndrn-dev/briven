@@ -49,6 +49,9 @@ export async function getServerSession(
       headers: {
         cookie: input.cookieHeader,
         'x-briven-project-id': client.projectId,
+        // Same Bearer the browser get() sends — without it the api can't
+        // resolve the tenant and always returns an empty/null session.
+        authorization: `Bearer ${client.publicKey}`,
       },
     });
     if (!res.ok) return null;
@@ -86,6 +89,8 @@ export async function getServerUser(
       headers: {
         cookie: input.cookieHeader,
         'x-briven-project-id': client.projectId,
+        // Same Bearer the browser get() sends — required for tenant resolve.
+        authorization: `Bearer ${client.publicKey}`,
       },
     });
     if (!res.ok) return null;

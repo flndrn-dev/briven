@@ -102,7 +102,12 @@ function parseFlags(argv: readonly string[]): StreamOptions {
 function parseDuration(raw: string): number | null {
   if (!raw) return null;
   const m = raw.match(/^(\d+)(s|m|h)$/);
-  if (!m) return null;
+  if (!m) {
+    // Don't silently drop a bad value — the user asked for a window and
+    // would otherwise see a full tail with no hint why. Warn and fall back.
+    printError(`unrecognised --since '${raw}' — expected e.g. 30s, 10m, 2h; ignoring`);
+    return null;
+  }
   const n = Number(m[1]);
   switch (m[2]) {
     case 's':
