@@ -7,9 +7,11 @@ import { exportProjectSchema } from '../services/schema-export.js';
 import {
   addColumn,
   alterColumn,
+  bulkImportRows,
   createIndex,
   createTable,
   deleteRow,
+  exportAllTableRows,
   dropColumn,
   dropIndex,
   dropTable,
@@ -399,6 +401,81 @@ studioRouter.post(
       },
     });
     return c.json(result, 201);
+  },
+);
+
+/**
+ * Export a whole table for download. Returns `{ columns, rows, truncated }`;
+ * the client turns it into a CSV or JSON file (reusing the same download
+ * helpers as the SQL editor). Read-scope rate limit, admin-only, audited —
+ * the row contents may include PII so the export is treated like a read of
+ * the full data view.
+ */
+studioRouter.get(
+  '/v1/projects/:id/studio/tables/:table/export',
+  projectRateLimit('read'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const result = await exportAllTableRows(projectId, tableName);
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.table.export',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { table: tableName, rowCount: result.rows.length, truncated: result.truncated },
+    });
+    return c.json(result);
+  },
+);
+
+/**
+ * Bulk import rows from a CSV/JSON upload. Body: `{ rows: [{ col: value }] }`
+ * (the client parses the file). Each row inserts independently — bad rows are
+ * skipped and reported in `errors`, not fatal. Mutate-scope rate limit,
+ * admin-only, audited (counts only — never the values, per CLAUDE.md §5.1).
+ */
+studioRouter.post(
+  '/v1/projects/:id/studio/tables/:table/import',
+  projectRateLimit('mutate'),
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tableName = c.req.param('table');
+    if (!projectId || !tableName) {
+      return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
+    }
+    const body = (await c.req.json().catch(() => null)) as {
+      rows?: ReadonlyArray<Record<string, unknown>>;
+    } | null;
+    if (!body || !Array.isArray(body.rows)) {
+      return c.json(
+        { code: 'validation_failed', message: 'expected { rows: [{ col: value, ... }, ...] }' },
+        400,
+      );
+    }
+    const result = await bulkImportRows({ projectId, tableName, rows: body.rows });
+    const user = c.get('user');
+    await audit({
+      actorId: user?.id ?? null,
+      projectId,
+      action: 'studio.rows.import',
+      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        table: tableName,
+        attempted: body.rows.length,
+        inserted: result.inserted,
+        failed: result.failed,
+      },
+    });
+    return c.json(result);
   },
 );
 

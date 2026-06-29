@@ -8,6 +8,7 @@ import { FilterBar } from './filter-bar';
 import { AutoRefresh } from './auto-refresh';
 import { InsertRowForm } from './insert-row-form';
 import { SchemaPanel } from './schema-panel';
+import { TableIo } from './table-io';
 
 interface ColumnInfo {
   name: string;
@@ -152,6 +153,44 @@ export default async function TablePage({
     revalidatePath(`/dashboard/projects/${id}/studio/${table}`);
   }
 
+  async function exportTableAction(): Promise<{
+    columns: ColumnInfo[];
+    rows: Record<string, unknown>[];
+    truncated: boolean;
+  }> {
+    'use server';
+    return apiJson<{ columns: ColumnInfo[]; rows: Record<string, unknown>[]; truncated: boolean }>(
+      `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/export`,
+    );
+  }
+
+  async function importRowsAction(rows: Record<string, unknown>[]): Promise<{
+    inserted: number;
+    failed: number;
+    errors: Array<{ row: number; message: string }>;
+  }> {
+    'use server';
+    const res = await apiFetch(
+      `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/import`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(body || `import failed: ${res.status}`);
+    }
+    const result = (await res.json()) as {
+      inserted: number;
+      failed: number;
+      errors: Array<{ row: number; message: string }>;
+    };
+    revalidatePath(`/dashboard/projects/${id}/studio/${table}`);
+    return result;
+  }
+
   // Build a per-page link helper that preserves sort + filters but
   // overrides the named keys (used by the prev/next nav and the
   // sortable column headers).
@@ -213,6 +252,12 @@ export default async function TablePage({
         </div>
         <div className="flex items-center gap-3">
           <AutoRefresh />
+          <TableIo
+            columns={data.columns.map((c) => ({ name: c.name, dataType: c.dataType }))}
+            tableName={table}
+            exportAction={exportTableAction}
+            importAction={importRowsAction}
+          />
           <InsertRowForm columns={data.columns} action={insertRowAction} />
         </div>
       </header>
