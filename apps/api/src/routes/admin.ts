@@ -1206,6 +1206,19 @@ adminRouter.post('/v1/admin/tickets/:id/reply', async (c) => {
   try {
     const { reply, ticket } = await addTicketReply(id, 'operator', parsed.data.body);
     const rendered = renderTicketNumber(ticket.ticketNumber);
+    // An operator reply means the customer now has a response waiting. Flip the
+    // ticket to 'replied' (unless it's already closed) so it shows as "replied"
+    // in the customer's own "my tickets" view — the in-app signal that pairs
+    // with the email, so they don't have to rely on the inbox alone. Best-effort:
+    // a status-bump failure must not fail the reply (which already persisted).
+    if (ticket.status !== 'closed' && ticket.status !== 'replied') {
+      await updateTicket(id, { status: 'replied' }).catch((err) => {
+        log.error('ticket_reply_status_bump_failed', {
+          ticketId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
     await audit({
       actorId: actor.id,
       projectId: null,
