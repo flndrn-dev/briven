@@ -115,7 +115,8 @@ export default async function SupportPage() {
               return (
                 <li key={t.id}>
                   <Link
-                    href={`/dashboard/support/tickets/${encodeURIComponent(t.ticketNumber)}`}
+                    // '#' is display-only; a '#' in a URL is the fragment marker and 404s the thread.
+                    href={`/dashboard/support/tickets/${encodeURIComponent(t.ticketNumber.replace(/^#/, ''))}`}
                     className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-2.5 transition hover:border-[var(--color-border-strong)]"
                   >
                     <span

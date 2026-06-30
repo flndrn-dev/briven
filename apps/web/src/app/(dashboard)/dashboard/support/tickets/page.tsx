@@ -81,7 +81,8 @@ export default async function MyTicketsPage() {
             return (
               <li key={t.id}>
                 <Link
-                  href={`/dashboard/support/tickets/${encodeURIComponent(t.ticketNumber)}`}
+                  // '#' is display-only; a '#' in a URL is the fragment marker and 404s the thread.
+                  href={`/dashboard/support/tickets/${encodeURIComponent(t.ticketNumber.replace(/^#/, ''))}`}
                   className="flex flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 transition hover:border-[var(--color-border-strong)]"
                 >
                   <div className="flex flex-wrap items-center gap-2">

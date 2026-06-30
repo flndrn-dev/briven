@@ -53,8 +53,10 @@ export default async function UserTicketDetailPage({
   await requireUser();
   const { ticketNumber } = await params;
 
+  // Defensive: tolerate any stale link that still carries the display '#'.
+  const lookupNumber = ticketNumber.replace(/^#/, '');
   const result = await apiJson<{ ticket: UserTicket; replies: Reply[] }>(
-    `/v1/me/tickets/${encodeURIComponent(ticketNumber)}`,
+    `/v1/me/tickets/${encodeURIComponent(lookupNumber)}`,
   ).catch(() => null);
 
   if (!result) notFound();
