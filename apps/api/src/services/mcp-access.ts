@@ -2,20 +2,20 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import { newId, NotFoundError } from '@briven/shared';
 
-import { and, desc, eq, inArray, isNull, like } from 'drizzle-orm';
+import { desc, eq, inArray, isNull, like } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import {
   mcpKeys,
   platformSettings,
   projects,
-  subscriptions,
   type McpKey,
   type McpKeyScope,
   type NewMcpKey,
   type ProjectTier,
 } from '../db/schema.js';
 import { audit, listAuditByActionPrefix, type AuditEntry, type AuditRow } from './audit.js';
+import { getTierForOrg } from './billing.js';
 import { getPlatformSetting, setPlatformSetting } from './platform-settings.js';
 
 /**
@@ -161,18 +161,11 @@ export const defaultMcpAccessDeps: McpAccessDeps = {
       .where(eq(projects.id, projectId))
       .limit(1);
     if (!proj || proj.deletedAt) return null;
-    const [sub] = await db
-      .select({ tier: subscriptions.tier, status: subscriptions.status })
-      .from(subscriptions)
-      .where(
-        and(
-          eq(subscriptions.orgId, proj.orgId),
-          inArray(subscriptions.status, ['trialing', 'active', 'past_due']),
-        ),
-      )
-      .limit(1);
-    if (sub && (sub.tier === 'pro' || sub.tier === 'team')) return sub.tier;
-    return 'free';
+    // Resolve through getTierForOrg so the founder comp (owner-email → team)
+    // counts for MCP exactly as it does for /billing + project creation. A real
+    // customer still resolves to their live subscription tier; a non-comped free
+    // org still resolves to 'free' and stays gated.
+    return getTierForOrg(proj.orgId);
   },
   async setProjectEnabled(projectId, on, actorId) {
     await setPlatformSetting(projectFlagKey(projectId), on, actorId);
@@ -379,21 +372,16 @@ export async function listProjectAccess(limit = 500): Promise<ProjectAccessRow[]
   const orgIds = [...new Set(projectRows.map((p) => p.orgId))];
   const projectIds = projectRows.map((p) => p.id);
 
-  // Paid tiers come from the SAME source Phase 3 used: the org's non-canceled
-  // subscriptions. A project with no paid subscription is 'free'.
-  const subs = await db
-    .select({ orgId: subscriptions.orgId, tier: subscriptions.tier })
-    .from(subscriptions)
-    .where(
-      and(
-        inArray(subscriptions.orgId, orgIds),
-        inArray(subscriptions.status, ['trialing', 'active', 'past_due']),
-      ),
-    );
+  // Resolve each org's tier through getTierForOrg so the founder comp
+  // (owner-email → team) is honoured here exactly as on the gate + /billing —
+  // otherwise a comped owner's projects wrongly show "requires Pro/Team" and get
+  // no enable button. Real customers resolve to their live subscription tier.
   const tierByOrg = new Map<string, ProjectTier>();
-  for (const s of subs) {
-    if (s.tier === 'pro' || s.tier === 'team') tierByOrg.set(s.orgId, s.tier);
-  }
+  await Promise.all(
+    orgIds.map(async (orgId) => {
+      tierByOrg.set(orgId, await getTierForOrg(orgId));
+    }),
+  );
 
   // Per-project enablement lives in platform_settings under mcp.project.<id>.
   const flagRows = await db
