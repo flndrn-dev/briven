@@ -61,6 +61,7 @@ import {
   updateTierStorageCap,
 } from '../services/storage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
+import { getEmailAdminSummary } from '../services/email-admin.js';
 import {
   disableForProject as mcpDisableForProject,
   enableForProject as mcpEnableForProject,
@@ -317,6 +318,14 @@ adminRouter.get('/v1/admin/email-events', async (c) => {
   }));
   return c.json({ events });
 });
+
+/**
+ * Email Admin cockpit summary (Phase 8) — live sender/transport status +
+ * per-template stats (sends · delivered · bounced · complained), all derived
+ * from audit rows (no new table). Read-only, so no audit row. Backs the
+ * panels at the top of the admin email-events page.
+ */
+adminRouter.get('/v1/admin/email-overview', async (c) => c.json(await getEmailAdminSummary()));
 
 /**
  * Suppression list — emails we won't send to. Populated by the mittera
