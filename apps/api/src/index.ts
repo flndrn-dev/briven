@@ -45,6 +45,7 @@ import { platformRouter } from './routes/platform.js';
 import { usageRouter } from './routes/usage.js';
 import { incidentsRouter } from './routes/incidents.js';
 import { marketingEventsPublicRouter } from './routes/marketing-events.js';
+import { mcpServerRouter } from './routes/mcp-server.js';
 import { contactPublicRouter } from './routes/contact.js';
 import {
   migrationRequestsPublicRouter,
@@ -168,6 +169,10 @@ app.route('/', migrationRequestsPublicRouter);
 app.route('/', contactPublicRouter);
 app.route('/', marketingEventsPublicRouter);
 app.route('/', outboundWebhooksRouter);
+// mcp.briven.tech — the live MCP server endpoint (Streamable HTTP at /mcp).
+// Bearer-authenticated per-project key; the global csrf middleware's
+// Bearer carve-out lets the server-to-server POST through.
+app.route('/', mcpServerRouter);
 
 // briven auth service router — kill-switch gated per ARCHITECTURE.md §9.
 // Default-disabled in env.ts; flip BRIVEN_AUTH_ENABLED=true in Dokploy when

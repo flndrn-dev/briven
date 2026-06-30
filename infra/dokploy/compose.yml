@@ -342,6 +342,14 @@ services:
       - 'traefik.http.routers.briven-api.entrypoints=websecure'
       - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
       - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
+      # mcp.briven.tech — the per-project MCP door (apps/api/src/routes/mcp-server.ts,
+      # served at /mcp). A SECOND router onto the SAME api service — no new container.
+      # The global mcp kill-switch defaults OFF, so this answers access-denied until a
+      # project is explicitly enabled. DNS A record mcp.${BRIVEN_DOMAIN} already exists.
+      - 'traefik.http.routers.briven-mcp.rule=Host(`mcp.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-mcp.entrypoints=websecure'
+      - 'traefik.http.routers.briven-mcp.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-mcp.service=briven-api'
 
   runtime:
     build:

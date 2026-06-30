@@ -434,3 +434,110 @@ export async function listProjectAccess(limit = 500): Promise<ProjectAccessRow[]
 export async function listMcpAudit(limit = 200): Promise<AuditRow[]> {
   return listAuditByActionPrefix('mcp.', limit);
 }
+
+/* ─── key verification (the live MCP-server auth gate) ───────────────────── */
+
+/**
+ * Hash a presented plaintext key EXACTLY the way `generateMcpKey()` does, so a
+ * lookup by hash finds the row issued for that plaintext. sha-256 hex of the
+ * full plaintext (prefix included). Kept as its own helper so the hashing rule
+ * lives in one place and the verifier can never drift from the issuer.
+ */
+export function hashMcpKey(plaintext: string): string {
+  return createHash('sha256').update(plaintext).digest('hex');
+}
+
+/** Why a presented key was refused. 401 = auth (bad key); 403 = gate (plan/switch). */
+export type McpVerifyFailure =
+  | 'missing_key'
+  | 'malformed_key'
+  | 'unknown_key'
+  | 'revoked_key'
+  | 'global_disabled'
+  | 'project_disabled'
+  | 'plan_ineligible';
+
+/**
+ * Result of verifying a presented MCP key. On success it carries the ONLY
+ * facts the MCP server is allowed to trust: which key, which project it is
+ * hard-locked to, and what it may do. There is deliberately no way for a
+ * caller to widen `projectId` — it comes from the stored row, never the wire.
+ */
+export type McpVerifyResult =
+  | { ok: true; keyId: string; projectId: string; scope: McpKeyScope }
+  | { ok: false; status: 401 | 403; reason: McpVerifyFailure };
+
+/** Injectable seam so the verifier is unit-testable without a live DB. */
+export interface McpVerifyDeps {
+  getKeyByHash(hash: string): Promise<McpKey | null>;
+  touchKeyLastUsed(keyId: string): Promise<void>;
+  isGlobalEnabled(): Promise<boolean>;
+  isProjectEnabled(projectId: string): Promise<boolean>;
+  getProjectPlanTier(projectId: string): Promise<ProjectTier | null>;
+}
+
+/** Real, DB-backed verification dependencies. */
+export const defaultMcpVerifyDeps: McpVerifyDeps = {
+  async getKeyByHash(hash) {
+    const db = getDb();
+    const [row] = await db.select().from(mcpKeys).where(eq(mcpKeys.hash, hash)).limit(1);
+    return row ?? null;
+  },
+  async touchKeyLastUsed(keyId) {
+    const db = getDb();
+    await db.update(mcpKeys).set({ lastUsedAt: new Date() }).where(eq(mcpKeys.id, keyId));
+  },
+  isGlobalEnabled() {
+    return getGlobalEnabled();
+  },
+  async isProjectEnabled(projectId) {
+    const value = await getPlatformSetting<unknown>(projectFlagKey(projectId), false);
+    return value === true;
+  },
+  getProjectPlanTier(projectId) {
+    return defaultMcpAccessDeps.getProjectPlanTier(projectId);
+  },
+};
+
+/**
+ * Verify a presented plaintext key and resolve its project binding + scope.
+ *
+ * Order matters — auth first (is this a real, live key?), then the gates (is
+ * MCP even on for this project, and does the plan still qualify?):
+ *   1. present + well-formed prefix          → else 401 missing/malformed
+ *   2. hash matches a stored row             → else 401 unknown
+ *   3. not revoked and still enabled         → else 401 revoked
+ *   4. global kill-switch is ON              → else 403 global_disabled
+ *   5. project is enabled for MCP            → else 403 project_disabled
+ *   6. project's plan is Pro/Team            → else 403 plan_ineligible
+ *
+ * The plaintext key is NEVER logged or returned. On success `lastUsedAt` is
+ * stamped. The caller binds the returned `projectId`/`scope` to the request —
+ * no tool ever sees a project id from the wire.
+ */
+export async function verifyMcpKey(
+  presented: string | null | undefined,
+  deps: McpVerifyDeps = defaultMcpVerifyDeps,
+): Promise<McpVerifyResult> {
+  if (!presented) return { ok: false, status: 401, reason: 'missing_key' };
+  if (!presented.startsWith(MCP_KEY_PREFIX)) {
+    return { ok: false, status: 401, reason: 'malformed_key' };
+  }
+  const row = await deps.getKeyByHash(hashMcpKey(presented));
+  if (!row) return { ok: false, status: 401, reason: 'unknown_key' };
+  if (row.revokedAt || !row.enabled) return { ok: false, status: 401, reason: 'revoked_key' };
+
+  if (!(await deps.isGlobalEnabled())) {
+    return { ok: false, status: 403, reason: 'global_disabled' };
+  }
+  if (!(await deps.isProjectEnabled(row.projectId))) {
+    return { ok: false, status: 403, reason: 'project_disabled' };
+  }
+  const tier = await deps.getProjectPlanTier(row.projectId);
+  if (!isPlanEligibleForMcp(tier)) {
+    return { ok: false, status: 403, reason: 'plan_ineligible' };
+  }
+
+  await deps.touchKeyLastUsed(row.id);
+  return { ok: true, keyId: row.id, projectId: row.projectId, scope: row.scope };
+}
