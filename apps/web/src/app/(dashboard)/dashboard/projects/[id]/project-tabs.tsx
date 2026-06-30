@@ -14,6 +14,7 @@ const TABS = [
   { href: '/auth', label: 'auth', dev: false },
   { href: '/storage', label: 'storage', dev: false },
   { href: '/members', label: 'members', dev: false },
+  { href: '/mcp', label: 'agent access', dev: false },
   { href: '/functions', label: 'functions', dev: true },
   { href: '/cron', label: 'cron', dev: true },
   { href: '/webhooks', label: 'webhooks', dev: true },

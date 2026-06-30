@@ -418,6 +418,22 @@ export async function listProjectAccess(limit = 500): Promise<ProjectAccessRow[]
   });
 }
 
+/**
+ * Masked keys for a SINGLE project, newest first. Powers the per-project user
+ * dashboard (the project admin's own Agent-Access tab) — the project-scoped
+ * read that mirrors `listProjectAccess`'s key column without loading every
+ * project. Same query style + `maskKey()` so a hash never leaves the service.
+ */
+export async function listKeysForProject(projectId: string): Promise<MaskedMcpKey[]> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(mcpKeys)
+    .where(eq(mcpKeys.projectId, projectId))
+    .orderBy(desc(mcpKeys.createdAt));
+  return rows.map(maskKey);
+}
+
 /** Recent mcp.* audit rows for the cockpit audit-trail table. */
 export async function listMcpAudit(limit = 200): Promise<AuditRow[]> {
   return listAuditByActionPrefix('mcp.', limit);
