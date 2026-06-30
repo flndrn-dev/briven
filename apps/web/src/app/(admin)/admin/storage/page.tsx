@@ -68,8 +68,8 @@ function UsageBar({ used, max, over }: { used: number; max: number; over: boolea
 export default async function AdminStoragePage() {
   const apiOrigin = publicApiOrigin();
   const [{ usage }, { caps }] = await Promise.all([
-    apiJson<{ usage: ProjectStorageUsage[] }>('/v1/admin/storage'),
-    apiJson<{ caps: Record<Tier, TierCap> }>('/v1/admin/storage/tier-caps'),
+    apiJson<{ usage: ProjectStorageUsage[] }>('/v1/admin/storage').catch(() => ({ usage: [] as ProjectStorageUsage[] })),
+    apiJson<{ caps: Record<Tier, TierCap> }>('/v1/admin/storage/tier-caps').catch(() => ({ caps: { free: { maxRows: 0, maxTables: 0 }, pro: { maxRows: 0, maxTables: 0 }, team: { maxRows: 0, maxTables: 0 } } as Record<Tier, TierCap> })),
   ]);
 
   const overCount = usage.filter((u) => u.overLimit).length;

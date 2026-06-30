@@ -68,7 +68,7 @@ export default async function TablePage({
   const [data, indexesResult, tablesResult] = await Promise.all([
     apiJson<TableRows>(
       `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/rows?${queryString}`,
-    ),
+    ).catch((): TableRows => ({ columns: [], rows: [], limit: PAGE_SIZE, offset, hasMore: false })),
     apiJson<{
       indexes: Array<{ name: string; columns: string[]; unique: boolean; isPrimary: boolean }>;
     }>(`/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/indexes`).catch(() => ({
@@ -162,7 +162,7 @@ export default async function TablePage({
     'use server';
     return apiJson<{ columns: ColumnInfo[]; rows: Record<string, unknown>[]; truncated: boolean }>(
       `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/export`,
-    );
+    ).catch(() => ({ columns: [] as ColumnInfo[], rows: [] as Record<string, unknown>[], truncated: true }));
   }
 
   async function importRowsAction(rows: Record<string, unknown>[]): Promise<{

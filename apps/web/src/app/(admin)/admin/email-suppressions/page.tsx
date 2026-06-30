@@ -40,7 +40,7 @@ function publicApiOrigin(): string {
 export default async function EmailSuppressionsAdminPage() {
   const { suppressions } = await apiJson<{ suppressions: Suppression[] }>(
     '/v1/admin/email-suppressions',
-  );
+  ).catch(() => ({ suppressions: [] as Suppression[] }));
   const apiOrigin = publicApiOrigin();
 
   return (

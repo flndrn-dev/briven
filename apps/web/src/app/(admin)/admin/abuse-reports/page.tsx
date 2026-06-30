@@ -40,7 +40,7 @@ export default async function AbuseReportsAdminPage({
   const filter = status && status !== '' ? `?status=${encodeURIComponent(status)}` : '';
   const { reports } = await apiJson<{ reports: AbuseReport[] }>(
     `/v1/admin/abuse-reports${filter}`,
-  );
+  ).catch(() => ({ reports: [] as AbuseReport[] }));
   const apiOrigin = publicApiOrigin();
 
   return (

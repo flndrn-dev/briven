@@ -48,7 +48,19 @@ export default async function AuthUsagePage({
     );
   }
 
-  const mau = await apiJson<MauResponse>(`/v1/projects/${id}/auth/mau`);
+  const mau = await apiJson<MauResponse>(`/v1/projects/${id}/auth/mau`).catch(() => null);
+  if (!mau) {
+    return (
+      <section className="flex flex-col gap-6">
+        <header>
+          <h2 className="font-mono text-lg tracking-tight">auth · usage</h2>
+          <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+            usage data unavailable — refresh to try again.
+          </p>
+        </header>
+      </section>
+    );
+  }
   const pct = Math.min(100, Math.round(mau.usageFraction * 100));
   const over = mau.count > mau.ceiling;
 

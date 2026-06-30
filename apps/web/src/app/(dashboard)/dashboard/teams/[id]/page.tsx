@@ -28,8 +28,8 @@ export const metadata = { title: 'team · settings' };
 export default async function TeamDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [{ orgs }, { projects }] = await Promise.all([
-    apiJson<{ orgs: Org[] }>('/v1/me/orgs'),
-    apiJson<{ projects: Project[] }>('/v1/projects'),
+    apiJson<{ orgs: Org[] }>('/v1/me/orgs').catch(() => ({ orgs: [] as Org[] })),
+    apiJson<{ projects: Project[] }>('/v1/projects').catch(() => ({ projects: [] as Project[] })),
   ]);
   const org = orgs.find((o) => o.id === id);
   if (!org) {
@@ -216,7 +216,16 @@ async function TeamInvites({ teamId }: { teamId: string }) {
         acceptedAt: string | null;
         revokedAt: string | null;
       }>;
-    }>(`/v1/orgs/${teamId}/invitations`),
+    }>(`/v1/orgs/${teamId}/invitations`).catch(() => ({
+      invitations: [] as Array<{
+        id: string;
+        email: string;
+        role: 'owner' | 'admin' | 'developer' | 'viewer';
+        expiresAt: string;
+        acceptedAt: string | null;
+        revokedAt: string | null;
+      }>,
+    })),
     apiJson<{
       members: Array<{
         userId: string;
@@ -225,7 +234,15 @@ async function TeamInvites({ teamId }: { teamId: string }) {
         role: 'owner' | 'admin' | 'developer' | 'viewer';
         joinedAt: string;
       }>;
-    }>(`/v1/orgs/${teamId}/members`),
+    }>(`/v1/orgs/${teamId}/members`).catch(() => ({
+      members: [] as Array<{
+        userId: string;
+        email: string;
+        name: string | null;
+        role: 'owner' | 'admin' | 'developer' | 'viewer';
+        joinedAt: string;
+      }>,
+    })),
   ]);
 
   const pending = invitations.filter((i) => !i.acceptedAt && !i.revokedAt);

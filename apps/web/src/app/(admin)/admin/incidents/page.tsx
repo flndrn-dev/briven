@@ -24,7 +24,7 @@ function publicApiOrigin(): string {
 }
 
 export default async function AdminIncidentsPage() {
-  const { incidents } = await apiJson<{ incidents: Incident[] }>('/v1/admin/incidents');
+  const { incidents } = await apiJson<{ incidents: Incident[] }>('/v1/admin/incidents').catch(() => ({ incidents: [] as Incident[] }));
   const open = incidents.filter((i) => i.resolvedAt === null);
   const resolved = incidents.filter((i) => i.resolvedAt !== null);
 

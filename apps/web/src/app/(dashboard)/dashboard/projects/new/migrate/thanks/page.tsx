@@ -17,7 +17,7 @@ export default async function MigrationThanksPage() {
   // if they email us.
   const { requests } = await apiJson<{ requests: RequestRow[] }>(
     '/v1/migration-requests',
-  );
+  ).catch(() => ({ requests: [] as RequestRow[] }));
   const latest = requests[0];
 
   return (

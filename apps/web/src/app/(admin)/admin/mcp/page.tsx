@@ -25,7 +25,7 @@ interface McpStatus {
 }
 
 export default async function AdminMcpPage() {
-  const { globalEnabled, projects, audit } = await apiJson<McpStatus>('/v1/admin/mcp');
+  const { globalEnabled, projects, audit } = await apiJson<McpStatus>('/v1/admin/mcp').catch((): McpStatus => ({ globalEnabled: false, projects: [], audit: [] }));
 
   const enabled = projects.filter((p) => p.mcpEnabled);
   const eligible = projects.filter((p) => !p.mcpEnabled && p.eligible);

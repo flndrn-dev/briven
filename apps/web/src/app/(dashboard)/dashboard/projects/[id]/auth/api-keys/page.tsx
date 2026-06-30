@@ -59,7 +59,7 @@ export default async function AuthApiKeysPage({
     );
   }
 
-  const data = await apiJson<KeysResponse>(`/v1/projects/${id}/auth/api-keys`);
+  const data = await apiJson<KeysResponse>(`/v1/projects/${id}/auth/api-keys`).catch(() => ({ items: [] as MaskedKey[] }));
 
   return (
     <section className="flex flex-col gap-6">

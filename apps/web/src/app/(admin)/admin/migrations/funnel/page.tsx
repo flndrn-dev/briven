@@ -49,7 +49,7 @@ export default async function MigrationFunnelPage({
 }) {
   const params = await searchParams;
   const days = Math.max(1, Math.min(365, Number(params.days) || 30));
-  const data = await apiJson<FunnelResponse>(`/v1/admin/marketing-funnel?days=${days}`);
+  const data = await apiJson<FunnelResponse>(`/v1/admin/marketing-funnel?days=${days}`).catch((): FunnelResponse => ({ rows: [], totals: { source: 'all', views: 0, leads: 0, conversion: null }, sinceDays: days }));
 
   return (
     <section className="flex flex-col gap-6">
@@ -86,7 +86,7 @@ export default async function MigrationFunnelPage({
         </div>
       </header>
 
-      <div className="overflow-hidden rounded-md border border-[var(--color-border-subtle)]">
+      <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
         <table className="w-full font-mono text-xs">
           <thead className="bg-[var(--color-surface)] text-[var(--color-text-subtle)]">
             <tr>

@@ -52,7 +52,14 @@ interface Overview {
 }
 
 export default async function AdminOverviewPage() {
-  const data = await apiJson<Overview>('/v1/admin/overview');
+  const data = await apiJson<Overview>('/v1/admin/overview').catch(() => null);
+  if (!data) {
+    return (
+      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-sm text-[var(--color-text-muted)]">
+        overview unavailable — refresh to try again.
+      </div>
+    );
+  }
   const { billing, health, openIncidents, recentDeploys, counts } = data;
 
   return (

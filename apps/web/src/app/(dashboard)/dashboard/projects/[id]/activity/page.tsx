@@ -36,7 +36,7 @@ export default async function ActivityPage({
   const qs = prefix ? `?prefix=${encodeURIComponent(prefix)}` : '';
   const { activity } = await apiJson<{ activity: Activity[] }>(
     `/v1/projects/${id}/activity${qs}`,
-  );
+  ).catch(() => ({ activity: [] as Activity[] }));
 
   const filterBar = (
     <nav className="flex flex-wrap gap-1">

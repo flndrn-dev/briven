@@ -69,7 +69,7 @@ export default async function NewFromTemplatePage({
 
   // Load the user's orgs so they can pick where the project lives (same as
   // the blank-create flow).
-  const { orgs } = await apiJson<{ orgs: Org[] }>('/v1/me/orgs');
+  const { orgs } = await apiJson<{ orgs: Org[] }>('/v1/me/orgs').catch(() => ({ orgs: [] as Org[] }));
   const sorted = [...orgs.filter((o) => o.personal), ...orgs.filter((o) => !o.personal)];
 
   return (
@@ -120,17 +120,23 @@ export default async function NewFromTemplatePage({
 
         <label className="flex flex-col gap-2">
           <span className="font-mono text-xs text-[var(--color-text-muted)]">org</span>
-          <select
-            name="orgId"
-            defaultValue={sorted[0]?.id}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-          >
-            {sorted.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} {o.personal ? '· personal' : '· team'}
-              </option>
-            ))}
-          </select>
+          {sorted.length === 0 ? (
+            <p className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-2 font-mono text-xs text-[var(--color-text-muted)]">
+              no organization found — refresh to try again.
+            </p>
+          ) : (
+            <select
+              name="orgId"
+              defaultValue={sorted[0]?.id}
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+            >
+              {sorted.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name} {o.personal ? '· personal' : '· team'}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
 
         <label className="flex flex-col gap-2">

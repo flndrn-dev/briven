@@ -30,7 +30,10 @@ interface HealthSummary {
 }
 
 export default async function AdminHealthPage() {
-  const { checks, host } = await apiJson<HealthSummary>('/v1/admin/health');
+  const { checks, host } = await apiJson<HealthSummary>('/v1/admin/health').catch((): HealthSummary => ({
+    checks: { control_postgres: 'unreachable', data_plane_postgres: 'unreachable', runtime: 'unreachable', redis: 'unreachable' },
+    host: null,
+  }));
 
   return (
     <div className="flex flex-col gap-8">

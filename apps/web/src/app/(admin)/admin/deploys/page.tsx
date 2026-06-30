@@ -32,7 +32,7 @@ function relativeTime(t: string | Date): string {
 export default async function DeploysAdminPage() {
   const { deploys } = await apiJson<{ deploys: DeployEntry[] }>(
     '/v1/admin/deploys?limit=100',
-  );
+  ).catch(() => ({ deploys: [] as DeployEntry[] }));
 
   return (
     <div className="flex flex-col gap-6">

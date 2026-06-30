@@ -39,7 +39,7 @@ async function createProject(formData: FormData) {
 export default async function NewProjectPage() {
   // Load every org the user belongs to so they can pick where the
   // project lives. Personal first; teams sorted after.
-  const { orgs } = await apiJson<{ orgs: Org[] }>('/v1/me/orgs');
+  const { orgs } = await apiJson<{ orgs: Org[] }>('/v1/me/orgs').catch(() => ({ orgs: [] as Org[] }));
   const sorted = [
     ...orgs.filter((o) => o.personal),
     ...orgs.filter((o) => !o.personal),
@@ -64,17 +64,23 @@ export default async function NewProjectPage() {
       <form action={createProject} className="flex flex-col gap-5">
         <label className="flex flex-col gap-2">
           <span className="font-mono text-xs text-[var(--color-text-muted)]">org</span>
-          <select
-            name="orgId"
-            defaultValue={sorted[0]?.id}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
-          >
-            {sorted.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} {o.personal ? '· personal' : '· team'}
-              </option>
-            ))}
-          </select>
+          {sorted.length === 0 ? (
+            <p className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-2 font-mono text-xs text-[var(--color-text-muted)]">
+              no organization found — refresh to try again.
+            </p>
+          ) : (
+            <select
+              name="orgId"
+              defaultValue={sorted[0]?.id}
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--color-primary)]"
+            >
+              {sorted.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name} {o.personal ? '· personal' : '· team'}
+                </option>
+              ))}
+            </select>
+          )}
           <span className="font-mono text-[11px] text-[var(--color-text-subtle)]">
             projects belong to an org. members of the org can collaborate; billing rolls up to
             the org. create a team at <em>/dashboard/teams</em> if you need a separate

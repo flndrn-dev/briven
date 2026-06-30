@@ -32,7 +32,7 @@ function publicApiOrigin(): string {
 export default async function AdminMigrationsPage() {
   const { requests } = await apiJson<{ requests: AdminRequest[] }>(
     '/v1/admin/migration-requests?limit=200',
-  );
+  ).catch(() => ({ requests: [] as AdminRequest[] }));
 
   const open = requests.filter(
     (r) => r.status !== 'completed' && r.status !== 'cancelled',

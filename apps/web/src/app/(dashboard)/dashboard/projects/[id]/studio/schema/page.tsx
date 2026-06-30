@@ -37,7 +37,7 @@ export default async function SchemaOverviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const schema = await apiJson<FullSchema>(`/v1/projects/${id}/studio/schema`);
+  const schema = await apiJson<FullSchema>(`/v1/projects/${id}/studio/schema`).catch(() => ({ tables: [] as FullSchemaTable[], relationships: [] as RelationshipEdge[] }));
 
   // Index inbound FKs so each table card can show "← comments.user_id".
   const inbound = new Map<string, RelationshipEdge[]>();

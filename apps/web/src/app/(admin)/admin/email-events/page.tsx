@@ -48,7 +48,7 @@ function formatTs(t: string | Date): string {
 }
 
 export default async function EmailEventsAdminPage() {
-  const { events } = await apiJson<{ events: EmailEvent[] }>('/v1/admin/email-events');
+  const { events } = await apiJson<{ events: EmailEvent[] }>('/v1/admin/email-events').catch(() => ({ events: [] as EmailEvent[] }));
 
   // Group counts for the summary header.
   const counts = events.reduce<Record<string, number>>((acc, e) => {

@@ -52,7 +52,7 @@ function formatTime(iso: string): string {
 export default async function MyMigrationsPage() {
   const { requests } = await apiJson<{ requests: CustomerRequest[] }>(
     '/v1/migration-requests',
-  );
+  ).catch(() => ({ requests: [] as CustomerRequest[] }));
 
   const open = requests.filter(
     (r) => r.status !== 'completed' && r.status !== 'cancelled',

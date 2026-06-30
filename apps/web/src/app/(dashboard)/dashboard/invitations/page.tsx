@@ -17,7 +17,7 @@ export const metadata = { title: 'invitations' };
 export const dynamic = 'force-dynamic';
 
 export default async function InvitationsPage() {
-  const data = await apiJson<{ invitations: PendingInvitation[] }>('/v1/me/invitations');
+  const data = await apiJson<{ invitations: PendingInvitation[] }>('/v1/me/invitations').catch(() => ({ invitations: [] as PendingInvitation[] }));
   const invitations = data.invitations;
 
   async function accept(invitationId: string): Promise<void> {

@@ -152,27 +152,33 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
 
       <section>
         <h3 className="font-mono text-xs text-[var(--color-text-muted)]">current members</h3>
-        <ul className="mt-2 flex flex-col gap-2">
-          {members.map((m) => (
-            <li
-              key={m.userId}
-              className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
-            >
-              <div>
-                <p className="font-mono text-sm">{m.name ?? m.userId}</p>
-                <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-                  {m.userId} · joined {toValidDate(m.createdAt)?.toISOString().slice(0, 10) ?? '—'}
-                </p>
-              </div>
-              <MemberActions
-                userId={m.userId}
-                role={m.role}
-                onUpdateRole={updateRole}
-                onRemove={remove}
-              />
-            </li>
-          ))}
-        </ul>
+        {members.length === 0 ? (
+          <div className="mt-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center font-mono text-xs text-[var(--color-text-muted)]">
+            no members yet.
+          </div>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-2">
+            {members.map((m) => (
+              <li
+                key={m.userId}
+                className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-mono text-sm">{m.name ?? m.userId}</p>
+                  <p className="mt-0.5 truncate font-mono text-xs text-[var(--color-text-subtle)]">
+                    {m.userId} · joined {toValidDate(m.createdAt)?.toISOString().slice(0, 10) ?? '—'}
+                  </p>
+                </div>
+                <MemberActions
+                  userId={m.userId}
+                  role={m.role}
+                  onUpdateRole={updateRole}
+                  onRemove={remove}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
