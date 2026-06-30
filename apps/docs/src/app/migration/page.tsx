@@ -164,7 +164,7 @@ export default function MigrationPage() {
 
       <h2 className="mt-12 font-mono text-xl tracking-tight">when not to use this</h2>
       <ul className="mt-4 list-inside list-disc font-mono text-sm text-[var(--color-text-muted)]">
-        <li>moving between briven projects — wait for briven export / import (private beta)</li>
+        <li>moving between briven projects — use briven export / import</li>
         <li>moving a briven project between regions — file a support ticket</li>
         <li>migrating only data without schema changes — use pg_dump / pg_restore directly</li>
       </ul>

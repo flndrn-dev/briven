@@ -42,11 +42,12 @@ const GROUPS: readonly NavGroup[] = [
       { href: '/examples', label: 'examples' },
       { href: '/functions', label: 'functions' },
       { href: '/realtime', label: 'realtime' },
+      { href: '/vector-search', label: 'vector search' },
       { href: '/sdks', label: 'client sdks' },
       { href: '/auth', label: 'auth' },
       { href: '/api', label: 'http api' },
       { href: '/api-keys', label: 'api keys' },
-      { href: '/ai', label: 'ai schema' },
+      { href: '/ai', label: 'ai features' },
     ],
   },
   {
@@ -60,10 +61,15 @@ const GROUPS: readonly NavGroup[] = [
   {
     label: 'meta',
     items: [
+      { href: '/pricing', label: 'pricing' },
       { href: '/roadmap', label: 'roadmap' },
       { href: '/changelog', label: 'changelog' },
       { href: '/status', label: 'status' },
+      { href: '/sla', label: 'sla' },
       { href: '/support', label: 'support' },
+      { href: '/trust', label: 'trust + security' },
+      { href: '/ask', label: 'ask the docs' },
+      { href: '/search', label: 'search' },
     ],
   },
 ];

@@ -327,8 +327,8 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     slug: '/support',
     title: 'support',
     summary:
-      'where to ask for help, what to include in an issue, what NOT to paste (secrets, full session cookies, real user emails). private discord for beta users.',
-    keywords: ['support', 'help', 'discord', 'community', 'contact'],
+      'where to ask for help (github issues + the contact form), what to include in a bug report, what NOT to paste (secrets, full session cookies, real user emails), how to report security issues, and response targets per tier.',
+    keywords: ['support', 'help', 'community', 'contact', 'bug report', 'github issues'],
   },
   {
     slug: '/status',
@@ -395,6 +395,67 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     summary:
       'reverse-chronological list of every notable change to briven, tagged by feat / fix / security / docs / infra / chore. also available as RSS at /changelog/feed.xml.',
     keywords: ['changelog', 'releases', 'updates', 'history', 'whats new'],
+  },
+  {
+    slug: '/pricing',
+    title: 'pricing · free / pro / team tiers',
+    summary:
+      'briven pricing: free tier ($0), pro ($29.99/mo), team ($99.99/mo). VAT added at checkout for EU customers. tier comparison table with the real caps — projects per org, functions, function invocations/month, database storage, realtime connection-seconds, concurrent subscriptions, and auth monthly active users (free 1,000 / pro 25,000 / team 250,000). upgrade via the dashboard billing page (hosted Polar checkout); most caps are soft + metered, concurrent subs + project/function counts are hard caps.',
+    keywords: [
+      'pricing',
+      'price',
+      'cost',
+      'plans',
+      'tiers',
+      'free',
+      'pro',
+      'team',
+      'subscription',
+      'billing',
+      'vat',
+      'polar',
+      'upgrade',
+      'limits',
+      'caps',
+      'quota',
+    ],
+  },
+  {
+    slug: '/sla',
+    title: 'service level agreement (SLA)',
+    summary:
+      'the uptime briven commits to per tier (pro 99.5%, team 99.9%; free is best-effort), how monthly credits are calculated when we miss it, what counts as downtime, exclusions, and how to file a claim via the contact form. measured by an independent third-party probe.',
+    keywords: [
+      'sla',
+      'service level agreement',
+      'uptime',
+      'availability',
+      'downtime',
+      'credit',
+      'guarantee',
+      '99.9',
+      '99.5',
+    ],
+  },
+  {
+    slug: '/trust',
+    title: 'trust + security · vulnerability disclosure',
+    summary:
+      'how to report a security vulnerability (via the contact form, never a public issue; PGP key available on request), our responsible-disclosure policy and safe-harbour statement, in-scope surfaces (briven.tech, api.briven.tech, the open-core repo + @briven/* packages) and out-of-scope examples, supported versions, and our acknowledgement / triage / fix response targets.',
+    keywords: [
+      'trust',
+      'security',
+      'vulnerability',
+      'disclosure',
+      'responsible disclosure',
+      'safe harbor',
+      'safe harbour',
+      'report',
+      'pgp',
+      'bug bounty',
+      'cve',
+      'scope',
+    ],
   },
 ];
 

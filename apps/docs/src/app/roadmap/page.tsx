@@ -25,8 +25,8 @@ export default function RoadmapPage() {
         <Bullet status="planned">point-in-time recovery (replace nightly pg_dump with WAL streaming + 7-day window)</Bullet>
         <Bullet status="planned">multi-region read replicas (eu-west + us-east, opt-in per project)</Bullet>
         <Bullet status="planned">team auth: SSO via SAML/OIDC, per-project member roles beyond owner/admin/developer</Bullet>
-        <Bullet status="planned">payments live: Polar + invoice PDFs + dunning + tax handling for EU/UK</Bullet>
-        <Bullet status="planned">function logs: full-text search across the last 7 days (today is tail-only)</Bullet>
+        <Bullet status="done">payments live: Polar checkout + customer portal + tier sync via webhook (invoice PDFs + dunning still queued)</Bullet>
+        <Bullet status="done">function logs: full-text search across the last 7 days</Bullet>
         <Bullet status="planned">scheduled functions: cron expressions in code, observable in the dashboard</Bullet>
         <Bullet status="planned">file uploads: presigned-URL flow + per-project minio bucket + image transforms</Bullet>
       </Phase>
@@ -36,7 +36,8 @@ export default function RoadmapPage() {
         <Bullet status="planned">vector search beyond pgvector — first-party embedding generation via the platform</Bullet>
         <Bullet status="planned">k8s helm chart for self-hosters past ~100 projects per host</Bullet>
         <Bullet status="planned">desktop dashboard (electron) for offline-edit + git-based workflows</Bullet>
-        <Bullet status="planned">briven AI: schema-aware function generator, doc-aware chatbot for self-host operators</Bullet>
+        <Bullet status="done">briven AI: schema generator, function generator, and code explain — all live (dashboard + cli + api)</Bullet>
+        <Bullet status="planned">briven AI: doc-aware chatbot for self-host operators</Bullet>
       </Phase>
 
       <Phase label="not on the roadmap" body="things people ask about that we don&apos;t plan to build, with the why.">

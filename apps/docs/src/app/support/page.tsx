@@ -17,12 +17,6 @@ export default function SupportPage() {
         <h2 className="font-mono text-lg tracking-tight">where to ask</h2>
         <ul className="mt-3 flex flex-col gap-2 font-mono text-sm">
           <li>
-            <strong>community discord</strong> — open to everyone. fastest path for &quot;how
-            do i…&quot; questions; expect informal answers from the team + community within
-            an hour or two on Flanders business hours. invite link lands at public-beta open
-            on <strong>2026-05-21</strong>; until then reach the team via the contact form below.
-          </li>
-          <li>
             <strong>github issues</strong>{' '}
             <Link
               href="https://github.com/flndrn-dev/briven/issues"
@@ -126,13 +120,13 @@ export default function SupportPage() {
         <dl className="mt-3 grid grid-cols-[120px_1fr] gap-y-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-sm">
           <dt className="text-[var(--color-text-subtle)]">free</dt>
           <dd className="text-[var(--color-text-muted)]">
-            community-only; best-effort within ~48h via discord / github
+            community-only; best-effort within ~48h via github issues
           </dd>
           <dt className="text-[var(--color-text-subtle)]">pro</dt>
           <dd className="text-[var(--color-text-muted)]">email support, 48h target</dd>
           <dt className="text-[var(--color-text-subtle)]">team</dt>
           <dd className="text-[var(--color-text-muted)]">
-            priority email + 99.5% SLA, 24h target on outages
+            priority email + 99.9% SLA, 24h target on outages
           </dd>
         </dl>
       </section>

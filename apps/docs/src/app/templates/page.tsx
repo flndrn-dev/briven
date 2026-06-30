@@ -26,7 +26,7 @@ const TEMPLATES: readonly Template[] = [
     name: 'todo-app',
     pitch: 'canonical hello-world',
     description:
-      'classic todo list. 4 mutations covering create / toggle / rename / delete, 1 reactive query with a filter argument (open / done / all). matches the live demo at briven.tech/demo (when phase 4 lands).',
+      'classic todo list. 4 mutations covering create / toggle / rename / delete, 1 reactive query with a filter argument (open / done / all).',
     schema: `briven/
 ├── schema.ts               # 1 table: todos
 └── functions/

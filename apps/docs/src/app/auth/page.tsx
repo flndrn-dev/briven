@@ -12,8 +12,9 @@ export default function AuthPage() {
       <h1 className="font-mono text-2xl tracking-tight">auth</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
         <code>@briven/auth</code> is a drop-in sign-in client for your briven project. one
-        package gives you email + password, magic links, email OTP, and OAuth social login —
-        plus React hooks and a prebuilt <code>&lt;BrivenSignIn /&gt;</code> panel. the SDK
+        package gives you email + password, magic links, email OTP, passkeys (WebAuthn), and
+        OAuth social login — plus React hooks and a prebuilt <code>&lt;BrivenSignIn /&gt;</code>{' '}
+        panel. the SDK
         talks to the hosted briven auth service; you never run an auth server yourself.
       </p>
 
@@ -40,7 +41,14 @@ export default function AuthPage() {
       <section id="install" className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8">
         <h2 className="font-mono text-lg tracking-tight">install</h2>
         <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-          published to public npm. current version <code>0.0.1</code>.
+          published to public npm — see{' '}
+          <a
+            className="underline"
+            href="https://www.npmjs.com/package/@briven/auth"
+          >
+            npm
+          </a>{' '}
+          for the current version.
         </p>
         <div className="mt-3">
           <PmTabs commands={INSTALL} />
@@ -225,6 +233,36 @@ if (result.ok) { /* result.userId */ }`}</Snippet>
   redirectTo: '/dashboard',
 });
 window.location.assign(redirectUrl);`}</Snippet>
+
+        <h3 className="mt-5 font-mono text-sm">passkeys (WebAuthn)</h3>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+          passwordless sign-in backed by the device&apos;s platform authenticator (Touch ID, Face
+          ID, Windows Hello, a hardware key). two ceremonies, both wrapped for you so you never
+          touch the raw <code>navigator.credentials</code> calls:
+        </p>
+        <Snippet>{`// REGISTER — adds a passkey to the *currently signed-in* user.
+// call this from an account-settings screen, after a normal sign-in.
+const reg = await auth.passkey.register();
+if (reg.ok) { /* passkey saved on this device */ }
+
+// SIGN IN — no password, no email field needed.
+const result = await auth.passkey.signIn();
+if (result.ok) {
+  // result.userId, result.sessionExpiresAt
+} else {
+  // result.code: 'not_enabled' | 'cancelled' | 'unsupported' | ...
+  console.error(result.message);
+}`}</Snippet>
+        <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
+          passkeys are <strong>per-tenant</strong>: the project owner enables them under{' '}
+          <em>Auth → providers</em> (the <code>passkey</code> provider) and a passkey registered in
+          your project only works in your project. one caveat to know:{' '}
+          <code>auth.passkey.register()</code> needs an active session, and the credential is bound
+          to the <strong>rpID</strong> — which is the web origin (host) your app runs on. a passkey
+          registered on <code>app.example.com</code> can&apos;t be used from a different host, so
+          pin your production origin before you ask users to enrol. WebAuthn also requires a secure
+          context (https, or <code>localhost</code> in dev).
+        </p>
 
         <section className="mt-5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
           <strong className="text-[var(--color-text)]">before these work in production:</strong>{' '}

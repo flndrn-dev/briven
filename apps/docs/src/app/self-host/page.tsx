@@ -12,9 +12,12 @@ export default function SelfHostPage() {
       </p>
 
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
-        <strong>self-host status:</strong> the public dokploy + coolify templates ship alongside
-        the public beta. until then this page documents the moving parts so you can plan your
-        deploy; the step-by-step guide lands with the engine&apos;s self-host release.
+        <strong>self-host status:</strong> live since the public beta (2026-05-21). the deploy
+        templates live in the open-core repo under <code>infra/</code>:{' '}
+        <code>infra/dokploy/</code> (<code>compose.yml</code> + <code>compose.dokploy.yml</code>),{' '}
+        <code>infra/coolify/</code>, <code>infra/traefik/</code>, and an{' '}
+        <code>infra/k8s/</code> manifest set for larger fleets. clone the repo, copy the template
+        that matches your platform, fill in the env vars below, and bring the stack up.
       </div>
 
       <Section title="what you run">
