@@ -78,7 +78,7 @@ export default schema({
     body: text().notNull(),
     done: boolean().default('false').notNull(),
     createdAt: timestamp().default('now()').notNull(),
-    completedAt: timestamp().nullable(),
+    completedAt: timestamp(),
   }),
 });
 `,
@@ -260,7 +260,7 @@ export default schema({
     ownerId: text().notNull(),
     title: text().notNull(),
     body: text().notNull(),
-    tag: text().nullable(),
+    tag: text(),
     createdAt: timestamp().default('now()').notNull(),
     updatedAt: timestamp().default('now()').notNull(),
   }),
@@ -389,7 +389,7 @@ export default schema({
     body: text().notNull(),
     done: boolean().default('false').notNull(),
     createdAt: timestamp().default('now()').notNull(),
-    completedAt: timestamp().nullable(),
+    completedAt: timestamp(),
   }),
 });
 `,
