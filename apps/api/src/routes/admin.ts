@@ -63,12 +63,14 @@ import {
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 import { getEmailAdminSummary } from '../services/email-admin.js';
 import {
+  deleteRevokedKey as mcpDeleteRevokedKey,
   disableForProject as mcpDisableForProject,
   enableForProject as mcpEnableForProject,
   getGlobalEnabled as mcpGetGlobalEnabled,
   issueKey as mcpIssueKey,
   listMcpAudit,
   listProjectAccess as mcpListProjectAccess,
+  McpKeyNotRevokedError,
   McpPlanRequiredError,
   revokeKey as mcpRevokeKey,
   setGlobalEnabled as mcpSetGlobalEnabled,
@@ -1457,6 +1459,33 @@ adminRouter.post('/v1/admin/mcp/keys/revoke', async (c) => {
     const result = await mcpRevokeKey(parsed.data.keyId, mcpActor(c));
     return c.json(result);
   } catch (err) {
+    if (err instanceof NotFoundError) {
+      return c.json({ code: 'not_found' }, 404);
+    }
+    throw err;
+  }
+});
+
+/**
+ * Delete a key — REVOKE-THEN-DELETE: only an already-revoked key may be removed.
+ * An active key is refused (409 mcp_key_not_revoked); unknown → 404.
+ */
+adminRouter.post('/v1/admin/mcp/keys/delete', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({ keyId: z.string().min(1) }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const result = await mcpDeleteRevokedKey(parsed.data.keyId, mcpActor(c));
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof McpKeyNotRevokedError) {
+      return c.json(
+        { code: err.code, message: 'revoke this key before deleting it' },
+        409,
+      );
+    }
     if (err instanceof NotFoundError) {
       return c.json({ code: 'not_found' }, 404);
     }

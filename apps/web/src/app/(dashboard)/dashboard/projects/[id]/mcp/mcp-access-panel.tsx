@@ -170,6 +170,20 @@ export function McpAccessPanel({
     refresh();
   }
 
+  // Delete only ever runs on an already-revoked key (the button is shown only
+  // for revoked keys) — REVOKE-THEN-DELETE. Hard-removes the row.
+  async function remove(keyId: string) {
+    setBusy(true);
+    setError(null);
+    const result = await post(apiOrigin, `${base}/keys/${keyId}/delete`);
+    setBusy(false);
+    if (result.kind === 'error') {
+      setError(result.message);
+      return;
+    }
+    refresh();
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* enable/disable */}
@@ -254,7 +268,16 @@ export function McpAccessPanel({
                       >
                         revoke
                       </button>
-                    ) : null}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void remove(k.id)}
+                        disabled={busy}
+                        className="font-mono text-[10px] text-[var(--color-text-subtle)] hover:text-[var(--color-error)] disabled:opacity-50"
+                      >
+                        delete
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

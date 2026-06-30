@@ -10,12 +10,14 @@ import { mcpKeyScope, type ProjectTier } from '../db/schema.js';
 import {
   defaultMcpAccessDeps,
   defaultMcpVerifyDeps,
+  deleteRevokedKey,
   disableForProject,
   enableForProject,
   getGlobalEnabled,
   isPlanEligibleForMcp,
   issueKey,
   listKeysForProject,
+  McpKeyNotRevokedError,
   McpPlanRequiredError,
   revokeKey,
   type MaskedMcpKey,
@@ -47,6 +49,9 @@ import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
  *   - revoke    → 404 if the key is unknown; 403 `cross_project` if the key
  *                 belongs to a DIFFERENT project than the URL `:id`
  *                 (no cross-project revoke).
+ *   - delete    → same cross-project guard as revoke, plus REVOKE-THEN-DELETE:
+ *                 409 `mcp_key_not_revoked` if the key is still active (a live
+ *                 key must be revoked before it can be deleted).
  * Every mutation is audited inside the mcp-access service (`mcp.*` actions,
  * actor = the acting user id, project = `:id`).
  */
@@ -207,6 +212,34 @@ export function buildProjectMcpRouter(opts?: {
       const result = await revokeKey(keyId, mcpActor(c), accessDeps);
       return c.json(result);
     } catch (err) {
+      if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+      throw err;
+    }
+  });
+
+  /**
+   * Delete a key — same cross-project guard as revoke, plus REVOKE-THEN-DELETE:
+   * only an already-revoked key may be removed (409 `mcp_key_not_revoked` for an
+   * active key). Unknown / other-project → 404 / 403 `cross_project`.
+   */
+  router.post('/v1/projects/:id/mcp/keys/:keyId/delete', projectRateLimit('mutate'), async (c) => {
+    const projectId = c.req.param('id');
+    const keyId = c.req.param('keyId');
+    const row = await accessDeps.getKeyById(keyId);
+    if (!row) return c.json({ code: 'not_found', message: 'key not found' }, 404);
+    if (row.projectId !== projectId) {
+      return c.json(
+        { code: 'cross_project', message: 'key does not belong to this project' },
+        403,
+      );
+    }
+    try {
+      const result = await deleteRevokedKey(keyId, mcpActor(c), accessDeps);
+      return c.json(result);
+    } catch (err) {
+      if (err instanceof McpKeyNotRevokedError) {
+        return c.json({ code: err.code, message: 'revoke this key before deleting it' }, 409);
+      }
       if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
       throw err;
     }

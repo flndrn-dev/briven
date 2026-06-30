@@ -22,6 +22,7 @@ interface FakeState {
   enabled: Map<string, boolean>;
   keys: Map<string, McpKey>;
   revoked: string[];
+  deleted: string[];
 }
 
 function makeFakes(opts: {
@@ -34,6 +35,7 @@ function makeFakes(opts: {
   const enabled = new Map<string, boolean>((opts.enabledProjects ?? []).map((p) => [p, true]));
   const keys = new Map<string, McpKey>((opts.seedKeys ?? []).map((k) => [k.id, k]));
   const revoked: string[] = [];
+  const deleted: string[] = [];
 
   const accessDeps: McpAccessDeps = {
     async setGlobalSetting() {},
@@ -69,6 +71,10 @@ function makeFakes(opts: {
       const row = keys.get(keyId);
       if (row) keys.set(keyId, { ...row, revokedAt: new Date(), enabled: false });
     },
+    async deleteKey(keyId) {
+      deleted.push(keyId);
+      keys.delete(keyId);
+    },
     async audit() {},
   };
 
@@ -96,7 +102,7 @@ function makeFakes(opts: {
     },
   };
 
-  return { accessDeps, readDeps, enabled, keys, revoked };
+  return { accessDeps, readDeps, enabled, keys, revoked, deleted };
 }
 
 /** Fake auth middleware: sets an acting user + a project role on the request. */
@@ -139,6 +145,11 @@ function makeKey(id: string, projectId: string): McpKey {
     lastUsedAt: null,
     revokedAt: null,
   };
+}
+
+/** Like makeKey, but already revoked + disabled — ready to be deleted. */
+function makeRevokedKey(id: string, projectId: string): McpKey {
+  return { ...makeKey(id, projectId), enabled: false, revokedAt: new Date() };
 }
 
 /* ─── 1. plan gate ─────────────────────────────────────────────────────────── */
@@ -264,6 +275,83 @@ describe('cross-project key-revoke isolation', () => {
       readDeps: fakes.readDeps,
     });
     const res = await app.request('/v1/projects/proj_A/mcp/keys/mck_nope/revoke', POST);
+    expect(res.status).toBe(404);
+  });
+});
+
+/* ─── 4. delete (revoke-then-delete) ────────────────────────────────────────── */
+
+describe('delete key (revoke-then-delete rule)', () => {
+  it('deleting an ACTIVE key is refused → 409 mcp_key_not_revoked, row still present', async () => {
+    const activeKey = makeKey('mck_active', 'proj_B');
+    const fakes = makeFakes({
+      planByProject: { proj_B: 'team' },
+      globalOn: true,
+      seedKeys: [activeKey],
+    });
+    const app = mountApp({
+      middleware: [fakeAuth('admin')],
+      accessDeps: fakes.accessDeps,
+      readDeps: fakes.readDeps,
+    });
+    const res = await app.request('/v1/projects/proj_B/mcp/keys/mck_active/delete', POST);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('mcp_key_not_revoked');
+    // never deleted — the row survives
+    expect(fakes.deleted).toHaveLength(0);
+    expect(fakes.keys.has('mck_active')).toBe(true);
+  });
+
+  it('deleting a REVOKED key removes the row → 200, row gone', async () => {
+    const revokedKey = makeRevokedKey('mck_revoked', 'proj_B');
+    const fakes = makeFakes({
+      planByProject: { proj_B: 'team' },
+      globalOn: true,
+      seedKeys: [revokedKey],
+    });
+    const app = mountApp({
+      middleware: [fakeAuth('admin')],
+      accessDeps: fakes.accessDeps,
+      readDeps: fakes.readDeps,
+    });
+    const res = await app.request('/v1/projects/proj_B/mcp/keys/mck_revoked/delete', POST);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { deleted?: boolean };
+    expect(body.deleted).toBe(true);
+    expect(fakes.deleted).toContain('mck_revoked');
+    expect(fakes.keys.has('mck_revoked')).toBe(false);
+  });
+
+  it('a revoked key from project B cannot be deleted via project A’s URL → 403 cross_project', async () => {
+    const revokedKey = makeRevokedKey('mck_b', 'proj_B');
+    const fakes = makeFakes({
+      planByProject: { proj_A: 'team', proj_B: 'team' },
+      globalOn: true,
+      seedKeys: [revokedKey],
+    });
+    const app = mountApp({
+      middleware: [fakeAuth('admin')],
+      accessDeps: fakes.accessDeps,
+      readDeps: fakes.readDeps,
+    });
+    const res = await app.request('/v1/projects/proj_A/mcp/keys/mck_b/delete', POST);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('cross_project');
+    // never deleted — the row survives
+    expect(fakes.deleted).toHaveLength(0);
+    expect(fakes.keys.has('mck_b')).toBe(true);
+  });
+
+  it('an unknown key → 404', async () => {
+    const fakes = makeFakes({ planByProject: { proj_A: 'team' }, globalOn: true });
+    const app = mountApp({
+      middleware: [fakeAuth('admin')],
+      accessDeps: fakes.accessDeps,
+      readDeps: fakes.readDeps,
+    });
+    const res = await app.request('/v1/projects/proj_A/mcp/keys/mck_nope/delete', POST);
     expect(res.status).toBe(404);
   });
 });

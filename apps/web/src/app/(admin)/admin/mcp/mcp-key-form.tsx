@@ -283,6 +283,27 @@ export function McpProjectControls({
     await run();
   }
 
+  // Delete only ever runs on an already-revoked key (the button is shown only
+  // for revoked keys) — REVOKE-THEN-DELETE. Hard-removes the row.
+  async function remove(keyId: string, keyLabel: string) {
+    const run = async () => {
+      setBusy(true);
+      setError(null);
+      const result = await post(apiOrigin, '/v1/admin/mcp/keys/delete', { keyId });
+      setBusy(false);
+      if (result.kind === 'step_up') {
+        setPending({ run, reason: `deleting key ${keyLabel}.` });
+        return;
+      }
+      if (result.kind === 'error') {
+        setError(result.message);
+        return;
+      }
+      refresh();
+    };
+    await run();
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -356,7 +377,16 @@ export function McpProjectControls({
                     >
                       revoke
                     </button>
-                  ) : null}
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void remove(k.id, `${k.prefix}•••${k.suffix}`)}
+                      disabled={busy}
+                      className="font-mono text-[10px] text-[var(--color-text-subtle)] hover:text-[var(--color-error)] disabled:opacity-50"
+                    >
+                      delete
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

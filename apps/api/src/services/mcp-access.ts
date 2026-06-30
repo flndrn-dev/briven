@@ -70,6 +70,19 @@ export class McpPlanRequiredError extends Error {
   }
 }
 
+/**
+ * Thrown when a DELETE is attempted on a key that is still ACTIVE (revoked_at is
+ * null). Delete is a tidy-up of an already-cut key — a live key must be revoked
+ * first, so it can never be removed by accident. Routes map this to a 409.
+ */
+export class McpKeyNotRevokedError extends Error {
+  readonly code = 'mcp_key_not_revoked' as const;
+  constructor(readonly keyId: string) {
+    super('cannot delete an active key — revoke it first');
+    this.name = 'McpKeyNotRevokedError';
+  }
+}
+
 /* ─── pure helpers (unit-testable without a DB) ──────────────────────────── */
 
 /** The plan gate, as a pure rule: only Pro / Team qualify. */
@@ -145,6 +158,8 @@ export interface McpAccessDeps {
   getKeyById(keyId: string): Promise<McpKey | null>;
   /** Set revoked_at = now() AND enabled = false. */
   setKeyRevoked(keyId: string): Promise<void>;
+  /** Hard-delete the key row. Only ever called on an already-revoked key. */
+  deleteKey(keyId: string): Promise<void>;
   audit(entry: AuditEntry): Promise<void>;
 }
 
@@ -187,6 +202,10 @@ export const defaultMcpAccessDeps: McpAccessDeps = {
       .update(mcpKeys)
       .set({ revokedAt: new Date(), enabled: false })
       .where(eq(mcpKeys.id, keyId));
+  },
+  async deleteKey(keyId) {
+    const db = getDb();
+    await db.delete(mcpKeys).where(eq(mcpKeys.id, keyId));
   },
   async audit(entry) {
     await audit(entry);
@@ -332,6 +351,34 @@ export async function revokeKey(
     metadata: { projectId: row.projectId, keyId },
   });
   return { keyId, revoked: true };
+}
+
+/**
+ * Hard-delete a key — but ONLY if it is already revoked. REVOKE-THEN-DELETE: a
+ * live key must be cut (revoked) before it can be tidied away, so a deletion can
+ * never remove an in-use key by accident.
+ *   - unknown key       → NotFoundError (route → 404)
+ *   - still active       → McpKeyNotRevokedError (route → 409)
+ *   - already revoked    → row hard-deleted + mcp.key.deleted audited
+ */
+export async function deleteRevokedKey(
+  keyId: string,
+  actor: McpActor,
+  deps: McpAccessDeps = defaultMcpAccessDeps,
+): Promise<{ keyId: string; deleted: true }> {
+  const row = await deps.getKeyById(keyId);
+  if (!row) throw new NotFoundError('mcp_key', keyId);
+  if (!row.revokedAt) throw new McpKeyNotRevokedError(keyId);
+  await deps.deleteKey(keyId);
+  await deps.audit({
+    actorId: actor.id,
+    projectId: row.projectId,
+    action: 'mcp.key.deleted',
+    ipHash: actor.ipHash,
+    userAgent: actor.userAgent,
+    metadata: { projectId: row.projectId, keyId },
+  });
+  return { keyId, deleted: true };
 }
 
 /* ─── read surfaces (cockpit) ────────────────────────────────────────────── */
