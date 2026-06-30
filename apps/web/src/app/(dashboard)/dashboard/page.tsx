@@ -179,7 +179,7 @@ export default async function DashboardHome() {
             <Link
               key={m.id}
               href={`/dashboard/migrations/${m.id}`}
-              className="flex items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
+              className="flex flex-wrap items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
             >
               <div className="flex items-center gap-3">
                 <span className="rounded-full border border-[var(--color-border-subtle)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-text-subtle)]">
