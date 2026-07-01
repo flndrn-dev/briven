@@ -7,6 +7,7 @@ import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
 import { ChevronsUpDownIcon, type ChevronsUpDownIconHandle } from './ui/chevrons-up-down';
 import { GlobeIcon, type GlobeIconHandle } from './ui/globe';
 import { LogOutIcon, type LogOutIconHandle } from './ui/log-out';
+import { ShieldCheckIcon, type ShieldCheckIconHandle } from './ui/shield-check';
 
 interface UserInfo {
   name: string | null;
@@ -18,6 +19,7 @@ interface UserInfo {
 interface Props {
   user: UserInfo;
   collapsed: boolean;
+  isAdmin?: boolean;
 }
 
 /**
@@ -33,7 +35,7 @@ interface Props {
  * component handle — hovering anywhere in the row (icon, label, padding)
  * triggers the animation, not just the icon's own 16px surface.
  */
-export function UserMenuButton({ user, collapsed }: Props) {
+export function UserMenuButton({ user, collapsed, isAdmin = false }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -151,6 +153,17 @@ export function UserMenuButton({ user, collapsed }: Props) {
                 onSelect={() => setOpen(false)}
                 icon={BookOpenIcon}
                 label="docs"
+              />
+            </li>
+            <li>
+              <MenuRow
+                as="button"
+                onSelect={() => {
+                  setOpen(false);
+                  router.push('/dashboard/admin');
+                }}
+                icon={ShieldCheckIcon}
+                label="admin"
               />
             </li>
             <li>

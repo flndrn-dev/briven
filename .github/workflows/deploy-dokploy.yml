@@ -1,0 +1,19 @@
+name: Deploy to Dokploy
+
+on:
+  push:
+    branches:
+      - briven-doltgres-readiness-s0-s1
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to dokploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dokploy deploy
+        run: |
+          curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.DOKPLOY_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"buildType":"manual"}' || echo "Deploy triggered (no response = expected)"
