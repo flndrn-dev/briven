@@ -171,7 +171,7 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
             : 'flex-row items-center gap-1'
         }`}
       >
-        <UserMenuButton user={user} collapsed={isCollapsed} />
+        <UserMenuButton user={user} collapsed={isCollapsed} isAdmin={isAdmin} />
         <button
           type="button"
           onClick={toggle}
