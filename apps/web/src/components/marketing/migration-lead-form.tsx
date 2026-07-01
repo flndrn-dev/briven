@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 
 interface Source {
@@ -85,7 +84,7 @@ export function MigrationLeadForm({ apiOrigin, defaultSource = '', sources }: Pr
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceNotes, setSourceNotes] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<React.ReactNode>(null);
+  const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
 
   async function submit(e: React.FormEvent) {
@@ -119,16 +118,7 @@ export function MigrationLeadForm({ apiOrigin, defaultSource = '', sources }: Pr
       });
       if (res.status === 429) {
         setError(
-          <>
-            too many requests from this address recently — wait an hour, or reach us via our{' '}
-            <Link
-              href="/contact?topic=sales"
-              className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
-            >
-              contact form
-            </Link>
-            .
-          </>,
+          "too many requests from this address recently. wait an hour, or email migrations@flndrn.com directly.",
         );
         return;
       }
@@ -153,22 +143,23 @@ export function MigrationLeadForm({ apiOrigin, defaultSource = '', sources }: Pr
           got it · we&apos;ll reach out within one business day
         </p>
         <p className="mt-3 leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-small)]">
-          your request is queued. an operator will email you from the address on file
-          with the next steps — typically a short call to confirm scope, then the actual
-          move while you keep running on {submitted.source}.
+          your request is queued. an operator will email you from{' '}
+          <code>migrations@flndrn.com</code> with the next steps — typically a short call
+          to confirm scope, then the actual move while you keep running on{' '}
+          {submitted.source}.
         </p>
         <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
           request id:{' '}
           <code className="text-[var(--color-text-muted)]">{submitted.requestId}</code>
         </p>
         <p className="mt-3 font-mono text-[10px] text-[var(--color-text-subtle)]">
-          if you don&apos;t hear from us within one business day, reach us via our{' '}
-          <Link
-            href="/contact?topic=sales"
+          if you don&apos;t hear from us within one business day, email{' '}
+          <a
+            href="mailto:migrations@flndrn.com"
             className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
           >
-            contact form
-          </Link>{' '}
+            migrations@flndrn.com
+          </a>{' '}
           and quote the id above.
         </p>
       </div>

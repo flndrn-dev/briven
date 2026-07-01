@@ -74,7 +74,7 @@ export default async function AuthWebhooksPage({
     );
   }
 
-  const data = await apiJson<SubscribersResponse>(`/v1/projects/${id}/outbound-webhooks`).catch(() => ({ subscribers: [] as Subscriber[], knownEventTypes: [] as readonly string[] }));
+  const data = await apiJson<SubscribersResponse>(`/v1/projects/${id}/outbound-webhooks`);
   // Surface only subscribers that subscribe to at least one auth event (or
   // `*` which implicitly does). The general project webhooks panel handles
   // the rest of the event types.

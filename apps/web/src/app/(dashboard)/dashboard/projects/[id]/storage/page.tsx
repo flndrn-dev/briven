@@ -2,7 +2,6 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson, ApiError } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { UploadButton } from './upload-button';
 
 interface ProjectFile {
@@ -62,14 +61,9 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
     'use server';
     const { id } = await params;
     const fileId = String(formData.get('fileId') ?? '');
-    let result: { downloadUrl: string };
-    try {
-      result = await apiJson<{ downloadUrl: string }>(
-        `/v1/projects/${id}/files/${fileId}/download-url`,
-      );
-    } catch {
-      throw new Error('Could not generate a download link. Please try again.');
-    }
+    const result = await apiJson<{ downloadUrl: string }>(
+      `/v1/projects/${id}/files/${fileId}/download-url`,
+    );
     redirect(result.downloadUrl);
   }
 
@@ -106,13 +100,7 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
               </h3>
               {files.length > 0 ? (
                 <p className="font-mono text-xs text-[var(--color-text-muted)]">
-                  {formatBytes(
-                    files.reduce((sum, f) => {
-                      const b = Number(f.sizeBytes);
-                      return sum + (Number.isFinite(b) && b > 0 ? b : 0);
-                    }, 0),
-                  )}{' '}
-                  total
+                  {formatBytes(files.reduce((sum, f) => sum + Number(f.sizeBytes), 0))} total
                 </p>
               ) : null}
             </div>
@@ -133,9 +121,7 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
                       </p>
                       <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
                         {f.contentType} · {formatBytes(Number(f.sizeBytes))} ·{' '}
-                        {toValidDate(f.createdAt)
-                          ? `${toValidDate(f.createdAt)!.toISOString().slice(0, 16).replace('T', ' ')} utc`
-                          : '—'}
+                        {new Date(f.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -170,9 +156,6 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
 }
 
 function formatBytes(n: number): string {
-  // A missing/garbage sizeBytes becomes NaN via Number(...) — guard it so the
-  // file row shows '—' instead of an ugly "NaN GiB".
-  if (!Number.isFinite(n) || n < 0) return '—';
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MiB`;

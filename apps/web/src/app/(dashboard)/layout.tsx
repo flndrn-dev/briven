@@ -1,14 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 
 import { DashboardMobileNav } from './dashboard-mobile-nav';
 import { DashboardSidebar } from './dashboard-sidebar';
-import { Reconnecting } from './reconnecting';
 import { SignOutButton } from './sign-out-button';
 import { LiveRefresh } from '../../components/live-refresh';
-import { ApiUnavailableError, apiJson } from '../../lib/api';
-import { getSessionUser, type SessionUser } from '../../lib/session';
+import { apiJson } from '../../lib/api';
+import { requireUser } from '../../lib/session';
 
 interface BuildInfo {
   buildSha: string;
@@ -26,22 +24,12 @@ async function fetchBuildInfo(): Promise<BuildInfo | null> {
 }
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  let user: SessionUser | null;
-  try {
-    user = await getSessionUser();
-  } catch (err) {
-    // Backend briefly unreachable (the ~1–2 min mid-deploy window) → show a
-    // calm auto-retrying "reconnecting…" page instead of a hard 500.
-    if (err instanceof ApiUnavailableError) return <Reconnecting />;
-    throw err;
-  }
-  if (!user) redirect('/signin');
-  const info = await fetchBuildInfo();
+  const [user, info] = await Promise.all([requireUser(), fetchBuildInfo()]);
 
   return (
     <div className="flex h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
       <LiveRefresh />
-      <header className="shrink-0">
+      <header className="shrink-0 border-b border-[var(--color-border-subtle)]">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/dashboard" className="flex items-center gap-3" aria-label="briven dashboard">
             <Image src="/icon.svg" alt="" width={24} height={24} priority />
@@ -71,7 +59,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </header>
 
       {/* Mobile-only nav row. Hidden md+ where the sidebar takes over. */}
-      <DashboardMobileNav />
+      <DashboardMobileNav isAdmin={user.isAdmin} />
 
       {/* Body area fills the remaining viewport height. Sidebar spans the
           full body height; main scrolls independently so the sidebar's
@@ -98,7 +86,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn
             </span>
             <span>100% self-funded, sustainable &amp; independent</span>
-            <span>flndrn, Limassol, Cyprus</span>
+            <span>flndrn Limited, Limassol, Cyprus</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">

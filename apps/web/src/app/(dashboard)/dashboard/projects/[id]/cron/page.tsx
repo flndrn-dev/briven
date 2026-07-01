@@ -1,7 +1,6 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { CronExpressionField } from './cron-expression-field';
 
 function publicApiOrigin(): string {
@@ -328,6 +327,6 @@ function StatusPill({
 }
 
 function formatTimestamp(iso: string): string {
-  const d = toValidDate(iso);
-  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
+  const d = new Date(iso);
+  return d.toISOString().replace('T', ' ').slice(0, 16) + ' utc';
 }

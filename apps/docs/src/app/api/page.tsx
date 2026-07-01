@@ -206,18 +206,6 @@ const SECTIONS: readonly Section[] = [
         path: '/v1/projects/:id/studio/relationships',
         summary: 'Every FK edge in the schema (used by the studio overview).',
       },
-      {
-        method: 'GET',
-        path: '/v1/projects/:id/studio/tables/:table/export',
-        summary:
-          'Export a whole table for download. Returns { columns, rows, truncated }; the dashboard turns it into a CSV or JSON file. Read-scope, admin-only, audited.',
-      },
-      {
-        method: 'POST',
-        path: '/v1/projects/:id/studio/tables/:table/import',
-        summary:
-          'Bulk-import rows from a CSV/JSON upload. Body: { rows: [{ col: value }] } (the client parses the file). Each row inserts independently — bad rows are skipped and reported in errors, not fatal. Mutate-scope, admin-only, audited.',
-      },
     ],
   },
   {

@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 export const metadata = { title: 'privacy policy' };
 
 export default function PrivacyPage() {
@@ -13,8 +11,8 @@ export default function PrivacyPage() {
       <p className="mt-8">
         This Privacy Policy explains what personal data the briven Service (briven.tech and any
         subdomain) collects, why, and what you can do about it. The Service is operated by{' '}
-        <strong>flndrn</strong> (the &ldquo;Operator&rdquo;, also the data controller
-        for the purposes of the EU General Data Protection Regulation), operating from
+        <strong>flndrn Limited</strong> (the &ldquo;Operator&rdquo;, also the data controller
+        for the purposes of the EU General Data Protection Regulation), a company registered at
         Arch. Makariou III 171, Vanezis Business Center 4th floor, 3027 Limassol, Cyprus.
         Day-to-day development takes place in Flanders, Belgium. For brand and legal context see
         the <a href="/terms" className="text-[var(--color-text-link)]">Terms of Service</a>.
@@ -134,11 +132,8 @@ export default function PrivacyPage() {
         password hashes; SHA-256 for API key hashes; constant-time comparison on every secret
         check. SSH access to the host is key-only; root-password authentication is disabled.
         Dependency updates roll weekly. No system is ever fully secure; if you discover a
-        vulnerability, please{' '}
-        <Link href="/contact?topic=security" className="text-[var(--color-text-link)] underline">
-          report it through our contact form
-        </Link>{' '}
-        rather than disclosing publicly.
+        vulnerability, please email <strong>security@flndrn.com</strong> rather than disclosing
+        publicly.
       </p>
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">
@@ -186,12 +181,9 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p className="mt-3">
-        To exercise any of these rights,{' '}
-        <Link href="/contact?topic=privacy" className="text-[var(--color-text-link)] underline">
-          send us a privacy request
-        </Link>
-        . We answer within 72 hours and resolve within 30 days, extendable by 60 days for complex
-        requests (we will tell you).
+        To exercise any of these rights, email <strong>privacy@flndrn.com</strong>. We answer
+        within 72 hours and resolve within 30 days, extendable by 60 days for complex requests
+        (we will tell you).
       </p>
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">9. cookies</h2>
@@ -227,11 +219,9 @@ export default function PrivacyPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">12. contact</h2>
       <p>
-        Privacy questions and rights requests:{' '}
-        <Link href="/contact?topic=privacy" className="text-[var(--color-text-link)] underline">
-          use our contact form
-        </Link>{' '}
-        and we&rsquo;ll route it to the right place. We answer within 72 hours.
+        Privacy questions and rights requests: <strong>privacy@flndrn.com</strong>. Until
+        brand-fronted email is fully wired up, this address forwards to{' '}
+        <strong>flandriendev@hotmail.com</strong>. We answer within 72 hours.
       </p>
     </>
   );

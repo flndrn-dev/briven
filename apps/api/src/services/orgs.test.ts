@@ -1,36 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { ORG_LIMIT_BY_TIER, isUniqueViolation, slugFromEmail } from './orgs.js';
-
-describe('isUniqueViolation (account-deletion 500 regression)', () => {
-  test('detects a top-level pg 23505', () => {
-    expect(isUniqueViolation({ code: '23505' })).toBe(true);
-  });
-
-  test('detects a Drizzle-WRAPPED 23505 nested in err.cause — the actual bug', () => {
-    // This is exactly the shape that 500'd /v1/me: the wrapper message has
-    // no "duplicate key" text and no top-level code; the real code is in cause.
-    const wrapped = Object.assign(
-      new Error('Failed query: insert into "organizations" ...\nparams: org_x,slug,name,true,x'),
-      { cause: { code: '23505', message: 'duplicate key value violates unique constraint' } },
-    );
-    expect(isUniqueViolation(wrapped)).toBe(true);
-  });
-
-  test('detects via message text alone', () => {
-    expect(
-      isUniqueViolation(
-        new Error('duplicate key value violates unique constraint "organizations_pkey"'),
-      ),
-    ).toBe(true);
-  });
-
-  test('ignores unrelated errors', () => {
-    expect(isUniqueViolation(new Error('connection refused'))).toBe(false);
-    expect(isUniqueViolation({ code: '23503' })).toBe(false);
-    expect(isUniqueViolation(null)).toBe(false);
-  });
-});
+import { ORG_LIMIT_BY_TIER, slugFromEmail } from './orgs.js';
 
 describe('ORG_LIMIT_BY_TIER', () => {
   test('free caps at 1 (personal only, no team creation)', () => {

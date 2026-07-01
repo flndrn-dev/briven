@@ -1,7 +1,6 @@
 import { brivenError, ValidationError } from '@briven/shared';
 
 import { runInProjectDatabase } from '../db/data-plane.js';
-import { assertWithinStorageLimit } from './storage-admin.js';
 
 /**
  * Studio read-mode services. Phase 2 first slice — table listing only.
@@ -121,36 +120,24 @@ export async function getTableColumns(
 ): Promise<readonly ColumnInfo[]> {
   await assertTableExists(projectId, tableName);
   // Single query: information_schema.columns LEFT JOINed against the
-  // table's PK column set, plus a LEFT JOIN against information_schema's FK
-  // metadata so each column row can carry its (table.column) reference.
-  //
-  // PK detection MUST come from information_schema, NOT the pg_index /
-  // pg_attribute catalog join (`a.attnum = ANY(i.indkey)`): DoltGres has no
-  // `smallint = int2vector` operator and 500s on it ("operator does not exist:
-  // smallint = int2vector"). This is the same DoltGres gap S1.4 hit in
-  // listIndexes — sourcing PKs from table_constraints + key_column_usage (the
-  // exact shape the fk_cols CTE below already uses successfully) avoids it.
+  // table's PK column set sourced from pg_index, plus a LEFT JOIN against
+  // information_schema's FK metadata so each column row can carry its
+  // (table.column) reference if there is one.
   const rows = (await runInProjectDatabase(projectId, async (tx) =>
     tx.unsafe(
       `
     WITH pk_cols AS (
-      -- NOTE: the kcu join MUST include table_name. In DoltGres/MySQL every
-      -- primary key is named 'PRIMARY', so joining tc→kcu on constraint_name
-      -- alone matches the PK column of EVERY table in the schema, fanning out
-      -- the column list (e.g. an 'id' PK column appearing once per table that
-      -- also has an 'id' PK). DISTINCT is a belt-and-suspenders guard.
-      SELECT DISTINCT kcu.column_name
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage kcu
-        ON kcu.constraint_name = tc.constraint_name
-       AND kcu.table_schema = tc.table_schema
-       AND kcu.table_name = tc.table_name
-      WHERE tc.constraint_type = 'PRIMARY KEY'
-        AND tc.table_schema = 'public'
-        AND tc.table_name = $1
+      SELECT a.attname AS column_name
+      FROM pg_index i
+      JOIN pg_class c ON c.oid = i.indrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
+      WHERE i.indisprimary
+        AND n.nspname = 'public'
+        AND c.relname = $1
     ),
     fk_cols AS (
-      SELECT DISTINCT
+      SELECT
         kcu.column_name,
         ccu.table_name AS fk_table,
         ccu.column_name AS fk_column
@@ -158,7 +145,6 @@ export async function getTableColumns(
       JOIN information_schema.key_column_usage kcu
         ON kcu.constraint_name = tc.constraint_name
        AND kcu.table_schema = tc.table_schema
-       AND kcu.table_name = tc.table_name
       JOIN information_schema.constraint_column_usage ccu
         ON ccu.constraint_name = tc.constraint_name
        AND ccu.table_schema = tc.table_schema
@@ -505,10 +491,6 @@ export async function insertRow(input: InsertRowInput): Promise<InsertRowResult>
     throw new ValidationError('insert requires at least one column', {});
   }
 
-  // Phase 4: in 'block' mode, reject the write when the project is at its row
-  // cap. No-op fast path for 'flag' projects (the default) — no count runs.
-  await assertWithinStorageLimit(input.projectId, 'row');
-
   const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
   const cols_sql = keys.map((k) => `"${k}"`).join(', ');
   const params = keys.map((k) => input.values[k] as never);
@@ -520,129 +502,6 @@ export async function insertRow(input: InsertRowInput): Promise<InsertRowResult>
     );
   })) as Array<Record<string, unknown>>;
   return { inserted: rows[0] ?? null };
-}
-
-/**
- * Hard ceiling on a single table export. Sized to comfortably cover a Pro
- * project's row counts while keeping the in-memory accumulation bounded so a
- * huge table can't OOM the api. When exceeded, the export is truncated and the
- * `truncated` flag is set so the UI can tell the user there's more.
- */
-export const MAX_EXPORT_ROWS = 100_000;
-
-/**
- * Hard ceiling on a single CSV/JSON import. Keeps one upload bounded; bigger
- * loads should use the CLI / SDK. Each row inserts in its own Dolt commit so a
- * bad row is skipped, not fatal — see bulkImportRows.
- */
-export const MAX_IMPORT_ROWS = 10_000;
-
-export interface TableExport {
-  readonly columns: readonly ColumnInfo[];
-  readonly rows: ReadonlyArray<Record<string, unknown>>;
-  /** True when the table has more rows than MAX_EXPORT_ROWS (export cut off). */
-  readonly truncated: boolean;
-}
-
-/**
- * Read every row of a table for download. Pages through the proven
- * `getTableRows` path (same DoltGres-safe SELECT, same isolation) rather than
- * issuing a new unbounded query — so the export inherits the data-plane
- * boundary and the `_briven_` guard for free. Caps at MAX_EXPORT_ROWS.
- */
-export async function exportAllTableRows(
-  projectId: string,
-  tableName: string,
-): Promise<TableExport> {
-  await assertTableExists(projectId, tableName);
-  const columns = await getTableColumns(projectId, tableName);
-  const all: Array<Record<string, unknown>> = [];
-  let offset = 0;
-  for (;;) {
-    const page = await getTableRows(projectId, tableName, { limit: MAX_LIMIT, offset });
-    all.push(...page.rows);
-    if (all.length >= MAX_EXPORT_ROWS) {
-      return { columns, rows: all.slice(0, MAX_EXPORT_ROWS), truncated: true };
-    }
-    if (!page.hasMore || page.rows.length === 0) break;
-    offset += page.rows.length;
-  }
-  return { columns, rows: all, truncated: false };
-}
-
-export interface BulkImportInput {
-  readonly projectId: string;
-  readonly tableName: string;
-  /** Each entry is one row's column→value map; keys validated per row. */
-  readonly rows: ReadonlyArray<Record<string, unknown>>;
-}
-
-export interface BulkImportResult {
-  readonly inserted: number;
-  readonly failed: number;
-  /** First 100 per-row failures (row index + reason); UI surfaces them. */
-  readonly errors: ReadonlyArray<{ row: number; message: string }>;
-}
-
-/**
- * Insert many rows from a CSV/JSON upload. Each row is inserted independently
- * (its own Dolt commit) so one malformed row is skipped and reported rather
- * than failing the whole batch — the spec'd "skip bad rows, tell me which"
- * behaviour. Columns are fetched ONCE and validated in-memory per row (no
- * N+1 metadata queries). Reuses the exact parameterised INSERT shape that
- * `insertRow` is proven on against DoltGres.
- */
-export async function bulkImportRows(input: BulkImportInput): Promise<BulkImportResult> {
-  await assertTableExists(input.projectId, input.tableName);
-  if (input.rows.length === 0) {
-    throw new ValidationError('import requires at least one row', {});
-  }
-  if (input.rows.length > MAX_IMPORT_ROWS) {
-    throw new ValidationError(`import is capped at ${MAX_IMPORT_ROWS} rows per upload`, {
-      rows: input.rows.length,
-      max: MAX_IMPORT_ROWS,
-    });
-  }
-  const cols = await getTableColumns(input.projectId, input.tableName);
-  const colNames = new Set(cols.map((c) => c.name));
-  // Block-mode row-cap gate, once. Flag-mode projects (default) no-op here.
-  await assertWithinStorageLimit(input.projectId, 'row');
-
-  let inserted = 0;
-  const errors: Array<{ row: number; message: string }> = [];
-  for (let i = 0; i < input.rows.length; i++) {
-    const values = input.rows[i] ?? {};
-    const keys = Object.keys(values);
-    try {
-      if (keys.length === 0) {
-        throw new ValidationError('row has no columns', {});
-      }
-      for (const k of keys) {
-        if (!COLUMN_NAME_RE.test(k)) {
-          throw new ValidationError('invalid column name', { column: k });
-        }
-        if (!colNames.has(k)) {
-          throw new ValidationError(`column not found on table: ${k}`, { column: k });
-        }
-      }
-      const placeholders = keys.map((_, j) => `$${j + 1}`).join(', ');
-      const cols_sql = keys.map((k) => `"${k}"`).join(', ');
-      const params = keys.map((k) => values[k] as never);
-      await runInProjectDatabase(input.projectId, async (tx) => {
-        await tx.unsafe('SET dolt_transaction_commit = 1');
-        return tx.unsafe(
-          `INSERT INTO "${input.tableName}" (${cols_sql}) VALUES (${placeholders})`,
-          params,
-        );
-      });
-      inserted++;
-    } catch (err) {
-      if (errors.length < 100) {
-        errors.push({ row: i, message: err instanceof Error ? err.message : 'insert failed' });
-      }
-    }
-  }
-  return { inserted, failed: input.rows.length - inserted, errors };
 }
 
 export interface DeleteRowInput {
@@ -1004,10 +863,6 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
       await assertFkTarget(input.projectId, col.references, input.tableName);
     }
   }
-
-  // Phase 4: in 'block' mode, reject when the project is at its table cap.
-  // No-op fast path for 'flag' projects (the default).
-  await assertWithinStorageLimit(input.projectId, 'table');
 
   // Composite PK → table-level constraint; single PK stays inline so the
   // SQL output is unchanged for every non-M2M shape.

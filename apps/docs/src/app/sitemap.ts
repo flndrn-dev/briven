@@ -27,13 +27,10 @@ const PATHS: readonly string[] = [
   '/ai',
   '/self-host',
   '/operator',
-  '/pricing',
   '/roadmap',
   '/changelog',
   '/status',
-  '/sla',
   '/support',
-  '/trust',
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

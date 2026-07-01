@@ -4,22 +4,19 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { PasskeySignIn } from '../passkey-sign-in';
-
 type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp';
 
 interface Props {
   projectId: string;
   flow: FormFlow;
-  /**
-   * The project's ENABLED OAuth/OIDC providers, resolved server-side from the
-   * public branding/config endpoint. Buttons render ONLY for these — never the
-   * old hard-coded "all five" list — so an unconfigured provider is never shown.
-   */
-  providers: string[];
-  /** Display labels for custom-OIDC providers (built-ins fall back to the key). */
-  providerLabels: Record<string, string>;
 }
+
+const OAUTH_PROVIDERS: ReadonlyArray<'google' | 'github' | 'discord' | 'microsoft'> = [
+  'google',
+  'github',
+  'discord',
+  'microsoft',
+];
 
 const TITLES: Record<FormFlow, string> = {
   'sign-in': 'sign in',
@@ -48,7 +45,7 @@ interface ErrorBody {
  * with the CNAME orchestration runbook (BUILD_PLAN.md "Decisions
  * locked" Q7); the form contract here doesn't change.
  */
-export function HostedFlow({ projectId, flow, providers, providerLabels }: Props) {
+export function HostedFlow({ projectId, flow }: Props) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -151,28 +148,17 @@ export function HostedFlow({ projectId, flow, providers, providerLabels }: Props
       </header>
 
       {flow === 'sign-in' ? (
-        <div className="flex flex-col gap-3">
-          <form className="flex flex-col gap-3" onSubmit={handleSignIn}>
-            <Field label="email" type="email" value={email} onChange={setEmail} autoComplete="email" />
-            <Field
-              label="password"
-              type="password"
-              value={password}
-              onChange={setPassword}
-              autoComplete="current-password"
-            />
-            <Submit pending={pending} idle="sign in" busy="signing in…" />
-          </form>
-          <div className="flex justify-end">
-            <Link
-              href={`/auth/${projectId}/reset-password`}
-              className="font-mono text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
-            >
-              forgot password?
-            </Link>
-          </div>
-          <PasskeySignIn projectId={projectId} />
-        </div>
+        <form className="flex flex-col gap-3" onSubmit={handleSignIn}>
+          <Field label="email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+          <Field
+            label="password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+          />
+          <Submit pending={pending} idle="sign in" busy="signing in…" />
+        </form>
       ) : null}
 
       {flow === 'sign-up' ? (
@@ -232,24 +218,22 @@ export function HostedFlow({ projectId, flow, providers, providerLabels }: Props
         </p>
       ) : null}
 
-      {providers.length > 0 ? (
-        <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-4">
-          <p className="text-center font-mono text-[11px] text-[var(--color-text-subtle)]">
-            or continue with
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {providers.map((p) => (
-              <a
-                key={p}
-                href={oauthHref(p)}
-                className="rounded-md border border-[var(--color-border)] px-3 py-2 text-center font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-              >
-                {providerLabels[p] ?? p}
-              </a>
-            ))}
-          </div>
+      <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-4">
+        <p className="text-center font-mono text-[11px] text-[var(--color-text-subtle)]">
+          or continue with
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {OAUTH_PROVIDERS.map((p) => (
+            <a
+              key={p}
+              href={oauthHref(p)}
+              className="rounded-md border border-[var(--color-border)] px-3 py-2 text-center font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+            >
+              {p}
+            </a>
+          ))}
         </div>
-      ) : null}
+      </div>
 
       <nav className="flex flex-wrap justify-center gap-3 font-mono text-[11px]">
         {flow !== 'sign-in' ? (

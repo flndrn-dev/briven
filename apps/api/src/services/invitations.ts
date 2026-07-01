@@ -37,18 +37,6 @@ export async function createInvitation(input: InviteInput): Promise<ProjectInvit
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + EXPIRES_MS);
 
-  // Send the invite email BEFORE persisting the row (fail fast): if the
-  // send throws we never write the invitation, so the caller surfaces the
-  // error and can retry — instead of stranding a "pending" row the
-  // recipient was never emailed about with no resend path. A failed send
-  // also leaves any prior pending invite (and its still-valid token) intact.
-  //
-  // The plaintext token only lives in transit — it rides in the invite
-  // email and in the `accept` URL the recipient clicks. The DB only has
-  // the hash, so an operator reading postgres cannot impersonate.
-  const acceptURL = `${input.callbackURL}?token=${encodeURIComponent(token)}`;
-  await sendInvitation(input.email, acceptURL);
-
   const db = getDb();
   const [row] = await db
     .insert(projectInvitations)
@@ -68,6 +56,11 @@ export async function createInvitation(input: InviteInput): Promise<ProjectInvit
     .returning();
   if (!row) throw new Error('invitation insert returned no row');
 
+  // The plaintext token only lives in transit — it rides in the invite
+  // email and in the `accept` URL the recipient clicks. The DB only has
+  // the hash, so an operator reading postgres cannot impersonate.
+  const acceptURL = `${input.callbackURL}?token=${encodeURIComponent(token)}`;
+  await sendInvitation(input.email, acceptURL);
   return row;
 }
 

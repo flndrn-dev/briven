@@ -17,7 +17,7 @@ export default async function MigrationThanksPage() {
   // if they email us.
   const { requests } = await apiJson<{ requests: RequestRow[] }>(
     '/v1/migration-requests',
-  ).catch(() => ({ requests: [] as RequestRow[] }));
+  );
   const latest = requests[0];
 
   return (
@@ -67,13 +67,13 @@ export default async function MigrationThanksPage() {
       </div>
 
       <p className="mt-10 font-mono text-xs text-[var(--color-text-subtle)]">
-        question we missed? reach us via our{' '}
-        <Link
-          href="/contact?topic=sales"
+        question we missed? email{' '}
+        <a
+          href="mailto:migrations@flndrn.com"
           className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
         >
-          contact form
-        </Link>{' '}
+          migrations@flndrn.com
+        </a>{' '}
         and quote your request id.
       </p>
     </section>

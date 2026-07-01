@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 
 interface Activity {
   id: string;
@@ -36,7 +35,7 @@ export default async function ActivityPage({
   const qs = prefix ? `?prefix=${encodeURIComponent(prefix)}` : '';
   const { activity } = await apiJson<{ activity: Activity[] }>(
     `/v1/projects/${id}/activity${qs}`,
-  ).catch(() => ({ activity: [] as Activity[] }));
+  );
 
   const filterBar = (
     <nav className="flex flex-wrap gap-1">
@@ -113,7 +112,7 @@ export default async function ActivityPage({
               ) : null}
             </div>
             <time className="font-mono text-xs text-[var(--color-text-subtle)]">
-              {toValidDate(a.createdAt)?.toISOString().replace('T', ' ').slice(0, 19) ?? '—'}
+              {new Date(a.createdAt).toISOString().replace('T', ' ').slice(0, 19)}
             </time>
           </li>
         ))}

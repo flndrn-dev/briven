@@ -27,6 +27,10 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@briven/config": "workspace:*",
+    "@briven/shared": "workspace:*"
+  },
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -40,27 +44,12 @@
     }
   },
   "devDependencies": {
-    "@briven/config": "workspace:*",
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
     "typescript": "^6.0.3"
   },
   "publishConfig": {
-    "access": "public",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./react": {
-        "types": "./dist/react/index.d.ts",
-        "default": "./dist/react/index.js"
-      },
-      "./server": {
-        "types": "./dist/server/index.d.ts",
-        "default": "./dist/server/index.js"
-      }
-    }
+    "access": "public"
   },
   "keywords": [
     "briven",

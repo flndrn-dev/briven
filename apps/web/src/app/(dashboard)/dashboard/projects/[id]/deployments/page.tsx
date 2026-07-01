@@ -1,5 +1,4 @@
 import { apiJson } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 
 interface Deployment {
   id: string;
@@ -19,7 +18,7 @@ export default async function DeploymentsPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const { deployments } = await apiJson<{ deployments: Deployment[] }>(
     `/v1/projects/${id}/deployments?limit=100`,
-  ).catch(() => ({ deployments: [] as Deployment[] }));
+  );
 
   if (deployments.length === 0) {
     return (
@@ -42,9 +41,9 @@ export default async function DeploymentsPage({ params }: { params: Promise<{ id
             <span className={`font-mono text-xs ${statusColour(d.status)}`}>{d.status}</span>
           </div>
           <p className="mt-1 font-mono text-xs text-[var(--color-text-subtle)]">
-            created {toValidDate(d.createdAt)?.toISOString().replace('T', ' ').slice(0, 19) ?? '—'}
-            {toValidDate(d.finishedAt)
-              ? ` · finished ${toValidDate(d.finishedAt)!.toISOString().replace('T', ' ').slice(11, 19)}`
+            created {new Date(d.createdAt).toISOString().replace('T', ' ').slice(0, 19)}
+            {d.finishedAt
+              ? ` · finished ${new Date(d.finishedAt).toISOString().replace('T', ' ').slice(11, 19)}`
               : null}
           </p>
           <DiffSummary summary={d.schemaDiffSummary} functionCount={d.functionCount} />

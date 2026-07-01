@@ -111,14 +111,11 @@ export const create = mutation({
           </p>
           <Snippet>{`// app/providers.tsx
 'use client';
-import { BrivenProvider } from '@briven/react';
-import { createBrivenClient } from '@briven/client';
+import { BrivenProvider, createClient } from '@briven/react';
 
-const client = createBrivenClient({
-  apiOrigin: 'https://api.briven.tech',
-  wsOrigin: 'wss://ws.briven.tech',                    // needed for live useQuery
+const client = createClient({
   projectId: 'p_01HZ...',
-  token: process.env.NEXT_PUBLIC_BRIVEN_PUBLIC_KEY!,   // viewer-scope 'brk_...' key
+  apiKey: process.env.NEXT_PUBLIC_BRIVEN_PUBLIC_KEY!,  // 'brk_pub_...'
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {

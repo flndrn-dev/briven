@@ -2,14 +2,12 @@ import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../../lib/api';
-import { toValidDate } from '../../../../../../../lib/utils';
 import { DeleteRowButton } from './delete-row-button';
 import { EditableCell } from './editable-cell';
 import { FilterBar } from './filter-bar';
 import { AutoRefresh } from './auto-refresh';
 import { InsertRowForm } from './insert-row-form';
 import { SchemaPanel } from './schema-panel';
-import { TableIo } from './table-io';
 
 interface ColumnInfo {
   name: string;
@@ -68,7 +66,7 @@ export default async function TablePage({
   const [data, indexesResult, tablesResult] = await Promise.all([
     apiJson<TableRows>(
       `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/rows?${queryString}`,
-    ).catch((): TableRows => ({ columns: [], rows: [], limit: PAGE_SIZE, offset, hasMore: false })),
+    ),
     apiJson<{
       indexes: Array<{ name: string; columns: string[]; unique: boolean; isPrimary: boolean }>;
     }>(`/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/indexes`).catch(() => ({
@@ -154,44 +152,6 @@ export default async function TablePage({
     revalidatePath(`/dashboard/projects/${id}/studio/${table}`);
   }
 
-  async function exportTableAction(): Promise<{
-    columns: ColumnInfo[];
-    rows: Record<string, unknown>[];
-    truncated: boolean;
-  }> {
-    'use server';
-    return apiJson<{ columns: ColumnInfo[]; rows: Record<string, unknown>[]; truncated: boolean }>(
-      `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/export`,
-    ).catch(() => ({ columns: [] as ColumnInfo[], rows: [] as Record<string, unknown>[], truncated: true }));
-  }
-
-  async function importRowsAction(rows: Record<string, unknown>[]): Promise<{
-    inserted: number;
-    failed: number;
-    errors: Array<{ row: number; message: string }>;
-  }> {
-    'use server';
-    const res = await apiFetch(
-      `/v1/projects/${id}/studio/tables/${encodeURIComponent(table)}/import`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ rows }),
-      },
-    );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || `import failed: ${res.status}`);
-    }
-    const result = (await res.json()) as {
-      inserted: number;
-      failed: number;
-      errors: Array<{ row: number; message: string }>;
-    };
-    revalidatePath(`/dashboard/projects/${id}/studio/${table}`);
-    return result;
-  }
-
   // Build a per-page link helper that preserves sort + filters but
   // overrides the named keys (used by the prev/next nav and the
   // sortable column headers).
@@ -253,12 +213,6 @@ export default async function TablePage({
         </div>
         <div className="flex items-center gap-3">
           <AutoRefresh />
-          <TableIo
-            columns={data.columns.map((c) => ({ name: c.name, dataType: c.dataType }))}
-            tableName={table}
-            exportAction={exportTableAction}
-            importAction={importRowsAction}
-          />
           <InsertRowForm columns={data.columns} action={insertRowAction} />
         </div>
       </header>
@@ -335,9 +289,7 @@ export default async function TablePage({
                 const canEdit = pkUsable && pkPairs.length > 0;
                 return (
                   <tr
-                    key={pkPairs.length > 0
-                      ? pkPairs.map((p) => `${p.column}:${String(p.value)}`).join('|')
-                      : i}
+                    key={i}
                     className="border-t border-[var(--color-border-subtle)] hover:bg-[var(--color-surface)]"
                   >
                     {data.columns.map((col) => {
@@ -447,10 +399,7 @@ function renderCell(value: unknown): React.ReactNode {
     return <span className="text-[var(--color-text-subtle)]">null</span>;
   }
   if (value instanceof Date) {
-    // A malformed timestamp in a customer's table is an Invalid Date — calling
-    // .toISOString() on it throws and 500s the whole Studio view. Guard it.
-    const d = toValidDate(value);
-    return <span>{d ? d.toISOString() : 'invalid date'}</span>;
+    return <span>{value.toISOString()}</span>;
   }
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return <span>{String(value)}</span>;

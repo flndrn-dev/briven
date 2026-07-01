@@ -20,13 +20,12 @@ export const requireAdmin = (): MiddlewareHandler => async (c, next) => {
 
   const db = getDb();
   const [row] = await db
-    .select({ isAdmin: users.isAdmin, suspendedAt: users.suspendedAt, deletedAt: users.deletedAt })
+    .select({ isAdmin: users.isAdmin, suspendedAt: users.suspendedAt })
     .from(users)
     .where(eq(users.id, user.id))
     .limit(1);
   if (!row?.isAdmin) throw new ForbiddenError('admin only');
   if (row.suspendedAt) throw new ForbiddenError('account suspended');
-  if (row.deletedAt) throw new ForbiddenError('account deleted');
 
   await next();
 };

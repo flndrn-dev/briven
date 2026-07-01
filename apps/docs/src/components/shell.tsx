@@ -18,20 +18,8 @@ const GROUPS: readonly NavGroup[] = [
     items: [
       { href: '/', label: 'overview' },
       { href: '/quickstart', label: 'quickstart' },
-      { href: '/connect', label: 'connect' },
       { href: '/cli', label: 'cli' },
       { href: '/templates', label: 'templates' },
-    ],
-  },
-  {
-    label: 'doltgres',
-    items: [
-      { href: '/doltgres', label: 'overview' },
-      { href: '/doltgres/install', label: 'install + run' },
-      { href: '/doltgres/version-control', label: 'version control' },
-      { href: '/doltgres/history', label: 'history + time travel' },
-      { href: '/doltgres/types', label: 'types + sql support' },
-      { href: '/doltgres/limitations', label: 'beta + limitations' },
     ],
   },
   {
@@ -42,12 +30,9 @@ const GROUPS: readonly NavGroup[] = [
       { href: '/examples', label: 'examples' },
       { href: '/functions', label: 'functions' },
       { href: '/realtime', label: 'realtime' },
-      { href: '/vector-search', label: 'vector search' },
       { href: '/sdks', label: 'client sdks' },
-      { href: '/auth', label: 'auth' },
       { href: '/api', label: 'http api' },
-      { href: '/api-keys', label: 'api keys' },
-      { href: '/ai', label: 'ai features' },
+      { href: '/ai', label: 'ai schema' },
     ],
   },
   {
@@ -61,15 +46,10 @@ const GROUPS: readonly NavGroup[] = [
   {
     label: 'meta',
     items: [
-      { href: '/pricing', label: 'pricing' },
       { href: '/roadmap', label: 'roadmap' },
       { href: '/changelog', label: 'changelog' },
       { href: '/status', label: 'status' },
-      { href: '/sla', label: 'sla' },
       { href: '/support', label: 'support' },
-      { href: '/trust', label: 'trust + security' },
-      { href: '/ask', label: 'ask the docs' },
-      { href: '/search', label: 'search' },
     ],
   },
 ];
@@ -110,21 +90,19 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
               dashboard
             </Link>
             <Link
-              href="https://github.com/flndrn-dev/briven"
-              className="inline-flex items-center font-mono text-sm text-[var(--color-text-muted)] opacity-80 transition-opacity hover:text-[var(--color-text)] hover:opacity-100"
-              aria-label="briven source on GitHub"
+              href="https://codeberg.org/flndrn/briven"
+              className="inline-flex items-center opacity-80 transition-opacity hover:opacity-100"
+              aria-label="Codeberg"
             >
-              github
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/codeberg.svg" alt="Codeberg" className="h-5 w-auto" />
             </Link>
           </nav>
         </div>
       </header>
 
       <div className="mx-auto grid w-full max-w-6xl grid-cols-[220px_1fr] gap-10 px-6 py-10">
-        <nav
-          aria-label="docs sections"
-          className="sticky top-10 flex max-h-[calc(100dvh-5rem)] flex-col gap-5 self-start overflow-y-auto font-mono text-sm"
-        >
+        <nav aria-label="docs sections" className="flex flex-col gap-5 font-mono text-sm">
           {GROUPS.map((group) => (
             <div key={group.label} className="flex flex-col gap-1">
               <p className="px-3 pb-1 text-[10px] uppercase tracking-wide text-[var(--color-text-subtle)]">
@@ -149,9 +127,9 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-[var(--color-border-subtle)] py-6">
         <p className="mx-auto max-w-6xl px-6 font-mono text-xs text-[var(--color-text-subtle)]">
           briven · open-core reactive postgres · ©{' '}
-          {new Date().getFullYear()} flndrn ·{' '}
+          {new Date().getFullYear()} flndrn Limited ·{' '}
           <Link
-            href="https://github.com/flndrn-dev/briven"
+            href="https://codeberg.org/flndrn/briven"
             className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
           >
             source

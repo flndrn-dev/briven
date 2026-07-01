@@ -27,8 +27,6 @@ import {
   unsuspendUser,
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
-import { getBillingTotals, listSubscribers } from '../services/billing/mavi-pay.js';
-import { getHealthSummary } from '../services/platform-health.js';
 import { listDeploys } from '../services/deploy-history.js';
 import {
   createIncident,
@@ -36,11 +34,7 @@ import {
   resolveIncident,
   updateIncident,
 } from '../services/incidents.js';
-import {
-  sendMigrationStatusUpdate,
-  sendTicketReply,
-  sendTicketStatusUpdate,
-} from '../lib/email.js';
+import { sendMigrationStatusUpdate } from '../lib/email.js';
 import { translateConvexSchema } from '../services/convex-schema-translator.js';
 import { getMarketingFunnel } from '../services/marketing-events.js';
 import { log } from '../lib/logger.js';
@@ -52,40 +46,15 @@ import {
 } from '../services/migration-requests.js';
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
-import { restoreAccount } from '../services/account-deletion.js';
 import {
   getTierStorageCaps,
   listStorageUsage,
-  setProjectEnforcement,
   setProjectStorageLimit,
   updateTierStorageCap,
 } from '../services/storage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
-import { getEmailAdminSummary } from '../services/email-admin.js';
-import {
-  deleteRevokedKey as mcpDeleteRevokedKey,
-  disableForProject as mcpDisableForProject,
-  enableForProject as mcpEnableForProject,
-  getGlobalEnabled as mcpGetGlobalEnabled,
-  issueKey as mcpIssueKey,
-  listMcpAudit,
-  listProjectAccess as mcpListProjectAccess,
-  McpKeyNotRevokedError,
-  McpPlanRequiredError,
-  revokeKey as mcpRevokeKey,
-  setGlobalEnabled as mcpSetGlobalEnabled,
-  type McpActor,
-} from '../services/mcp-access.js';
-import { incidentSeverity, mcpKeyScope, ticketStatuses } from '../db/schema.js';
-import {
-  addReply as addTicketReply,
-  getTicketByIdForAdmin,
-  listTicketsForAdmin,
-  renderTicketNumber,
-  updateTicket,
-  type UpdateTicketInput,
-} from '../services/support-tickets.js';
-import { NotFoundError, ValidationError } from '@briven/shared';
+import { incidentSeverity } from '../db/schema.js';
+import { ValidationError } from '@briven/shared';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
 
@@ -115,62 +84,6 @@ adminRouter.use('/v1/admin/*', async (c, next) => {
 
 adminRouter.get('/v1/admin/stats', async (c) => c.json(await adminStats()));
 
-/**
- * Superadmin Overview — the 3-second glance. One aggregate fan-out so the
- * cockpit home renders from a single round-trip. Every number is REAL or
- * explicitly null; the web layer renders "—" for nulls (Mavi Pay MRR/churn
- * + host metrics) rather than a fake zero. Read-only, so no audit row.
- */
-adminRouter.get('/v1/admin/overview', async (c) => {
-  const [billing, health, incidents, deploys, stats] = await Promise.all([
-    getBillingTotals(),
-    getHealthSummary(),
-    listIncidents({ activeOnly: true, limit: 100 }),
-    listDeploys({ limit: 3 }),
-    adminStats(),
-  ]);
-  return c.json({
-    billing,
-    health,
-    openIncidents: incidents.length,
-    recentDeploys: deploys.map((r) => ({
-      id: r.id,
-      service: r.service,
-      buildSha: r.buildSha,
-      buildAt: r.buildAt,
-      env: r.env,
-      bootedAt: r.bootedAt,
-    })),
-    counts: { projects: stats.projects, users: stats.users },
-  });
-});
-
-/**
- * Platform health — the full summary (the four upstream checks + real
- * host CPU/RAM/disk/steal from Prometheus). Backs the cockpit Health
- * page. Host metrics are REAL or null; the web layer renders "—" with a
- * "monitoring not connected" note for null rather than a fabricated 0%.
- * Read-only, no audit row.
- */
-adminRouter.get('/v1/admin/health', async (c) => c.json(await getHealthSummary()));
-
-/**
- * Mavi Pay (backed by Polar.sh) — billing totals for the Subscribers &
- * Billing page. Same shape the Overview reads; every number is REAL or
- * explicitly null (MRR degrades to null when Polar isn't configured).
- * Read-only, no audit row.
- */
-adminRouter.get('/v1/admin/billing/totals', async (c) => c.json(await getBillingTotals()));
-
-/**
- * Mavi Pay — non-canceled subscriber list (org, plan, status, period-end,
- * since), joined to the owning org for operator triage. Read-only.
- */
-adminRouter.get('/v1/admin/billing/subscribers', async (c) => {
-  const subscribers = await listSubscribers();
-  return c.json({ subscribers });
-});
-
 adminRouter.get('/v1/admin/users', async (c) => {
   const rows = await listUsers(200);
   return c.json({ users: rows });
@@ -182,7 +95,7 @@ adminRouter.get('/v1/admin/users/:id', async (c) => {
     const detail = await getUserDetailForAdmin(userId);
     return c.json(detail);
   } catch (err) {
-    if (err instanceof NotFoundError) {
+    if (err instanceof Error && /not found/i.test(err.message)) {
       return c.json({ code: 'not_found' }, 404);
     }
     throw err;
@@ -259,30 +172,6 @@ adminRouter.patch('/v1/admin/storage/projects/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-const enforcementBody = z.object({
-  enforcement: z.enum(['flag', 'block']),
-});
-
-/** Flip a project between 'flag' (surface over-cap only) and 'block' (reject over-cap writes). */
-adminRouter.patch('/v1/admin/storage/projects/:id/enforcement', async (c) => {
-  const projectId = c.req.param('id');
-  const body = enforcementBody.safeParse(await c.req.json().catch(() => null));
-  if (!body.success) {
-    throw new ValidationError("expected { enforcement: 'flag' | 'block' }");
-  }
-  const user = c.get('user');
-  await setProjectEnforcement(projectId, body.data.enforcement, user?.id ?? null);
-  await audit({
-    actorId: user?.id ?? null,
-    projectId,
-    action: 'admin.storage.enforcement.set',
-    ipHash: ipHash(c),
-    userAgent: c.req.header('user-agent') ?? null,
-    metadata: { enforcement: body.data.enforcement },
-  });
-  return c.json({ ok: true });
-});
-
 /**
  * Mittera email events — pulled from audit_logs filtered to the
  * `mittera.email.*` action prefix. Returns the most recent 200 with a
@@ -320,14 +209,6 @@ adminRouter.get('/v1/admin/email-events', async (c) => {
   }));
   return c.json({ events });
 });
-
-/**
- * Email Admin cockpit summary (Phase 8) — live sender/transport status +
- * per-template stats (sends · delivered · bounced · complained), all derived
- * from audit rows (no new table). Read-only, so no audit row. Backs the
- * panels at the top of the admin email-events page.
- */
-adminRouter.get('/v1/admin/email-overview', async (c) => c.json(await getEmailAdminSummary()));
 
 /**
  * Suppression list — emails we won't send to. Populated by the mittera
@@ -488,24 +369,6 @@ adminRouter.post('/v1/admin/users/unsuspend', async (c) => {
     metadata: { userId: parsed.userId },
   });
   return c.json({ unsuspended: parsed.userId });
-});
-
-adminRouter.post('/v1/admin/users/restore', async (c) => {
-  const actor = c.get('user')!;
-  const parsed = await parseUserAction(c);
-  if (!parsed.ok) return c.json({ code: 'validation_failed', issues: parsed.error }, 400);
-  // Reverses a soft-deletion within the grace window (the previously-missing
-  // restore path). Throws not_deleted (409) when the account isn't deletable.
-  const result = await restoreAccount(parsed.userId);
-  await audit({
-    actorId: actor.id,
-    projectId: null,
-    action: 'admin.user.restore',
-    ipHash: ipHash(c),
-    userAgent: c.req.header('user-agent') ?? null,
-    metadata: { ...result },
-  });
-  return c.json(result);
 });
 
 adminRouter.post('/v1/admin/users/force-sign-out', async (c) => {
@@ -1057,206 +920,6 @@ adminRouter.patch('/v1/admin/migration-requests/:id', async (c) => {
   }
 });
 
-/* ─── support tickets (tagged /contact submissions) ──────────────────── */
-
-interface AdminTicket {
-  id: string;
-  ticketNumber: string | null;
-  status: string;
-  topic: string;
-  topicCode: string | null;
-  name: string;
-  email: string;
-  subject: string | null;
-  message: string;
-  country: string | null;
-  assignedTo: string | null;
-  operatorNotes: string | null;
-  createdAt: string;
-  handledAt: string | null;
-}
-
-function serializeAdminTicket(t: {
-  id: string;
-  ticketNumber: string | null;
-  status: string;
-  topic: string;
-  topicCode: string | null;
-  name: string;
-  email: string;
-  subject: string | null;
-  message: string;
-  country: string | null;
-  assignedTo: string | null;
-  operatorNotes: string | null;
-  createdAt: Date;
-  handledAt: Date | null;
-}): AdminTicket {
-  return {
-    id: t.id,
-    ticketNumber: renderTicketNumber(t.ticketNumber),
-    status: t.status,
-    topic: t.topic,
-    topicCode: t.topicCode,
-    name: t.name,
-    email: t.email,
-    subject: t.subject,
-    message: t.message,
-    country: t.country,
-    assignedTo: t.assignedTo,
-    operatorNotes: t.operatorNotes,
-    createdAt: t.createdAt.toISOString(),
-    handledAt: t.handledAt ? t.handledAt.toISOString() : null,
-  };
-}
-
-function serializeReply(r: {
-  id: string;
-  author: string;
-  body: string;
-  createdAt: Date;
-}): { id: string; author: string; body: string; createdAt: string } {
-  return { id: r.id, author: r.author, body: r.body, createdAt: r.createdAt.toISOString() };
-}
-
-const updateTicketSchema = z.object({
-  status: z.enum(ticketStatuses).optional(),
-  assignedTo: z.string().max(200).nullable().optional(),
-  operatorNotes: z.string().max(20_000).nullable().optional(),
-});
-
-const ticketReplySchema = z.object({
-  body: z.string().trim().min(1).max(8_000),
-});
-
-adminRouter.get('/v1/admin/tickets', async (c) => {
-  const statusParam = c.req.query('status');
-  const status =
-    statusParam && (ticketStatuses as readonly string[]).includes(statusParam)
-      ? (statusParam as (typeof ticketStatuses)[number])
-      : undefined;
-  const limitParam = c.req.query('limit');
-  const limit = limitParam ? Number(limitParam) || 100 : 100;
-  const rows = await listTicketsForAdmin({ status, limit });
-  return c.json({ tickets: rows.map(serializeAdminTicket) });
-});
-
-adminRouter.get('/v1/admin/tickets/:id', async (c) => {
-  const id = c.req.param('id');
-  try {
-    const { ticket, replies } = await getTicketByIdForAdmin(id);
-    return c.json({
-      ticket: serializeAdminTicket(ticket),
-      replies: replies.map(serializeReply),
-    });
-  } catch {
-    return c.json({ code: 'not_found' }, 404);
-  }
-});
-
-adminRouter.patch('/v1/admin/tickets/:id', async (c) => {
-  const actor = c.get('user')!;
-  const id = c.req.param('id');
-  const body = await c.req.json().catch(() => null);
-  const parsed = updateTicketSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const before = await getTicketByIdForAdmin(id);
-    const patch: UpdateTicketInput = parsed.data;
-    const ticket = await updateTicket(id, patch);
-    const statusChanged = Boolean(patch.status) && before.ticket.status !== ticket.status;
-    await audit({
-      actorId: actor.id,
-      projectId: null,
-      action: 'contact_ticket.update',
-      ipHash: ipHash(c),
-      userAgent: c.req.header('user-agent') ?? null,
-      metadata: {
-        ticketId: id,
-        ticketNumber: renderTicketNumber(ticket.ticketNumber),
-        fields: Object.keys(patch),
-        statusChanged,
-        newStatus: statusChanged ? ticket.status : null,
-      },
-    });
-    // Notify the sender on a real status change to 'replied'/'closed'.
-    // Fire-and-forget so mittera latency never blocks the operator.
-    const rendered = renderTicketNumber(ticket.ticketNumber);
-    if (
-      statusChanged &&
-      rendered &&
-      (ticket.status === 'replied' || ticket.status === 'closed')
-    ) {
-      void sendTicketStatusUpdate(ticket.email, rendered, ticket.status).catch((err) => {
-        log.error('ticket_status_email_failed', {
-          ticketId: id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
-    }
-    return c.json({ ticket: serializeAdminTicket(ticket) });
-  } catch (err) {
-    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
-    if (err instanceof ValidationError) {
-      return c.json({ code: 'validation_failed', message: err.message }, 400);
-    }
-    throw err;
-  }
-});
-
-adminRouter.post('/v1/admin/tickets/:id/reply', async (c) => {
-  const actor = c.get('user')!;
-  const id = c.req.param('id');
-  const body = await c.req.json().catch(() => null);
-  const parsed = ticketReplySchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const { reply, ticket } = await addTicketReply(id, 'operator', parsed.data.body);
-    const rendered = renderTicketNumber(ticket.ticketNumber);
-    // An operator reply means the customer now has a response waiting. Flip the
-    // ticket to 'replied' (unless it's already closed) so it shows as "replied"
-    // in the customer's own "my tickets" view — the in-app signal that pairs
-    // with the email, so they don't have to rely on the inbox alone. Best-effort:
-    // a status-bump failure must not fail the reply (which already persisted).
-    if (ticket.status !== 'closed' && ticket.status !== 'replied') {
-      await updateTicket(id, { status: 'replied' }).catch((err) => {
-        log.error('ticket_reply_status_bump_failed', {
-          ticketId: id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
-    }
-    await audit({
-      actorId: actor.id,
-      projectId: null,
-      action: 'contact_ticket.reply',
-      ipHash: ipHash(c),
-      userAgent: c.req.header('user-agent') ?? null,
-      metadata: { ticketId: id, ticketNumber: rendered, replyId: reply.id },
-    });
-    // Email the sender the reply. Fire-and-forget.
-    if (rendered) {
-      void sendTicketReply(ticket.email, rendered, reply.body).catch((err) => {
-        log.error('ticket_reply_email_failed', {
-          ticketId: id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
-    }
-    return c.json({ reply: serializeReply(reply) }, 201);
-  } catch (err) {
-    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
-    if (err instanceof ValidationError) {
-      return c.json({ code: 'validation_failed', message: err.message }, 400);
-    }
-    throw err;
-  }
-});
-
 /**
  * Promote an unauth lead to a user account. Used when an operator
  * verifies (via the contact email match) that the briven user signing
@@ -1322,172 +985,6 @@ adminRouter.post('/v1/admin/migration-requests/:id/promote-to-user', async (c) =
   } catch (err) {
     if (err instanceof ValidationError) {
       return c.json({ code: 'validation_failed', message: err.message }, 400);
-    }
-    throw err;
-  }
-});
-
-/* ─── MCP / Agent-Access (B Phase 5) ─────────────────────────────────────
- * The on/off + key-issuing + audit SURFACE for the future MCP server. The
- * socket server that consumes these keys is a separate track. Every mutation
- * is step-up-gated (the global middleware above) and audited via the service
- * with the `mcp.*` action namespace. The plan gate is SERVER-SIDE: enabling /
- * issuing for a non-paying project returns 403 mcp_plan_required.
- */
-
-/** Build the audit actor from the request — id + hashed IP + user-agent. */
-function mcpActor(c: Context<AppEnv>): McpActor {
-  const user = c.get('user');
-  return {
-    id: user?.id ?? null,
-    ipHash: ipHash(c),
-    userAgent: c.req.header('user-agent') ?? null,
-  };
-}
-
-/** Status: global flag + per-project access list + recent mcp.* audit. */
-adminRouter.get('/v1/admin/mcp', async (c) => {
-  const [globalEnabled, projects, recentAudit] = await Promise.all([
-    mcpGetGlobalEnabled(),
-    mcpListProjectAccess(),
-    listMcpAudit(100),
-  ]);
-  return c.json({
-    globalEnabled,
-    projects,
-    audit: recentAudit.map((r) => ({
-      id: r.id,
-      action: r.action,
-      actorId: r.actorId,
-      metadata: r.metadata,
-      createdAt: r.createdAt.toISOString(),
-    })),
-  });
-});
-
-/** Flip the global MCP kill-switch. OFF cuts ALL agent access at once. */
-adminRouter.post('/v1/admin/mcp/global', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ enabled: z.boolean() }).safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  const result = await mcpSetGlobalEnabled(parsed.data.enabled, mcpActor(c));
-  return c.json(result);
-});
-
-const mcpProjectBody = z.object({ projectId: z.string().min(1) });
-
-/** Enable MCP for a project — SERVER-SIDE plan gate (Pro/Team only). */
-adminRouter.post('/v1/admin/mcp/projects/enable', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = mcpProjectBody.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const result = await mcpEnableForProject(parsed.data.projectId, mcpActor(c));
-    return c.json(result);
-  } catch (err) {
-    if (err instanceof McpPlanRequiredError) {
-      return c.json(
-        {
-          code: err.code,
-          message: 'MCP access requires a Pro or Team plan',
-          tier: err.tier,
-        },
-        403,
-      );
-    }
-    throw err;
-  }
-});
-
-/** Disable MCP for a project (no plan gate — always allowed). */
-adminRouter.post('/v1/admin/mcp/projects/disable', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = mcpProjectBody.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  const result = await mcpDisableForProject(parsed.data.projectId, mcpActor(c));
-  return c.json(result);
-});
-
-const mcpIssueBody = z.object({
-  projectId: z.string().min(1),
-  name: z.string().min(1).max(120),
-  scope: z.enum(mcpKeyScope),
-});
-
-/** Issue a key — returns the FULL plaintext EXACTLY once. */
-adminRouter.post('/v1/admin/mcp/keys', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = mcpIssueBody.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const result = await mcpIssueKey(
-      { projectId: parsed.data.projectId, name: parsed.data.name, scope: parsed.data.scope },
-      mcpActor(c),
-    );
-    return c.json(result, 201);
-  } catch (err) {
-    if (err instanceof McpPlanRequiredError) {
-      return c.json(
-        {
-          code: err.code,
-          message: 'MCP access requires a Pro or Team plan',
-          tier: err.tier,
-        },
-        403,
-      );
-    }
-    throw err;
-  }
-});
-
-/** Revoke a key — sets revoked_at + enabled=false. */
-adminRouter.post('/v1/admin/mcp/keys/revoke', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ keyId: z.string().min(1) }).safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const result = await mcpRevokeKey(parsed.data.keyId, mcpActor(c));
-    return c.json(result);
-  } catch (err) {
-    if (err instanceof NotFoundError) {
-      return c.json({ code: 'not_found' }, 404);
-    }
-    throw err;
-  }
-});
-
-/**
- * Delete a key — REVOKE-THEN-DELETE: only an already-revoked key may be removed.
- * An active key is refused (409 mcp_key_not_revoked); unknown → 404.
- */
-adminRouter.post('/v1/admin/mcp/keys/delete', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ keyId: z.string().min(1) }).safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const result = await mcpDeleteRevokedKey(parsed.data.keyId, mcpActor(c));
-    return c.json(result);
-  } catch (err) {
-    if (err instanceof McpKeyNotRevokedError) {
-      return c.json(
-        { code: err.code, message: 'revoke this key before deleting it' },
-        409,
-      );
-    }
-    if (err instanceof NotFoundError) {
-      return c.json({ code: 'not_found' }, 404);
     }
     throw err;
   }

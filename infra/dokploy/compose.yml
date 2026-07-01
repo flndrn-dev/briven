@@ -342,14 +342,6 @@ services:
       - 'traefik.http.routers.briven-api.entrypoints=websecure'
       - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
       - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
-      # mcp.briven.tech — the per-project MCP door (apps/api/src/routes/mcp-server.ts,
-      # served at /mcp). A SECOND router onto the SAME api service — no new container.
-      # The global mcp kill-switch defaults OFF, so this answers access-denied until a
-      # project is explicitly enabled. DNS A record mcp.${BRIVEN_DOMAIN} already exists.
-      - 'traefik.http.routers.briven-mcp.rule=Host(`mcp.${BRIVEN_DOMAIN}`)'
-      - 'traefik.http.routers.briven-mcp.entrypoints=websecure'
-      - 'traefik.http.routers.briven-mcp.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.briven-mcp.service=briven-api'
 
   runtime:
     build:
@@ -406,7 +398,7 @@ services:
       BRIVEN_DATA_PLANE_URL: postgres://postgres:${BRIVEN_DOLTGRES_PASSWORD}@doltgres:5432/postgres?sslmode=disable
       BRIVEN_REALTIME_POLL_MS: '500'
     healthcheck:
-      test: ['CMD-SHELL', "bun -e \"fetch('http://localhost:3004/ready').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
+      test: ['CMD-SHELL', "bun -e \"fetch('http://localhost:3004/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -437,15 +429,10 @@ services:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       NEXT_PUBLIC_BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
-      # A provider's sign-in button shows only when BOTH its Client ID AND
-      # Secret are set — mirroring the server, which registers the provider in
-      # Better Auth only when both are present (apps/api/src/lib/auth.ts). The
-      # nested `${ID:+${SECRET:+true}}` yields "true" only if both are non-empty
-      # (verified on docker compose v2). Prevents a button that shows but errors.
-      NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+${BRIVEN_GOOGLE_CLIENT_SECRET:+true}}
-      NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+${BRIVEN_GITHUB_CLIENT_SECRET:+true}}
-      NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH: ${BRIVEN_KONNOS_CLIENT_ID:+${BRIVEN_KONNOS_CLIENT_SECRET:+true}}
-      NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH: ${BRIVEN_DISCORD_CLIENT_ID:+${BRIVEN_DISCORD_CLIENT_SECRET:+true}}
+      NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH: ${BRIVEN_KONNOS_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH: ${BRIVEN_DISCORD_CLIENT_ID:+true}
     healthcheck:
       # web runs `next start` on node — use node's built-in fetch.
       test: ['CMD-SHELL', "node -e \"fetch('http://localhost:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]

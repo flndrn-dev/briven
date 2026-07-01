@@ -5,7 +5,7 @@ export default function TrustPage() {
     <>
       <h1 className="font-mono text-2xl text-[var(--color-text)]">trust</h1>
       <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
-        last updated 2026-05-10 · phase 0 private alpha · operated by flndrn (Cyprus)
+        last updated 2026-05-10 · phase 0 private alpha · operated by flndrn Limited (Cyprus)
       </p>
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">where data lives</h2>
@@ -48,8 +48,8 @@ export default function TrustPage() {
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">open source</h2>
       <p>
         briven-core is AGPL-3.0. The CLI and client SDKs are MIT. Source lives at{' '}
-        <a href="https://github.com/flndrn-dev/briven" className="text-[var(--color-text-link)]">
-          github.com/flndrn-dev/briven
+        <a href="https://codeberg.org/flndrn/briven" className="text-[var(--color-text-link)]">
+          codeberg.org/flndrn/briven
         </a>
         .
       </p>

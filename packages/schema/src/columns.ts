@@ -31,16 +31,6 @@ export class ColumnBuilder<TDef extends ColumnDef = ColumnDef> {
     return this.with({ nullable: false });
   }
 
-  /**
-   * Explicitly marks the column nullable. Columns are nullable by default,
-   * so this is a no-op for the generated SQL — it exists so authors can
-   * state intent (and so scaffold templates that call `.nullable()` don't
-   * crash). Returning `this` keeps the builder immutable-consistent.
-   */
-  nullable(): ColumnBuilder<TDef> {
-    return this.with({ nullable: true });
-  }
-
   primaryKey(): ColumnBuilder<TDef> {
     return this.with({ primaryKey: true, nullable: false });
   }

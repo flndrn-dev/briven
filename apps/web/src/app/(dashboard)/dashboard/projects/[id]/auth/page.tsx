@@ -11,7 +11,6 @@ interface AuthConfig {
     github: { enabled: boolean; clientId: string | null };
     discord: { enabled: boolean; clientId: string | null };
     microsoft: { enabled: boolean; clientId: string | null };
-    konnos: { enabled: boolean; clientId: string | null };
   };
   branding: {
     logoUrl: string | null;
@@ -117,7 +116,6 @@ export default async function AuthOverviewPage({
             ['github', state.config.providers.github.enabled],
             ['discord', state.config.providers.discord.enabled],
             ['microsoft', state.config.providers.microsoft.enabled],
-            ['konnos', state.config.providers.konnos.enabled],
           ]}
         />
         <SummaryCard
@@ -129,21 +127,7 @@ export default async function AuthOverviewPage({
               state.config.branding.senderDomain ?? 'noreply@auth.briven.tech (fallback)',
             ],
             ['primary color', state.config.branding.primaryColor],
-            [
-              'logo',
-              state.config.branding.logoUrl ? (
-                <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={state.config.branding.logoUrl}
-                    alt="branding logo"
-                    className="h-8 w-auto max-w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] object-contain"
-                  />
-                </>
-              ) : (
-                'briven default'
-              ),
-            ],
+            ['logo', state.config.branding.logoUrl ?? 'briven default'],
           ]}
         />
       </div>
@@ -173,7 +157,7 @@ export const auth = createBrivenAuth({
 
 interface SummaryCardProps {
   title: string;
-  rows: Array<[string, boolean | React.ReactNode]>;
+  rows: Array<[string, boolean | string]>;
 }
 
 function SummaryCard({ title, rows }: SummaryCardProps) {
@@ -184,7 +168,7 @@ function SummaryCard({ title, rows }: SummaryCardProps) {
         {rows.map(([k, v]) => (
           <div key={k} className="contents">
             <dt className="text-[var(--color-text-muted)]">{k}</dt>
-            <dd className="min-w-0 break-words text-[var(--color-text)]">
+            <dd className="text-[var(--color-text)]">
               {typeof v === 'boolean' ? (
                 v ? (
                   <span className="text-[var(--color-primary)]">on</span>

@@ -1,6 +1,5 @@
 import { apiJson } from '../../../../lib/api';
 import { requireUser } from '../../../../lib/session';
-import { toValidDate } from '@/lib/utils';
 import { ManageBillingButton } from './manage-billing-button';
 import { UpgradeButtons } from './upgrade-buttons';
 
@@ -107,7 +106,8 @@ const STATUS_LABEL: Record<SubscriptionSummary['status'], string> = {
 };
 
 function renewalDate(iso: string | null): string {
-  return toValidDate(iso)?.toISOString().slice(0, 10) ?? '—';
+  if (!iso) return '—';
+  return new Date(iso).toISOString().slice(0, 10);
 }
 
 export default async function BillingPage({
@@ -133,15 +133,7 @@ export default async function BillingPage({
   // Fetch billing address from the profile endpoint
   const profile = await apiJson<BillingProfile>('/v1/me').catch(() => null);
 
-  // Clamp the tier to one the UI actually has tables for. The API is the source
-  // of truth and could one day return a tier this build doesn't know yet (e.g. a
-  // new plan shipped server-side first); an unknown key makes TIER_INCLUDED[tier]
-  // /TIER_SLA[tier] undefined, and the .map()/.uptime below would crash the whole
-  // billing page into a 500. Fall back to 'free' so the page always renders.
-  const KNOWN_TIERS = ['free', 'pro', 'team'] as const;
-  const tier: SubscriptionSummary['tier'] = KNOWN_TIERS.includes(subscription.tier)
-    ? subscription.tier
-    : 'free';
+  const tier = subscription.tier;
   const isCheckoutSuccess = checkout === 'success';
 
   return (
@@ -177,7 +169,7 @@ export default async function BillingPage({
               </span>
             </div>
           </div>
-          <dl className="grid grid-cols-[110px_1fr] gap-y-1 font-mono text-xs">
+          <dl className="grid grid-cols-[1fr] gap-y-2 sm:grid-cols-[110px_1fr] font-mono text-xs">
             <dt className="text-[var(--color-text-subtle)]">status</dt>
             <dd className="text-[var(--color-text)]">
               {STATUS_LABEL[subscription.status] ?? subscription.status}

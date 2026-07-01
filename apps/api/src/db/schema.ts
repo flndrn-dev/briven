@@ -14,7 +14,6 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
-  date,
   index,
   integer,
   jsonb,
@@ -81,12 +80,9 @@ export const users = pgTable(
     addressRegion: text('address_region'),
     // ISO 3166-1 alpha-2 (e.g. 'BE', 'NL'). Determines VAT treatment.
     addressCountry: text('address_country'),
-    // KYC — required before paid checkout under EU AML. The underlying
-    // column is DATE; drizzle `date` (default mode 'string') returns the
-    // ISO yyyy-mm-dd as a string, matching the existing storage without a
-    // destructive ALTER (was declared `text` here, which drifted from the
-    // DB and would make db:generate emit a column-type ALTER — audit Theme).
-    dateOfBirth: date('date_of_birth'),
+    // KYC — required before paid checkout under EU AML. Stored as
+    // ISO yyyy-mm-dd text; the underlying column is DATE.
+    dateOfBirth: text('date_of_birth'),
     // ISO 3166-1 alpha-2 (e.g. 'BE'). Separate from address_country —
     // residency drives VAT, birth drives KYC.
     countryOfBirth: text('country_of_birth'),
@@ -101,16 +97,6 @@ export const users = pgTable(
     // Surfaced only in audit_logs / admin tools — never replayed back
     // to the user, never used in cross-user analytics.
     deletionReason: text('deletion_reason'),
-    // User-chosen "delete secret" gating project deletion. Mirrors the SDK
-    // key pattern (migration 0034/0039): sha-256 hex `delete_secret_hash`
-    // is the sole verification mechanism, while AES-256-GCM
-    // `delete_secret_enc` (BRIVEN_ENCRYPTION_KEY KEK via
-    // services/project-env.ts) lets the owner reveal/copy the secret again
-    // through the authenticated + audited reveal path. All NULLABLE — a
-    // user without a secret set has all three null.
-    deleteSecretHash: text('delete_secret_hash'),
-    deleteSecretEnc: text('delete_secret_enc'),
-    deleteSecretSetAt: ts('delete_secret_set_at'),
   },
   (t) => ({
     emailIdx: uniqueIndex('users_email_idx').on(t.email),
@@ -193,13 +179,9 @@ export const organizations = pgTable(
     // True for the auto-created first org per user. Lets the UI keep a
     // single-org implicit UX until Phase 3 adds a switcher.
     personal: boolean('personal').notNull().default(false),
-    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
-    // user can proceed when this org is shared (multi-owner) and survives
-    // the purge — the creator reference simply nulls out instead of an FK
-    // violation blocking the whole DELETE. Sole-owner orgs are hard-deleted
-    // before the user in the same purge transaction, so they never rely on
-    // this null-out.
-    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -260,11 +242,6 @@ export const projects = pgTable(
     // unmeasurable on DoltGres, so limits are expressed as rows + tables.
     storageMaxRows: bigint('storage_max_rows', { mode: 'number' }),
     storageMaxTables: bigint('storage_max_tables', { mode: 'number' }),
-    // Sprint 4 Phase 4 enforcement lever. 'flag' (default) only surfaces an
-    // over-limit project in the admin dashboard and NEVER blocks a customer.
-    // 'block' rejects new writes (createTable / insertRow) while the project
-    // is over its effective cap. An admin opts a specific project into 'block'.
-    storageEnforcement: text('storage_enforcement').$type<'flag' | 'block'>().notNull().default('flag'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -272,12 +249,6 @@ export const projects = pgTable(
   (t) => ({
     slugIdx: uniqueIndex('projects_slug_idx').on(t.slug),
     orgIdx: index('projects_org_idx').on(t.orgId),
-    // Partial index over the suspended subset so the admin suspension scan
-    // stays cheap. Declared here to match the index already present in the
-    // live DB (audit: schema was missing this declaration).
-    suspendedAtIdx: index('projects_suspended_at_idx')
-      .on(t.suspendedAt)
-      .where(sql`suspended_at IS NOT NULL`),
   }),
 );
 
@@ -313,10 +284,6 @@ export const projectMembers = pgTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.projectId, t.userId] }),
-    // Reverse lookup "all projects a user belongs to" (membership scans in
-    // access checks + the account-deletion sole-owner sweep). The composite
-    // PK is (project_id, user_id) so user_id alone is not index-covered.
-    userIdx: index('project_members_user_id_idx').on(t.userId),
   }),
 );
 
@@ -361,7 +328,7 @@ export const projectInvitations = pgTable(
     // SHA-256 hash of the single-use accept token; plaintext only rides
     // in the invite email and the recipient's URL.
     tokenHash: text('token_hash').notNull(),
-    invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    invitedBy: text('invited_by').references(() => users.id),
     expiresAt: ts('expires_at').notNull(),
     acceptedAt: ts('accepted_at'),
     revokedAt: ts('revoked_at'),
@@ -393,7 +360,7 @@ export const orgInvitations = pgTable(
     // SHA-256 hash of the single-use accept token; plaintext only rides
     // in the invite email and the recipient's URL.
     tokenHash: text('token_hash').notNull(),
-    invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    invitedBy: text('invited_by').references(() => users.id),
     expiresAt: ts('expires_at').notNull(),
     acceptedAt: ts('accepted_at'),
     revokedAt: ts('revoked_at'),
@@ -420,7 +387,7 @@ export const projectEnvVars = pgTable(
     // AES-256-GCM ciphertext of the value, base64. Never read directly —
     // always through services/project-env.ts which wraps decrypt.
     encryptedValue: text('encrypted_value').notNull(),
-    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -439,11 +406,9 @@ export const apiKeys = pgTable(
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
-    // user doesn't 23503-block on this key (the key stays scoped to its
-    // project; only the creator attribution is severed). Was NOT NULL +
-    // NO ACTION — a blocker of the account purge (audit Theme 0).
-    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
     name: text('name').notNull(),
     // SHA-256 of the plaintext key — we never store the plaintext after creation.
     hash: text('hash').notNull(),
@@ -476,7 +441,7 @@ export const deployments = pgTable(
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    triggeredBy: text('triggered_by').references(() => users.id, { onDelete: 'set null' }),
+    triggeredBy: text('triggered_by').references(() => users.id),
     apiKeyId: text('api_key_id').references(() => apiKeys.id),
     status: text('status').$type<DeploymentStatus>().notNull().default('pending'),
     schemaDiffSummary: jsonb('schema_diff_summary'),
@@ -544,13 +509,8 @@ export const auditLogs = pgTable(
   'audit_logs',
   {
     id: id(),
-    // ON DELETE SET NULL so a GDPR hard-delete of the actor preserves the
-    // audit row (action + timestamp survive) while severing the FK — keeps
-    // the immutable audit trail intact without blocking the purge DELETE.
-    actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }),
-    // ON DELETE SET NULL so a project hard-delete during a GDPR purge
-    // doesn't 23503-block on retained audit rows (sibling of actor_id).
-    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    actorId: text('actor_id').references(() => users.id),
+    projectId: text('project_id').references(() => projects.id),
     action: text('action').notNull(),
     // SHA-256 hash of the caller IP — we never store raw IPs (CLAUDE.md §5.1).
     ipHash: varchar('ip_hash', { length: 64 }),
@@ -613,34 +573,12 @@ export const usageMetric = [
   'invocations',
   'storage_bytes',
   'connection_seconds',
-  // briven auth MAU — distinct end-users active in the current UTC calendar
-  // month (the single canonical MAU window — see services/auth-mau.ts).
+  // briven auth MAU — distinct end-users active in the trailing 30 days.
   // Gauge sample (not a delta) snapshotted by the hourly aggregator and
   // pushed to Polar's `briven_auth_mau` meter for overage billing.
   'auth_mau',
 ] as const;
 export type UsageMetric = (typeof usageMetric)[number];
-
-/**
- * Gauge vs counter — the single source of truth for how a metric bills.
- *
- *  - GAUGE  (storage_bytes, auth_mau): a point-in-time snapshot. The value
- *    is only meaningful as "the level right now", so the billable quantity
- *    for a period is the period's representative value (latest), NOT the sum
- *    of every hourly snapshot. These are stored as ONE row per
- *    (project, BILLING-MONTH, metric) — UPSERTed to the latest value — and
- *    pushed to Polar as a delta-to-latest so a SUM-type meter bills the
- *    final value exactly once and can never over-count the ~720 hourly
- *    snapshots a month produces. (See workers/usage-aggregator.ts +
- *    workers/polar-meter-push.ts.)
- *  - COUNTER (invocations, connection_seconds): an additive delta for the
- *    hour. Stored one row per (project, HOUR, metric) and SUM-aggregated by
- *    Polar across the month — the existing behaviour, unchanged.
- */
-export const GAUGE_METRICS = new Set<UsageMetric>(['storage_bytes', 'auth_mau']);
-export function isGaugeMetric(metric: UsageMetric): boolean {
-  return GAUGE_METRICS.has(metric);
-}
 
 export const usageEvents = pgTable(
   'usage_events',
@@ -648,21 +586,11 @@ export const usageEvents = pgTable(
     id: id(),
     projectId: text('project_id').notNull(),
     metric: text('metric', { enum: usageMetric }).notNull(),
-    // Counters: first millisecond of the UTC hour this row covers.
-    // Gauges (storage_bytes, auth_mau): first millisecond of the UTC
-    // billing month — so there is exactly ONE row per (project, month,
-    // gauge-metric) instead of ~720 hourly snapshots.
+    // First millisecond of the UTC hour this row covers.
     periodStart: ts('period_start').notNull(),
-    // For counters (invocations, connection_seconds): the additive delta in
-    // this hour. For gauges (storage_bytes, auth_mau): the latest snapshot
-    // value for the billing month (UPSERTed in place).
+    // For counters (invocations, connection_seconds): the delta in this
+    // window. For gauges (storage_bytes): the sample value at period_end.
     value: text('value').notNull(),
-    // For GAUGES only: the running total already delivered to Polar for this
-    // period. The push sends `value - pushedValue` (delta-to-latest) and, on
-    // success, advances pushedValue to `value`. A SUM-type meter then bills
-    // the latest value exactly once — re-pushing the same row is a no-op
-    // (delta 0). NULL for counters, which push their absolute hourly value.
-    pushedValue: text('pushed_value'),
     // 'pushed' once the Polar meter accepts it. Until then, 'pending'.
     // The push worker scans for pending rows and batches them.
     polarPushStatus: text('polar_push_status', {
@@ -983,126 +911,6 @@ export const migrationRequests = pgTable(
   }),
 );
 
-/* ─── contact_messages (public /contact form intake) ─────────────── */
-// Public, unauthenticated contact-form submissions from the /contact
-// marketing page. The sender's email is collected + stored here so the
-// operator can reply privately — it is never rendered back to the
-// website. Triaged out-of-band; `handled_at` is stamped once an operator
-// has actioned the message.
-
-export const contactTopics = [
-  'general',
-  'support',
-  'sales',
-  'self-host',
-  'security',
-  'privacy',
-  'legal',
-  'other',
-] as const;
-export type ContactTopic = (typeof contactTopics)[number];
-
-// Support-ticket lifecycle. A contact submission becomes a ticket only
-// when the sender tagged it with a routing tag (#support/#billing/etc).
-// A fresh ticket starts at `no_response`; an operator can move it through
-// the rest. Non-ticketed contact rows leave ticket_number/topic_code NULL
-// and carry the default status (never surfaced for them).
-export const ticketStatuses = ['no_response', 'in_review', 'replied', 'closed'] as const;
-export type TicketStatus = (typeof ticketStatuses)[number];
-
-// Per-topic 3-letter code stamped on a ticket. Derived from the primary
-// routing tag (support→SUP, billing→BIL, technical→TEC, self-hosting→SLF).
-export const ticketTopicCodes = ['SUP', 'BIL', 'TEC', 'SLF'] as const;
-export type TicketTopicCode = (typeof ticketTopicCodes)[number];
-
-// Who authored a thread message: the operator (admin reply) or the user.
-export const ticketReplyAuthors = ['operator', 'user'] as const;
-export type TicketReplyAuthor = (typeof ticketReplyAuthors)[number];
-
-export const contactMessages = pgTable(
-  'contact_messages',
-  {
-    id: id(),
-    name: text('name').notNull(),
-    email: text('email').notNull(),
-    topic: text('topic').$type<ContactTopic>().notNull(),
-    // Free-text "what's this about" line from the form. Nullable: the
-    // topic-only flow (and older clients) submit without it. Also holds the
-    // serialized `#tag` routing chips the support form sends.
-    subject: text('subject'),
-    message: text('message').notNull(),
-    // Visitor country auto-detected from their IP on the /contact page and
-    // submitted as a locked field — a hint for the operator. Nullable when
-    // it couldn't be resolved (localhost, unknown block).
-    country: text('country'),
-    ipHash: text('ip_hash'),
-    userAgent: text('user_agent'),
-    // ── Support-ticket columns (0045) ──
-    // Lifecycle status. NOT NULL with a default so every row has one; only
-    // meaningful for ticketed rows (ticket_number IS NOT NULL).
-    status: text('status').$type<TicketStatus>().notNull().default('no_response'),
-    // Human-facing ticket number stored WITHOUT the leading '#'
-    // (e.g. SUP260629-000001). NULL for non-ticketed contact messages.
-    // UNIQUE — a unique index on a nullable column lets the many
-    // non-ticket rows keep NULL while ticketed rows stay unique.
-    ticketNumber: text('ticket_number'),
-    // Primary topic code (SUP/BIL/TEC/SLF). NULL for non-ticketed rows.
-    topicCode: text('topic_code').$type<TicketTopicCode>(),
-    // Operator the ticket is assigned to (free-text handle). NULL = unassigned.
-    assignedTo: text('assigned_to'),
-    // Internal operator-only triage notes. NEVER surfaced to the user.
-    operatorNotes: text('operator_notes'),
-    createdAt: createdAt(),
-    handledAt: ts('handled_at'),
-  },
-  (t) => ({
-    createdIdx: index('contact_messages_created_idx').on(t.createdAt),
-    // Nullable-unique: multiple NULLs allowed (non-ticket rows), ticketed
-    // rows are globally unique.
-    ticketNumberIdx: uniqueIndex('contact_messages_ticket_number_idx').on(t.ticketNumber),
-  }),
-);
-export type ContactMessage = typeof contactMessages.$inferSelect;
-
-/* ─── ticket_counters (daily, per-topic-code sequence) ───────────── */
-// One row per (topic_code, day). The counter is atomically incremented by
-// an INSERT ... ON CONFLICT DO UPDATE on ticket creation, giving a
-// race-safe, gap-tolerant sequence that resets to 1 each new day per code.
-export const ticketCounters = pgTable(
-  'ticket_counters',
-  {
-    topicCode: text('topic_code').notNull(),
-    // Calendar day (UTC) the sequence belongs to. String mode → 'YYYY-MM-DD'.
-    day: date('day', { mode: 'string' }).notNull(),
-    counter: integer('counter').notNull().default(0),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.topicCode, t.day] }),
-  }),
-);
-export type TicketCounter = typeof ticketCounters.$inferSelect;
-
-/* ─── contact_message_replies (ticket thread) ────────────────────── */
-// Append-only thread of messages on a ticket. An operator reply emails the
-// sender; a user reply (future inbound path) is recorded too. Cascades when
-// the parent contact_messages row is deleted.
-export const contactMessageReplies = pgTable(
-  'contact_message_replies',
-  {
-    id: id(),
-    messageId: text('message_id')
-      .notNull()
-      .references(() => contactMessages.id, { onDelete: 'cascade' }),
-    author: text('author').$type<TicketReplyAuthor>().notNull(),
-    body: text('body').notNull(),
-    createdAt: createdAt(),
-  },
-  (t) => ({
-    messageIdx: index('contact_message_replies_message_idx').on(t.messageId),
-  }),
-);
-export type ContactMessageReply = typeof contactMessageReplies.$inferSelect;
-
 /* ─── platform_settings (single-row dashboard-controllable flags) ─── */
 // Key/value JSONB store for platform-level flags an admin needs to flip
 // without a container restart. Today: `openSignups` (boolean). Future:
@@ -1133,11 +941,7 @@ export const signupAllowlist = pgTable(
     id: id(),
     email: text('email').notNull(),
     invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
-    // Column is `invited_at` (migration 0024). Do NOT use the createdAt()
-    // helper here — it hard-codes the column name to `created_at`, which does
-    // not exist on this table, so every addToAllowlist/listAllowlist query
-    // failed against the real DB ("column created_at does not exist").
-    invitedAt: ts('invited_at').defaultNow().notNull(),
+    invitedAt: createdAt(),
     acceptedAt: ts('accepted_at'),
     notes: text('notes'),
   },
@@ -1357,10 +1161,9 @@ export const brivenAuthSdkKeys = pgTable(
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
-    // user doesn't 23503-block on this key (audit Theme 0). Was NOT NULL +
-    // NO ACTION.
-    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
     name: text('name').notNull(),
     // sha-256 hex digest of the plaintext token. Never the plaintext itself.
     hash: text('hash').notNull(),
@@ -1371,14 +1174,6 @@ export const brivenAuthSdkKeys = pgTable(
     // Last 4 chars of the plaintext — safe to display.
     suffix: varchar('suffix', { length: 4 }).notNull(),
     scope: text('scope').$type<BrivenAuthSdkKeyScope>().notNull().default('read'),
-    // AES-256-GCM ciphertext of the plaintext key, encrypted at rest with
-    // BRIVEN_ENCRYPTION_KEY (services/project-env.ts wire format). Lets an
-    // owner copy the full key again later via the authenticated + audited
-    // reveal endpoint — the value is NEVER returned in list/create masks and
-    // never rendered in HTML. NULL for keys minted before 0039: those cannot
-    // be revealed (rotate to get a copyable key). `hash` stays the only
-    // auth-verification mechanism; this column is copy-again only.
-    encryptedKey: text('encrypted_key'),
     lastUsedAt: ts('last_used_at'),
     expiresAt: ts('expires_at'),
     createdAt: createdAt(),
@@ -1392,52 +1187,6 @@ export const brivenAuthSdkKeys = pgTable(
 
 export type BrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferSelect;
 export type NewBrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferInsert;
-
-/* ─── mcp_keys (B Phase 5 — MCP / Agent-Access keys) ───────────────────── */
-// Keys an agent / MCP client presents to reach a project once MCP access is
-// turned on for it. Same one-time-reveal discipline as api_keys and
-// briven_auth_sdk_keys: the plaintext is returned exactly once on issue; only
-// a sha-256 hex digest persists. `prefix` is the constant `pk_briven_mcp_`
-// (kept as a column so a future v2 scheme can coexist without a migration);
-// `suffix` is the safe-to-show last 4 chars for the `<prefix>•••<suffix>`
-// dashboard hint. `enabled` is the per-key live switch — revoke flips it false
-// AND stamps revoked_at. This is only the access SURFACE; the MCP socket
-// server that consumes these keys is a separate track.
-export const mcpKeyScope = ['read', 'read-write', 'admin'] as const;
-export type McpKeyScope = (typeof mcpKeyScope)[number];
-
-export const mcpKeys = pgTable(
-  'mcp_keys',
-  {
-    id: id(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    // sha-256 hex digest of the plaintext token. Never the plaintext itself.
-    hash: text('hash').notNull(),
-    // Plaintext prefix — currently always `pk_briven_mcp_`.
-    prefix: text('prefix').notNull(),
-    // Last 4 chars of the plaintext — safe to display.
-    suffix: varchar('suffix', { length: 4 }).notNull(),
-    scope: text('scope').$type<McpKeyScope>().notNull().default('read'),
-    enabled: boolean('enabled').notNull().default(true),
-    // Nullable + ON DELETE SET NULL so a GDPR hard-delete of the creating
-    // user doesn't 23503-block on this key (audit Theme 0). Was NOT NULL +
-    // NO ACTION.
-    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
-    createdAt: createdAt(),
-    lastUsedAt: ts('last_used_at'),
-    revokedAt: ts('revoked_at'),
-  },
-  (t) => ({
-    hashIdx: uniqueIndex('mcp_keys_hash_idx').on(t.hash),
-    projectIdx: index('mcp_keys_project_idx').on(t.projectId),
-  }),
-);
-
-export type McpKey = typeof mcpKeys.$inferSelect;
-export type NewMcpKey = typeof mcpKeys.$inferInsert;
 
 /* ─── project_auto_snapshot_settings (automatic scheduled snapshots) ─ */
 // One row per project that has automatic save-points configured. Drives
@@ -1488,46 +1237,3 @@ export const projectAutoSnapshotSettings = pgTable(
 
 export type ProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferSelect;
 export type NewProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferInsert;
-
-/* ─── tenant_secrets (per-tenant encrypted secrets — OAuth client secrets) ─ */
-// Persistence layer for the Layer-2 secret primitive in
-// services/tenant-secret-store.ts (HKDF-SHA256 per-tenant key +
-// AES-256-GCM). One row per (project, service, name) secret — e.g. a
-// project's `google_client_secret` for the `auth` service. The ciphertext
-// in `encrypted_value` is the base64 blob `encryptTenantSecret` returns;
-// it is NEVER read directly — always through services/tenant-secrets.ts
-// which wraps decrypt. `service` stores the TenantService string
-// ('auth' | 'pay') so a single table serves both briven auth and pay
-// without colliding (key derivation is service-scoped). Control-plane
-// table (Postgres 17), so `onConflictDoUpdate` upserts are available.
-export const tenantSecrets = pgTable(
-  'tenant_secrets',
-  {
-    id: id(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    // TenantService discriminator ('auth' | 'pay'). Stored as text so the
-    // table doesn't need a migration when a third service appears.
-    service: text('service').notNull(),
-    // Logical secret name within the (project, service) namespace, e.g.
-    // 'google_client_secret', 'github_client_secret'.
-    name: text('name').notNull(),
-    // base64 ciphertext from encryptTenantSecret. Never read directly.
-    encryptedValue: text('encrypted_value').notNull(),
-    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (t) => ({
-    projectServiceNameIdx: uniqueIndex('tenant_secrets_project_service_name_idx').on(
-      t.projectId,
-      t.service,
-      t.name,
-    ),
-    projectServiceIdx: index('tenant_secrets_project_service_idx').on(t.projectId, t.service),
-  }),
-);
-
-export type TenantSecret = typeof tenantSecrets.$inferSelect;
-export type NewTenantSecret = typeof tenantSecrets.$inferInsert;

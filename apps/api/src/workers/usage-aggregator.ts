@@ -3,15 +3,13 @@ import { and, eq, isNull, sql as drizzleSql } from 'drizzle-orm';
 import { newId } from '@briven/shared';
 
 import { getDb } from '../db/client.js';
-import { isGaugeMetric, projects, usageEvents, type UsageMetric } from '../db/schema.js';
+import { projects, usageEvents, type UsageMetric } from '../db/schema.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import { getAuthMauStats } from '../services/auth-mau.js';
 import { collectConnectionSecondsDeltas } from '../services/connection-seconds.js';
 import { isAuthEnabled } from '../services/tenant-config-store.js';
-import { currentMonthBounds, getInvocationUsage, getStorageUsage } from '../services/usage.js';
-
-type DbHandle = ReturnType<typeof getDb>;
+import { getInvocationUsage, getStorageUsage } from '../services/usage.js';
 
 /**
  * Hourly usage aggregator. For each non-deleted project:
@@ -21,27 +19,13 @@ type DbHandle = ReturnType<typeof getDb>;
  *   3. connection_seconds — scrape briven_realtime_connection_seconds_total
  *      from realtime /metrics, compute delta vs previous period
  *
- * Storage rows are written per (project, BILLING-MONTH, metric) and auth
- * MAU likewise — see the gauge note below.
+ * One row per (project, hour, metric). Idempotent via the unique
+ * index so re-running the cron for a missed hour just overwrites the
+ * previous attempt — safe for catch-up after a restart.
  *
- * COUNTERS vs GAUGES (the money-critical distinction — see schema.ts
- * `isGaugeMetric`):
- *   - COUNTERS (invocations, connection_seconds) are additive per hour, so
- *     one row per (project, HOUR, metric); Polar SUMs them across the month.
- *   - GAUGES (storage_bytes, auth_mau) are point-in-time levels. Writing a
- *     new row every hour would stack ~720 snapshots a month; a SUM meter
- *     would then bill ~720× the real value. So gauges are keyed by
- *     period_start = first-of-UTC-month and UPSERTed to the LATEST value —
- *     exactly ONE row per (project, month, gauge-metric). The Polar push
- *     bills the delta-to-latest so the running total equals the final value.
- *
- * Idempotent via the unique index (project_id, period_start, metric): a
- * counter re-run overwrites that hour's row; a gauge re-run overwrites the
- * single monthly row with the freshest snapshot — both safe for catch-up.
- *
- * Polar push is a separate worker (`polar-meter-push.ts`) that scans
- * WHERE polar_push_status='pending'. Until a meter id is configured the
- * rows are marked 'skipped' and the operator can verify the data via SQL.
+ * Polar push is a separate worker (`push-polar-meters.ts`, follow-up)
+ * that scans WHERE polar_push_status='pending'. Until that lands rows
+ * stay pending and the operator can verify the data via SQL.
  */
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -154,67 +138,29 @@ async function rollUpProject(
 
   const db = getDb();
   for (const row of rows) {
-    await persistUsageEvent(db, projectId, row.metric, periodStart, periodEnd, row.value);
+    await db
+      .insert(usageEvents)
+      .values({
+        id: newId('au'),
+        projectId,
+        metric: row.metric,
+        periodStart,
+        value: row.value,
+        polarPushStatus: 'pending',
+      })
+      .onConflictDoUpdate({
+        target: [usageEvents.projectId, usageEvents.periodStart, usageEvents.metric],
+        set: {
+          value: row.value,
+          // Conflict means we re-ran an hour. Reset push status so the
+          // updated value goes out to Polar (the previous attempt was
+          // either stale or never pushed).
+          polarPushStatus: 'pending',
+          polarPushedAt: null,
+        },
+      });
   }
   return rows.length;
-}
-
-/**
- * The single billing period a metric's value belongs to:
- *   - GAUGE  → first millisecond of the UTC month containing `hourEnd`
- *     (≈ "now"); the gauge value is the level as-of the end of the hour, so
- *     it's filed under the month that instant falls in. Using hourEnd (not
- *     hourStart) keeps the boundary hour [23:00 last-day, 00:00 first-day)
- *     filing the new month's near-zero count under the NEW month instead of
- *     clobbering the old month's final value.
- *   - COUNTER → the hour itself (`hourStart`).
- */
-export function usagePeriodStart(metric: UsageMetric, hourStart: Date, hourEnd: Date): Date {
-  return isGaugeMetric(metric) ? currentMonthBounds(hourEnd).periodStart : hourStart;
-}
-
-/**
- * UPSERT one usage sample, keyed by the metric's billing period. For gauges
- * this collapses every hourly snapshot of a month onto ONE row (latest
- * value wins); for counters it's one row per hour. A conflict re-arms the
- * Polar push (status→pending, pushedAt→null) so the freshest value goes
- * out. `pushed_value` is deliberately left untouched here — only the push
- * advances it on a successful delivery, which is what makes the gauge
- * delta-to-latest idempotent (a re-push with an unchanged value is a 0
- * delta and bills nothing). Exported so the integration probe drives the
- * real storage path, not a reimplementation.
- */
-export async function persistUsageEvent(
-  db: DbHandle,
-  projectId: string,
-  metric: UsageMetric,
-  hourStart: Date,
-  hourEnd: Date,
-  value: string,
-): Promise<void> {
-  const periodStart = usagePeriodStart(metric, hourStart, hourEnd);
-  await db
-    .insert(usageEvents)
-    .values({
-      id: newId('ue'),
-      projectId,
-      metric,
-      periodStart,
-      value,
-      polarPushStatus: 'pending',
-    })
-    .onConflictDoUpdate({
-      target: [usageEvents.projectId, usageEvents.periodStart, usageEvents.metric],
-      set: {
-        value,
-        // Conflict = re-ran an hour (counter) or a fresher monthly gauge
-        // snapshot. Re-arm the push so the updated value goes to Polar; the
-        // delta-to-latest math (pushed_value preserved) prevents any
-        // double-bill on the gauge side.
-        polarPushStatus: 'pending',
-        polarPushedAt: null,
-      },
-    });
 }
 
 const INTERVAL_MS = HOUR_MS;

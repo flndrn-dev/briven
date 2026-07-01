@@ -153,12 +153,9 @@ export default function SlaPage() {
       <Section title="filing a claim">
         <p>
           credits are automatic and applied to the next invoice. if you believe a credit was missed,
-          reach us via{' '}
-          <a
-            href="https://briven.tech/contact?topic=sales"
-            className="text-[var(--color-text-link)] hover:underline"
-          >
-            the contact form
+          email{' '}
+          <a href="mailto:billing@flndrn.com" className="text-[var(--color-text-link)] hover:underline">
+            billing@flndrn.com
           </a>{' '}
           within 30 days of the affected month with your project id and the time window in
           question. claims older than 30 days are ineligible.

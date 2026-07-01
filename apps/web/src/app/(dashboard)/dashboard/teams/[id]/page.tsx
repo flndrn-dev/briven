@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson } from '../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 
 interface Org {
   id: string;
@@ -28,8 +27,8 @@ export const metadata = { title: 'team · settings' };
 export default async function TeamDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [{ orgs }, { projects }] = await Promise.all([
-    apiJson<{ orgs: Org[] }>('/v1/me/orgs').catch(() => ({ orgs: [] as Org[] })),
-    apiJson<{ projects: Project[] }>('/v1/projects').catch(() => ({ projects: [] as Project[] })),
+    apiJson<{ orgs: Org[] }>('/v1/me/orgs'),
+    apiJson<{ projects: Project[] }>('/v1/projects'),
   ]);
   const org = orgs.find((o) => o.id === id);
   if (!org) {
@@ -216,16 +215,7 @@ async function TeamInvites({ teamId }: { teamId: string }) {
         acceptedAt: string | null;
         revokedAt: string | null;
       }>;
-    }>(`/v1/orgs/${teamId}/invitations`).catch(() => ({
-      invitations: [] as Array<{
-        id: string;
-        email: string;
-        role: 'owner' | 'admin' | 'developer' | 'viewer';
-        expiresAt: string;
-        acceptedAt: string | null;
-        revokedAt: string | null;
-      }>,
-    })),
+    }>(`/v1/orgs/${teamId}/invitations`),
     apiJson<{
       members: Array<{
         userId: string;
@@ -234,15 +224,7 @@ async function TeamInvites({ teamId }: { teamId: string }) {
         role: 'owner' | 'admin' | 'developer' | 'viewer';
         joinedAt: string;
       }>;
-    }>(`/v1/orgs/${teamId}/members`).catch(() => ({
-      members: [] as Array<{
-        userId: string;
-        email: string;
-        name: string | null;
-        role: 'owner' | 'admin' | 'developer' | 'viewer';
-        joinedAt: string;
-      }>,
-    })),
+    }>(`/v1/orgs/${teamId}/members`),
   ]);
 
   const pending = invitations.filter((i) => !i.acceptedAt && !i.revokedAt);
@@ -320,7 +302,7 @@ async function TeamInvites({ teamId }: { teamId: string }) {
                 {m.name ?? m.email}
               </p>
               <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">
-                {m.role} · joined {toValidDate(m.joinedAt)?.toISOString().slice(0, 10) ?? '—'}
+                {m.role} · joined {new Date(m.joinedAt).toISOString().slice(0, 10)}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -404,7 +386,7 @@ async function TeamInvites({ teamId }: { teamId: string }) {
               <div className="min-w-0">
                 <p className="font-mono text-xs text-[var(--color-text)]">{inv.email}</p>
                 <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">
-                  {inv.role} · expires {toValidDate(inv.expiresAt)?.toISOString().slice(0, 10) ?? '—'}
+                  {inv.role} · expires {new Date(inv.expiresAt).toISOString().slice(0, 10)}
                 </p>
               </div>
               <form action={revoke.bind(null, inv.id)}>

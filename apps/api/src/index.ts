@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { secureHeaders } from 'hono/secure-headers';
 
 import { env } from './env.js';
 import { log } from './lib/logger.js';
@@ -21,7 +20,6 @@ import { authRouter } from './routes/auth.js';
 import { authCliRouter } from './routes/auth-cli.js';
 import { authServiceRouter } from './routes/auth-service.js';
 import { billingRouter } from './routes/billing.js';
-import { brandingPublicRouter } from './routes/branding-public.js';
 import { dbRouter } from './routes/db.js';
 import { deploymentsRouter } from './routes/deployments.js';
 import { exportRouter } from './routes/export.js';
@@ -35,7 +33,6 @@ import { mitteraWebhookRouter } from './routes/mittera-webhook.js';
 import { orgsRouter } from './routes/orgs.js';
 import { outboundWebhooksRouter } from './routes/outbound-webhooks.js';
 import { projectEnvRouter } from './routes/project-env.js';
-import { projectMcpRouter } from './routes/project-mcp.js';
 import { membersRouter } from './routes/project-members.js';
 import { projectsRouter } from './routes/projects.js';
 import { rootRouter } from './routes/root.js';
@@ -46,8 +43,6 @@ import { platformRouter } from './routes/platform.js';
 import { usageRouter } from './routes/usage.js';
 import { incidentsRouter } from './routes/incidents.js';
 import { marketingEventsPublicRouter } from './routes/marketing-events.js';
-import { mcpServerRouter } from './routes/mcp-server.js';
-import { contactPublicRouter } from './routes/contact.js';
 import {
   migrationRequestsPublicRouter,
   migrationRequestsRouter,
@@ -102,25 +97,6 @@ app.use('*', csrfOriginCheck());
 // identified for the whitelist branch.
 app.use('*', maintenanceMode());
 
-// The public branding logo (served by brandingPublicRouter below) is embedded
-// cross-origin via a plain <img src>: the dashboard (briven.tech) and the
-// hosted auth pages load it from api.briven.tech. secureHeaders() sets
-// `Cross-Origin-Resource-Policy: same-origin` on every response, which makes
-// the browser refuse the image (it renders as a broken-image icon even though
-// the bytes serve 200/image-png). This path-scoped override is registered
-// BEFORE secureHeaders so its post-`next()` write is the OUTERMOST one — it has
-// the final say and flips just this one logo route to `cross-origin`, leaving
-// every other API response same-origin.
-app.use('/v1/projects/:id/auth/branding/logo', async (c, next) => {
-  await next();
-  c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-});
-
-// Security response headers (HSTS, nosniff, frame deny, etc.) on every
-// API response. Placed after the global middleware chain and before the
-// route mounts so all handlers inherit it.
-app.use('*', secureHeaders());
-
 // Block state-changing routes on a suspended project at the app level
 // instead of per-router — keeps the abuse-suspension gate from drifting
 // when a new mutating route lands without picking up the middleware. The
@@ -128,11 +104,6 @@ app.use('*', secureHeaders());
 // readable, and on missing :id so the unmounted segments pass through.
 app.use('/v1/projects/:id', blockIfProjectSuspended());
 app.use('/v1/projects/:id/*', blockIfProjectSuspended());
-
-// Mounted FIRST — before every project-auth guard — so the public branding
-// logo stays genuinely public (a hosted login page loads it via <img>).
-// See routes/branding-public.ts for why it can't live in authServiceRouter.
-app.route('/', brandingPublicRouter);
 
 app.route('/', rootRouter);
 app.route('/', healthRouter);
@@ -146,7 +117,6 @@ app.route('/', deploymentsRouter);
 app.route('/', invokeRouter);
 app.route('/', internalRouter);
 app.route('/', projectEnvRouter);
-app.route('/', projectMcpRouter);
 app.route('/', invitationsRouter);
 app.route('/', adminRouter);
 app.route('/', adminManifestRouter);
@@ -168,13 +138,8 @@ app.route('/', webhooksPublicRouter);
 app.route('/', incidentsRouter);
 app.route('/', migrationRequestsRouter);
 app.route('/', migrationRequestsPublicRouter);
-app.route('/', contactPublicRouter);
 app.route('/', marketingEventsPublicRouter);
 app.route('/', outboundWebhooksRouter);
-// mcp.briven.tech — the live MCP server endpoint (Streamable HTTP at /mcp).
-// Bearer-authenticated per-project key; the global csrf middleware's
-// Bearer carve-out lets the server-to-server POST through.
-app.route('/', mcpServerRouter);
 
 // briven auth service router — kill-switch gated per ARCHITECTURE.md §9.
 // Default-disabled in env.ts; flip BRIVEN_AUTH_ENABLED=true in Dokploy when

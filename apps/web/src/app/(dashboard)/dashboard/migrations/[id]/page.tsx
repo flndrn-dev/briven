@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ApiError, apiJson } from '../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { DeleteMigrationButton } from './delete-migration-button';
 
 export const metadata = { title: 'migration detail' };
@@ -69,14 +68,12 @@ function statusTone(status: string): string {
 }
 
 function formatTime(iso: string): string {
-  const d = toValidDate(iso);
-  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
+  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
 }
 
 /** Compact one-line variant for the timeline — `May 17 · 08:29`. */
 function formatTimeShort(iso: string): string {
-  const d = toValidDate(iso);
-  if (!d) return '—';
+  const d = new Date(iso);
   const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
   const day = d.getUTCDate().toString().padStart(2, '0');
   const hh = d.getUTCHours().toString().padStart(2, '0');
@@ -410,13 +407,13 @@ export default async function MigrationDetailPage({
       </div>
 
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-        questions? reply to any email we sent, or reach us via our{' '}
-        <Link
-          href="/contact?topic=sales"
+        questions? reply to any email we sent, or write to{' '}
+        <a
+          href="mailto:migrations@flndrn.com"
           className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
         >
-          contact form
-        </Link>{' '}
+          migrations@flndrn.com
+        </a>{' '}
         and quote the request id.
       </p>
 

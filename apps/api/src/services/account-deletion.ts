@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { brivenError, NotFoundError } from '@briven/shared';
 
@@ -94,123 +94,117 @@ export async function softDeleteAccount(args: {
     sessionsRevoked: 0,
   };
 
-  // Steps 2–8 run in ONE transaction so a mid-way failure can't leave a
-  // half-deleted account (sessions gone but deletedAt unset → invisible to
-  // the GC, re-loginable, and tripping ensurePersonalOrg). The email send
-  // above stays outside the tx on purpose.
-  await db.transaction(async (tx) => {
-    // 2. Revoke sessions
-    const sessionRows = await tx
-      .delete(sessions)
-      .where(eq(sessions.userId, args.userId))
-      .returning({ id: sessions.id });
-    counts.sessionsRevoked = sessionRows.length;
+  // 2. Revoke sessions
+  const sessionRows = await db
+    .delete(sessions)
+    .where(eq(sessions.userId, args.userId))
+    .returning({ id: sessions.id });
+  counts.sessionsRevoked = sessionRows.length;
 
-    // 3. Revoke invitations sent by this user (project + org)
-    const projInvRows = await tx
-      .update(projectInvitations)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(projectInvitations.invitedBy, args.userId),
-          isNull(projectInvitations.acceptedAt),
-          isNull(projectInvitations.revokedAt),
-        ),
-      )
-      .returning({ id: projectInvitations.id });
-    const orgInvRows = await tx
-      .update(orgInvitations)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(orgInvitations.invitedBy, args.userId),
-          isNull(orgInvitations.acceptedAt),
-          isNull(orgInvitations.revokedAt),
-        ),
-      )
-      .returning({ id: orgInvitations.id });
-    counts.invitationsRevoked = projInvRows.length + orgInvRows.length;
+  // 3. Revoke invitations sent by this user (project + org)
+  const projInvRows = await db
+    .update(projectInvitations)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(projectInvitations.invitedBy, args.userId),
+        isNull(projectInvitations.acceptedAt),
+        isNull(projectInvitations.revokedAt),
+      ),
+    )
+    .returning({ id: projectInvitations.id });
+  const orgInvRows = await db
+    .update(orgInvitations)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(orgInvitations.invitedBy, args.userId),
+        isNull(orgInvitations.acceptedAt),
+        isNull(orgInvitations.revokedAt),
+      ),
+    )
+    .returning({ id: orgInvitations.id });
+  counts.invitationsRevoked = projInvRows.length + orgInvRows.length;
 
-    // 4–7. Iterate every org the user is a member of. For sole-owner orgs,
-    // cascade through (revoke keys → soft-delete projects → soft-delete
-    // org). For shared orgs, just remove this user's orgMembers row.
-    const memberships = await tx
-      .select({ orgId: orgMembers.orgId, role: orgMembers.role })
-      .from(orgMembers)
-      .where(eq(orgMembers.userId, args.userId));
+  // 4–7. Iterate every org the user is a member of. For sole-owner orgs,
+  // cascade through (revoke keys → soft-delete projects → soft-delete
+  // org). For shared orgs, just remove this user's orgMembers row.
+  const memberships = await db
+    .select({ orgId: orgMembers.orgId, role: orgMembers.role })
+    .from(orgMembers)
+    .where(eq(orgMembers.userId, args.userId));
 
-    for (const m of memberships) {
-      const [org] = await tx
-        .select()
-        .from(organizations)
-        .where(eq(organizations.id, m.orgId))
-        .limit(1);
-      if (!org) continue;
-      const sole = await isSoleOwner(org, args.userId, tx);
-      if (sole) {
-        // 4. Revoke api_keys on this org's projects.
-        const orgProjects = await tx
-          .select({ id: projects.id })
-          .from(projects)
-          .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)));
-        for (const p of orgProjects) {
-          const revokedKeys = await tx
-            .update(apiKeys)
-            .set({ revokedAt: new Date() })
-            .where(and(eq(apiKeys.projectId, p.id), isNull(apiKeys.revokedAt)))
-            .returning({ id: apiKeys.id });
-          counts.apiKeysRevoked += revokedKeys.length;
-        }
-
-        // 5. Soft-delete the org's projects.
-        const nowProjects = new Date();
-        const deletedProjects = await tx
-          .update(projects)
-          .set({ deletedAt: nowProjects, updatedAt: nowProjects })
-          .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)))
-          .returning({ id: projects.id });
-        counts.projectsDeleted += deletedProjects.length;
-
-        // 6. Soft-delete the org itself.
-        const nowOrg = new Date();
-        await tx
-          .update(organizations)
-          .set({ deletedAt: nowOrg, updatedAt: nowOrg })
-          .where(eq(organizations.id, org.id));
-        counts.soloOrgsDeleted += 1;
-      } else {
-        // 7. Shared team org — just remove this user from membership.
-        await tx
-          .delete(orgMembers)
-          .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, args.userId)));
-        counts.removedFromOrgs += 1;
+  for (const m of memberships) {
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, m.orgId))
+      .limit(1);
+    if (!org) continue;
+    const sole = await isSoleOwner(org, args.userId);
+    if (sole) {
+      // 4. Revoke api_keys on this org's projects.
+      const orgProjects = await db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)));
+      for (const p of orgProjects) {
+        const revokedKeys = await db
+          .update(apiKeys)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(apiKeys.projectId, p.id), isNull(apiKeys.revokedAt)))
+          .returning({ id: apiKeys.id });
+        counts.apiKeysRevoked += revokedKeys.length;
       }
-    }
 
-    // 8. Pseudonymise PII + mark deleted. Email stays so the user can
-    // re-sign-up later (same email = new fresh account; no merge).
-    const now = new Date();
-    await tx
-      .update(users)
-      .set({
-        legalName: null,
-        companyName: null,
-        vatId: null,
-        vatVerifiedAt: null,
-        addressLine1: null,
-        addressLine2: null,
-        addressCity: null,
-        addressPostalCode: null,
-        addressRegion: null,
-        addressCountry: null,
-        name: null,
-        image: null,
-        deletedAt: now,
-        deletionReason: args.reason ?? null,
-        updatedAt: now,
-      })
-      .where(eq(users.id, args.userId));
-  });
+      // 5. Soft-delete the org's projects.
+      const nowProjects = new Date();
+      const deletedProjects = await db
+        .update(projects)
+        .set({ deletedAt: nowProjects, updatedAt: nowProjects })
+        .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)))
+        .returning({ id: projects.id });
+      counts.projectsDeleted += deletedProjects.length;
+
+      // 6. Soft-delete the org itself.
+      const nowOrg = new Date();
+      await db
+        .update(organizations)
+        .set({ deletedAt: nowOrg, updatedAt: nowOrg })
+        .where(eq(organizations.id, org.id));
+      counts.soloOrgsDeleted += 1;
+    } else {
+      // 7. Shared team org — just remove this user from membership.
+      await db
+        .delete(orgMembers)
+        .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, args.userId)));
+      counts.removedFromOrgs += 1;
+    }
+  }
+
+  // 8. Pseudonymise PII + mark deleted. Email stays so the user can
+  // re-sign-up later (same email = new fresh account; no merge).
+  const now = new Date();
+  await db
+    .update(users)
+    .set({
+      legalName: null,
+      companyName: null,
+      vatId: null,
+      vatVerifiedAt: null,
+      addressLine1: null,
+      addressLine2: null,
+      addressCity: null,
+      addressPostalCode: null,
+      addressRegion: null,
+      addressCountry: null,
+      name: null,
+      image: null,
+      deletedAt: now,
+      deletionReason: args.reason ?? null,
+      updatedAt: now,
+    })
+    .where(eq(users.id, args.userId));
 
   // 9. Audit.
   await audit({
@@ -234,153 +228,14 @@ export async function softDeleteAccount(args: {
   return counts;
 }
 
-export interface AccountDeletionPreview {
-  projects: { id: string; name: string; slug: string }[];
-  orgs: { id: string; name: string }[];
-  apiKeysToRevoke: number;
-}
-
-/**
- * Read-only preview of EXACTLY what `softDeleteAccount` would destroy, so
- * the UI can show "this deletes isy, katsuro, konnos + 2 workspaces" before
- * the user confirms. Mirrors the sole-owner cascade walk without mutating.
- */
-export async function previewAccountDeletion(userId: string): Promise<AccountDeletionPreview> {
-  const db = getDb();
-  const preview: AccountDeletionPreview = { projects: [], orgs: [], apiKeysToRevoke: 0 };
-  const memberships = await db
-    .select({ orgId: orgMembers.orgId })
-    .from(orgMembers)
-    .where(eq(orgMembers.userId, userId));
-  for (const m of memberships) {
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, m.orgId))
-      .limit(1);
-    if (!org || org.deletedAt) continue;
-    if (!(await isSoleOwner(org, userId))) continue;
-    preview.orgs.push({ id: org.id, name: org.name });
-    const orgProjects = await db
-      .select({ id: projects.id, name: projects.name, slug: projects.slug })
-      .from(projects)
-      .where(and(eq(projects.orgId, org.id), isNull(projects.deletedAt)));
-    preview.projects.push(...orgProjects);
-    for (const p of orgProjects) {
-      const keys = await db
-        .select({ id: apiKeys.id })
-        .from(apiKeys)
-        .where(and(eq(apiKeys.projectId, p.id), isNull(apiKeys.revokedAt)));
-      preview.apiKeysToRevoke += keys.length;
-    }
-  }
-  return preview;
-}
-
-/**
- * Reverse a soft-deletion within the grace window — the "30-day reversal"
- * the confirmation email promises but which previously had NO code path
- * (the deletion incident had to be undone by hand-editing the DB).
- *
- * Clears `users.deletedAt` and revives the cascaded sole-owner orgs
- * (including the personal org) plus the projects soft-deleted in the SAME
- * cascade — matched by a ±2-minute window around the account's `deletedAt`
- * so projects the user had intentionally deleted earlier stay deleted.
- * Revoked api-keys and invitations are NOT auto-restored (re-issue those).
- */
-export async function restoreAccount(userId: string): Promise<{
-  userId: string;
-  orgsRestored: number;
-  projectsRestored: number;
-}> {
-  const db = getDb();
-  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  if (!user) throw new NotFoundError('user', userId);
-  if (!user.deletedAt) {
-    throw new brivenError('not_deleted', 'this account is not in the deletion grace window', {
-      status: 409,
-    });
-  }
-  const deletedAt = user.deletedAt;
-  const windowStart = new Date(deletedAt.getTime() - 120_000);
-  const windowEnd = new Date(deletedAt.getTime() + 120_000);
-
-  let orgsRestored = 0;
-  let projectsRestored = 0;
-  await db.transaction(async (tx) => {
-    // 1. Reactivate the account.
-    await tx
-      .update(users)
-      .set({ deletedAt: null, deletionReason: null, updatedAt: new Date() })
-      .where(eq(users.id, userId));
-
-    // 2. Revive every soft-deleted sole-owner org the user still belongs to
-    //    (incl. the personal org) + that org's projects from the same cascade.
-    const memberships = await tx
-      .select({ orgId: orgMembers.orgId })
-      .from(orgMembers)
-      .where(eq(orgMembers.userId, userId));
-    for (const m of memberships) {
-      const [org] = await tx
-        .select()
-        .from(organizations)
-        .where(eq(organizations.id, m.orgId))
-        .limit(1);
-      if (!org || !org.deletedAt) continue;
-      if (!(await isSoleOwner(org, userId, tx))) continue;
-      await tx
-        .update(organizations)
-        .set({ deletedAt: null, updatedAt: new Date() })
-        .where(eq(organizations.id, org.id));
-      orgsRestored += 1;
-      const revivedProjects = await tx
-        .update(projects)
-        .set({ deletedAt: null, updatedAt: new Date() })
-        .where(
-          and(
-            eq(projects.orgId, org.id),
-            gte(projects.deletedAt, windowStart),
-            lte(projects.deletedAt, windowEnd),
-          ),
-        )
-        .returning({ id: projects.id });
-      projectsRestored += revivedProjects.length;
-    }
-  });
-
-  await audit({
-    actorId: userId,
-    projectId: null,
-    action: 'account.restored',
-    ipHash: null,
-    userAgent: 'briven-api',
-    metadata: { orgsRestored, projectsRestored },
-  });
-  log.info('account_restored', { userId, orgsRestored, projectsRestored });
-  return { userId, orgsRestored, projectsRestored };
-}
-
-/**
- * Minimal executor surface shared by the lazy db handle and a live
- * `db.transaction` tx — enough for the read isSoleOwner needs. Threading
- * the tx in lets the ownership read run INSIDE the enclosing transaction
- * (no getDb() second-connection TOCTOU between the check and the cascade).
- */
-type DbExecutor = Pick<ReturnType<typeof getDb>, 'select'>;
-
 /**
  * True when the user is the only role='owner' member of the org, or
  * when the org is the user's personal org (always sole-owner by design).
- * Pass the enclosing `tx` so the read is consistent with the surrounding
- * mutations; defaults to a fresh getDb() handle for read-only callers.
  */
-async function isSoleOwner(
-  org: Organization,
-  userId: string,
-  executor: DbExecutor = getDb(),
-): Promise<boolean> {
+async function isSoleOwner(org: Organization, userId: string): Promise<boolean> {
   if (org.personal) return org.createdBy === userId;
-  const owners = await executor
+  const db = getDb();
+  const owners = await db
     .select({ userId: orgMembers.userId })
     .from(orgMembers)
     .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.role, 'owner')));
@@ -391,26 +246,9 @@ async function isSoleOwner(
 
 /**
  * Hard-delete every soft-deleted user whose 30-day grace window has
- * elapsed. Called by the account-deletion-gc worker.
- *
- * Two ordered DELETEs in ONE transaction:
- *   1. Hard-delete the expiring users' OWN soft-deleted orgs (the personal
- *      org + any sole-owner team org soft-deleted by softDeleteAccount).
- *      Their projects — and everything hanging off those projects
- *      (api_keys, env vars, deployments, invitations, …) — cascade away via
- *      projects.org_id ON DELETE CASCADE. This clears the FK rows that would
- *      otherwise block step 2.
- *   2. Hard-delete the expired users. This now SUCCEEDS where it previously
- *      ALWAYS raised FK violation 23503 (silently swallowed by the gc
- *      worker, so no account was ever purged): migration 0042 flipped the
- *      two blocking FKs to ON DELETE SET NULL, so a surviving SHARED org's
- *      `created_by` and every `audit_logs.actor_id` simply null out instead
- *      of blocking the DELETE. Other user FKs are ON DELETE CASCADE
- *      (sessions, accounts, org/project memberships).
- *
- * The 30-day threshold is computed in SQL in BOTH statements (no JS-side
- * date drift), and the org DELETE is gated to the SAME expiring-user set so
- * it can only ever touch orgs belonging to users about to be purged.
+ * elapsed. Cascades via the FK ON DELETE CASCADE rules already in the
+ * schema (sessions, accounts, audit_logs.actor_id ref but nullable —
+ * actorId nulls out). Called by the account-deletion-gc worker.
  *
  * Returns the count of users hard-deleted. Idempotent: safe to retry
  * after a crash.
@@ -418,54 +256,14 @@ async function isSoleOwner(
 export async function hardDeleteExpiredAccounts(opts: { graceDays?: number } = {}): Promise<number> {
   const db = getDb();
   const graceDays = opts.graceDays ?? 30;
-
-  let deleted = 0;
-  await db.transaction(async (tx) => {
-    // 1. Hard-delete the expiring users' own soft-deleted orgs first.
-    // Projects (and their api_keys / env vars / deployments / invitations)
-    // cascade via projects.org_id ON DELETE CASCADE.
-    //
-    // Select the orgs to purge by OWNERSHIP (org_members role='owner'),
-    // mirroring isSoleOwner — NOT by organizations.created_by. created_by
-    // is the WRONG qualifier here: 0042/0044 flip the org → user FKs to
-    // ON DELETE SET NULL, so a prior purge nulls created_by and those
-    // soft-deleted orgs would then never match → zombie orgs accumulate
-    // and keep blocking the cascade. The created_by clause is retained
-    // only as a defensive fallback for orgs that predate the membership
-    // backfill. Both expiring-user subqueries are identical and computed
-    // in SQL (no JS date drift).
-    await tx.execute(sql`
-      DELETE FROM organizations o
-      WHERE o.deleted_at IS NOT NULL
-        AND (
-          EXISTS (
-            SELECT 1 FROM org_members m
-            WHERE m.org_id = o.id
-              AND m.role = 'owner'
-              AND m.user_id IN (
-                SELECT id FROM users
-                WHERE deleted_at IS NOT NULL
-                  AND deleted_at < now() - (${graceDays} || ' days')::interval
-              )
-          )
-          OR o.created_by IN (
-            SELECT id FROM users
-            WHERE deleted_at IS NOT NULL
-              AND deleted_at < now() - (${graceDays} || ' days')::interval
-          )
-        )
-    `);
-
-    // 2. Hard-delete the expired users themselves.
-    const rows = (await tx.execute(sql`
-      DELETE FROM users
-      WHERE deleted_at IS NOT NULL
-        AND deleted_at < now() - (${graceDays} || ' days')::interval
-      RETURNING id
-    `)) as unknown as Array<{ id: string }>;
-    deleted = rows.length;
-  });
-
-  log.info('account_hard_delete_run', { graceDays, deleted });
-  return deleted;
+  // Use a raw SQL fragment so the threshold comparison happens entirely
+  // in SQL (no JS-side date drift).
+  const rows = (await db.execute(sql`
+    DELETE FROM users
+    WHERE deleted_at IS NOT NULL
+      AND deleted_at < now() - (${graceDays} || ' days')::interval
+    RETURNING id
+  `)) as unknown as Array<{ id: string }>;
+  log.info('account_hard_delete_run', { graceDays, deleted: rows.length });
+  return rows.length;
 }

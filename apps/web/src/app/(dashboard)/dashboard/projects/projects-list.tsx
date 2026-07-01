@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
-import { toValidDate } from '@/lib/utils';
 import { RowDeleteProjectButton } from './row-delete-project-button';
 
 interface Project {
@@ -106,43 +105,43 @@ export function ProjectsList({
           no projects match that filter.
         </p>
       ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className="flex flex-col gap-2">
           {filtered.map((p) => (
             <li
               key={p.id}
-              className="group flex flex-col justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] transition hover:border-[var(--color-border)]"
+              className="group flex items-center gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] pr-2 transition hover:border-[var(--color-border)]"
             >
               <Link
                 href={projectHref(p.id)}
-                className="flex flex-1 flex-col gap-1 px-4 py-3"
+                className="flex flex-1 items-center justify-between px-4 py-3"
                 {...(studioOrigin
                   ? { rel: 'noopener', target: '_self' }
                   : {})}
               >
-                <p className="truncate font-mono text-sm">{p.name}</p>
-                <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-                  {p.slug} · {p.region} · {p.tier}
-                  {p.orgName ? (
-                    <span>
-                      {' · '}
-                      <span className="text-[var(--color-text-muted)]">
-                        {p.orgName}
-                        {p.orgPersonal ? '' : ' (team)'}
+                <div>
+                  <p className="font-mono text-sm">{p.name}</p>
+                  <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
+                    {p.slug} · {p.region} · {p.tier}
+                    {p.orgName ? (
+                      <span>
+                        {' · '}
+                        <span className="text-[var(--color-text-muted)]">
+                          {p.orgName}
+                          {p.orgPersonal ? '' : ' (team)'}
+                        </span>
                       </span>
-                    </span>
-                  ) : null}
-                </p>
-              </Link>
-              <div className="flex items-center justify-between border-t border-[var(--color-border-subtle)] px-4 py-2">
-                <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-                  {toValidDate(p.createdAt)?.toISOString().slice(0, 10) ?? '—'}
+                    ) : null}
+                  </p>
+                </div>
+                <span className="font-mono text-xs text-[var(--color-text-subtle)]">
+                  {new Date(p.createdAt).toISOString().slice(0, 10)}
                 </span>
-                <RowDeleteProjectButton
-                  projectId={p.id}
-                  projectName={p.name}
-                  apiOrigin={apiOrigin}
-                />
-              </div>
+              </Link>
+              <RowDeleteProjectButton
+                projectId={p.id}
+                projectName={p.name}
+                apiOrigin={apiOrigin}
+              />
             </li>
           ))}
         </ul>

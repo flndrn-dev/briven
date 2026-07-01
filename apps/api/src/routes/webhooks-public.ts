@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 
-import { ipKey, rateLimit } from '../middleware/rate-limit.js';
 import { hashIp } from '../services/audit.js';
 import { invoke } from '../services/invoke.js';
 import {
@@ -32,15 +31,6 @@ const MAX_REQUEST_ID_LEN = 64;
  * failures get 401, replay failures 401, missing endpoint 404, disabled
  * 410, function errors 502, success 200.
  */
-// Public ingress is unauthenticated apart from the per-endpoint HMAC, so a
-// flood of bad-signature requests would otherwise write a rejected-delivery
-// row per hit. Cap by source IP (60/min) before any DB work. Behind Traefik
-// the client IP arrives via x-forwarded-for, which `ipKey` reads.
-webhooksPublicRouter.use(
-  '/webhooks/:projectId/:endpointId',
-  rateLimit({ scope: 'webhook-ingress', limit: 60, windowMs: 60_000, key: ipKey }),
-);
-
 webhooksPublicRouter.post('/webhooks/:projectId/:endpointId', async (c) => {
   const projectId = c.req.param('projectId');
   const endpointId = c.req.param('endpointId');

@@ -185,72 +185,31 @@ export async function listProjectUsers(
   const limitPlaceholder = `$${params.length}`;
 
   const rows = await runInProjectDatabase<RawUserJoinRow[]>(projectId, async (tx) => {
-    // DoltGres leaks a hidden expression-index column
-    // ("!hidden!_briven_auth_users_email_uniq!…") into query scope whenever a
-    // correlated subquery runs against `_briven_auth_users` — which has a
-    // UNIQUE INDEX on `lower(email)`. The old single-query form (correlated
-    // MAX + ARRAY subqueries) tripped exactly that and 500'd. So we fetch the
-    // user page with a plain SELECT, then enrich last-seen + providers with
-    // two simple `IN (…)` companion queries and stitch in JS. No correlated
-    // subquery touches the users table. (Verified on DoltGres.)
-    const userRows = (await tx.unsafe(
+    return (await tx.unsafe(
       `
-        SELECT u.id, u.email, u.name, u.created_at
+        SELECT
+          u.id,
+          u.email,
+          u.name,
+          u.created_at,
+          (
+            SELECT MAX(s.created_at)
+            FROM "_briven_auth_sessions" s
+            WHERE s.user_id = u.id
+          ) AS last_seen_at,
+          ARRAY(
+            SELECT DISTINCT a.provider_id
+            FROM "_briven_auth_accounts" a
+            WHERE a.user_id = u.id
+            ORDER BY a.provider_id
+          ) AS provider_ids
         FROM "_briven_auth_users" u
         WHERE 1=1 ${cursorClause}
         ORDER BY u.created_at DESC, u.id DESC
         LIMIT ${limitPlaceholder}
       `,
       params as never[],
-    )) as Array<{ id: string; email: string; name: string | null; created_at: Date }>;
-
-    if (userRows.length === 0) return [];
-
-    const ids = userRows.map((r) => r.id);
-    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
-
-    // last-seen per user = newest session (plain GROUP BY, no correlation).
-    const sessionRows = (await tx.unsafe(
-      `
-        SELECT user_id, MAX(created_at) AS last_seen
-        FROM "_briven_auth_sessions"
-        WHERE user_id IN (${placeholders})
-        GROUP BY user_id
-      `,
-      ids as never[],
-    )) as Array<{ user_id: string; last_seen: Date | null }>;
-    const lastSeenById = new Map<string, Date | null>();
-    for (const s of sessionRows) lastSeenById.set(s.user_id, s.last_seen);
-
-    // providers per user — deduped + sorted in JS (replaces DISTINCT/ORDER BY).
-    const accountRows = (await tx.unsafe(
-      `
-        SELECT user_id, provider_id
-        FROM "_briven_auth_accounts"
-        WHERE user_id IN (${placeholders})
-      `,
-      ids as never[],
-    )) as Array<{ user_id: string; provider_id: string }>;
-    const providersById = new Map<string, Set<string>>();
-    for (const a of accountRows) {
-      let set = providersById.get(a.user_id);
-      if (!set) {
-        set = new Set<string>();
-        providersById.set(a.user_id, set);
-      }
-      set.add(a.provider_id);
-    }
-
-    return userRows.map((u) => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      created_at: u.created_at,
-      last_seen_at: lastSeenById.get(u.id) ?? null,
-      provider_ids: providersById.has(u.id)
-        ? [...providersById.get(u.id)!].sort()
-        : [],
-    })) as unknown as RawUserJoinRow[];
+    )) as RawUserJoinRow[];
   });
 
   const hasMore = rows.length > limit;

@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 import { apiJson } from '../../../lib/api';
 import { requireUser } from '../../../lib/session';
-import { toValidDate } from '@/lib/utils';
 
 interface Project {
   id: string;
@@ -180,7 +179,7 @@ export default async function DashboardHome() {
             <Link
               key={m.id}
               href={`/dashboard/migrations/${m.id}`}
-              className="flex items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
+              className="flex flex-wrap items-center justify-between rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-4 py-3 transition hover:bg-[var(--color-surface-raised)]"
             >
               <div className="flex items-center gap-3">
                 <span className="rounded-full border border-[var(--color-border-subtle)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-text-subtle)]">
@@ -190,8 +189,7 @@ export default async function DashboardHome() {
                   {m.status.replace(/_/g, ' ')}
                 </span>
                 <p className="font-mono text-sm text-[var(--color-text)]">
-                  {m.urgency.replace(/_/g, ' ')} · submitted{' '}
-                  {toValidDate(m.createdAt)?.toISOString().slice(0, 10) ?? '—'}
+                  {m.urgency.replace(/_/g, ' ')} · submitted {new Date(m.createdAt).toISOString().slice(0, 10)}
                 </p>
               </div>
               <span className="font-mono text-sm text-[var(--color-primary)]">see progress →</span>
@@ -369,14 +367,13 @@ function QuickLink({
 }
 
 function formatRelative(iso: string): string {
-  const d = toValidDate(iso);
-  if (!d) return '—';
-  const diffSec = Math.round((Date.now() - d.getTime()) / 1000);
+  const then = new Date(iso).getTime();
+  const diffSec = Math.round((Date.now() - then) / 1000);
   if (diffSec < 60) return `${diffSec}s ago`;
   if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
   if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
   if (diffSec < 86400 * 7) return `${Math.round(diffSec / 86400)}d ago`;
-  return d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
 }
 
 /**

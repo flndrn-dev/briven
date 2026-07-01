@@ -34,10 +34,8 @@ import type { Session, User } from './session.js';
  * Routes that need stricter gating chain `requireProjectRole(min)` after
  * this middleware.
  */
-export const requireProjectAuth =
-  (paramName = 'id'): MiddlewareHandler =>
-  async (c, next) => {
-  const projectId = c.req.param(paramName);
+export const requireProjectAuth = (): MiddlewareHandler => async (c, next) => {
+  const projectId = c.req.param('id');
   if (!projectId) throw new ForbiddenError('missing project id');
 
   const user = c.get('user') as User | null;
@@ -64,25 +62,14 @@ export const requireProjectAuth =
     try {
       const payload = await verifyCliToken(token);
       const [row] = await getDb()
-        .select({
-          id: usersTable.id,
-          email: usersTable.email,
-          name: usersTable.name,
-          deletedAt: usersTable.deletedAt,
-          suspendedAt: usersTable.suspendedAt,
-        })
+        .select({ id: usersTable.id, email: usersTable.email, name: usersTable.name })
         .from(usersTable)
         .where(eq(usersTable.id, payload.sub))
         .limit(1);
       if (!row) {
         return c.json({ code: 'unauthorized', message: 'cli token user not found' }, 401);
       }
-      // Self-contained status check — don't rely on a downstream requireAuth
-      // re-validating. A suspended/soft-deleted user must not pass here.
-      if (row.deletedAt || row.suspendedAt) {
-        return c.json({ code: 'unauthorized', message: 'account is no longer active' }, 401);
-      }
-      userRow = { id: row.id, email: row.email, name: row.name } as unknown as User;
+      userRow = row as unknown as User;
     } catch (err) {
       log.warn('project_auth_cli_jwt_rejected', {
         err: err instanceof Error ? err.message : String(err),

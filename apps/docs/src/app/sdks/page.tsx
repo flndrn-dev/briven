@@ -17,14 +17,12 @@ const SDKS: readonly Sdk[] = [
     framework: 'react',
     pitch:
       'reference client. `useQuery` re-runs on row changes via the realtime WS; `useMutation` is the same shape as TanStack Query so the api curve is short.',
-    setup: `import { BrivenProvider } from '@briven/react';
-import { createBrivenClient } from '@briven/client';
+    setup: `import { BrivenProvider, createClient } from '@briven/react';
 
-const client = createBrivenClient({
-  apiOrigin: 'https://api.briven.tech',
-  wsOrigin: 'wss://ws.briven.tech',
+const client = createClient({
+  url: 'https://api.briven.tech',
   projectId: 'p_xxx',
-  token: process.env.NEXT_PUBLIC_BRIVEN_KEY,
+  apiKey: process.env.NEXT_PUBLIC_BRIVEN_KEY,
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -57,15 +55,15 @@ export function Notes() {
     framework: 'svelte 5',
     pitch:
       "queries return a Readable store that fires while you're subscribed; the WS closes when the last consumer drops. svelte's reference-counted store contract does the lifecycle for us.",
-    setup: `import { setBrivenClient } from '@briven/svelte';
-import { createBrivenClient } from '@briven/client';
+    setup: `import { setBrivenClient, createClient } from '@briven/svelte';
 
-setBrivenClient(createBrivenClient({
-  apiOrigin: 'https://api.briven.tech',
-  wsOrigin: 'wss://ws.briven.tech',
+const client = createClient({
+  url: 'https://api.briven.tech',
   projectId: 'p_xxx',
-  token: import.meta.env.VITE_BRIVEN_KEY,
-}));`,
+  apiKey: import.meta.env.VITE_BRIVEN_KEY,
+});
+
+setBrivenClient(client);`,
     useExample: `<script lang="ts">
   import { query, mutation } from '@briven/svelte';
   const notes = query<'listNotes', { id: string; body: string }[]>('listNotes', {});
@@ -86,15 +84,15 @@ setBrivenClient(createBrivenClient({
       'composables version of the same surface. `useQuery` returns refs; `watch(stableKey(args))` re-subscribes when arg identity changes. `onScopeDispose` closes the sub on component unmount.',
     setup: `// main.ts
 import { createApp } from 'vue';
-import { setBrivenClient } from '@briven/vue';
-import { createBrivenClient } from '@briven/client';
+import { setBrivenClient, createClient } from '@briven/vue';
 
-setBrivenClient(createBrivenClient({
-  apiOrigin: 'https://api.briven.tech',
-  wsOrigin: 'wss://ws.briven.tech',
+const client = createClient({
+  url: 'https://api.briven.tech',
   projectId: 'p_xxx',
-  token: import.meta.env.VITE_BRIVEN_KEY,
-}));
+  apiKey: import.meta.env.VITE_BRIVEN_KEY,
+});
+
+setBrivenClient(client);
 createApp(App).mount('#app');`,
     useExample: `<script setup lang="ts">
 import { useQuery, useMutation } from '@briven/vue';

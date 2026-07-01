@@ -287,11 +287,6 @@ services:
       BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
       BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
       BRIVEN_ENCRYPTION_KEY: ${BRIVEN_ENCRYPTION_KEY}
-      # Customer-auth kill-switch + per-tenant secret master key. Must be
-      # passed through here or the api container never sees them and the auth
-      # router stays unmounted (defaults to off) — see ARCHITECTURE.md §9.
-      BRIVEN_AUTH_ENABLED: ${BRIVEN_AUTH_ENABLED:-false}
-      BRIVEN_AUTH_MASTER_KEY: ${BRIVEN_AUTH_MASTER_KEY:-}
       BRIVEN_MITTERA_API_URL: ${BRIVEN_MITTERA_API_URL:-}
       BRIVEN_MITTERA_API_KEY: ${BRIVEN_MITTERA_API_KEY:-}
       BRIVEN_MITTERA_WEBHOOK_SECRET: ${BRIVEN_MITTERA_WEBHOOK_SECRET:-}
@@ -310,11 +305,7 @@ services:
       BRIVEN_POLAR_PRO_PRODUCT_ID: ${BRIVEN_POLAR_PRO_PRODUCT_ID:-}
       BRIVEN_POLAR_TEAM_PRODUCT_ID: ${BRIVEN_POLAR_TEAM_PRODUCT_ID:-}
       BRIVEN_DOMAIN: ${BRIVEN_DOMAIN}
-      # Managed briven.tech: signups OPEN to everyone by default (flndrn's
-      # launch choice). The admin dashboard "open signups" toggle (DB-backed,
-      # via getOpenSignupsFlag) overrides this live without a redeploy. The
-      # self-host template (compose.yml) keeps the safer invite-only default.
-      BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-true}
+      BRIVEN_OPEN_SIGNUPS: ${BRIVEN_OPEN_SIGNUPS:-false}
       BRIVEN_OLLAMA_URL: ${BRIVEN_OLLAMA_URL:-}
       BRIVEN_OLLAMA_API_KEY: ${BRIVEN_OLLAMA_API_KEY:-}
       BRIVEN_OLLAMA_MODEL: ${BRIVEN_OLLAMA_MODEL:-qwen2.5-coder:32b}
@@ -427,15 +418,10 @@ services:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       NEXT_PUBLIC_BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
-      # A provider's sign-in button shows only when BOTH its Client ID AND
-      # Secret are set — mirroring the server, which registers the provider in
-      # Better Auth only when both are present (apps/api/src/lib/auth.ts). The
-      # nested `${ID:+${SECRET:+true}}` yields "true" only if both are non-empty
-      # (verified on docker compose v2). Prevents a button that shows but errors.
-      NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+${BRIVEN_GOOGLE_CLIENT_SECRET:+true}}
-      NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+${BRIVEN_GITHUB_CLIENT_SECRET:+true}}
-      NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH: ${BRIVEN_KONNOS_CLIENT_ID:+${BRIVEN_KONNOS_CLIENT_SECRET:+true}}
-      NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH: ${BRIVEN_DISCORD_CLIENT_ID:+${BRIVEN_DISCORD_CLIENT_SECRET:+true}}
+      NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH: ${BRIVEN_GOOGLE_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH: ${BRIVEN_GITHUB_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH: ${BRIVEN_KONNOS_CLIENT_ID:+true}
+      NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH: ${BRIVEN_DISCORD_CLIENT_ID:+true}
     healthcheck:
       # web runs `next start` on node — use node's built-in fetch.
       test: ['CMD-SHELL', "node -e \"fetch('http://localhost:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]

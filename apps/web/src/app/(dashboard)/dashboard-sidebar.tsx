@@ -10,7 +10,7 @@ import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
 import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/credit-card';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { LayoutGridIcon, type LayoutGridIconHandle } from '../../components/ui/layout-grid';
-import { LifeBuoyIcon, type LifeBuoyIconHandle } from '../../components/ui/life-buoy';
+import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
 import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
 const STORAGE_KEY = 'briven.sidebar.collapsed';
@@ -63,20 +63,21 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/dashboard/settings'),
   },
   {
-    href: '/dashboard/support',
-    label: 'support',
-    Icon: LifeBuoyIcon as never,
-    match: (p) => p.startsWith('/dashboard/support'),
+    href: '/dashboard/admin',
+    label: 'admin',
+    Icon: ShieldCheckIcon as never,
+    match: (p) => p.startsWith('/dashboard/admin'),
+    adminOnly: true,
   },
 ];
 
 type IconHandle =
   | FoldersIconHandle
   | CogIconHandle
+  | ShieldCheckIconHandle
   | CreditCardIconHandle
   | UsersIconHandle
-  | LayoutGridIconHandle
-  | LifeBuoyIconHandle;
+  | LayoutGridIconHandle;
 
 interface SidebarUser {
   name: string | null;
@@ -162,7 +163,7 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
             : 'flex-row items-center gap-1'
         }`}
       >
-        <UserMenuButton user={user} collapsed={isCollapsed} isAdmin={isAdmin} />
+        <UserMenuButton user={user} collapsed={isCollapsed} />
         <button
           type="button"
           onClick={toggle}

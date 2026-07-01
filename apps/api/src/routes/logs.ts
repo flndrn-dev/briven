@@ -26,11 +26,7 @@ logsRouter.use('/v1/projects/:id/logs/*', requireProjectAuth());
 logsRouter.get('/v1/projects/:id/logs/stream', async (c) => {
   const projectId = c.req.param('id');
   const since = c.req.query('since');
-  // Clamp the caller-supplied replay window to 0..500. `n` flows straight
-  // into Redis `XREVRANGE … COUNT n`; an uncapped (or NaN/negative) value
-  // would let a client demand an unbounded scan of the stream.
-  const rawN = Number(c.req.query('n') ?? 0);
-  const replayN = Number.isFinite(rawN) ? Math.min(500, Math.max(0, Math.floor(rawN))) : 0;
+  const replayN = Number(c.req.query('n') ?? 0);
 
   const sharedRedis = getRedis();
   if (!sharedRedis) {

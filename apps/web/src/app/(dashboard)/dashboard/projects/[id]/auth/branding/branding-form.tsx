@@ -20,6 +20,7 @@ interface Props {
 
 const DOMAIN_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const URL_RE = /^https?:\/\/.+/i;
 
 /**
  * Branding editor — logo, primary color, sender name, sender domain.
@@ -44,22 +45,19 @@ export function BrandingForm({ projectId, initial }: Props) {
   // the save button surface errors before the round-trip.
   const colorOk = HEX_RE.test(branding.primaryColor);
   const domainOk = branding.senderDomain === null || DOMAIN_RE.test(branding.senderDomain);
+  const logoOk = branding.logoUrl === null || URL_RE.test(branding.logoUrl);
   const nameOk = branding.senderName.length > 0 && branding.senderName.length <= 64;
-  const canSave = colorOk && domainOk && nameOk && !pending;
+  const canSave = colorOk && domainOk && logoOk && nameOk && !pending;
 
   async function save(): Promise<void> {
     setPending(true);
     setErrMsg(null);
     try {
-      // `logoUrl` is owned exclusively by the LogoUploader (file upload +
-      // serve route). Omit it here so a stale value in this form's state
-      // can't clobber a freshly-uploaded logo on save.
-      const { logoUrl: _ownedByUploader, ...brandingPatch } = branding;
       const res = await fetch(`/api/v1/projects/${projectId}/auth/config`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ branding: brandingPatch }),
+        body: JSON.stringify({ branding }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
@@ -81,8 +79,21 @@ export function BrandingForm({ projectId, initial }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* logo upload lives in <LogoUploader> (rendered by page.tsx) — it
-          owns branding.logoUrl via the file-upload + serve route. */}
+      <Card title="logo" description="public URL to a PNG or SVG. shown in the top-left of hosted login pages.">
+        <input
+          type="url"
+          value={branding.logoUrl ?? ''}
+          onChange={(e) => setBranding((b) => ({ ...b, logoUrl: e.target.value || null }))}
+          placeholder="https://cdn.example.com/logo.svg"
+          className="w-full max-w-md rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+        />
+        {branding.logoUrl && !logoOk ? (
+          <p className="mt-1 font-mono text-[11px] text-[var(--color-error)]">
+            must start with http:// or https://
+          </p>
+        ) : null}
+      </Card>
+
       <Card
         title="primary color"
         description="accent color on hosted login buttons + auth emails. WCAG-AA contrast against #0a0b0d (dark bg) recommended."

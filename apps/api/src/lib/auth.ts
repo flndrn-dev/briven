@@ -57,16 +57,6 @@ export const auth = betterAuth({
     .map((o) => o.trim())
     .filter(Boolean),
 
-  // Throttle credential-stuffing / brute-force against the auth endpoints
-  // (sign-in, sign-up, password reset). Better Auth's built-in rate limiter
-  // is window/max over each client IP. Enabled only in production so dev
-  // and tests aren't throttled; ~10 requests per 60s window.
-  rateLimit: {
-    enabled: env.BRIVEN_ENV === 'production',
-    window: 60,
-    max: 10,
-  },
-
   // Map Better Auth's singular model names onto our pluralised tables
   // (CLAUDE.md §6.1: DB tables are snake_case + plural).
   database: drizzleAdapter(getDb(), {
@@ -114,14 +104,12 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
-    // why: signup is ALWAYS attempted here; the
-    // `databaseHooks.user.create.before` hook is the SINGLE gate for the
-    // invite-only beta — it allows everyone when getOpenSignupsFlag() is
-    // true, otherwise only allowlisted emails. disableSignUp is
-    // intentionally false: Better Auth aborts user-creation BEFORE the
-    // `before` hook runs if disableSignUp is true, which would dead-letter
-    // the allowlist carve-out (no invited user could ever sign up).
-    disableSignUp: false,
+    // why: invite-only beta until BRIVEN_OPEN_SIGNUPS flips. Existing
+    // users still sign in; only first-time signup is gated. The
+    // per-method flags (here + on each social provider + on the magic
+    // link plugin) are the same toggle to keep the override surface
+    // small.
+    disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
     requireEmailVerification: env.BRIVEN_ENV === 'production',
     minPasswordLength: 10,
     maxPasswordLength: 128,
@@ -163,7 +151,7 @@ export const auth = betterAuth({
           google: {
             clientId: env.BRIVEN_GOOGLE_CLIENT_ID,
             clientSecret: env.BRIVEN_GOOGLE_CLIENT_SECRET,
-            disableSignUp: false,
+            disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
           },
         }
       : {}),
@@ -172,7 +160,7 @@ export const auth = betterAuth({
           github: {
             clientId: env.BRIVEN_GITHUB_CLIENT_ID,
             clientSecret: env.BRIVEN_GITHUB_CLIENT_SECRET,
-            disableSignUp: false,
+            disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
           },
         }
       : {}),
@@ -181,7 +169,7 @@ export const auth = betterAuth({
           discord: {
             clientId: env.BRIVEN_DISCORD_CLIENT_ID,
             clientSecret: env.BRIVEN_DISCORD_CLIENT_SECRET,
-            disableSignUp: false,
+            disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
           },
         }
       : {}),
@@ -190,11 +178,10 @@ export const auth = betterAuth({
   plugins: [
     magicLink({
       expiresIn: 60 * 10, // 10 minutes
-      // Signup is always attempted; the `databaseHooks.user.create.before`
-      // hook is the SINGLE gate (allows all when getOpenSignupsFlag() is
-      // true, else allowlist-only). disableSignUp stays false so the hook
-      // can run — Better Auth would abort creation before it otherwise.
-      disableSignUp: false,
+      // Same gate as emailAndPassword.disableSignUp — magic-link sign-IN
+      // for existing users is allowed; first-time signup is rejected
+      // when BRIVEN_OPEN_SIGNUPS is false.
+      disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
       sendMagicLink: async ({ email, url }) => {
         await sendMagicLink(email, url);
       },
@@ -216,7 +203,7 @@ export const auth = betterAuth({
                 tokenUrl: `${env.BRIVEN_KONNOS_ISSUER}/login/oauth/access_token`,
                 userInfoUrl: `${env.BRIVEN_KONNOS_ISSUER}/api/v1/user`,
                 scopes: ['read:user'],
-                disableSignUp: false,
+                disableSignUp: !env.BRIVEN_OPEN_SIGNUPS,
                 mapProfileToUser: (profile) => ({
                   id: String(profile.id),
                   email: profile.email,
@@ -231,14 +218,12 @@ export const auth = betterAuth({
       : []),
   ],
 
-  // - `before`: the SINGLE invite-only beta gate for every auth method.
-  //   Signup is always ATTEMPTED (disableSignUp is intentionally false on
-  //   all providers above — Better Auth aborts user-creation before this
-  //   hook runs if disableSignUp is true, so the gate must live here). It
-  //   allows everyone when getOpenSignupsFlag() is true; otherwise it
-  //   rejects any email not on the platform allowlist, so admins can
-  //   invite users one by one. The DB toggle (platform_settings.openSignups)
-  //   is the source of truth, not the env var.
+  // - `before`: invite-only beta gate. When BRIVEN_OPEN_SIGNUPS=false,
+  //   reject signups whose email isn't on the platform allowlist. The
+  //   environment-driven `disableSignUp` set on every provider above is
+  //   the broad "no public signups" switch; this `before` hook is the
+  //   "but THESE specific emails are allowed" carve-out so admins can
+  //   invite users one by one without flipping the global toggle.
   // - `after`: auto-create the personal org + mark the allowlist entry
   //   as accepted so the dashboard can show pending vs claimed invites.
   databaseHooks: {

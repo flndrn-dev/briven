@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "packages/studio/*"
 
 # Studio fork — versions pinned by upstream supabase studio.
 # Only consumed by packages under packages/studio/* and apps/studio/.
@@ -91,3 +92,7 @@ overrides:
   tmp: ^0.2.4
   unhead: ^2.1.13
   webpack: ^5.104.1
+
+# Studio fork — patched dependencies.
+patchedDependencies:
+  react-data-grid: patches/react-data-grid.patch

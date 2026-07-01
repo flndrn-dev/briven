@@ -80,10 +80,6 @@ export const authSessions = pgTable(
     tokenUniq: uniqueIndex('_briven_auth_sessions_token_uniq').on(t.token),
     userIdx: index('_briven_auth_sessions_user_idx').on(t.userId),
     expiresIdx: index('_briven_auth_sessions_expires_idx').on(t.expiresAt),
-    // Covering index for the monthly MAU distinct-count
-    // (services/auth-mau.ts). Mirrors the provisioning DDL in
-    // services/auth-provisioning.ts — keep both in sync.
-    createdAtIdx: index('_briven_auth_sessions_created_at_idx').on(t.createdAt, t.userId),
   }),
 );
 
@@ -208,9 +204,6 @@ export const AUTH_VERIFICATION_TYPES = [
 ] as const;
 export type AuthVerificationType = (typeof AUTH_VERIFICATION_TYPES)[number];
 
-/** OAuth provider ids known to briven auth v1. Apple intentionally omitted.
- *  `konnos` is a generic OIDC/OAuth provider (Forgejo at code.konnos.org) —
- *  wired via Better Auth's genericOAuth plugin rather than a built-in social
- *  provider (see apps/api/src/lib/auth.ts for the proven konnos config). */
-export const AUTH_OAUTH_PROVIDERS = ['google', 'github', 'discord', 'microsoft', 'konnos'] as const;
+/** OAuth provider ids known to briven auth v1. Apple intentionally omitted. */
+export const AUTH_OAUTH_PROVIDERS = ['google', 'github', 'discord', 'microsoft'] as const;
 export type AuthOAuthProvider = (typeof AUTH_OAUTH_PROVIDERS)[number];

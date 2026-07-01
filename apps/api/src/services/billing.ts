@@ -134,6 +134,33 @@ export async function upsertSubscriptionFromPolar(input: {
 }): Promise<void> {
   const tier = tierForProductId(input.polarProductId);
   const db = getDb();
+  // Unique index on subscriptions.org_id (one sub per org). New subs for
+  // the same org replace the stale row — a fresh checkout after cancel
+  // cleanly overwrites the prior polar_subscription_id.
+  await db
+    .insert(subscriptions)
+    .values({
+      id: `sub_${input.polarSubscriptionId}`,
+      orgId: input.orgId,
+      polarSubscriptionId: input.polarSubscriptionId,
+      polarCustomerId: input.polarCustomerId,
+      tier,
+      status: input.status,
+      currentPeriodEnd: input.currentPeriodEnd,
+      canceledAt: input.canceledAt,
+    })
+    .onConflictDoUpdate({
+      target: subscriptions.orgId,
+      set: {
+        polarSubscriptionId: input.polarSubscriptionId,
+        polarCustomerId: input.polarCustomerId,
+        tier,
+        status: input.status,
+        currentPeriodEnd: input.currentPeriodEnd,
+        canceledAt: input.canceledAt,
+        updatedAt: new Date(),
+      },
+    });
 
   // Propagate the org-level tier change down to every active project
   // owned by that org. Without this, projects.tier stays 'free' even
@@ -142,48 +169,11 @@ export async function upsertSubscriptionFromPolar(input: {
   // collapse back to 'free' here.
   const effectiveTier: ProjectTier =
     input.status === 'canceled' || input.status === 'past_due' ? 'free' : tier;
-
-  // Both writes go in ONE transaction: a crash between them previously left
-  // the subscription row saying "pro" while every project stayed "free"
-  // forever (the rate-limiter reads projects.tier). Atomic now.
-  const updated = await db.transaction(async (tx) => {
-    // Unique index on subscriptions.org_id (one sub per org). New subs for
-    // the same org replace the stale row — a fresh checkout after cancel
-    // cleanly overwrites the prior polar_subscription_id.
-    await tx
-      .insert(subscriptions)
-      .values({
-        id: `sub_${input.polarSubscriptionId}`,
-        orgId: input.orgId,
-        polarSubscriptionId: input.polarSubscriptionId,
-        polarCustomerId: input.polarCustomerId,
-        tier,
-        status: input.status,
-        currentPeriodEnd: input.currentPeriodEnd,
-        canceledAt: input.canceledAt,
-      })
-      .onConflictDoUpdate({
-        target: subscriptions.orgId,
-        set: {
-          polarSubscriptionId: input.polarSubscriptionId,
-          polarCustomerId: input.polarCustomerId,
-          tier,
-          status: input.status,
-          currentPeriodEnd: input.currentPeriodEnd,
-          canceledAt: input.canceledAt,
-          updatedAt: new Date(),
-        },
-      });
-
-    return tx
-      .update(projects)
-      .set({ tier: effectiveTier, updatedAt: new Date() })
-      .where(and(eq(projects.orgId, input.orgId), isNull(projects.deletedAt)))
-      .returning({ id: projects.id });
-  });
-
-  // Cache invalidation + outbound notification run AFTER commit so we never
-  // signal a tier change the transaction then rolled back.
+  const updated = await db
+    .update(projects)
+    .set({ tier: effectiveTier, updatedAt: new Date() })
+    .where(and(eq(projects.orgId, input.orgId), isNull(projects.deletedAt)))
+    .returning({ id: projects.id });
   for (const row of updated) {
     invalidateTierCache(row.id);
     // The polar customer id may have flipped on this checkout — drop the
@@ -238,9 +228,6 @@ export async function getTierForOrg(orgId: string): Promise<ProjectTier> {
       .from(orgMembers)
       .innerJoin(users, eq(users.id, orgMembers.userId))
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.role, 'owner')))
-      // Deterministic pick when an org has >1 owner — otherwise LIMIT 1
-      // returns an arbitrary owner and the comp flag flickers between calls.
-      .orderBy(orgMembers.createdAt, orgMembers.userId)
       .limit(1);
     if (owner && COMPED_OWNER_EMAILS.has(owner.email.toLowerCase())) {
       return 'team';

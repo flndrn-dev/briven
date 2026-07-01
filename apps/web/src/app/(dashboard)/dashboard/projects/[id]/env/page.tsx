@@ -1,7 +1,6 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { AddEnvForm } from './add-env-form';
 import { DeleteEnvButton } from './delete-env-button';
 
@@ -17,9 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function EnvPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { env } = await apiJson<{ env: EnvVar[] }>(`/v1/projects/${id}/env`).catch(() => ({
-    env: [] as EnvVar[],
-  }));
+  const { env } = await apiJson<{ env: EnvVar[] }>(`/v1/projects/${id}/env`);
 
   async function upsert(formData: FormData) {
     'use server';
@@ -72,7 +69,7 @@ export default async function EnvPage({ params }: { params: Promise<{ id: string
               <div>
                 <p className="font-mono text-sm">{v.key}</p>
                 <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-                  •••{v.lastFour} · updated {toValidDate(v.updatedAt)?.toISOString().slice(0, 10) ?? '—'}
+                  •••{v.lastFour} · updated {new Date(v.updatedAt).toISOString().slice(0, 10)}
                 </p>
               </div>
               <DeleteEnvButton envVarId={v.id} envKey={v.key} onDelete={remove} />

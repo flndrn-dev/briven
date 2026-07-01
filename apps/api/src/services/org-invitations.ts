@@ -46,15 +46,6 @@ export async function createOrgInvitation(input: OrgInviteInput): Promise<OrgInv
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + EXPIRES_MS);
 
-  // Send the invite email BEFORE persisting the row (fail fast): if the
-  // send throws we never write the invitation, so the caller surfaces the
-  // error and can retry cleanly — instead of leaving a "pending" row in the
-  // db that the recipient was never emailed about and has no resend path.
-  // A failed send also leaves any prior pending invite (and its still-valid
-  // token) untouched.
-  const acceptURL = `${input.callbackURL}?token=${encodeURIComponent(token)}`;
-  await sendInvitation(input.email, acceptURL);
-
   const db = getDb();
   const [row] = await db
     .insert(orgInvitations)
@@ -74,6 +65,8 @@ export async function createOrgInvitation(input: OrgInviteInput): Promise<OrgInv
     .returning();
   if (!row) throw new Error('org invitation insert returned no row');
 
+  const acceptURL = `${input.callbackURL}?token=${encodeURIComponent(token)}`;
+  await sendInvitation(input.email, acceptURL);
   return row;
 }
 
@@ -139,24 +132,18 @@ export async function acceptOrgInvitation(args: {
     .limit(1);
   if (!org) throw new ValidationError('org no longer exists');
 
-  // Member-insert + invitation-mark-accepted in ONE transaction: a crash
-  // between them left the user added but the invite still "pending", so a
-  // retry re-ran the insert and hit the unique constraint → permanent
-  // lockout. Atomic now (both commit or neither).
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(orgMembers)
-      .values({ orgId: inv.orgId, userId: args.userId, role: inv.role })
-      .onConflictDoUpdate({
-        target: [orgMembers.orgId, orgMembers.userId],
-        set: { role: inv.role },
-      });
+  await db
+    .insert(orgMembers)
+    .values({ orgId: inv.orgId, userId: args.userId, role: inv.role })
+    .onConflictDoUpdate({
+      target: [orgMembers.orgId, orgMembers.userId],
+      set: { role: inv.role },
+    });
 
-    await tx
-      .update(orgInvitations)
-      .set({ acceptedAt: new Date() })
-      .where(eq(orgInvitations.id, inv.id));
-  });
+  await db
+    .update(orgInvitations)
+    .set({ acceptedAt: new Date() })
+    .where(eq(orgInvitations.id, inv.id));
 
   return { orgId: inv.orgId, role: inv.role };
 }

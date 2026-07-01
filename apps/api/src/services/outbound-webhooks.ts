@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import { newId, NotFoundError, ValidationError } from '@briven/shared';
-import { and, asc, desc, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lte } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import {
@@ -386,50 +386,26 @@ export function matchesEventType(filter: string, eventType: string): boolean {
 }
 
 /**
- * How far forward a claim leases a delivery row. While a dispatcher holds a
- * claimed row (doing the POST), next_attempt_at is pushed this far into the
- * future so an overlapping dispatcher tick won't re-select the same row.
- * recordDeliveryResult sets the authoritative next_attempt_at afterwards; if
- * the dispatcher dies mid-flight the row simply becomes due again after the
- * lease, so no delivery is lost (at-least-once).
- */
-const CLAIM_LEASE_MS = 120_000;
-
-/**
- * Dispatcher claim path. Atomically CLAIMS up to `limit` due+pending
- * deliveries: the inner select takes FOR UPDATE SKIP LOCKED so two
- * dispatcher instances (or overlapping ticks) can never grab the same rows
- * — that would POST the same event twice (double-delivery). The claimed rows
- * are leased forward (see CLAIM_LEASE_MS) in the SAME transaction. The caller
- * then does the POST + records the result via recordDeliveryResult.
+ * Dispatcher claim path. Selects up to `limit` deliveries whose
+ * next_attempt_at is in the past and which are still pending. The
+ * caller does the POST + records the result via recordDeliveryResult.
  */
 export async function claimDueDeliveries(
   now: Date,
   limit: number,
 ): Promise<WebhookOutboundDelivery[]> {
   const db = getDb();
-  return db.transaction(async (tx) => {
-    const due = await tx
-      .select({ id: webhookOutboundDeliveries.id })
-      .from(webhookOutboundDeliveries)
-      .where(
-        and(
-          eq(webhookOutboundDeliveries.status, 'pending'),
-          lte(webhookOutboundDeliveries.nextAttemptAt, now),
-        ),
-      )
-      .orderBy(asc(webhookOutboundDeliveries.nextAttemptAt))
-      .limit(limit)
-      .for('update', { skipLocked: true });
-    if (due.length === 0) return [];
-    const ids = due.map((d) => d.id);
-    const leaseUntil = new Date(now.getTime() + CLAIM_LEASE_MS);
-    return tx
-      .update(webhookOutboundDeliveries)
-      .set({ nextAttemptAt: leaseUntil })
-      .where(inArray(webhookOutboundDeliveries.id, ids))
-      .returning();
-  });
+  return db
+    .select()
+    .from(webhookOutboundDeliveries)
+    .where(
+      and(
+        eq(webhookOutboundDeliveries.status, 'pending'),
+        lte(webhookOutboundDeliveries.nextAttemptAt, now),
+      ),
+    )
+    .orderBy(asc(webhookOutboundDeliveries.nextAttemptAt))
+    .limit(limit);
 }
 
 export const MAX_ATTEMPTS = 5;

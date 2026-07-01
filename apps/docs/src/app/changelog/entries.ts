@@ -162,7 +162,7 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-11',
     tags: ['feat'],
     title: 'polar billing wired end-to-end',
-    body: 'production polar configured: access token, webhook secret, and product IDs for briven Pro ($29.99/mo) and briven Team ($99.99/mo). Existing webhook receiver at /v1/billing/webhook now authoritative for tier sync — subscription.* events flip projects.tier in the same transaction. checkout flow + customer portal both live.',
+    body: 'production polar configured: access token, webhook secret, and product IDs for briven Pro ($21.99/mo) and briven Team ($99.99/mo). Existing webhook receiver at /v1/billing/webhook now authoritative for tier sync — subscription.* events flip projects.tier in the same transaction. checkout flow + customer portal both live.',
   },
   {
     date: '2026-05-11',
@@ -467,8 +467,8 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-04-24',
     tags: ['infra'],
-    title: 'Cloudflare DNS-01 cert resolver configured (PR #9)',
-    body: 'traefik gains a cloudflare DNS-01 certificate resolver (groundwork for future wildcard certs). note: per-project *.apps.briven.tech subdomains are not yet routed in production — connect to your database with the endpoint + project id + API key shown on your project page.',
+    title: 'wildcard TLS via Cloudflare DNS-01 (PR #9)',
+    body: 'traefik issues *.apps.briven.tech certificates via the cloudflare DNS challenge. each customer project gets its own routable subdomain at deploy time.',
   },
   {
     date: '2026-04-23',

@@ -1,32 +1,17 @@
+import Link from 'next/link';
+
 import { DocsShell } from '../../components/shell';
 
-export const metadata = { title: 'ai features' };
+export const metadata = { title: 'ai schema generator' };
 
 export default function AiPage() {
   return (
     <DocsShell>
-      <h1 className="font-mono text-2xl tracking-tight">ai features</h1>
+      <h1 className="font-mono text-2xl tracking-tight">ai schema generator</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        briven ships three AI helpers — a <strong>schema generator</strong>, a{' '}
-        <strong>function generator</strong>, and <strong>code explain</strong>. all three run on
-        the same self-hosted Qwen 2.5-coder 32B on briven infrastructure; your prompts never
-        leave briven&apos;s network and are not logged. each is available from the dashboard, the{' '}
-        <code>briven ai</code> cli, and the HTTP api.
-      </p>
-
-      <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
-        jump to: <a className="underline" href="#schema">ai schema generator</a> ·{' '}
-        <a className="underline" href="#function">ai function generator</a> ·{' '}
-        <a className="underline" href="#explain">ai explain</a>
-      </p>
-
-      <h2 id="schema" className="mt-12 scroll-mt-20 font-mono text-xl tracking-tight">
-        ai schema generator
-      </h2>
-      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        describe your app in plain english, get a draft <code>schema.ts</code> back. dashboard at{' '}
-        <code>/dashboard/projects/&lt;p_id&gt;/ai-schema</code>, or{' '}
-        <code>briven ai schema &quot;...&quot;</code> from the cli.
+        describe your app in plain english, get a draft <code>schema.ts</code> back. powered
+        by a self-hosted Qwen 2.5-coder 32B running on briven infrastructure — your prompt
+        never leaves briven&apos;s network.
       </p>
 
       <Section title="how to use it">
@@ -103,9 +88,8 @@ export default function AiPage() {
       <Section title="what it can't do">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>write your functions</strong> — the schema generator returns schema only. for
-            draft function bodies use the <a className="underline" href="#function">ai function
-            generator</a> below
+            <strong>write your functions</strong> — schema only. function bodies are too app-
+            specific to template
           </li>
           <li>
             <strong>guess your auth model</strong> — every table that needs per-user scoping
@@ -123,81 +107,9 @@ export default function AiPage() {
         </ul>
       </Section>
 
-      <h2 id="function" className="mt-14 scroll-mt-20 font-mono text-xl tracking-tight">
-        ai function generator
-      </h2>
-      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        describe what a function should do and get a draft{' '}
-        <code>briven/functions/&lt;name&gt;.ts</code> back — the right wrapper (
-        <code>query</code> / <code>mutation</code> / <code>action</code>), <code>ctx.db</code>{' '}
-        chains, <code>brivenError</code> shape, and ulid prefixing already in place. dashboard at{' '}
-        <code>/dashboard/projects/&lt;p_id&gt;/ai-function</code>, or{' '}
-        <code>briven ai function &quot;...&quot;</code> from the cli.
-      </p>
-
-      <Section title="how to use it">
-        <ol className="list-decimal space-y-2 pl-5">
-          <li>
-            open the <em>ai function</em> tab on a project at{' '}
-            <code>/dashboard/projects/&lt;p_id&gt;/ai-function</code>
-          </li>
-          <li>
-            describe the function — what it reads, what it writes, what to validate (e.g.
-            &quot;create a todo: validate the body is 1-200 chars, insert with a ulid id and the
-            caller&apos;s user_id&quot;)
-          </li>
-          <li>
-            the dashboard automatically feeds your project&apos;s current schema in as context, so
-            the draft references real tables and columns. from the cli, pass{' '}
-            <code>briven ai function --with-schema</code> to do the same
-          </li>
-          <li>
-            click <strong>copy</strong>, drop the file into <code>briven/functions/</code>, review
-            every line, then <code>briven deploy</code>
-          </li>
-        </ol>
-        <p>
-          the model is primed with the <code>@briven/cli/server</code> DSL — it knows the wrapper
-          signatures and the <code>ctx</code> surface, so the draft is shaped like real briven
-          code rather than generic node. it still can&apos;t guess your auth rules or business
-          logic; treat the output as a starting point, not a finished handler.
-        </p>
-      </Section>
-
-      <h2 id="explain" className="mt-14 scroll-mt-20 font-mono text-xl tracking-tight">
-        ai explain
-      </h2>
-      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        paste any briven schema or function snippet and get a plain-english walkthrough in briven
-        idioms — what the wrapper means, which <code>ctx.db</code> calls happen, where reactivity
-        hooks in, and the sharp edges to watch. dashboard at{' '}
-        <code>/dashboard/projects/&lt;p_id&gt;/ai-explain</code>, or{' '}
-        <code>briven ai explain --file &lt;path&gt;</code> from the cli.
-      </p>
-
-      <Section title="when to reach for it">
-        <ul className="list-disc space-y-2 pl-5">
-          <li>
-            onboarding onto an unfamiliar briven codebase — explain a handler before you change it
-          </li>
-          <li>
-            understanding why a query is reactive (which tables it touches) without reading the
-            runtime internals
-          </li>
-          <li>
-            a sanity check on AI-generated or hand-written code before you deploy it
-          </li>
-        </ul>
-        <p>
-          same backend, same not-logged privacy posture as the two generators. it reads the
-          snippet you give it and nothing else — it can&apos;t see your data or your other
-          functions.
-        </p>
-      </Section>
-
       <Section title="privacy">
         <p>
-          your prompts and the generated output are <strong>not</strong> logged. only the
+          your prompt and the generated schema are <strong>not</strong> logged. only the
           prompt length, response length, model name, and elapsed milliseconds are recorded
           for operational monitoring. the request never leaves briven&apos;s infrastructure
           — the Ollama instance runs on a dedicated DGX VPS in EU-Central.
@@ -232,8 +144,11 @@ export default function AiPage() {
       </Section>
 
       <p className="mt-12 font-mono text-xs text-[var(--color-text-subtle)]">
-        all three run on the same self-hosted model. operator setup (which model, hardware
-        sizing, per-feature overrides) is documented in <code>docs/AI.md</code> in the repo.
+        more AI features (function bodies, query suggestions, performance review) are{' '}
+        <Link href="/roadmap" className="underline hover:text-[var(--color-text)]">
+          on the roadmap
+        </Link>{' '}
+        for year-two.
       </p>
     </DocsShell>
   );

@@ -94,21 +94,6 @@ const envSchema = z.object({
   BRIVEN_MITTERA_API_KEY: z.string().optional(),
   BRIVEN_MITTERA_WEBHOOK_SECRET: z.string().optional(),
 
-  // Generic SMTP fallback for transactional email. When mittera is
-  // unconfigured OR a mittera send fails at runtime, briven falls back to
-  // this SMTP transport so sign-in / magic-link / OTP mail still goes out
-  // while mittera's sender is sandbox-limited. Provider-agnostic — point it
-  // at any SMTP server (a mailserver, or any provider's SMTP endpoint), so
-  // there's no lock-in. HOST + PORT + USER + PASS + FROM must ALL be set for
-  // the fallback to engage; otherwise the chain ends at stdout-only (dev
-  // bootstrap). Implicit TLS is inferred from PORT 465; all other ports use
-  // STARTTLS. See lib/smtp.ts + lib/email.ts.
-  BRIVEN_SMTP_HOST: z.string().optional(),
-  BRIVEN_SMTP_PORT: z.coerce.number().int().positive().optional(),
-  BRIVEN_SMTP_USER: z.string().optional(),
-  BRIVEN_SMTP_PASS: z.string().optional(),
-  BRIVEN_SMTP_FROM: z.string().optional(),
-
   // MinIO — object storage.
   //   _ENDPOINT          server-side (internal docker network OK).
   //   _PUBLIC_ENDPOINT   what the browser sees in presigned URLs. HTTPS
@@ -183,14 +168,6 @@ const envSchema = z.object({
   // only writes invocations + storage_bytes.
   BRIVEN_REALTIME_URL: z.string().url().default('http://localhost:3004'),
 
-  // Prometheus — the observability stack's query endpoint (Phase 4). The
-  // superadmin Health cockpit reads real host metrics (CPU/RAM/disk/steal)
-  // from node-exporter via Prometheus's instant-query API. Optional: when
-  // unset, getHostMetrics() returns null and the cockpit honestly shows
-  // "—" with a "monitoring not connected" note rather than a fake zero.
-  // Point this at the in-cluster Prometheus (e.g. http://prometheus:9090).
-  BRIVEN_PROMETHEUS_URL: z.string().url().optional(),
-
   // GeoIP — optional path to a MaxMind GeoLite2-City.mmdb file. When unset
   // or unreadable, IP → city lookups return null and callers show a dash.
   // Refresh the DB monthly via the free MaxMind account download portal.
@@ -256,17 +233,6 @@ if (env.BRIVEN_ENV !== 'development') {
       `BRIVEN_WEB_ORIGIN must be HTTPS outside development (got: ${env.BRIVEN_WEB_ORIGIN})`,
     );
   }
-  // why: BRIVEN_BETTER_AUTH_SECRET is the HS256 key for session cookies AND
-  // CLI JWTs (lib/cli-jwt.ts). It's marked .optional() so local dev/tests can
-  // boot, and cli-jwt.ts already fails closed at sign/verify time. But a
-  // deployed environment that booted WITHOUT it would silently run with no
-  // stable signing key — so fail at boot here instead of on the first auth.
-  // Pre-flight: production/staging MUST have BRIVEN_BETTER_AUTH_SECRET set.
-  if (!env.BRIVEN_BETTER_AUTH_SECRET) {
-    throw new Error(
-      'BRIVEN_BETTER_AUTH_SECRET must be set outside development (HS256 key for sessions + CLI JWTs — an unset key makes CLI tokens forgeable)',
-    );
-  }
   // why: BRIVEN_ENCRYPTION_KEY decrypts customer env vars at rest. If
   // unset, services/project-env.ts fails-closed at request time — but a
   // deploy that forgot the key would only surface the misconfiguration
@@ -283,19 +249,6 @@ if (env.BRIVEN_ENV !== 'development') {
   if (!env.BRIVEN_DATA_PLANE_URL) {
     throw new Error(
       'BRIVEN_DATA_PLANE_URL must be set outside development (per-project schemas live in this cluster)',
-    );
-  }
-  // why: when the briven auth product is switched ON (BRIVEN_AUTH_ENABLED), its
-  // per-tenant secret store needs BRIVEN_AUTH_MASTER_KEY (32-byte hex) to derive
-  // per-project AES-256-GCM keys (services/tenant-secret-store.ts). The key is
-  // .optional() so dev/tests boot, and the secret store already fails-closed at
-  // first use — but a production deploy that flipped the switch ON while
-  // forgetting the key would only break when a customer first saves an OAuth
-  // secret. Fail at boot instead so a half-configured auth product is loud and
-  // immediate, never a silent landmine.
-  if (env.BRIVEN_AUTH_ENABLED && !env.BRIVEN_AUTH_MASTER_KEY) {
-    throw new Error(
-      'BRIVEN_AUTH_MASTER_KEY must be set when BRIVEN_AUTH_ENABLED=true outside development (32-byte hex master key for per-tenant auth secret encryption)',
     );
   }
 }

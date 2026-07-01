@@ -165,39 +165,6 @@ export async function getCurrentMonthConnectionSecondsUsage(
 }
 
 /**
- * Current-month auth MAU for the main usage widget. Reads the DURABLE
- * monthly gauge row the hourly aggregator writes
- * (`usage_events`, metric='auth_mau', period_start = start-of-UTC-month) —
- * NOT a live distinct-count against the tenant DB. That keeps this route
- * cheap (one control-plane row read, no data-plane round-trip) and aligned
- * with the exact value that gets billed to Polar. Returns 0 when the
- * aggregator hasn't written a row yet (auth off, or first hour of a fresh
- * month) — the dashboard renders that as "—" naturally. The dedicated
- * Auth → Usage page keeps using the live `/auth/mau` endpoint.
- */
-export async function getCurrentMonthAuthMau(
-  projectId: string,
-  now: Date = new Date(),
-): Promise<number> {
-  const { periodStart } = currentMonthBounds(now);
-  const db = getDb();
-  const [row] = await db
-    .select({ value: usageEvents.value })
-    .from(usageEvents)
-    .where(
-      and(
-        eq(usageEvents.projectId, projectId),
-        eq(usageEvents.metric, 'auth_mau'),
-        eq(usageEvents.periodStart, periodStart),
-      ),
-    )
-    .limit(1);
-  if (!row) return 0;
-  const parsed = Number.parseInt(row.value, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-/**
  * Query the data-plane for the storage footprint of a project's schema.
  * Cheap — single round-trip with a pg_total_relation_size aggregate.
  * Used by the dashboard usage widget and (Phase 3 follow-up) by the

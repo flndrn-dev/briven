@@ -16,12 +16,11 @@ const NAV = [
   { href: '/dashboard/teams', label: 'teams' },
   { href: '/dashboard/billing', label: 'billing' },
   { href: '/dashboard/settings', label: 'settings' },
-  { href: '/dashboard/support', label: 'support' },
 ] as const;
 
-export function DashboardMobileNav() {
+export function DashboardMobileNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
-  const items = NAV;
+  const items = isAdmin ? [...NAV, { href: '/dashboard/admin', label: 'admin' }] : NAV;
   return (
     <nav
       aria-label="dashboard sections"

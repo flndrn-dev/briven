@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { RowDeleteMigrationButton } from './row-delete-migration-button';
 
 export const metadata = { title: 'my migrations' };
@@ -45,14 +44,13 @@ function statusTone(status: string): string {
 }
 
 function formatTime(iso: string): string {
-  const d = toValidDate(iso);
-  return d ? d.toISOString().replace('T', ' ').slice(0, 16) + ' utc' : '—';
+  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' utc';
 }
 
 export default async function MyMigrationsPage() {
   const { requests } = await apiJson<{ requests: CustomerRequest[] }>(
     '/v1/migration-requests',
-  ).catch(() => ({ requests: [] as CustomerRequest[] }));
+  );
 
   const open = requests.filter(
     (r) => r.status !== 'completed' && r.status !== 'cancelled',
@@ -115,13 +113,13 @@ export default async function MyMigrationsPage() {
       )}
 
       <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
-        question about an in-flight migration? reach us via our{' '}
-        <Link
-          href="/contact?topic=sales"
+        question about an in-flight migration? email{' '}
+        <a
+          href="mailto:migrations@flndrn.com"
           className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"
         >
-          contact form
-        </Link>{' '}
+          migrations@flndrn.com
+        </a>{' '}
         and quote the request id.
       </p>
     </section>

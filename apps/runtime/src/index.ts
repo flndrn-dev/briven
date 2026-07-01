@@ -112,16 +112,13 @@ async function probeDataPlane(): Promise<boolean> {
 }
 
 app.post('/invoke', async (c) => {
-  // Fail CLOSED, mirroring apps/realtime's `authorise()`: if the shared
-  // secret is unset (misconfig), OR the bearer token is missing, OR it
-  // doesn't match, reject with 401. Previously the whole check was gated
-  // inside `if (expected)`, so an unset secret skipped auth entirely and
-  // left /invoke open to anyone who could reach the port (fail-open).
   const expected = env.BRIVEN_RUNTIME_SHARED_SECRET;
-  const auth = c.req.header('authorization');
-  const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
-  if (!expected || !token || !constantTimeEqual(token, expected)) {
-    return c.json({ code: 'unauthorized', message: 'runtime is not open to the public' }, 401);
+  if (expected) {
+    const auth = c.req.header('authorization');
+    const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
+    if (!token || !constantTimeEqual(token, expected)) {
+      return c.json({ code: 'unauthorized', message: 'runtime is not open to the public' }, 401);
+    }
   }
 
   const body = await c.req.json().catch(() => null);

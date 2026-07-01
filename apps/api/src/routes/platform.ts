@@ -38,20 +38,14 @@ import { log } from "../lib/logger.js";
 
 const platformRouter = new Hono<AppEnv>();
 
-// Auth is enforced PER-ROUTE below via `requireProjectAuth("ref")`. It can't
-// live on a `/platform/*` wildcard `.use()`: Hono resolves `c.req.param()`
-// against the *current* matched route only, so a wildcard middleware never
-// sees the `:ref` path param (it reads as undefined → the guard 403s every
-// request). The project id lives at different path positions across the
-// Supabase-compat surface (`pg-meta/:ref`, `rest/v1/:ref`), so it must be
-// read from the named route param, not the wildcard.
+// Auth for all platform routes — session cookie from .briven.tech
+platformRouter.use("/platform/*", requireProjectAuth());
 
 // ── pg-meta (schema introspection) ──────────────────────────────────────
 
 platformRouter.get(
   "/platform/pg-meta/:ref/tables",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const tables = await listProjectTables(c.req.param("ref"));
@@ -61,8 +55,7 @@ platformRouter.get(
 
 platformRouter.get(
   "/platform/pg-meta/:ref/schemas",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const schema = await getFullSchema(c.req.param("ref"));
@@ -72,8 +65,7 @@ platformRouter.get(
 
 platformRouter.get(
   "/platform/pg-meta/:ref/foreign-tables",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     // Return relationships as foreign-table info
@@ -84,8 +76,7 @@ platformRouter.get(
 
 platformRouter.post(
   "/platform/pg-meta/:ref/query",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
@@ -116,8 +107,7 @@ platformRouter.post(
 
 platformRouter.get(
   "/platform/pg-meta/:ref/columns",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
@@ -134,8 +124,7 @@ platformRouter.get(
 
 platformRouter.get(
   "/platform/rest/v1/:ref/:table",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
@@ -149,16 +138,12 @@ platformRouter.get(
 
 platformRouter.post(
   "/platform/rest/v1/:ref/:table",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
-    const body = await c.req.json<Record<string, unknown>>().catch(() => null);
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return c.json({ code: "validation_failed", message: "expected a json object body" }, 400);
-    }
+    const body = await c.req.json<Record<string, unknown>>();
     const result = await insertRow({ projectId, tableName, values: body });
     return c.json(result, 201);
   }
@@ -166,16 +151,13 @@ platformRouter.post(
 
 platformRouter.patch(
   "/platform/rest/v1/:ref/:table",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
-    const body = await c.req
-      .json<{ primaryKey: Array<{ column: string; value: string | number }>; values: Record<string, unknown> }>()
-      .catch(() => null);
-    if (!body || !body.primaryKey || !body.values) {
+    const body = await c.req.json<{ primaryKey: Array<{ column: string; value: string | number }>; values: Record<string, unknown> }>();
+    if (!body.primaryKey || !body.values) {
       return c.json({ code: "validation_failed", message: "expected { primaryKey, values }" }, 400);
     }
     // Postgres updateCell sets one column at a time; apply each value in the patch.
@@ -188,16 +170,13 @@ platformRouter.patch(
 
 platformRouter.delete(
   "/platform/rest/v1/:ref/:table",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
-    const body = await c.req
-      .json<{ primaryKey: Array<{ column: string; value: string | number }> }>()
-      .catch(() => null);
-    if (!body || !body.primaryKey) {
+    const body = await c.req.json<{ primaryKey: Array<{ column: string; value: string | number }> }>();
+    if (!body.primaryKey) {
       return c.json({ code: "validation_failed", message: "expected { primaryKey }" }, 400);
     }
     await deleteRow({ projectId, tableName, primaryKey: body.primaryKey });
@@ -209,15 +188,12 @@ platformRouter.delete(
 
 platformRouter.post(
   "/platform/pg-meta/:ref/tables",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");
-    const body = await c.req
-      .json<{ name: string; schema?: string; comment?: string; columns?: StudioColumnSpec[] }>()
-      .catch(() => null);
-    if (!body || !body.name) {
+    const body = await c.req.json<{ name: string; schema?: string; comment?: string; columns?: StudioColumnSpec[] }>();
+    if (!body.name) {
       return c.json({ code: "validation_failed", message: "expected { name }" }, 400);
     }
     // Postgres requires at least one column + a primary key; default to a
@@ -233,8 +209,7 @@ platformRouter.post(
 
 platformRouter.delete(
   "/platform/pg-meta/:ref/tables/:id",
-  requireProjectAuth("ref"),
-  projectRateLimit("mutate", "ref"),
+  projectRateLimit("mutate"),
   requireProjectRole("admin"),
   async (c) => {
     const projectId = c.req.param("ref");

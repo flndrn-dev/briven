@@ -1,7 +1,6 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { KeyRow } from './key-row';
 import { NewKeyDialog } from './new-key-dialog';
 
@@ -19,9 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function KeysPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { keys } = await apiJson<{ keys: ApiKey[] }>(`/v1/projects/${id}/api-keys`).catch(() => ({
-    keys: [] as ApiKey[],
-  }));
+  const { keys } = await apiJson<{ keys: ApiKey[] }>(`/v1/projects/${id}/api-keys`);
 
   async function createKey(formData: FormData) {
     'use server';
@@ -100,7 +97,7 @@ export default async function KeysPage({ params }: { params: Promise<{ id: strin
             {revoked.map((k) => (
               <li key={k.id} className="px-4 py-2 text-[var(--color-text-subtle)]">
                 {k.name} · brk_•••{k.suffix} · revoked{' '}
-                {toValidDate(k.revokedAt)?.toISOString().slice(0, 10) ?? '—'}
+                {new Date(k.revokedAt!).toISOString().slice(0, 10)}
               </li>
             ))}
           </ul>

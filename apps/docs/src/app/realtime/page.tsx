@@ -28,8 +28,7 @@ export default function RealtimePage() {
         <ol className="mt-3 flex list-decimal flex-col gap-2 pl-5 font-mono text-sm text-[var(--color-text-muted)]">
           <li>
             <strong>subscribe</strong> — the client opens a WS to{' '}
-            <code>wss://ws.briven.tech/v1/subscribe</code> (the same{' '}
-            <code>wsOrigin</code> the SDK takes), sends{' '}
+            <code>wss://api.briven.tech/v1/projects/&lt;id&gt;/realtime</code>, sends{' '}
             <code>{`{ type: 'subscribe', function, args }`}</code>, receives the initial
             result + a subscription id.
           </li>

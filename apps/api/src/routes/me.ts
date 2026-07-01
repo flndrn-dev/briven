@@ -1,4 +1,3 @@
-import { NotFoundError, ValidationError } from '@briven/shared';
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -7,32 +6,20 @@ import { getDb } from '../db/client.js';
 import { users } from '../db/schema.js';
 import { auth } from '../lib/auth.js';
 import { requireAuth } from '../middleware/session.js';
-import { ipKey, rateLimit } from '../middleware/rate-limit.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types/app-env.js';
-import { previewAccountDeletion, softDeleteAccount } from '../services/account-deletion.js';
+import { softDeleteAccount } from '../services/account-deletion.js';
 import { audit, hashIp } from '../services/audit.js';
 import { checkVatWithVies } from '../services/billing.js';
 import {
-  DeleteSecretExistsError,
   getCurrentVat,
-  getDeleteSecretStatus,
   getProfile,
-  hasPasswordCredential,
-  resetDeleteSecret,
-  revealDeleteSecret,
   setAvatar,
-  setDeleteSecret,
   updateProfile,
-  verifyDeleteSecret,
   type ProfilePatch,
 } from '../services/me.js';
 import { listOrgsForUser } from '../services/orgs.js';
 import { listProjectsForUser } from '../services/projects.js';
-import {
-  getTicketForUserByNumber,
-  listTicketsForUserEmail,
-  renderTicketNumber,
-} from '../services/support-tickets.js';
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
@@ -104,68 +91,6 @@ meRouter.get('/v1/me/projects', requireAuth(), async (c) => {
     orgName: orgsById.get(p.orgId)?.name ?? null,
   }));
   return c.json({ projects });
-});
-
-/* ─── support tickets ("my tickets" dashboard view) ──────────────────── */
-// The signed-in user's own support tickets, matched by the contact email
-// they submitted (case-insensitive). Operator-only fields (operator notes,
-// assignee, ip/user-agent) are NEVER surfaced here — only what the user
-// needs to follow their own ticket.
-
-function serializeUserTicket(t: {
-  id: string;
-  ticketNumber: string | null;
-  status: string;
-  topic: string;
-  topicCode: string | null;
-  subject: string | null;
-  message: string;
-  createdAt: Date;
-}): {
-  id: string;
-  ticketNumber: string | null;
-  status: string;
-  topic: string;
-  topicCode: string | null;
-  subject: string | null;
-  message: string;
-  createdAt: string;
-} {
-  return {
-    id: t.id,
-    ticketNumber: renderTicketNumber(t.ticketNumber),
-    status: t.status,
-    topic: t.topic,
-    topicCode: t.topicCode,
-    subject: t.subject,
-    message: t.message,
-    createdAt: t.createdAt.toISOString(),
-  };
-}
-
-meRouter.get('/v1/me/tickets', requireAuth(), async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-  const rows = await listTicketsForUserEmail(user.email, { limit: 50 });
-  return c.json({ tickets: rows.map(serializeUserTicket) });
-});
-
-meRouter.get('/v1/me/tickets/:ticketNumber', requireAuth(), async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-  const result = await getTicketForUserByNumber(user.email, c.req.param('ticketNumber'));
-  // 404 for both "doesn't exist" and "not yours" so we never leak the
-  // existence of another user's ticket.
-  if (!result) return c.json({ code: 'not_found' }, 404);
-  return c.json({
-    ticket: serializeUserTicket(result.ticket),
-    replies: result.replies.map((r) => ({
-      id: r.id,
-      author: r.author,
-      body: r.body,
-      createdAt: r.createdAt.toISOString(),
-    })),
-  });
 });
 
 meRouter.patch('/v1/me', requireAuth(), async (c) => {
@@ -281,15 +206,6 @@ meRouter.delete('/v1/me/avatar', requireAuth(), async (c) => {
   return c.json(profile);
 });
 
-// Read-only blast-radius preview so the UI can warn the user EXACTLY what a
-// deletion destroys (all projects + workspaces) before they confirm.
-meRouter.get('/v1/me/delete-account/preview', requireAuth(), async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-  const preview = await previewAccountDeletion(user.id);
-  return c.json(preview);
-});
-
 const deleteAccountSchema = z.object({
   // Typed-email confirmation prevents an accidental click — the route
   // refuses unless this matches the signed-in user's address.
@@ -309,7 +225,7 @@ meRouter.post(
     scope: 'me-delete-account',
     limit: 3,
     windowMs: 60 * 60_000,
-    key: ipKey,
+    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
   }),
   async (c) => {
     const user = c.get('user');
@@ -369,7 +285,7 @@ meRouter.post(
     scope: 'me-step-up',
     limit: 10,
     windowMs: 5 * 60_000,
-    key: ipKey,
+    key: (c) => c.req.raw.headers.get('cf-connecting-ip') ?? null,
   }),
   async (c) => {
     const user = c.get('user');
@@ -406,254 +322,3 @@ meRouter.post(
     return c.json({ ok: true, validUntilMs: Date.now() + 10 * 60_000 });
   },
 );
-
-const passwordSchema = z.object({
-  // Required only when CHANGING an existing password. Passwordless users
-  // (magic-link / OAuth) ADD a first password and omit this.
-  currentPassword: z.string().min(1).max(200).optional(),
-  newPassword: z.string().min(10).max(128),
-});
-
-/**
- * Set or change the account password from the dashboard — NO email round-
- * trip. Passwordless (magic-link / OAuth) users use this to ADD a first
- * password so the destructive-action step-up (POST /v1/me/step-up, which
- * re-checks the account password) will then accept them.
- *
- * Delegates to Better Auth on the authenticated session:
- *  - no existing password  → `auth.api.setPassword({ body: { newPassword } })`
- *    links a `credential` account for the session user. Body is newPassword
- *    ONLY — no email is involved.
- *  - existing password     → `auth.api.changePassword` which re-verifies
- *    `currentPassword` before swapping the hash.
- * Both endpoints run under Better Auth's `sensitiveSessionMiddleware`, which
- * only requires a valid session (resolved from the forwarded cookies) — so
- * the existing dashboard session drives the request.
- */
-meRouter.post(
-  '/v1/me/password',
-  requireAuth(),
-  rateLimit({
-    scope: 'me-password',
-    limit: 10,
-    windowMs: 5 * 60_000,
-    key: ipKey,
-  }),
-  async (c) => {
-    const user = c.get('user');
-    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-    const body = await c.req.json().catch(() => null);
-    const parsed = passwordSchema.safeParse(body);
-    if (!parsed.success) {
-      return c.json(
-        { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
-        400,
-      );
-    }
-
-    const alreadyHasPassword = await hasPasswordCredential(user.id);
-    try {
-      if (alreadyHasPassword) {
-        if (!parsed.data.currentPassword) {
-          return c.json(
-            {
-              code: 'current_password_required',
-              message: 'your current password is required to change it',
-            },
-            400,
-          );
-        }
-        await auth.api.changePassword({
-          body: {
-            currentPassword: parsed.data.currentPassword,
-            newPassword: parsed.data.newPassword,
-          },
-          headers: c.req.raw.headers,
-        });
-      } else {
-        await auth.api.setPassword({
-          body: { newPassword: parsed.data.newPassword },
-          headers: c.req.raw.headers,
-        });
-      }
-    } catch {
-      // Better Auth throws on wrong current password / policy failure.
-      // Don't leak which: a single generic message covers both the
-      // change-path (bad current password) and any set-path edge case.
-      return c.json(
-        {
-          code: 'password_update_failed',
-          message: alreadyHasPassword
-            ? 'could not change password — check your current password and try again'
-            : 'could not set password — please try again',
-        },
-        400,
-      );
-    }
-
-    await audit({
-      actorId: user.id,
-      projectId: null,
-      action: alreadyHasPassword ? 'me.password_change' : 'me.password_set',
-      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
-      userAgent: c.req.header('user-agent') ?? null,
-      metadata: {},
-    });
-
-    return c.json({ ok: true });
-  },
-);
-
-/* ─── delete secret ──────────────────────────────────────────────────
- *
- * A user-chosen "delete secret" gating project deletion. Stored encrypted-
- * at-rest (reveal/copy) AND hashed (verify) — mirrors the SDK-key reveal
- * pattern. Verifying the secret bumps users.last_mfa_at exactly like the
- * password step-up, so the project DELETE route's requireRecentMfa(10)
- * gate passes for the next 10 minutes.
- */
-
-const deleteSecretSchema = z.object({
-  secret: z.string().min(1).max(256),
-});
-
-// Current status — does the signed-in user have a delete secret, and when
-// was it set? No secret material is returned.
-meRouter.get('/v1/me/delete-secret', requireAuth(), async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-  const status = await getDeleteSecretStatus(user.id);
-  return c.json({ hasSecret: status.hasSecret, setAt: status.setAt?.toISOString() ?? null });
-});
-
-// Set the delete secret (one per user). 409 if one already exists — the
-// user must reset before setting a new one. Validation failures surface
-// the human-readable complexity message.
-meRouter.post('/v1/me/delete-secret', requireAuth(), async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-  const body = await c.req.json().catch(() => null);
-  const parsed = deleteSecretSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
-      400,
-    );
-  }
-  let setAt: Date;
-  try {
-    ({ setAt } = await setDeleteSecret(user.id, parsed.data.secret));
-  } catch (err) {
-    if (err instanceof DeleteSecretExistsError) {
-      return c.json({ code: 'delete_secret_exists', message: err.message }, 409);
-    }
-    if (err instanceof ValidationError) {
-      return c.json({ code: 'validation_failed', message: err.message }, 400);
-    }
-    throw err;
-  }
-  await audit({
-    actorId: user.id,
-    projectId: null,
-    action: 'me.delete_secret_set',
-    ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
-    userAgent: c.req.header('user-agent') ?? null,
-    metadata: {},
-  });
-  return c.json({ ok: true, setAt: setAt.toISOString() }, 201);
-});
-
-// Reveal the plaintext so the owner can copy it again. Rate-limited and
-// audited; the value itself is never logged.
-meRouter.post(
-  '/v1/me/delete-secret/reveal',
-  requireAuth(),
-  rateLimit({
-    scope: 'me-delete-secret-reveal',
-    limit: 10,
-    windowMs: 5 * 60_000,
-    key: ipKey,
-  }),
-  async (c) => {
-    const user = c.get('user');
-    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-    let secret: string;
-    try {
-      ({ secret } = await revealDeleteSecret(user.id));
-    } catch (err) {
-      if (err instanceof NotFoundError) {
-        return c.json({ code: 'no_delete_secret', message: 'no delete secret is set' }, 404);
-      }
-      throw err;
-    }
-    await audit({
-      actorId: user.id,
-      projectId: null,
-      action: 'me.delete_secret_reveal',
-      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
-      userAgent: c.req.header('user-agent') ?? null,
-      metadata: {},
-    });
-    return c.json({ secret });
-  },
-);
-
-// Verify the secret. On match, bump last_mfa_at (same as POST /v1/me/step-up)
-// and audit 'auth.step_up' so the project DELETE route's recent-MFA gate
-// passes. Rate-limited to blunt brute force.
-meRouter.post(
-  '/v1/me/delete-secret/verify',
-  requireAuth(),
-  rateLimit({
-    scope: 'me-delete-secret-verify',
-    limit: 10,
-    windowMs: 5 * 60_000,
-    key: ipKey,
-  }),
-  async (c) => {
-    const user = c.get('user');
-    if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-    const body = await c.req.json().catch(() => null);
-    const parsed = deleteSecretSchema.safeParse(body);
-    if (!parsed.success) {
-      return c.json(
-        { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
-        400,
-      );
-    }
-    const ok = await verifyDeleteSecret(user.id, parsed.data.secret);
-    if (!ok) {
-      return c.json({ code: 'invalid_delete_secret', message: 'secret incorrect' }, 401);
-    }
-    const db = getDb();
-    await db
-      .update(users)
-      .set({ lastMfaAt: new Date(), updatedAt: new Date() })
-      .where(eq(users.id, user.id));
-    await audit({
-      actorId: user.id,
-      projectId: null,
-      action: 'auth.step_up',
-      ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
-      userAgent: c.req.header('user-agent') ?? null,
-      metadata: { via: 'delete_secret' },
-    });
-    return c.json({ ok: true, validUntilMs: Date.now() + 10 * 60_000 });
-  },
-);
-
-// Reset (clear) the delete secret so a new one can be set.
-meRouter.delete('/v1/me/delete-secret', requireAuth(), async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
-  await resetDeleteSecret(user.id);
-  await audit({
-    actorId: user.id,
-    projectId: null,
-    action: 'me.delete_secret_reset',
-    ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
-    userAgent: c.req.header('user-agent') ?? null,
-    metadata: {},
-  });
-  return c.json({ ok: true });
-});

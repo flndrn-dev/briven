@@ -8,7 +8,6 @@ import {
   useTransition,
   type FormEvent,
 } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { COUNTRIES_EU, COUNTRIES_REST } from '../lib/countries';
@@ -290,13 +289,13 @@ export function ProfileBillingForm({
             />
             {vatLocked ? (
               <p className="text-xs text-[var(--color-text-subtle)]">
-                VAT verified ✓ · locked. To change a verified VAT ID, reach us via our{' '}
-                <Link
-                  href="/contact?topic=support"
+                VAT verified ✓ · locked. To change a verified VAT ID, email{' '}
+                <a
+                  href="mailto:support@flndrn.com?subject=VAT%20change%20request"
                   className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
                 >
-                  contact form
-                </Link>{' '}
+                  support@flndrn.com
+                </a>{' '}
                 with the new ID + reason — we re-verify against VIES on our side.
               </p>
             ) : (

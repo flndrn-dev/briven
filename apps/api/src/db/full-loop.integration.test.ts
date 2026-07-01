@@ -22,7 +22,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 
 import {
-  closeProjectDbPool,
+  closeProjectDbPools,
   dropProjectDatabase,
   provisionProjectDatabase,
   runInProjectDatabase,
@@ -37,7 +37,7 @@ describe.skipIf(!HAS_DB)('full create→write→read→live-update loop', () => 
   afterAll(async () => {
     // Always try to clean up the throwaway database + pools.
     await dropProjectDatabase(PROJECT_ID).catch(() => {});
-    await closeProjectDbPool(PROJECT_ID).catch(() => {});
+    await closeProjectDbPools().catch(() => {});
   });
 
   test('provision → committed write advances HEAD → read back', async () => {

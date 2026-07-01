@@ -2,8 +2,6 @@
 
 import { useTransition } from 'react';
 
-import { toValidDate } from '@/lib/utils';
-
 interface Invitation {
   id: string;
   email: string;
@@ -27,7 +25,7 @@ export function InvitationRow({ invitation, onRevoke }: Props) {
           <span className="text-[var(--color-text-subtle)]">· pending · {invitation.role}</span>
         </p>
         <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-          expires {toValidDate(invitation.expiresAt)?.toISOString().slice(0, 10) ?? '—'}
+          expires {new Date(invitation.expiresAt).toISOString().slice(0, 10)}
         </p>
       </div>
       <button

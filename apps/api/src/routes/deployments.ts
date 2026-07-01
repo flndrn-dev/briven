@@ -354,10 +354,7 @@ function isDestructiveDiff(
   return false;
 }
 
-deploymentsRouter.post(
-  '/v1/projects/:id/deployments/:deploymentId/cancel',
-  requireProjectRole('developer'),
-  async (c) => {
+deploymentsRouter.post('/v1/projects/:id/deployments/:deploymentId/cancel', async (c) => {
   const projectId = c.req.param('id');
   const deploymentId = c.req.param('deploymentId');
   const deployment = await cancelPendingDeployment(projectId, deploymentId);

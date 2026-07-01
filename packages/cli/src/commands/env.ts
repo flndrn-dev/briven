@@ -1,6 +1,6 @@
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { basename, dirname, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { apiCall, ApiCallError } from '../api-client.js';
 import { readCredentials } from '../config.js';
@@ -276,15 +276,7 @@ function serialiseValue(value: string): string {
   // Only quote when the value has whitespace, quotes, backslashes, or shell
   // metachars that make the `.env.local` unambiguous for dotenv parsers.
   if (/^[A-Za-z0-9_./:@-]*$/.test(value)) return value;
-  // Escape backslashes and quotes, then turn real newlines/carriage-returns
-  // into their `\n` / `\r` escape sequences so a multi-line secret stays on
-  // ONE line in the .env file (dotenv parsers expand `\n` inside double
-  // quotes; a literal newline would corrupt the file / split the value).
-  const escaped = value
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r');
+  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return `"${escaped}"`;
 }
 
@@ -307,7 +299,7 @@ async function checkGitignore(
     if (parent === dir) break;
     dir = parent;
   }
-  const filename = basename(target) || '.env.local';
+  const filename = target.split('/').pop() ?? '.env.local';
   const suggestedLine = filename;
   if (!gitRoot) {
     return { insideGitRepo: false, ignored: false, suggestedLine };
@@ -374,33 +366,18 @@ function relativeTime(iso: string): string {
   return `${Math.round(deltaSec / 86_400)}d ago`;
 }
 
-/**
- * Read a single line from a non-TTY (piped) input stream. Exported for
- * tests. The ordering here is the whole point: rl.close() synchronously
- * emits 'close', so we must resolve the value BEFORE closing — otherwise
- * the 'close' handler wins the race and rejects 'cancelled', which made
- * `echo secret | briven env set KEY` always fail in CI.
- */
-export function readPipedLine(input: NodeJS.ReadableStream): Promise<string> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const rl = createInterface({ input });
-    let gotLine = false;
-    rl.once('line', (l) => {
-      gotLine = true;
-      resolvePromise(l);
-      rl.close();
-    });
-    rl.once('close', () => {
-      // Only a "cancelled" close is one where no line ever arrived
-      // (e.g. empty piped stdin / Ctrl-D with no input).
-      if (!gotLine) rejectPromise(new Error('cancelled'));
-    });
-  });
-}
-
 async function readSecret(prompt: string): Promise<string> {
   if (!process.stdin.isTTY) {
-    return readPipedLine(process.stdin);
+    return new Promise((resolvePromise, rejectPromise) => {
+      const rl = createInterface({ input: process.stdin });
+      rl.once('line', (l) => {
+        rl.close();
+        resolvePromise(l);
+      });
+      rl.once('close', () => {
+        rejectPromise(new Error('cancelled'));
+      });
+    });
   }
   process.stdout.write(prompt);
   process.stdin.setRawMode(true);

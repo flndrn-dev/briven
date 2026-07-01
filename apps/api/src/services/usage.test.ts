@@ -69,12 +69,12 @@ describe('TIERS.storageBytes', () => {
     expect(TIERS.free.storageBytes).toBe(1024 * 1024 * 1024);
   });
 
-  test('pro tier ships at exactly 100 GiB', () => {
-    expect(TIERS.pro.storageBytes).toBe(100 * 1024 * 1024 * 1024);
+  test('pro tier ships at exactly 10 GiB', () => {
+    expect(TIERS.pro.storageBytes).toBe(10 * 1024 * 1024 * 1024);
   });
 
-  test('team tier ships at exactly 500 GiB', () => {
-    expect(TIERS.team.storageBytes).toBe(500 * 1024 * 1024 * 1024);
+  test('team tier ships at exactly 100 GiB', () => {
+    expect(TIERS.team.storageBytes).toBe(100 * 1024 * 1024 * 1024);
   });
 });
 

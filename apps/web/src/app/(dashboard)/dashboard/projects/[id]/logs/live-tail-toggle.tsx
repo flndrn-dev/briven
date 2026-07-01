@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { toValidDate } from '@/lib/utils';
-
 /**
  * Toggleable poll-driven auto-refresh for the logs page. When on, we
  * call router.refresh() every 5s so the server-rendered list re-fetches
@@ -43,7 +41,7 @@ export function LiveTailToggle() {
       {on ? (
         <span className="text-[var(--color-text-subtle)]">
           · {Math.round(INTERVAL_MS / 1000)}s
-          {toValidDate(tickAt) ? ` · last ${toValidDate(tickAt)!.toISOString().slice(11, 19)}` : ''}
+          {tickAt ? ` · last ${new Date(tickAt).toISOString().slice(11, 19)}` : ''}
         </span>
       ) : null}
     </label>

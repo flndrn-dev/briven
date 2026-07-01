@@ -40,7 +40,6 @@ import {
   type OAuthProvider,
   type SessionResponse,
   type SignInResult,
-  type SocialProvider,
   type User,
 } from '../index.js';
 
@@ -149,30 +148,26 @@ export function useUser(): UseUserResult {
 }
 
 export interface BrivenSignInProps {
-  /**
-   * Providers to render as OAuth buttons. An empty array hides the OAuth
-   * section. When OMITTED, the component auto-discovers the project's enabled
-   * providers at runtime (via `auth.getEnabledProviders()`) and renders only
-   * those — so it never shows a button for a provider that isn't wired.
-   */
-  providers?: ReadonlyArray<SocialProvider>;
+  /** Providers to render as OAuth buttons. Empty array hides the OAuth section. */
+  providers?: ReadonlyArray<OAuthProvider>;
   /** Render the email + password form. Default true. */
   showEmailPassword?: boolean;
   /** Render the magic-link section. Default true. */
   showMagicLink?: boolean;
   /** Post-sign-in URL the customer's app wants users to land on. */
   redirectTo?: string;
-  /**
-   * Whether to render a sign-in or sign-up form. Defaults to `'sign-in'`.
-   * In `'sign-up'` mode the form calls `auth.signUp.email()` and shows an
-   * optional name field. Use `<BrivenSignUp>` as a convenience alias.
-   */
-  mode?: 'sign-in' | 'sign-up';
-  /** Called when sign-in / sign-up completes successfully. */
+  /** Called when sign-in completes successfully. */
   onSuccess?: (result: { userId: string }) => void;
   /** Optional className applied to the root container. */
   className?: string;
 }
+
+const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
+  'google',
+  'github',
+  'discord',
+  'microsoft',
+];
 
 /**
  * Drop-in sign-in component. Renders email+password, magic-link, and the
@@ -185,34 +180,12 @@ export interface BrivenSignInProps {
  */
 export function BrivenSignIn(props: BrivenSignInProps) {
   const auth = useBrivenAuth();
-  const mode = props.mode ?? 'sign-in';
-  const explicitProviders = props.providers;
+  const providers = props.providers ?? DEFAULT_PROVIDERS;
   const showEmailPassword = props.showEmailPassword ?? true;
   const showMagicLink = props.showMagicLink ?? true;
 
-  // Auto-discovery: when the caller does NOT pass `providers`, fetch the
-  // project's enabled list once on mount instead of defaulting to all five
-  // built-ins (which would render buttons for unconfigured providers). `null`
-  // means "not fetched yet" → render no OAuth buttons until the list lands.
-  const [discovered, setDiscovered] = useState<ReadonlyArray<string> | null>(null);
-  useEffect(() => {
-    if (explicitProviders !== undefined) return;
-    let cancelled = false;
-    void (async () => {
-      const list = await auth.getEnabledProviders();
-      if (!cancelled) setDiscovered(list);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [auth, explicitProviders]);
-
-  const providers: ReadonlyArray<SocialProvider> =
-    explicitProviders ?? discovered ?? [];
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [magicEmail, setMagicEmail] = useState('');
   const [pending, setPending] = useState<'password' | 'magic' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -223,10 +196,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
       e.preventDefault();
       setPending('password');
       setError(null);
-      const result: SignInResult =
-        mode === 'sign-up'
-          ? await auth.signUp.email({ email, password, name: name || undefined })
-          : await auth.signIn.email({ email, password });
+      const result: SignInResult = await auth.signIn.email({ email, password });
       if (result.ok) {
         props.onSuccess?.({ userId: result.userId });
       } else {
@@ -234,7 +204,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
       }
       setPending(null);
     },
-    [auth, email, password, name, mode, props],
+    [auth, email, password, props],
   );
 
   const handleMagic = useCallback(
@@ -257,7 +227,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
   );
 
   const handleOAuth = useCallback(
-    (provider: SocialProvider): void => {
+    (provider: OAuthProvider): void => {
       const { redirectUrl } = auth.signIn.social({
         provider,
         redirectTo: props.redirectTo,
@@ -290,9 +260,8 @@ export function BrivenSignIn(props: BrivenSignInProps) {
   return createElement(
     'div',
     {
-      className:
-        props.className ?? (mode === 'sign-up' ? 'briven-auth-signup' : 'briven-auth-signin'),
-      'data-briven-auth': mode === 'sign-up' ? 'signup' : 'signin',
+      className: props.className ?? 'briven-auth-signin',
+      'data-briven-auth': 'signin',
     },
     showEmailPassword
       ? createElement(
@@ -301,19 +270,8 @@ export function BrivenSignIn(props: BrivenSignInProps) {
             key: 'password',
             onSubmit: handlePassword,
             className: 'briven-auth-form',
-            'data-briven-auth-flow': mode === 'sign-up' ? 'sign-up' : 'password',
+            'data-briven-auth-flow': 'password',
           },
-          mode === 'sign-up'
-            ? createElement('input', {
-                key: 'name',
-                type: 'text',
-                placeholder: 'full name (optional)',
-                value: name,
-                onChange: (e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value),
-                autoComplete: 'name',
-                className: 'briven-auth-input',
-              })
-            : null,
           createElement('input', {
             key: 'email',
             type: 'email',
@@ -331,7 +289,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
             placeholder: 'password',
             value: password,
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value),
-            autoComplete: mode === 'sign-up' ? 'new-password' : 'current-password',
+            autoComplete: 'current-password',
             className: 'briven-auth-input',
           }),
           createElement(
@@ -342,13 +300,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
               disabled: pending !== null,
               className: 'briven-auth-submit',
             },
-            pending === 'password'
-              ? mode === 'sign-up'
-                ? 'creating account…'
-                : 'signing in…'
-              : mode === 'sign-up'
-                ? 'create account'
-                : 'sign in',
+            pending === 'password' ? 'signing in…' : 'sign in',
           ),
         )
       : null,
@@ -415,40 +367,4 @@ export function BrivenSignIn(props: BrivenSignInProps) {
   );
 }
 
-/**
- * Returns a stable function that calls `auth.signOut()`.
- * Convenience alternative to `const auth = useBrivenAuth(); auth.signOut()`.
- *
- * @example
- * ```tsx
- * function SignOutButton() {
- *   const signOut = useSignOut();
- *   return <button onClick={signOut}>sign out</button>;
- * }
- * ```
- */
-export function useSignOut(): () => Promise<{ ok: boolean }> {
-  const auth = useBrivenAuth();
-  return useCallback(() => auth.signOut(), [auth]);
-}
-
-/** Props for `<BrivenSignUp>` — identical to `BrivenSignInProps` without `mode`. */
-export type BrivenSignUpProps = Omit<BrivenSignInProps, 'mode'>;
-
-/**
- * Drop-in sign-up component. Mirrors `<BrivenSignIn>` but wires
- * email+password to `auth.signUp.email()` and adds an optional name field.
- * Identical to `<BrivenSignIn mode="sign-up" />`.
- */
-export function BrivenSignUp(props: BrivenSignUpProps) {
-  return createElement(BrivenSignIn, { ...props, mode: 'sign-up' });
-}
-
-export type {
-  BrivenAuthClient,
-  SessionResponse,
-  SignInResult,
-  User,
-  OAuthProvider,
-  SocialProvider,
-};
+export type { BrivenAuthClient, SessionResponse, SignInResult, User, OAuthProvider };

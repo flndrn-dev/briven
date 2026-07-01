@@ -31,24 +31,6 @@ export const ORG_LIMIT_BY_TIER: Record<ProjectTier, number> = {
 };
 
 /**
- * True when `err` is (or wraps) a Postgres unique-violation (23505).
- * Drizzle nests the native pg error inside `.cause`, and its own wrapper
- * message is just "Failed query: insert into …" with no "duplicate key"
- * text — so we MUST check both levels. Missing the nested cause was the
- * exact bug that 500'd /v1/me during the account-deletion incident.
- */
-export function isUniqueViolation(err: unknown): boolean {
-  const top = err as { code?: string; message?: string } | null;
-  const cause = (err as { cause?: { code?: string; message?: string } } | null)?.cause;
-  const messages = [top?.message ?? '', cause?.message ?? ''];
-  return (
-    top?.code === '23505' ||
-    cause?.code === '23505' ||
-    messages.some((m) => m.includes('duplicate key') || m.includes('unique constraint'))
-  );
-}
-
-/**
  * Resolve the caller's default organisation — today this is always their
  * `personal=true` org. Auto-created via the Better Auth `user.create.after`
  * hook in [lib/auth.ts](../lib/auth.ts) and self-healed here for users who
@@ -96,11 +78,6 @@ export async function ensurePersonalOrg(input: {
 }): Promise<Organization> {
   const db = getDb();
 
-  // Look up the personal org regardless of soft-delete state. A personal
-  // org is the user's home base — if a prior account-deletion cascade
-  // soft-deleted it, we must REVIVE that row, never insert a second one
-  // (the id + slug are deterministic, so a second insert collides on the
-  // PK / slug unique index → the /v1/me 500 from the deletion incident).
   const [existing] = await db
     .select()
     .from(organizations)
@@ -108,22 +85,11 @@ export async function ensurePersonalOrg(input: {
       and(
         eq(organizations.createdBy, input.userId),
         eq(organizations.personal, true),
+        isNull(organizations.deletedAt),
       ),
     )
     .limit(1);
-  if (existing) {
-    if (!existing.deletedAt) return existing;
-    const [revived] = await db
-      .update(organizations)
-      .set({ deletedAt: null, updatedAt: new Date() })
-      .where(eq(organizations.id, existing.id))
-      .returning();
-    await db
-      .insert(orgMembers)
-      .values({ orgId: existing.id, userId: input.userId, role: 'owner' })
-      .onConflictDoNothing();
-    return revived ?? existing;
-  }
+  if (existing) return existing;
 
   // Mirrors migration 0010 so personal orgs are addressable by user id alone.
   const orgId = `org_${input.userId}`;
@@ -156,9 +122,17 @@ export async function ensurePersonalOrg(input: {
       .onConflictDoNothing();
     return row;
   } catch (err) {
-    // A racing insert (or a leftover soft-deleted row with the same
-    // deterministic id/slug) collapses here — re-read the winner.
-    if (isUniqueViolation(err)) {
+    const code = (err as { code?: string }).code;
+    const msg = err instanceof Error ? err.message : '';
+    // 23505 = unique_violation (PostgresError). Also catch drizzle-
+    // wrapped errors where the code is nested or the message contains
+    // "duplicate key" — the postgres driver sometimes wraps the native
+    // error inside a driver-level Error whose .code is undefined.
+    const isDuplicate =
+      code === '23505' ||
+      msg.includes('duplicate key') ||
+      msg.includes('unique constraint');
+    if (isDuplicate) {
       const [refound] = await db
         .select()
         .from(organizations)
@@ -169,16 +143,14 @@ export async function ensurePersonalOrg(input: {
           .insert(orgMembers)
           .values({ orgId: refound.id, userId: input.userId, role: 'owner' })
           .onConflictDoNothing();
-        // Self-heal: revive a soft-deleted row and/or fix a non-personal
-        // flag so the next getDefaultOrgForUser hits the fast path instead
-        // of re-entering ensurePersonalOrg (which would re-collide forever).
-        if (refound.deletedAt || !refound.personal) {
-          const [healed] = await db
+        // Self-heal: if the org was created with personal=false (pre-
+        // migration edge case), fix it now so the next getDefaultOrgForUser
+        // hits the fast path instead of re-entering ensurePersonalOrg.
+        if (!refound.personal) {
+          await db
             .update(organizations)
-            .set({ deletedAt: null, personal: true, updatedAt: new Date() })
-            .where(eq(organizations.id, refound.id))
-            .returning();
-          return healed ?? { ...refound, deletedAt: null, personal: true };
+            .set({ personal: true, updatedAt: new Date() })
+            .where(eq(organizations.id, refound.id));
         }
         return refound;
       }
@@ -448,29 +420,23 @@ export async function deleteOrg(args: {
     return { ok: false, reason: 'only an owner can delete a team' };
   }
 
-  // Bounce if there are live projects in the org, then soft-delete — both in
-  // ONE transaction so a project created in the gap between the check and the
-  // update can't be orphaned under a now-deleted org. The live-projects probe
-  // takes a FOR UPDATE lock on any matching row so a concurrent create
-  // serialises against this delete.
-  return db.transaction(async (tx) => {
-    const liveProjects = await tx.execute(sql`
-      select 1 from projects
-      where org_id = ${args.orgId}
-        and deleted_at is null
-      limit 1
-      for update
-    `);
-    if (liveProjects.length > 0) {
-      return { ok: false, reason: 'team still has projects — delete or move them first' };
-    }
+  // Bounce if there are live projects in the org. The dashboard surfaces
+  // this with a friendly "delete or move projects first" message.
+  const liveProjects = await db.execute(sql`
+    select 1 from projects
+    where org_id = ${args.orgId}
+      and deleted_at is null
+    limit 1
+  `);
+  if (liveProjects.length > 0) {
+    return { ok: false, reason: 'team still has projects — delete or move them first' };
+  }
 
-    await tx
-      .update(organizations)
-      .set({ deletedAt: new Date(), updatedAt: new Date() })
-      .where(eq(organizations.id, args.orgId));
-    return { ok: true };
-  });
+  await db
+    .update(organizations)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(eq(organizations.id, args.orgId));
+  return { ok: true };
 }
 
 /**
@@ -489,7 +455,7 @@ export async function changeOrgMemberRole(args: {
     .from(organizations)
     .where(eq(organizations.id, args.orgId))
     .limit(1);
-  if (!org || org.deletedAt) return { ok: false, reason: 'org not found' };
+  if (!org) return { ok: false, reason: 'org not found' };
   if (org.personal) return { ok: false, reason: 'cannot change roles in a personal org' };
 
   const [target] = await db
@@ -532,7 +498,7 @@ export async function removeOrgMember(args: {
     .from(organizations)
     .where(eq(organizations.id, args.orgId))
     .limit(1);
-  if (!org || org.deletedAt) return { removed: false, reason: 'org not found' };
+  if (!org) return { removed: false, reason: 'org not found' };
   if (org.personal) return { removed: false, reason: 'cannot remove members from a personal org' };
 
   const [target] = await db

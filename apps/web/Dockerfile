@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1.7
-# Base = node:22-slim (Debian glibc). Debian over alpine for glibc prebuilds +
-# bash, which native deps (sharp, libpg-query in the workspace) build against
-# more reliably than musl/busybox.
+# Base = node:22-slim (Debian glibc), matching supabase/apps/studio/Dockerfile.
+# Why not alpine: apps/studio depends on libpg-query@15.2.0, which (a) only has
+# pre-built binaries for glibc-linux-x64 on supabase's S3 bucket (musl 404s),
+# and (b) when source-compiled, runs script/buildAddon.sh which requires bash
+# (alpine ships only busybox sh). Debian gives us glibc prebuilds AND bash.
 FROM node:22-slim AS base
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \

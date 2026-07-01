@@ -64,7 +64,7 @@ export default function GlobalError({
           ↻ reload
         </button>
         <footer style={{ marginTop: '2rem', fontSize: '10px', color: '#6a6a6a' }}>
-          built with <span style={{ color: '#e8344a' }}>♥</span> in Flanders · flndrn
+          built with <span style={{ color: '#e8344a' }}>♥</span> in Flanders · flndrn Limited
         </footer>
       </body>
     </html>

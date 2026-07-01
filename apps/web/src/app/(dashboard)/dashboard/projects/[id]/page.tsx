@@ -1,9 +1,6 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
-import { CopyButton } from '@/components/ui/copy-button';
-
 import { InvocationsSparkline } from './invocations-sparkline';
 
 interface Project {
@@ -85,14 +82,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     `/v1/projects/${id}/realtime-stats`,
   ).catch(() => null);
 
-  // The address a user points their 3 keys at to reach their database from
-  // ANYWHERE: the live, certificated data endpoint + their project id + an
-  // API key. This is deliberately NOT the per-project `<slug>.apps.briven.tech`
-  // subdomain — that has no wildcard certificate yet, so a real user copying it
-  // would get a TLS failure. Default to the working endpoint; swap to a branded
-  // host (e.g. https://mcp.briven.tech/mcp) later by setting the env var only.
-  const endpoint =
-    process.env.NEXT_PUBLIC_BRIVEN_MCP_ENDPOINT ?? 'https://mcp.flndrn.com/mcp';
+  const endpoint = `${project.slug}.apps.briven.tech`;
   const latest = deployments[0];
 
   // Banner copy + colour driven by fill ratio. 75% = yellow (heads-up),
@@ -132,19 +122,13 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card
-          label="database endpoint"
-          value={endpoint}
-          mono
-          copyValue={endpoint}
-          hint="connect from anywhere with this + project id + an API key"
-        />
-        <Card label="project id" value={project.id} mono copyValue={project.id} />
+        <Card label="endpoint" value={endpoint} mono />
+        <Card label="project id" value={project.id} mono />
         <Card
           label="last deploy"
           value={
             latest
-              ? `${latest.status} · ${toValidDate(latest.createdAt)?.toISOString().slice(0, 10) ?? '—'}`
+              ? `${latest.status} · ${new Date(latest.createdAt).toISOString().slice(0, 10)}`
               : 'never'
           }
         />
@@ -231,7 +215,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                     ) : null}
                   </div>
                   <time className="shrink-0 text-[10px] text-[var(--color-text-subtle)]">
-                    {toValidDate(log.createdAt)?.toISOString().replace('T', ' ').slice(11, 19) ?? '—'}
+                    {new Date(log.createdAt).toISOString().replace('T', ' ').slice(11, 19)}
                   </time>
                 </div>
               </li>
@@ -258,7 +242,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                 <div>
                   <p className="font-mono text-sm">{d.id}</p>
                   <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
-                    {toValidDate(d.createdAt)?.toISOString().replace('T', ' ').slice(0, 19) ?? '—'}
+                    {new Date(d.createdAt).toISOString().replace('T', ' ').slice(0, 19)}
                   </p>
                 </div>
                 <span className={`font-mono text-xs ${statusColour(d.status)}`}>{d.status}</span>
@@ -328,21 +312,16 @@ function Card({
   value,
   mono,
   hint,
-  copyValue,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   hint?: string;
-  copyValue?: string;
 }) {
   return (
     <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">{label}</p>
-      <div className="mt-1 flex items-center justify-between gap-2">
-        <p className={`min-w-0 truncate text-sm ${mono ? 'font-mono' : ''}`}>{value}</p>
-        {copyValue ? <CopyButton value={copyValue} label={`copy ${label}`} /> : null}
-      </div>
+      <p className={`mt-1 text-sm ${mono ? 'font-mono' : ''}`}>{value}</p>
       {hint ? (
         <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">{hint}</p>
       ) : null}

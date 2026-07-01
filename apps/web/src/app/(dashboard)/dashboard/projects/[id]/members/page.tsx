@@ -1,7 +1,6 @@
 import { revalidatePath } from 'next/cache';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { AddMemberForm } from './add-member-form';
 import { InvitationRow } from './invitation-row';
 import { InviteForm } from './invite-form';
@@ -32,9 +31,7 @@ export const dynamic = 'force-dynamic';
 export default async function MembersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [{ members }, invitesRes] = await Promise.all([
-    apiJson<{ members: Member[] }>(`/v1/projects/${id}/members`).catch(() => ({
-      members: [] as Member[],
-    })),
+    apiJson<{ members: Member[] }>(`/v1/projects/${id}/members`),
     apiJson<{ invitations: Invitation[] }>(`/v1/projects/${id}/invitations`).catch(() => ({
       invitations: [] as Invitation[],
     })),
@@ -152,33 +149,27 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
 
       <section>
         <h3 className="font-mono text-xs text-[var(--color-text-muted)]">current members</h3>
-        {members.length === 0 ? (
-          <div className="mt-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center font-mono text-xs text-[var(--color-text-muted)]">
-            no members yet.
-          </div>
-        ) : (
-          <ul className="mt-2 flex flex-col gap-2">
-            {members.map((m) => (
-              <li
-                key={m.userId}
-                className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="font-mono text-sm">{m.name ?? m.userId}</p>
-                  <p className="mt-0.5 truncate font-mono text-xs text-[var(--color-text-subtle)]">
-                    {m.userId} · joined {toValidDate(m.createdAt)?.toISOString().slice(0, 10) ?? '—'}
-                  </p>
-                </div>
-                <MemberActions
-                  userId={m.userId}
-                  role={m.role}
-                  onUpdateRole={updateRole}
-                  onRemove={remove}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="mt-2 flex flex-col gap-2">
+          {members.map((m) => (
+            <li
+              key={m.userId}
+              className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
+            >
+              <div>
+                <p className="font-mono text-sm">{m.name ?? m.userId}</p>
+                <p className="mt-0.5 font-mono text-xs text-[var(--color-text-subtle)]">
+                  {m.userId} · joined {new Date(m.createdAt).toISOString().slice(0, 10)}
+                </p>
+              </div>
+              <MemberActions
+                userId={m.userId}
+                role={m.role}
+                onUpdateRole={updateRole}
+                onRemove={remove}
+              />
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );

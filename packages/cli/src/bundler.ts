@@ -43,10 +43,7 @@ export async function loadProjectSchema(cwd: string): Promise<SchemaDef | null> 
   }
 
   if (candidate.version !== 1 || typeof candidate.tables !== 'object') {
-    throw new Error(
-      'default export is not a valid briven schema — it must be `export default schema({ ... })` ' +
-        'from "@briven/cli/schema", and your package.json must set "type": "module".',
-    );
+    throw new Error('default export is not a valid briven schema');
   }
   return candidate as SchemaDef;
 }

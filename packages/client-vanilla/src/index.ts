@@ -66,10 +66,6 @@ export function createBrivenClient(options: BrivenClientOptions): BrivenClient {
   let backoffMs = 500;
   let closed = false;
   const active = new Map<string, ActiveSubscription>();
-  // Subscription ids already sent on the CURRENT socket. Reset on every
-  // (re)connect. Guards against the same subscribe frame going out twice
-  // when subscribe() races the reconnect loop's bulk re-send.
-  let sentOnSocket = new Set<string>();
 
   async function resolveToken(): Promise<string | null> {
     if (!options.token) return null;
@@ -89,23 +85,15 @@ export function createBrivenClient(options: BrivenClientOptions): BrivenClient {
       const token = await resolveToken();
       const url = new URL('/v1/subscribe', options.wsOrigin!).toString();
       const sock = new WebSocket(url + (token ? `?token=${encodeURIComponent(token)}` : ''));
-      // Register lifecycle listeners BEFORE the open/error race. If 'close'
-      // were only attached after a successful open, a server that is down
-      // at the very first connect would reject here and the reconnect chain
-      // would die permanently (subscriptions silently dead until reload).
-      // Attaching 'close' up front means onClose() fires on a failed first
-      // connect too, so reconnect keeps retrying with backoff.
-      sock.addEventListener('message', (e) => onMessage(e.data));
-      sock.addEventListener('close', () => onClose());
       await new Promise<void>((resolve, reject) => {
         sock.addEventListener('open', () => resolve(), { once: true });
         sock.addEventListener('error', () => reject(new Error('ws_open_failed')), { once: true });
       });
+      sock.addEventListener('message', (e) => onMessage(e.data));
+      sock.addEventListener('close', () => onClose());
       ws = sock;
       backoffMs = 500;
-      // Re-send all active subscriptions on (re)connect. Reset the
-      // per-socket sent-set first so this fresh socket re-sends each.
-      sentOnSocket = new Set<string>();
+      // Re-send all active subscriptions on (re)connect.
       for (const sub of active.values()) sendSubscribe(sock, sub);
       return sock;
     })();
@@ -120,9 +108,7 @@ export function createBrivenClient(options: BrivenClientOptions): BrivenClient {
   function onClose() {
     ws = null;
     if (closed || !reconnect || active.size === 0) return;
-    // Add ±25% jitter so a fleet of clients that all dropped at once don't
-    // reconnect in lockstep and thundering-herd the server.
-    const delay = Math.min(backoffMs, 30_000) * (0.75 + Math.random() * 0.5);
+    const delay = Math.min(backoffMs, 30_000);
     backoffMs = Math.min(backoffMs * 2, 30_000);
     setTimeout(() => {
       void ensureSocket().catch(() => undefined);
@@ -144,12 +130,6 @@ export function createBrivenClient(options: BrivenClientOptions): BrivenClient {
   }
 
   function sendSubscribe(sock: WebSocket, sub: ActiveSubscription): void {
-    // Exactly-once per socket: the reconnect loop bulk-re-sends every
-    // active sub on a fresh socket, and subscribe()'s own .then() also
-    // calls here — without this guard a sub freshly added during a connect
-    // would be sent twice (drifting the server's subsByProject counter).
-    if (sentOnSocket.has(sub.subscriptionId)) return;
-    sentOnSocket.add(sub.subscriptionId);
     sock.send(
       JSON.stringify({
         type: 'subscribe',
@@ -162,46 +142,17 @@ export function createBrivenClient(options: BrivenClientOptions): BrivenClient {
   }
 
   async function invoke(functionName: string, args: unknown = {}): Promise<InvokeFrame> {
-    // invoke() must NEVER throw: the framework wrappers (react/vue/svelte
-    // mutate()) await it with no try/catch, so a thrown SyntaxError (from a
-    // non-JSON 502/504 gateway body) or a network failure would leave the
-    // component stuck `isPending: true` forever with no visible error.
-    try {
-      const token = await resolveToken();
-      const headers: Record<string, string> = { 'content-type': 'application/json' };
-      if (token) headers['authorization'] = `Bearer ${token}`;
-      const url = `${options.apiOrigin}/v1/projects/${options.projectId}/functions/${functionName}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(args ?? {}),
-        credentials: token ? 'omit' : 'include',
-      });
-      // Read as text first, then parse. The api returns a JSON error frame
-      // even for function errors (e.g. 422), so a valid JSON body — ok or
-      // not — is returned as-is. Only a body that isn't JSON at all (HTML
-      // gateway error page) becomes a synthetic network_error frame.
-      const body = await res.text();
-      try {
-        return JSON.parse(body) as InvokeFrame;
-      } catch {
-        return {
-          ok: false,
-          code: 'network_error',
-          message: res.ok
-            ? 'invalid (non-JSON) response from server'
-            : `request failed (${res.status})`,
-          durationMs: 0,
-        };
-      }
-    } catch (err) {
-      return {
-        ok: false,
-        code: 'network_error',
-        message: err instanceof Error ? err.message : 'network error',
-        durationMs: 0,
-      };
-    }
+    const token = await resolveToken();
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (token) headers['authorization'] = `Bearer ${token}`;
+    const url = `${options.apiOrigin}/v1/projects/${options.projectId}/functions/${functionName}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(args ?? {}),
+      credentials: token ? 'omit' : 'include',
+    });
+    return (await res.json()) as InvokeFrame;
   }
 
   function subscribe(

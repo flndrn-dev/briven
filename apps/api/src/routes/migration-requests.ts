@@ -1,8 +1,6 @@
 import { ValidationError } from '@briven/shared';
 import { Hono } from 'hono';
-import { z } from 'zod';
 
-import { migrationUrgencies } from '../db/schema.js';
 import {
   sendMigrationRequestCustomerConfirmation,
   sendMigrationRequestOperatorAlert,
@@ -114,52 +112,30 @@ migrationRequestsRouter.delete('/v1/migration-requests/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// Bounded intake schema. Free-text fields are length-capped so a curl
-// caller can't dump unbounded blobs into the table, and `urgency` is an
-// enum (the service also re-asserts it, but rejecting at the edge gives a
-// clean 400 instead of a deeper ValidationError). Numeric estimates accept
-// number|string and are coerced by toOptionalInt/Bigint below.
-const createRequestSchema = z.object({
-  orgId: z.string().max(64).nullish(),
-  source: z.string().max(120).optional(),
-  sourceUrl: z.string().max(2000).nullish(),
-  sourceNotes: z.string().max(10_000).optional(),
-  estimatedTables: z.union([z.number(), z.string()]).nullish(),
-  estimatedRows: z.union([z.number(), z.string()]).nullish(),
-  estimatedFunctions: z.union([z.number(), z.string()]).nullish(),
-  urgency: z.enum(migrationUrgencies).optional(),
-  contactEmail: z.string().email().max(320).optional(),
-});
-
 migrationRequestsRouter.post('/v1/migration-requests', async (c) => {
   const user = c.get('user')!;
-  const body = await c.req.json().catch(() => null);
-  const parsed = createRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { code: 'validation_failed', message: 'invalid request body', issues: parsed.error.issues },
-      400,
-    );
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body !== 'object') {
+    return c.json({ code: 'validation_failed', message: 'JSON body required' }, 400);
   }
-  const data = parsed.data;
   try {
     const request = await createMigrationRequest({
       userId: user.id,
-      orgId: typeof data.orgId === 'string' ? data.orgId : null,
-      source: String(data.source ?? ''),
-      sourceUrl: typeof data.sourceUrl === 'string' ? data.sourceUrl : null,
-      sourceNotes: typeof data.sourceNotes === 'string' ? data.sourceNotes : '',
-      estimatedTables: toOptionalInt(data.estimatedTables),
-      estimatedRows: toOptionalBigint(data.estimatedRows),
-      estimatedFunctions: toOptionalInt(data.estimatedFunctions),
-      urgency: data.urgency ?? 'exploring',
+      orgId: typeof body.orgId === 'string' ? body.orgId : null,
+      source: String(body.source ?? ''),
+      sourceUrl: typeof body.sourceUrl === 'string' ? body.sourceUrl : null,
+      sourceNotes: typeof body.sourceNotes === 'string' ? body.sourceNotes : '',
+      estimatedTables: toOptionalInt(body.estimatedTables),
+      estimatedRows: toOptionalBigint(body.estimatedRows),
+      estimatedFunctions: toOptionalInt(body.estimatedFunctions),
+      urgency: typeof body.urgency === 'string' ? body.urgency : 'exploring',
       // Default the contact email to the signed-in user's address; the
       // wizard sends this explicitly but we accept an empty/missing value
       // and fall back so a curious user hitting the endpoint with curl
       // still produces a usable record.
       contactEmail:
-        typeof data.contactEmail === 'string' && data.contactEmail.trim()
-          ? data.contactEmail
+        typeof body.contactEmail === 'string' && body.contactEmail.trim()
+          ? body.contactEmail
           : user.email,
     });
     await audit({

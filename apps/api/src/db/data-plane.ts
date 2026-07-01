@@ -137,13 +137,6 @@ export async function provisionProjectDatabase(projectId: string): Promise<strin
  */
 export async function dropProjectDatabase(projectId: string): Promise<void> {
   const dbName = dbNameFor(projectId);
-  // Evict + .end() the cached per-project pool FIRST. Two reasons: (1) a
-  // lingering pool in _projPools keeps idle connections open to a database
-  // that's about to vanish — a slow connection leak across the process
-  // lifetime; (2) Postgres refuses to DROP DATABASE while sessions are still
-  // connected to it, so the open pool would make the drop fail. closeProjectDbPool
-  // is a no-op when no pool was cached.
-  await closeProjectDbPool(projectId);
   const admin = client();
   await admin.query(`DROP DATABASE IF EXISTS "${dbName}"`);
   log.warn('project_database_dropped', { projectId, dbName });
@@ -340,21 +333,6 @@ export async function closeProjectDbPools(): Promise<void> {
   const pools = Array.from(_projPools.values());
   _projPools.clear();
   await Promise.all(pools.map((p) => p.end()));
-}
-
-/**
- * Close + drop the cached pool for a SINGLE project. Use this for per-test
- * teardown so one integration test file's cleanup doesn't `.end()` pools that
- * a sibling file — sharing the same process under `bun test` — is still using.
- * That cross-file collision is what made the storage-count tests flakily see
- * `tableCount: 0`. Process shutdown still uses `closeProjectDbPools()` (all).
- */
-export async function closeProjectDbPool(projectId: string): Promise<void> {
-  const dbName = dbNameFor(projectId);
-  const pool = _projPools.get(dbName);
-  if (!pool) return;
-  _projPools.delete(dbName);
-  await pool.end();
 }
 
 export async function pingDataPlane(): Promise<boolean> {

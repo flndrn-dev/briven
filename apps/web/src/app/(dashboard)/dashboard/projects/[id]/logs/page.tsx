@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 import { ExportLogsLink } from './export-link';
 import { LiveTailToggle } from './live-tail-toggle';
 
@@ -39,9 +38,7 @@ export default async function LogsPage({
   if (sp.before) qs.set('before', sp.before);
 
   const [{ logs }, { names }] = await Promise.all([
-    apiJson<{ logs: FunctionLog[] }>(`/v1/projects/${id}/function-logs?${qs.toString()}`).catch(
-      () => ({ logs: [] as FunctionLog[] }),
-    ),
+    apiJson<{ logs: FunctionLog[] }>(`/v1/projects/${id}/function-logs?${qs.toString()}`),
     apiJson<{ names: string[] }>(`/v1/projects/${id}/function-names`).catch(() => ({
       names: [] as string[],
     })),
@@ -200,7 +197,7 @@ export default async function LogsPage({
                   ) : null}
                 </div>
                 <time className="shrink-0 text-[10px] text-[var(--color-text-subtle)]">
-                  {toValidDate(log.createdAt)?.toISOString().replace('T', ' ').slice(0, 19) ?? '—'}
+                  {new Date(log.createdAt).toISOString().replace('T', ' ').slice(0, 19)}
                 </time>
               </div>
             </li>

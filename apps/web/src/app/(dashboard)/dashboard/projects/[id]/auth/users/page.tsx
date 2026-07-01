@@ -65,7 +65,7 @@ export default async function AuthUsersPage({
   if (cursor) qs.set('cursor', cursor);
   const data = await apiJson<UsersResponse>(
     `/v1/projects/${id}/auth/users?${qs.toString()}`,
-  ).catch(() => ({ items: [] as RedactedUser[], nextCursor: null }));
+  );
 
   return (
     <section className="flex flex-col gap-6">

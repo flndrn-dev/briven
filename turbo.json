@@ -23,10 +23,6 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "test:integration": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
     "test:e2e": {
       "dependsOn": ["^build"],
       "outputs": ["playwright-report/**"]

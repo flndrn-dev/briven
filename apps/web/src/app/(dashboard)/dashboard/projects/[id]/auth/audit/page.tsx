@@ -66,7 +66,7 @@ export default async function AuthAuditPage({
   if (userId) qs.set('userId', userId);
   const data = await apiJson<AuditResponse>(
     `/v1/projects/${id}/auth/audit-log?${qs.toString()}`,
-  ).catch(() => ({ items: [] as AuditEntry[], nextCursor: null }));
+  );
 
   return (
     <section className="flex flex-col gap-6">

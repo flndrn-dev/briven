@@ -55,15 +55,9 @@ Thumbs.db
 *.tsbuildinfo
 .cache/
 
-# NOTE: previously these two lines lived here —
-#   apps/*/data/
-#   apps/**/data/
-# intended for per-env "runtime bundles", but they silently ignored
-# apps/studio/data/ which is SOURCE CODE (Studio's React-Query data layer,
-# ~1,800 files imported via @/data/*). That folder was never committed as a
-# result and the studio build/typecheck went red. Removed so studio/data is
-# tracked. If a genuine runtime-bundle data dir is ever added, ignore it by
-# its exact path (e.g. apps/runtime/data/) — never with a broad apps/**/data/.
+# runtime bundles (populated per-env, never checked in)
+apps/*/data/
+apps/**/data/
 
 # claude code local overrides (shared settings.json is fine to commit)
 .claude/settings.local.json

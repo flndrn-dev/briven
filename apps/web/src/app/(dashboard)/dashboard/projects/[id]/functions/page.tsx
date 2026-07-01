@@ -24,7 +24,7 @@ export default async function FunctionsPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const { deployments } = await apiJson<{ deployments: Deployment[] }>(
     `/v1/projects/${id}/deployments?limit=1`,
-  ).catch(() => ({ deployments: [] as Deployment[] }));
+  );
 
   const current = deployments[0];
   const live = current && current.status !== 'failed' && current.status !== 'cancelled';

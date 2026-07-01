@@ -2,10 +2,7 @@ import { brivenError } from '@briven/shared';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { organizations, projects, type ProjectTier } from '../db/schema.js';
-
-/** Minimal executor surface — the lazy db handle OR a live tx. */
-type DbExecutor = Pick<ReturnType<typeof getDb>, 'select'>;
+import { projects, type ProjectTier } from '../db/schema.js';
 
 /**
  * Tier limits. Single source of truth for every hard cap enforced at
@@ -64,7 +61,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     projectsPerOrg: 20,
     functionsPerProject: 200,
     invokesPerMonth: 1_000_000,
-    storageBytes: 107_374_182_400, // 100 GiB — matches the pricing card's "100 gb" Pro database promise
+    storageBytes: 10_737_418_240, // 10 GiB
     connectionSecondsPerMonth: 10_000_000, // ~115 days = roughly 4 always-on subs
     concurrentSubscriptions: 1_000,
     authMauPerMonth: 25_000, // placeholder per BUILD_PLAN.md "Decisions locked" Q5
@@ -73,7 +70,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     projectsPerOrg: 100,
     functionsPerProject: 2_000,
     invokesPerMonth: 10_000_000,
-    storageBytes: 536_870_912_000, // 500 GiB — matches the pricing card's "500 gb" Team database promise
+    storageBytes: 107_374_182_400, // 100 GiB
     connectionSecondsPerMonth: 100_000_000, // ~1158 days = roughly 38 always-on
     concurrentSubscriptions: 10_000,
     authMauPerMonth: 250_000, // locked: BUILD_PLAN.md "Decisions locked" Q5
@@ -186,32 +183,15 @@ export class TierLimitExceeded extends brivenError {
 }
 
 /**
- * Count an org's non-deleted projects and enforce the per-tier cap before
- * inserting a new row. Pass the enclosing `executor` (the create
- * transaction's `tx`) so the check is race-safe: we take a FOR UPDATE row
- * lock on the parent org so concurrent creates for the same org serialise
- * through here — two parallel creates can no longer both read count=N and
- * both slip past the cap.
- *
- * NB: we lock the ORG row, not the count query. Postgres rejects
- * `SELECT count(*) … FOR UPDATE` (FOR UPDATE is not allowed with aggregate
- * functions), and FOR UPDATE on the existing project rows wouldn't stop a
- * concurrent INSERT of a brand-new project (phantom). Contending on the
- * single parent org row is the correct serialization point. Outside a
- * transaction (default getDb() executor) the lock is a no-op self-release,
- * which is fine for the legacy non-transactional callers.
+ * Count a user's non-deleted projects. Called by services/projects.ts
+ * before inserting a new row.
  */
 export async function assertProjectCreateAllowed(
   orgId: string,
   orgTier: ProjectTier = 'free',
-  executor: DbExecutor = getDb(),
 ): Promise<void> {
-  await executor
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(eq(organizations.id, orgId))
-    .for('update');
-  const [row] = await executor
+  const db = getDb();
+  const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(projects)
     .where(and(eq(projects.orgId, orgId), isNull(projects.deletedAt)));

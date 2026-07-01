@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../lib/api';
-import { toValidDate } from '@/lib/utils';
 
 interface Org {
   id: string;
@@ -19,8 +18,9 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'teams' };
 
 function formatDate(t: string | Date): string {
-  const d = toValidDate(t);
-  return d ? d.toISOString().slice(0, 10) : '—';
+  const d = typeof t === 'string' ? new Date(t) : t;
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
 }
 
 export default async function TeamsPage() {
