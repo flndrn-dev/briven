@@ -4,7 +4,13 @@ import { z } from 'zod';
 import { runInProjectDatabase } from '../db/data-plane.js';
 import type { McpKeyScope } from '../db/schema.js';
 import { audit } from './audit.js';
-import { getTableColumns, insertRow, listProjectTables } from './studio.js';
+import {
+  STUDIO_COLUMN_TYPES,
+  createTable,
+  getTableColumns,
+  insertRow,
+  listProjectTables,
+} from './studio.js';
 
 /**
  * B Phase 5 / mcp.briven.tech — the MCP tool set.
@@ -15,9 +21,9 @@ import { getTableColumns, insertRow, listProjectTables } from './studio.js';
  *     runs through `runInProjectDatabase(boundProjectId, …)`, which opens a
  *     connection bound to that one project's DoltGres database. An agent can
  *     therefore never reach another project's data, whatever it sends.
- *   - A read-only key never even SEES the write tools: insert/update/delete are
- *     only REGISTERED when scope ∈ {read-write, admin}, so they are absent from
- *     `tools/list` for a `read` key.
+ *   - A read-only key never even SEES the write tools: create_table/insert/
+ *     update/delete are only REGISTERED when scope ∈ {read-write, admin}, so
+ *     they are absent from `tools/list` for a `read` key.
  *   - Every `tools/call` is audited under the `mcp.*` prefix (actor = keyId,
  *     project = bound projectId). Row values are never written to the audit log.
  *
@@ -246,6 +252,53 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
   /* ── write tools — ONLY registered for read-write / admin keys ──────── */
 
   if (ctx.scope === 'read-write' || ctx.scope === 'admin') {
+    server.registerTool(
+      'create_table',
+      {
+        title: 'Create a table',
+        description:
+          'Create a new table in your project. Exactly one column must be marked ' +
+          'primaryKey. Types: text, integer, bigint, boolean, timestamptz, jsonb, ' +
+          'uuid, numeric. Reuses the same validated path as the Studio "+ new table" button.',
+        inputSchema: {
+          table: z.string().describe('New table name (snake_case)'),
+          columns: z
+            .array(
+              z.object({
+                name: z.string().describe('Column name'),
+                type: z.enum(STUDIO_COLUMN_TYPES).describe('Column type'),
+                primaryKey: z.boolean().optional().describe('Exactly one column must be true'),
+                notNull: z.boolean().optional(),
+                defaultExpr: z
+                  .string()
+                  .nullable()
+                  .optional()
+                  .describe("SQL default, e.g. 'now()' or 'gen_random_uuid()'"),
+                references: z
+                  .object({
+                    table: z.string(),
+                    column: z.string(),
+                    onDelete: z
+                      .enum(['cascade', 'restrict', 'setNull', 'noAction'])
+                      .optional(),
+                  })
+                  .nullable()
+                  .optional()
+                  .describe('Optional foreign-key target (same project)'),
+              }),
+            )
+            .min(1)
+            .describe('Column definitions'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ table, columns }) => {
+        await auditCall('create_table', { table });
+        const result = await createTable({ projectId: ctx.projectId, tableName: table, columns });
+        return jsonResult(result);
+      },
+    );
+
     server.registerTool(
       'insert',
       {
