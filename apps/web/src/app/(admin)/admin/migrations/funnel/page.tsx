@@ -1,6 +1,11 @@
 import Link from 'next/link';
 
+import { ArrowLeftRightIcon } from '@/components/ui/arrow-left-right';
+
 import { apiJson } from '@/lib/api';
+
+import { EmptyState } from '../../_components/empty-state';
+import { Section } from '../../_components/section';
 
 export const metadata = { title: 'admin · migration funnel' };
 export const dynamic = 'force-dynamic';
@@ -52,94 +57,98 @@ export default async function MigrationFunnelPage({
   const data = await apiJson<FunnelResponse>(`/v1/admin/marketing-funnel?days=${days}`).catch((): FunnelResponse => ({ rows: [], totals: { source: 'all', views: 0, leads: 0, conversion: null }, sinceDays: days }));
 
   return (
-    <section className="flex flex-col gap-6">
+    <div className="flex flex-col gap-10">
       <header className="flex flex-col gap-2">
         <p className="font-mono text-xs text-[var(--color-text-muted)]">
-          <Link
-            href="/admin/migrations"
-            className="hover:text-[var(--color-text)]"
-          >
+          <Link href="/admin/migrations" className="hover:text-[var(--color-text)]">
             ← migration triage
           </Link>
         </p>
-        <h2 className="font-mono text-lg tracking-tight">migration funnel</h2>
-        <p className="font-mono text-sm text-[var(--color-text-muted)]">
+        <div className="flex items-center gap-2">
+          <span className="text-[var(--color-primary)]">
+            <ArrowLeftRightIcon size={20} />
+          </span>
+          <h1 className="font-mono text-xl tracking-tight">migration funnel</h1>
+        </div>
+        <p className="max-w-prose font-mono text-sm text-[var(--color-text-muted)]">
           per-source views (anyone landing on /migrate or /migrate/&lt;source&gt;) and
           leads submitted through the public form on those pages. lead-counts are
           server-side, so a forged claim from the public POST can&apos;t inflate them.
           window: last {days} days.
         </p>
-        <div className="flex gap-2">
-          {[7, 30, 90].map((d) => (
-            <Link
-              key={d}
-              href={`?days=${d}`}
-              className={`rounded-md border px-2 py-1 font-mono text-[10px] ${
-                d === days
-                  ? 'border-[var(--color-primary)] bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
-                  : 'border-[var(--color-border-subtle)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]'
-              }`}
-            >
-              {d}d
-            </Link>
-          ))}
-        </div>
       </header>
 
-      <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
-        <table className="w-full font-mono text-xs">
-          <thead className="bg-[var(--color-surface)] text-[var(--color-text-subtle)]">
-            <tr>
-              <th className="px-4 py-3 text-left uppercase tracking-wider">source</th>
-              <th className="px-4 py-3 text-right uppercase tracking-wider">views</th>
-              <th className="px-4 py-3 text-right uppercase tracking-wider">leads</th>
-              <th className="px-4 py-3 text-right uppercase tracking-wider">conv.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="px-4 py-6 text-center text-[var(--color-text-muted)]"
-                >
-                  no events recorded in the last {days} days yet.
-                </td>
-              </tr>
-            ) : (
-              data.rows.map((row) => (
-                <tr
-                  key={row.source}
-                  className="border-t border-[var(--color-border-subtle)] text-[var(--color-text-muted)]"
-                >
-                  <td className="px-4 py-2 text-[var(--color-text)]">
-                    {SOURCE_LABEL[row.source] ?? row.source}
-                  </td>
-                  <td className="px-4 py-2 text-right">{formatNum(row.views)}</td>
-                  <td className="px-4 py-2 text-right">{formatNum(row.leads)}</td>
-                  <td className="px-4 py-2 text-right text-[var(--color-text)]">
-                    {formatPercent(row.conversion)}
-                  </td>
+      <Section
+        title={`views → leads · last ${days}d`}
+        icon={<ArrowLeftRightIcon size={16} />}
+        right={
+          <div className="flex gap-2">
+            {[7, 30, 90].map((d) => (
+              <Link
+                key={d}
+                href={`?days=${d}`}
+                className={`rounded-full border px-3 py-1 font-mono text-[10px] transition-colors ${
+                  d === days
+                    ? 'border-[var(--color-primary)] bg-[var(--color-primary-subtle)] text-[var(--color-primary)]'
+                    : 'border-[var(--color-border-subtle)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]'
+                }`}
+              >
+                {d}d
+              </Link>
+            ))}
+          </div>
+        }
+      >
+        {data.rows.length === 0 ? (
+          <EmptyState
+            icon={<ArrowLeftRightIcon size={28} />}
+            title="no funnel events yet"
+            message={`no events recorded in the last ${days} days yet — views and leads appear here as visitors reach the /migrate pages.`}
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+            <table className="w-full font-mono text-xs">
+              <thead className="text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                <tr>
+                  <th className="px-6 py-4 text-left font-medium">source</th>
+                  <th className="px-6 py-4 text-right font-medium">views</th>
+                  <th className="px-6 py-4 text-right font-medium">leads</th>
+                  <th className="px-6 py-4 text-right font-medium">conv.</th>
                 </tr>
-              ))
-            )}
-            <tr className="border-t-2 border-[var(--color-border)] bg-[var(--color-surface)] font-medium text-[var(--color-text)]">
-              <td className="px-4 py-2">{SOURCE_LABEL.all}</td>
-              <td className="px-4 py-2 text-right">{formatNum(data.totals.views)}</td>
-              <td className="px-4 py-2 text-right">{formatNum(data.totals.leads)}</td>
-              <td className="px-4 py-2 text-right">
-                {formatPercent(data.totals.conversion)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {data.rows.map((row) => (
+                  <tr
+                    key={row.source}
+                    className="border-t border-[var(--color-border-subtle)] text-[var(--color-text-muted)]"
+                  >
+                    <td className="px-6 py-4 text-[var(--color-text)]">
+                      {SOURCE_LABEL[row.source] ?? row.source}
+                    </td>
+                    <td className="px-6 py-4 text-right">{formatNum(row.views)}</td>
+                    <td className="px-6 py-4 text-right">{formatNum(row.leads)}</td>
+                    <td className="px-6 py-4 text-right text-[var(--color-text)]">
+                      {formatPercent(row.conversion)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-[var(--color-border)] font-medium text-[var(--color-text)]">
+                  <td className="px-6 py-4">{SOURCE_LABEL.all}</td>
+                  <td className="px-6 py-4 text-right">{formatNum(data.totals.views)}</td>
+                  <td className="px-6 py-4 text-right">{formatNum(data.totals.leads)}</td>
+                  <td className="px-6 py-4 text-right">{formatPercent(data.totals.conversion)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
 
       <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
         views are tracked client-side via a pageview beacon to /v1/marketing-events
         (rate-limited 30/min per IP). leads are tracked server-side from POST
         /v1/migration-leads on success only.
       </p>
-    </section>
+    </div>
   );
 }

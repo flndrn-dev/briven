@@ -107,8 +107,8 @@ export function TicketActions({ ticket, apiOrigin }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-4">
-      <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+    <div className="flex flex-col gap-6 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+      <h3 className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
         operator actions
       </h3>
 

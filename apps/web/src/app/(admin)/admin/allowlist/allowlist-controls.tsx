@@ -64,7 +64,7 @@ export function AllowlistAddForm({ apiOrigin }: Props) {
     <>
       <form
         onSubmit={onSubmit}
-        className="grid grid-cols-1 gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 md:grid-cols-[2fr_2fr_auto] md:items-end"
+        className="grid grid-cols-1 gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 md:grid-cols-[2fr_2fr_auto] md:items-end"
       >
         <label className="flex flex-col gap-1">
           <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">

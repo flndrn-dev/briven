@@ -79,7 +79,7 @@ export function SuppressionControls({ apiOrigin }: Props) {
     <>
       <form
         onSubmit={submitAdd}
-        className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 font-mono text-xs"
+        className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 font-mono text-xs"
       >
         <span className="text-[var(--color-text-muted)]">add manual:</span>
         <input

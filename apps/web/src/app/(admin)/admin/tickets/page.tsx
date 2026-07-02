@@ -1,7 +1,12 @@
 import Link from 'next/link';
 
+import { LifeBuoyIcon } from '@/components/ui/life-buoy';
+
 import { apiJson } from '@/lib/api';
 import { toValidDate } from '@/lib/utils';
+
+import { EmptyState } from '../_components/empty-state';
+import { Section } from '../_components/section';
 import { StatusFilter } from './status-filter';
 
 export const metadata = { title: 'admin · tickets' };
@@ -60,10 +65,15 @@ export default async function AdminTicketsPage({
   ).catch(() => ({ tickets: [] as AdminTicket[] }));
 
   return (
-    <section className="flex flex-col gap-8">
+    <div className="flex flex-col gap-10">
       <header className="flex flex-col gap-2">
-        <h2 className="font-mono text-lg tracking-tight">support tickets</h2>
-        <p className="font-mono text-sm text-[var(--color-text-muted)]">
+        <div className="flex items-center gap-2">
+          <span className="text-[var(--color-primary)]">
+            <LifeBuoyIcon size={20} />
+          </span>
+          <h1 className="font-mono text-xl tracking-tight">support tickets</h1>
+        </div>
+        <p className="max-w-prose font-mono text-sm text-[var(--color-text-muted)]">
           incoming support tickets from the contact form. triage newest-first; change status as
           you review / reply / close. click a ticket to open the full thread.
         </p>
@@ -71,57 +81,66 @@ export default async function AdminTicketsPage({
 
       <StatusFilter current={validStatus} />
 
-      {tickets.length === 0 ? (
-        <p className="font-mono text-sm text-[var(--color-text-muted)]">
-          no tickets
-          {validStatus
-            ? ` with status "${STATUS_LABELS[validStatus] ?? validStatus}"`
-            : ' yet — the queue is clear.'}
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {tickets.map((t) => {
-            const created = toValidDate(t.createdAt);
-            return (
-              <li key={t.id}>
-                <Link
-                  href={`/admin/tickets/${t.id}`}
-                  className="flex flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 transition-colors hover:border-[var(--color-border-strong)]"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusBadgeClass(t.status)}`}
-                    >
-                      {STATUS_LABELS[t.status] ?? t.status}
-                    </span>
-                    <span className="rounded-full border border-[var(--color-border-subtle)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-text-subtle)]">
-                      {t.topicCode ?? t.topic}
-                    </span>
-                    <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-                      {t.name}
-                    </span>
-                    <span className="font-mono text-[10px] text-[var(--color-text-muted)]">
-                      ·{' '}
-                      {created
-                        ? `${created.toISOString().slice(0, 16).replace('T', ' ')} utc`
-                        : '—'}
-                    </span>
-                    <span className="ml-auto font-mono text-[10px] text-[var(--color-primary)]">
-                      {t.ticketNumber}
-                    </span>
-                  </div>
-                  <p className="font-mono text-xs text-[var(--color-text)]">
-                    {t.subject || '(no subject)'}
-                  </p>
-                  <p className="line-clamp-2 font-mono text-[10px] text-[var(--color-text-subtle)]">
-                    {t.message}
-                  </p>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+      <Section title={`tickets · ${tickets.length}`} icon={<LifeBuoyIcon size={16} />}>
+        {tickets.length === 0 ? (
+          <EmptyState
+            icon={<LifeBuoyIcon size={28} />}
+            title={
+              validStatus
+                ? `no tickets with status "${STATUS_LABELS[validStatus] ?? validStatus}"`
+                : 'no tickets yet — the queue is clear'
+            }
+            message={
+              validStatus
+                ? 'try another filter, or "all" for the full list.'
+                : 'new contact-form submissions land here the moment they arrive.'
+            }
+          />
+        ) : (
+          <ul className="flex flex-col gap-6">
+            {tickets.map((t) => {
+              const created = toValidDate(t.createdAt);
+              return (
+                <li key={t.id}>
+                  <Link
+                    href={`/admin/tickets/${t.id}`}
+                    className="flex flex-col gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 transition-colors hover:border-[var(--color-border-strong)]"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusBadgeClass(t.status)}`}
+                      >
+                        {STATUS_LABELS[t.status] ?? t.status}
+                      </span>
+                      <span className="rounded-full border border-[var(--color-border-subtle)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                        {t.topicCode ?? t.topic}
+                      </span>
+                      <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+                        {t.name}
+                      </span>
+                      <span className="font-mono text-[10px] text-[var(--color-text-muted)]">
+                        ·{' '}
+                        {created
+                          ? `${created.toISOString().slice(0, 16).replace('T', ' ')} utc`
+                          : '—'}
+                      </span>
+                      <span className="ml-auto font-mono text-[10px] text-[var(--color-primary)]">
+                        {t.ticketNumber}
+                      </span>
+                    </div>
+                    <p className="font-mono text-sm text-[var(--color-text)]">
+                      {t.subject || '(no subject)'}
+                    </p>
+                    <p className="line-clamp-2 font-mono text-[11px] text-[var(--color-text-subtle)]">
+                      {t.message}
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Section>
+    </div>
   );
 }

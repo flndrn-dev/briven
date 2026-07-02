@@ -1,5 +1,11 @@
+import { MailIcon } from '@/components/ui/mail';
+import { UsersIcon } from '@/components/ui/users';
+
 import { apiJson } from '@/lib/api';
 import { toValidDate } from '@/lib/utils';
+
+import { EmptyState } from '../_components/empty-state';
+import { Section } from '../_components/section';
 import { AllowlistAddForm, AllowlistRemoveButton } from './allowlist-controls';
 
 interface Entry {
@@ -31,10 +37,15 @@ export default async function AllowlistPage() {
   const apiOrigin = publicApiOrigin();
 
   return (
-    <div className="flex flex-col gap-6">
-      <header>
-        <h2 className="font-mono text-sm text-[var(--color-text)]">signup allowlist</h2>
-        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+    <div className="flex flex-col gap-10">
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[var(--color-primary)]">
+            <UsersIcon size={20} />
+          </span>
+          <h1 className="font-mono text-xl tracking-tight">signup allowlist</h1>
+        </div>
+        <p className="max-w-prose font-mono text-sm text-[var(--color-text-muted)]">
           while <code>BRIVEN_OPEN_SIGNUPS</code> is{' '}
           <span
             className={
@@ -50,40 +61,39 @@ export default async function AllowlistPage() {
 
       <AllowlistAddForm apiOrigin={apiOrigin} />
 
-      <section className="flex flex-col gap-2">
-        <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
-          entries ({entries.length})
-        </h3>
+      <Section title={`entries · ${entries.length}`} icon={<MailIcon size={16} />}>
         {entries.length === 0 ? (
-          <p className="rounded-md border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center font-mono text-sm text-[var(--color-text-muted)]">
-            no allowlist entries yet.
-          </p>
+          <EmptyState
+            icon={<MailIcon size={28} />}
+            title="no allowlist entries yet"
+            message="add the first email above to invite someone into the beta."
+          />
         ) : (
-          <ul className="flex flex-col divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+          <ul className="flex flex-col divide-y divide-[var(--color-border-subtle)] rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
             {entries.map((e) => (
               <li
                 key={e.id}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="font-mono text-sm text-[var(--color-text)]">{e.email}</span>
                     {e.acceptedAt ? (
-                      <span className="rounded-full border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-primary)]">
+                      <span className="rounded-full border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-primary)]">
                         claimed
                       </span>
                     ) : (
-                      <span className="rounded-full border border-[var(--color-warning)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-warning)]">
+                      <span className="rounded-full border border-[var(--color-warning)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[var(--color-warning)]">
                         pending
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 font-mono text-[10px] text-[var(--color-text-subtle)]">
+                  <p className="mt-1.5 font-mono text-[11px] text-[var(--color-text-subtle)]">
                     invited {formatTimestamp(e.invitedAt)}
                     {e.acceptedAt ? ` · claimed ${formatTimestamp(e.acceptedAt)}` : ''}
                   </p>
                   {e.notes ? (
-                    <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+                    <p className="mt-1.5 font-mono text-xs text-[var(--color-text-muted)]">
                       {e.notes}
                     </p>
                   ) : null}
@@ -93,7 +103,7 @@ export default async function AllowlistPage() {
             ))}
           </ul>
         )}
-      </section>
+      </Section>
     </div>
   );
 }

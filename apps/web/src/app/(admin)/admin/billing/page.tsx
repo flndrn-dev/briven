@@ -4,6 +4,10 @@ import { UsersIcon } from '@/components/ui/users';
 import { apiJson } from '@/lib/api';
 import { toValidDate } from '@/lib/utils';
 
+import { EmptyState } from '../_components/empty-state';
+import { Section } from '../_components/section';
+import { CountUp, StatCard } from '../_components/stat-card';
+
 export const metadata = { title: 'subscribers & billing · admin' };
 export const dynamic = 'force-dynamic';
 
@@ -42,14 +46,6 @@ function currencySymbol(code: string | null): string {
   }
 }
 
-function fmtMrr(mrr: number | null, currency: string | null): string | null {
-  if (mrr === null) return null;
-  return `${currencySymbol(currency)}${mrr.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   const d = toValidDate(iso);
@@ -77,10 +73,9 @@ export default async function AdminBillingPage() {
     })),
   ]);
   const subscribers = subsResp.subscribers;
-  const mrr = fmtMrr(totals.mrr, totals.currency);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-10">
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[var(--color-primary)]">
@@ -95,137 +90,80 @@ export default async function AdminBillingPage() {
         </p>
       </header>
 
-      {/* ── totals header ────────────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading icon={<CreditCardIcon size={16} />} label="totals · Mavi Pay" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
+      {/* ── totals row ───────────────────────────────────────────────── */}
+      <Section title="totals · Mavi Pay" icon={<CreditCardIcon size={16} />}>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
             label="paid subscribers"
-            value={totals.subscribers === null ? null : totals.subscribers.toLocaleString()}
+            value={totals.subscribers}
+            icon={<UsersIcon size={14} />}
             tone="primary"
             hint="non-canceled subscriptions"
-            icon={<UsersIcon size={14} />}
+            waitingOn="Mavi Pay not configured here"
           />
-          <MetricCard
+          <StatCard
             label="mrr"
-            value={mrr}
-            hint={mrr ? 'monthly recurring revenue' : undefined}
+            value={totals.mrr}
+            prefix={currencySymbol(totals.currency)}
+            decimals={totals.mrr !== null && !Number.isInteger(totals.mrr) ? 2 : 0}
+            hint="monthly recurring revenue"
             waitingOn="Mavi Pay not configured here"
           />
           <PlanMixCard planMix={totals.planMix} />
-          <MetricCard
+          <StatCard
             label="churn · 30d"
-            value={totals.churn30d === null ? null : totals.churn30d.toLocaleString()}
+            value={totals.churn30d}
             hint="subscriptions canceled · last 30d"
+            waitingOn="Mavi Pay not configured here"
           />
         </div>
-      </section>
+      </Section>
 
       {/* ── subscriber table ─────────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading
-          icon={<UsersIcon size={16} />}
-          label={`subscribers · ${subscribers.length.toLocaleString()}`}
-        />
+      <Section
+        title={`subscribers · ${subscribers.length.toLocaleString()}`}
+        icon={<UsersIcon size={16} />}
+      >
         {subscribers.length === 0 ? (
-          <div className="rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-8 text-center">
-            <p className="font-mono text-sm text-[var(--color-text-muted)]">
-              no paying subscribers yet
-            </p>
-            <p className="mt-1 font-mono text-[10px] text-[var(--color-text-subtle)]">
-              accounts appear here the moment Mavi Pay records a subscription.
-            </p>
-          </div>
+          <EmptyState
+            icon={<CreditCardIcon size={24} />}
+            title="no paying subscribers yet"
+            message="accounts appear here the moment Mavi Pay records a subscription — no placeholder rows in the meantime."
+          />
         ) : (
           <SubscriberTable rows={subscribers} />
         )}
-      </section>
+      </Section>
     </div>
-  );
-}
-
-function SectionHeading({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
-      <span className="text-[var(--color-text-muted)]">{icon}</span>
-      {label}
-    </h2>
-  );
-}
-
-function CardShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-full flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
-      {children}
-    </div>
-  );
-}
-
-/**
- * A single stat. `value === null` is the HARD honesty case: render "—" plus a
- * tiny label of what it's waiting on, never a fake 0.
- */
-function MetricCard({
-  label,
-  value,
-  tone = 'default',
-  hint,
-  waitingOn,
-  icon,
-}: {
-  label: string;
-  value: string | null;
-  tone?: 'default' | 'primary';
-  hint?: string;
-  waitingOn?: string;
-  icon?: React.ReactNode;
-}) {
-  const valueClass =
-    tone === 'primary' ? 'text-[var(--color-primary)]' : 'text-[var(--color-text)]';
-  return (
-    <CardShell>
-      <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
-        {icon ? <span className="text-[var(--color-text-muted)]">{icon}</span> : null}
-        {label}
-      </p>
-      {value === null ? (
-        <>
-          <p className="font-mono text-2xl text-[var(--color-text-subtle)]">—</p>
-          {waitingOn ? (
-            <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">{waitingOn}</p>
-          ) : null}
-        </>
-      ) : (
-        <>
-          <p className={`font-mono text-2xl ${valueClass}`}>{value}</p>
-          {hint ? (
-            <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">{hint}</p>
-          ) : null}
-        </>
-      )}
-    </CardShell>
   );
 }
 
 function PlanMixCard({ planMix }: { planMix: Record<Tier, number> | null }) {
   return (
-    <CardShell>
-      <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+    <div className="flex h-full flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
         plan mix
       </p>
       {planMix === null ? (
-        <p className="font-mono text-2xl text-[var(--color-text-subtle)]">—</p>
+        <div className="flex flex-col gap-1.5">
+          <p className="font-mono text-4xl tracking-tight text-[var(--color-text-subtle)]">—</p>
+          <p className="font-mono text-[11px] text-[var(--color-text-subtle)]">
+            Mavi Pay not configured here
+          </p>
+        </div>
       ) : (
-        <dl className="mt-0.5 flex flex-col gap-1 font-mono text-xs">
+        <dl className="flex flex-col gap-2 font-mono text-sm">
           {(['free', 'pro', 'team'] as const).map((tier) => (
             <div key={tier} className="flex items-center justify-between">
               <dt className="text-[var(--color-text-muted)]">{tier}</dt>
-              <dd className="text-[var(--color-text)]">{(planMix[tier] ?? 0).toLocaleString()}</dd>
+              <dd className="text-[var(--color-text)]">
+                <CountUp value={planMix[tier] ?? 0} />
+              </dd>
             </div>
           ))}
         </dl>
       )}
-    </CardShell>
+    </div>
   );
 }
 
@@ -239,7 +177,7 @@ const STATUS_TONE: Record<SubStatus, string> = {
 function StatusBadge({ status }: { status: SubStatus }) {
   return (
     <span
-      className={`rounded-full border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${STATUS_TONE[status]}`}
+      className={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider ${STATUS_TONE[status]}`}
     >
       {status.replace('_', ' ')}
     </span>
@@ -248,25 +186,25 @@ function StatusBadge({ status }: { status: SubStatus }) {
 
 function SubscriberTable({ rows }: { rows: SubscriberRow[] }) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+    <div className="overflow-x-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
       <table className="w-full border-collapse font-mono text-xs">
         <thead>
           <tr className="border-b border-[var(--color-border-subtle)] text-left text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
-            <th className="px-4 py-2 font-normal">org</th>
-            <th className="px-4 py-2 font-normal">plan</th>
-            <th className="px-4 py-2 font-normal">status</th>
-            <th className="px-4 py-2 font-normal">renews</th>
-            <th className="px-4 py-2 font-normal">since</th>
+            <th className="px-6 py-3 font-normal">org</th>
+            <th className="px-6 py-3 font-normal">plan</th>
+            <th className="px-6 py-3 font-normal">status</th>
+            <th className="px-6 py-3 font-normal">renews</th>
+            <th className="px-6 py-3 font-normal">since</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr
               key={r.orgId}
-              className="border-b border-[var(--color-border-subtle)] last:border-0"
+              className="border-b border-[var(--color-border-subtle)] transition-colors last:border-0 hover:bg-[var(--color-surface-raised)]"
             >
-              <td className="px-4 py-2.5">
-                <div className="flex flex-col">
+              <td className="px-6 py-4">
+                <div className="flex flex-col gap-0.5">
                   <span className="text-[var(--color-text)]">{r.orgName}</span>
                   {r.ownerEmail ? (
                     <span className="text-[10px] text-[var(--color-text-subtle)]">
@@ -275,16 +213,16 @@ function SubscriberTable({ rows }: { rows: SubscriberRow[] }) {
                   ) : null}
                 </div>
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-6 py-4">
                 <span className="text-[var(--color-primary)]">{r.tier}</span>
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-6 py-4">
                 <StatusBadge status={r.status} />
               </td>
-              <td className="px-4 py-2.5 text-[var(--color-text-muted)]">
+              <td className="px-6 py-4 text-[var(--color-text-muted)]">
                 {fmtDate(r.currentPeriodEnd)}
               </td>
-              <td className="px-4 py-2.5 text-[var(--color-text-muted)]">{fmtDate(r.since)}</td>
+              <td className="px-6 py-4 text-[var(--color-text-muted)]">{fmtDate(r.since)}</td>
             </tr>
           ))}
         </tbody>

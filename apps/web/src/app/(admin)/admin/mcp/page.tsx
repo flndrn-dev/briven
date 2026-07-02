@@ -5,6 +5,8 @@ import { ZapIcon } from '@/components/ui/zap';
 import { apiJson } from '@/lib/api';
 import { apiOrigin } from '@/lib/env';
 
+import { EmptyState } from '../_components/empty-state';
+import { Section } from '../_components/section';
 import { McpGlobalToggle, McpProjectControls, type ProjectAccess } from './mcp-key-form';
 
 export const metadata = { title: 'mcp / agent access · admin' };
@@ -25,7 +27,9 @@ interface McpStatus {
 }
 
 export default async function AdminMcpPage() {
-  const { globalEnabled, projects, audit } = await apiJson<McpStatus>('/v1/admin/mcp').catch((): McpStatus => ({ globalEnabled: false, projects: [], audit: [] }));
+  const { globalEnabled, projects, audit } = await apiJson<McpStatus>('/v1/admin/mcp').catch(
+    (): McpStatus => ({ globalEnabled: false, projects: [], audit: [] }),
+  );
 
   const enabled = projects.filter((p) => p.mcpEnabled);
   const eligible = projects.filter((p) => !p.mcpEnabled && p.eligible);
@@ -35,7 +39,7 @@ export default async function AdminMcpPage() {
   const ordered = [...enabled, ...eligible, ...free];
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-10">
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[var(--color-primary)]">
@@ -51,66 +55,67 @@ export default async function AdminMcpPage() {
       </header>
 
       {/* ── global kill-switch ───────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading icon={<ZapIcon size={16} />} label="global kill-switch" />
+      <Section title="global kill-switch" icon={<ZapIcon size={16} />}>
         <McpGlobalToggle apiOrigin={apiOrigin} enabled={globalEnabled} />
-      </section>
+      </Section>
 
       {/* ── per-project access ───────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading icon={<ArrowLeftRightIcon size={16} />} label="per-project access" />
+      <Section title="per-project access" icon={<ArrowLeftRightIcon size={16} />}>
         {projects.length === 0 ? (
-          <EmptyNote>
-            no projects yet. once a customer creates one on a Pro/Team plan, you&apos;ll be able to
-            turn MCP access on for it here.
-          </EmptyNote>
+          <EmptyState
+            icon={<ArrowLeftRightIcon size={24} />}
+            title="no projects yet"
+            message="once a customer creates one on a Pro/Team plan, you'll be able to turn MCP access on for it here."
+          />
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {ordered.map((p) => (
               <McpProjectControls key={p.projectId} apiOrigin={apiOrigin} project={p} />
             ))}
           </div>
         )}
-      </section>
+      </Section>
 
       {/* ── audit trail ──────────────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading icon={<BotIcon size={16} />} label="agent-access audit trail" />
+      <Section title="agent-access audit trail" icon={<BotIcon size={16} />}>
         {audit.length === 0 ? (
-          <EmptyNote>
-            no MCP activity recorded yet. every toggle, enable/disable, key issue and revoke shows
-            up here.
-          </EmptyNote>
+          <EmptyState
+            icon={<BotIcon size={24} />}
+            title="no MCP activity recorded yet"
+            message="every toggle, enable/disable, key issue and revoke shows up here."
+          />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-[var(--color-border-subtle)]">
-            <table className="w-full border-collapse font-mono text-xs">
-              <thead>
-                <tr className="border-b border-[var(--color-border-subtle)] text-left text-[var(--color-text-subtle)]">
-                  <th className="px-3 py-2 font-normal uppercase tracking-wider">action</th>
-                  <th className="px-3 py-2 font-normal uppercase tracking-wider">project</th>
-                  <th className="px-3 py-2 font-normal uppercase tracking-wider">actor</th>
-                  <th className="px-3 py-2 font-normal uppercase tracking-wider">when</th>
-                </tr>
-              </thead>
-              <tbody>
-                {audit.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-[var(--color-border-subtle)] text-[var(--color-text-muted)] last:border-0"
+          <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 sm:p-8">
+            <ol className="relative ml-1 flex flex-col gap-7 border-l border-[var(--color-border-subtle)] pl-7">
+              {audit.map((row) => (
+                <li key={row.id} className="relative flex flex-col gap-1">
+                  <span
+                    aria-hidden
+                    className="absolute -left-[33px] top-[3px] size-2.5 rounded-full border-2 border-[var(--color-surface)] bg-[var(--color-primary)]"
+                  />
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs">
+                    <span className="text-[var(--color-text)]">{row.action}</span>
+                    {auditProjectId(row) ? (
+                      <span className="text-[var(--color-text-muted)]">
+                        project {auditProjectId(row)}
+                      </span>
+                    ) : null}
+                    {row.actorId ? (
+                      <span className="text-[var(--color-text-subtle)]">by {row.actorId}</span>
+                    ) : null}
+                  </div>
+                  <time
+                    className="font-mono text-[10px] text-[var(--color-text-subtle)]"
+                    dateTime={row.createdAt}
                   >
-                    <td className="px-3 py-2 text-[var(--color-text)]">{row.action}</td>
-                    <td className="px-3 py-2">{auditProjectId(row) ?? '—'}</td>
-                    <td className="px-3 py-2">{row.actorId ?? '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {new Date(row.createdAt).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    {new Date(row.createdAt).toLocaleString()}
+                  </time>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
-      </section>
+      </Section>
     </div>
   );
 }
@@ -123,21 +128,4 @@ function auditProjectId(row: AuditRow): string | null {
     if (typeof pid === 'string') return pid;
   }
   return null;
-}
-
-function SectionHeading({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
-      <span className="text-[var(--color-text-muted)]">{icon}</span>
-      {label}
-    </h2>
-  );
-}
-
-function EmptyNote({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-6 font-mono text-xs text-[var(--color-text-subtle)]">
-      {children}
-    </div>
-  );
 }

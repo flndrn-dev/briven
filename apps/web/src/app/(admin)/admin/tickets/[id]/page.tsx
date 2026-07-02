@@ -1,8 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { LifeBuoyIcon } from '@/components/ui/life-buoy';
+
 import { apiJson } from '@/lib/api';
 import { toValidDate } from '@/lib/utils';
+
+import { Section } from '../../_components/section';
 import { TicketActions } from './ticket-actions';
 
 export const dynamic = 'force-dynamic';
@@ -81,10 +85,10 @@ export default async function AdminTicketDetailPage({
   const handled = toValidDate(ticket.handledAt);
 
   return (
-    <section className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-10">
       <Link
         href="/admin/tickets"
-        className="font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        className="font-mono text-xs text-[var(--color-text-muted)] transition hover:text-[var(--color-text)]"
       >
         ← tickets
       </Link>
@@ -92,8 +96,11 @@ export default async function AdminTicketDetailPage({
       {/* header */}
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[var(--color-primary)]">
+            <LifeBuoyIcon size={20} />
+          </span>
           <span
-            className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusBadgeClass(ticket.status)}`}
+            className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusBadgeClass(ticket.status)}`}
           >
             {statusLabel(ticket.status)}
           </span>
@@ -101,14 +108,12 @@ export default async function AdminTicketDetailPage({
             {ticket.ticketNumber}
           </span>
           <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-            {created
-              ? `${created.toISOString().slice(0, 16).replace('T', ' ')} utc`
-              : '—'}
+            {created ? `${created.toISOString().slice(0, 16).replace('T', ' ')} utc` : '—'}
           </span>
         </div>
-        <h2 className="font-mono text-base tracking-tight text-[var(--color-text)]">
+        <h1 className="font-mono text-xl tracking-tight text-[var(--color-text)]">
           {ticket.subject || '(no subject)'}
-        </h2>
+        </h1>
         <div className="flex flex-wrap gap-4 font-mono text-[10px] text-[var(--color-text-subtle)]">
           <span>
             from: {ticket.name} · {ticket.email}
@@ -116,51 +121,51 @@ export default async function AdminTicketDetailPage({
           {ticket.country ? <span>country: {ticket.country}</span> : null}
           {ticket.topicCode ? <span>topic: {ticket.topicCode}</span> : null}
           {handled ? (
-            <span>
-              handled: {handled.toISOString().slice(0, 16).replace('T', ' ')} utc
-            </span>
+            <span>handled: {handled.toISOString().slice(0, 16).replace('T', ' ')} utc</span>
           ) : null}
         </div>
       </header>
 
       {/* original message */}
-      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+      <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
           message · from {ticket.name}
         </p>
-        <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs text-[var(--color-text)]">
+        <pre className="mt-3 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--color-text)]">
           {ticket.message}
         </pre>
       </div>
 
       {/* reply thread */}
       {replies.length > 0 ? (
-        <div className="flex flex-col gap-3">
-          <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
-            thread · {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
-          </h3>
-          {replies.map((r) => {
-            const rd = toValidDate(r.createdAt);
-            return (
-              <div
-                key={r.id}
-                className={`rounded-md border px-4 py-3 ${
-                  r.author === 'operator'
-                    ? 'border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)]'
-                    : 'border-[var(--color-border-subtle)] bg-[var(--color-surface)]'
-                }`}
-              >
-                <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
-                  {r.author === 'operator' ? 'operator' : 'user'} ·{' '}
-                  {rd ? `${rd.toISOString().slice(0, 16).replace('T', ' ')} utc` : '—'}
-                </p>
-                <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs text-[var(--color-text)]">
-                  {r.body}
-                </pre>
-              </div>
-            );
-          })}
-        </div>
+        <Section
+          title={`thread · ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
+          icon={<LifeBuoyIcon size={16} />}
+        >
+          <div className="flex flex-col gap-6">
+            {replies.map((r) => {
+              const rd = toValidDate(r.createdAt);
+              return (
+                <div
+                  key={r.id}
+                  className={`rounded-xl border p-6 ${
+                    r.author === 'operator'
+                      ? 'border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)]'
+                      : 'border-[var(--color-border-subtle)] bg-[var(--color-surface)]'
+                  }`}
+                >
+                  <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                    {r.author === 'operator' ? 'operator' : 'user'} ·{' '}
+                    {rd ? `${rd.toISOString().slice(0, 16).replace('T', ' ')} utc` : '—'}
+                  </p>
+                  <pre className="mt-3 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--color-text)]">
+                    {r.body}
+                  </pre>
+                </div>
+              );
+            })}
+          </div>
+        </Section>
       ) : null}
 
       {/* operator actions: status, assignedTo, operatorNotes, reply */}
@@ -173,6 +178,6 @@ export default async function AdminTicketDetailPage({
         }}
         apiOrigin={publicApiOrigin()}
       />
-    </section>
+    </div>
   );
 }

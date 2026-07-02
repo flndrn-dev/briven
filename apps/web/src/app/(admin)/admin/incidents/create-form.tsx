@@ -69,9 +69,9 @@ export function IncidentCreateForm({ apiOrigin }: { apiOrigin: string }) {
   return (
     <form
       onSubmit={submit}
-      className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5"
+      className="flex flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6"
     >
-      <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+      <h3 className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
         new incident
       </h3>
 
@@ -79,13 +79,13 @@ export function IncidentCreateForm({ apiOrigin }: { apiOrigin: string }) {
         <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
           severity
         </span>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-2">
           {SEVERITIES.map((s) => (
             <button
               type="button"
               key={s}
               onClick={() => setSeverity(s)}
-              className={`rounded-md border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+              className={`rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
                 severity === s
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-[var(--color-border-subtle)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
@@ -101,13 +101,13 @@ export function IncidentCreateForm({ apiOrigin }: { apiOrigin: string }) {
         <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
           affected services
         </span>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-2">
           {SERVICES.map((s) => (
             <button
               type="button"
               key={s}
               onClick={() => toggleService(s)}
-              className={`rounded-md border px-2 py-0.5 font-mono text-[10px] ${
+              className={`rounded-full border px-3 py-1 font-mono text-[10px] transition-colors ${
                 services.has(s)
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-[var(--color-border-subtle)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]'

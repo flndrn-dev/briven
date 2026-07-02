@@ -91,7 +91,7 @@ export function IncidentRow({ incident, apiOrigin }: Props) {
   const tone = severityTone(incident.severity);
 
   return (
-    <li className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
+    <li className="flex flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
       <div className="flex flex-wrap items-baseline gap-2">
         <span
           className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${tone}`}

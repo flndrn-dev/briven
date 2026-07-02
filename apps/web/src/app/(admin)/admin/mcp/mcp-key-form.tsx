@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -63,7 +64,28 @@ async function post(apiOrigin: string, path: string, body: unknown): Promise<Sen
   }
 }
 
-/* ─── global kill-switch ─────────────────────────────────────────────────── */
+/* ─── pulsing status dot (matches the cockpit's health dots) ─────────────── */
+
+/**
+ * Green pulse when the thing is alive, solid red when it's cut. The pulse
+ * only runs in the "on" state so a killed switch reads as unmistakably dead.
+ */
+function PulseDot({ on, size = 'md' }: { on: boolean; size?: 'md' | 'lg' }) {
+  const dim = size === 'lg' ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5';
+  const color = on ? 'bg-[var(--color-success)]' : 'bg-[var(--color-error)]';
+  return (
+    <span className={`relative flex shrink-0 ${dim}`} aria-hidden>
+      {on ? (
+        <span
+          className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${color}`}
+        />
+      ) : null}
+      <span className={`relative inline-flex rounded-full ${dim} ${color}`} />
+    </span>
+  );
+}
+
+/* ─── global kill-switch (hero control) ──────────────────────────────────── */
 
 export function McpGlobalToggle({
   apiOrigin,
@@ -106,53 +128,61 @@ export function McpGlobalToggle({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="font-mono text-sm text-[var(--color-text)]">global agent access</span>
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">
-            the master switch. OFF cuts every agent and MCP client at once, regardless of
-            per-project settings.
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className="flex flex-col gap-6 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 sm:p-8"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-6">
+        <div className="flex items-start gap-5">
+          <span className="mt-2.5">
+            <PulseDot on={enabled} size="lg" />
           </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span
-            className={
-              enabled
-                ? 'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary-subtle)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--color-primary)]'
-                : 'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-surface-raised)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]'
-            }
-          >
+          <div className="flex flex-col gap-1.5">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+              global agent access
+            </span>
             <span
-              className={`size-1.5 rounded-full ${
-                enabled ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-text-subtle)]'
+              className={`font-mono text-3xl tracking-tight ${
+                enabled ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'
               }`}
-            />
-            {enabled ? 'enabled' : 'disabled'}
-          </span>
-          <button
-            type="button"
-            onClick={onClick}
-            disabled={busy}
-            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] transition hover:text-[var(--color-text)] disabled:opacity-50"
-          >
-            {busy ? 'saving…' : enabled ? 'turn off' : 'turn on'}
-          </button>
+            >
+              {enabled ? 'on' : 'off'}
+            </span>
+            <span className="max-w-prose font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+              the master switch. off cuts every agent and mcp client at once, regardless of
+              per-project settings.
+            </span>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={busy}
+          className={
+            enabled
+              ? 'rounded-md border border-[var(--color-error)] px-5 py-2.5 font-mono text-xs text-[var(--color-error)] transition hover:bg-[var(--color-error)] hover:text-[var(--color-text-inverse)] disabled:opacity-50'
+              : 'rounded-md bg-[var(--color-primary)] px-5 py-2.5 font-mono text-xs text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50'
+          }
+        >
+          {busy ? 'saving…' : enabled ? 'turn off' : 'turn on'}
+        </button>
       </div>
 
       {confirming ? (
-        <div className="flex flex-col gap-2 rounded-md border border-[var(--color-warning)] bg-[var(--color-surface)] p-3 font-mono text-xs">
+        <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-warning)] bg-[var(--color-surface)] p-4 font-mono text-xs">
           <p className="text-[var(--color-text)]">
             turn OFF global agent access? this immediately blocks every agent / MCP client across
             ALL projects.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => void send(false)}
               disabled={busy}
-              className="rounded-md bg-[var(--color-error)] px-3 py-1.5 font-sans text-xs text-[var(--color-text-inverse)] disabled:opacity-50"
+              className="rounded-md bg-[var(--color-error)] px-4 py-2 font-mono text-xs text-[var(--color-text-inverse)] disabled:opacity-50"
             >
               {busy ? 'turning off…' : 'yes, turn off'}
             </button>
@@ -182,7 +212,7 @@ export function McpGlobalToggle({
           onCancel={() => setPendingValue(null)}
         />
       ) : null}
-    </div>
+    </motion.div>
   );
 }
 
@@ -305,9 +335,14 @@ export function McpProjectControls({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className="flex flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <span className="font-mono text-sm text-[var(--color-text)]">{project.projectName}</span>
           <PlanBadge tier={project.planTier} />
           {project.mcpEnabled ? (
@@ -322,7 +357,7 @@ export function McpProjectControls({
             type="button"
             onClick={() => void toggle(false)}
             disabled={busy}
-            className="rounded-md border border-[var(--color-border)] px-2.5 py-1 font-mono text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-error)] disabled:opacity-50"
+            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-[10px] text-[var(--color-text-muted)] transition hover:text-[var(--color-error)] disabled:opacity-50"
           >
             disable mcp
           </button>
@@ -331,7 +366,7 @@ export function McpProjectControls({
             type="button"
             onClick={() => void toggle(true)}
             disabled={busy}
-            className="rounded-md bg-[var(--color-primary)] px-2.5 py-1 font-mono text-[10px] text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+            className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 font-mono text-[10px] text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
           >
             enable mcp
           </button>
@@ -344,20 +379,20 @@ export function McpProjectControls({
 
       {/* keys + issue, only when enabled */}
       {project.mcpEnabled ? (
-        <div className="flex flex-col gap-3 border-t border-[var(--color-border-subtle)] pt-3">
+        <div className="flex flex-col gap-4 border-t border-[var(--color-border-subtle)] pt-4">
           {project.keys.length === 0 ? (
             <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
               no keys issued yet.
             </p>
           ) : (
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex flex-col gap-2">
               {project.keys.map((k) => (
                 <li
                   key={k.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-[var(--color-surface-raised)] px-2.5 py-1.5"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--color-surface-raised)] px-4 py-2.5"
                 >
-                  <span className="flex flex-wrap items-center gap-2 font-mono text-[10px] text-[var(--color-text-muted)]">
-                    <span className="text-[var(--color-text)]">{k.name}</span>
+                  <span className="flex flex-wrap items-center gap-2.5 font-mono text-[10px] text-[var(--color-text-muted)]">
+                    <span className="text-xs text-[var(--color-text)]">{k.name}</span>
                     <span className="text-[var(--color-text-subtle)]">
                       {k.prefix}•••{k.suffix}
                     </span>
@@ -399,7 +434,7 @@ export function McpProjectControls({
               onDismiss={() => setRevealed(null)}
             />
           ) : (
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
                   key name
@@ -453,7 +488,7 @@ export function McpProjectControls({
           onCancel={() => setPending(null)}
         />
       ) : null}
-    </div>
+    </motion.div>
   );
 }
 
@@ -481,7 +516,7 @@ function RevealOnce({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-[var(--color-warning)] bg-[var(--color-surface)] p-3">
+    <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-warning)] bg-[var(--color-surface)] p-4">
       <p className="font-mono text-[10px] text-[var(--color-warning)]">
         copy &ldquo;{name}&rdquo; now — this is the ONLY time the full key is shown. after you
         dismiss it, only the prefix…suffix hint remains.
