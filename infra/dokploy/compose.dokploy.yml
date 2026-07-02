@@ -271,6 +271,7 @@ services:
       BRIVEN_API_PORT: '3001'
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
+      BRIVEN_ADMIN_ORIGIN: https://admin.${BRIVEN_DOMAIN}
       BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN},https://admin.${BRIVEN_DOMAIN}
       # Control plane — stock Postgres, postgres.js/drizzle.
       BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable

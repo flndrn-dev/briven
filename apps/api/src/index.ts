@@ -79,7 +79,11 @@ const app = new Hono<AppEnv>();
 app.use(
   '*',
   cors({
-    origin: [env.BRIVEN_WEB_ORIGIN, env.BRIVEN_STUDIO_ORIGIN],
+    origin: [
+      env.BRIVEN_WEB_ORIGIN,
+      env.BRIVEN_STUDIO_ORIGIN,
+      ...(env.BRIVEN_ADMIN_ORIGIN ? [env.BRIVEN_ADMIN_ORIGIN] : []),
+    ],
     credentials: true,
     allowHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     exposeHeaders: ['x-request-id'],

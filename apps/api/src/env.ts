@@ -151,6 +151,9 @@ const envSchema = z.object({
   // Web origin for email link callbacks.
   BRIVEN_WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
   BRIVEN_STUDIO_ORIGIN: z.string().url().default('http://localhost:8082'),
+  // Dedicated admin cockpit host (admin.<domain>) — must be CORS-allowed or
+  // every client-side fetch from the cockpit dies with "Failed to fetch".
+  BRIVEN_ADMIN_ORIGIN: z.string().url().optional(),
 
   // Comma-separated list of origins Better Auth will accept as `callbackURL`.
   // Must include every public hostname that serves the dashboard.
