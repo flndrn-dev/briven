@@ -11,26 +11,45 @@ const SESSION_COOKIE_DEV = 'briven.session_token';
  * the named/default export must be `proxy`, not `middleware`. Matcher
  * shape is unchanged from 15.x.
  *
- * Gate: any path under `/dashboard` requires a Better Auth session
- * cookie. Missing cookie → 302 to /signin?next=<original-path>. We
- * intentionally do not validate the cookie here — cheap check at the
- * edge, authoritative validation happens in the page via `requireUser()`
- * calling apps/api.
+ * Two jobs:
+ * 1. Admin subdomain: requests on `admin.<domain>` serve the
+ *    (admin)/admin cockpit without the /admin path prefix —
+ *    admin.briven.tech/users renders /admin/users. Paths already under
+ *    /admin pass through, so internal /admin/... links keep working on
+ *    the subdomain. Sessions carry over via cross-subdomain cookies.
+ * 2. Dashboard gate: any path under `/dashboard` requires a Better Auth
+ *    session cookie. Missing cookie → 302 to /signin?next=<path>. We
+ *    intentionally do not validate the cookie here — cheap check at the
+ *    edge, authoritative validation happens in the page via
+ *    `requireUser()` calling apps/api.
  */
 export default function proxy(req: NextRequest): NextResponse {
   const { nextUrl } = req;
-  const hasSession = req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);
 
-  if (!hasSession) {
+  const host = (req.headers.get('host') ?? '').split(':')[0] ?? '';
+  if (host.startsWith('admin.') && !nextUrl.pathname.startsWith('/admin')) {
     const url = nextUrl.clone();
-    url.pathname = '/signin';
-    url.searchParams.set('next', nextUrl.pathname + nextUrl.search);
-    return NextResponse.redirect(url);
+    url.pathname = `/admin${nextUrl.pathname === '/' ? '' : nextUrl.pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  if (nextUrl.pathname.startsWith('/dashboard')) {
+    const hasSession =
+      req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);
+    if (!hasSession) {
+      const url = nextUrl.clone();
+      url.pathname = '/signin';
+      url.searchParams.set('next', nextUrl.pathname + nextUrl.search);
+      return NextResponse.redirect(url);
+    }
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  // Everything except Next internals, API routes, and file-looking paths
+  // (favicon, images, fonts). The admin-host rewrite needs page
+  // navigations broadly; non-matching requests fall through untouched.
+  matcher: ['/((?!_next/|api/|.*\\..*).*)'],
 };
