@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { BookOpenIcon, type BookOpenIconHandle } from './ui/book-open';
-import { ChevronsUpDownIcon, type ChevronsUpDownIconHandle } from './ui/chevrons-up-down';
+import { ChevronsUpDownIcon, type ChevronsUpDownIconHandle } from './chevrons-up-down';
 import { GlobeIcon, type GlobeIconHandle } from './ui/globe';
 import { LogOutIcon, type LogOutIconHandle } from './ui/log-out';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from './ui/shield-check';
@@ -155,6 +155,19 @@ export function UserMenuButton({ user, collapsed, isAdmin = false }: Props) {
                 label="docs"
               />
             </li>
+            {isAdmin && (
+              <li>
+                <MenuRow
+                  as="button"
+                  onSelect={() => {
+                    setOpen(false);
+                    router.push('/dashboard/admin');
+                  }}
+                  icon={ShieldCheckIcon}
+                  label="admin"
+                />
+              </li>
+            )}
             <li>
               <MenuRow
                 as="button"
@@ -183,7 +196,7 @@ export function UserMenuButton({ user, collapsed, isAdmin = false }: Props) {
   );
 }
 
-type IconHandle = GlobeIconHandle | BookOpenIconHandle | LogOutIconHandle;
+type IconHandle = GlobeIconHandle | BookOpenIconHandle | LogOutIconHandle | ShieldCheckIconHandle;
 type IconComponent = typeof GlobeIcon | typeof BookOpenIcon | typeof LogOutIcon;
 
 interface MenuRowBaseProps {
