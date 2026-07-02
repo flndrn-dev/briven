@@ -271,7 +271,7 @@ services:
       BRIVEN_API_PORT: '3001'
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
-      BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN}
+      BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN},https://admin.${BRIVEN_DOMAIN}
       # Control plane — stock Postgres, postgres.js/drizzle.
       BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable
       # Data plane — DoltGres, `pg` driver, database-per-project. The api
@@ -441,7 +441,7 @@ services:
       - 'briven_logs=true'
       - 'traefik.enable=true'
       - 'traefik.docker.network=dokploy-network'
-      - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`) || Host(`app.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`) || Host(`app.${BRIVEN_DOMAIN}`) || Host(`admin.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-web.entrypoints=websecure'
       - 'traefik.http.routers.briven-web.tls.certresolver=letsencrypt'
       - 'traefik.http.services.briven-web.loadbalancer.server.port=3000'

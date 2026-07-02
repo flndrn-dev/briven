@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { CopyChip } from '../../../../../components/copy-chip';
 import { apiJson } from '../../../../../lib/api';
 import { InvocationsSparkline } from './invocations-sparkline';
 
@@ -122,8 +123,8 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card label="endpoint" value={endpoint} mono />
-        <Card label="project id" value={project.id} mono />
+        <Card label="endpoint" value={endpoint} mono copy />
+        <Card label="project id" value={project.id} mono copy />
         <Card
           label="last deploy"
           value={
@@ -312,16 +313,22 @@ function Card({
   value,
   mono,
   hint,
+  copy,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   hint?: string;
+  /** Show a copy-to-clipboard icon (morphs to a checkmark on copy). */
+  copy?: boolean;
 }) {
   return (
     <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
       <p className="font-mono text-xs text-[var(--color-text-subtle)]">{label}</p>
-      <p className={`mt-1 text-sm ${mono ? 'font-mono' : ''}`}>{value}</p>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className={`min-w-0 truncate text-sm ${mono ? 'font-mono' : ''}`}>{value}</p>
+        {copy ? <CopyChip value={value} label={label} /> : null}
+      </div>
       {hint ? (
         <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-subtle)]">{hint}</p>
       ) : null}

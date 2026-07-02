@@ -173,11 +173,9 @@ export function UserMenuButton({
             {isAdmin && variant !== 'admin' && (
               <li>
                 <MenuRow
-                  as="button"
-                  onSelect={() => {
-                    setOpen(false);
-                    router.push('/dashboard/admin');
-                  }}
+                  as="a"
+                  href="https://admin.briven.tech"
+                  onSelect={() => setOpen(false)}
                   icon={ShieldCheckIcon}
                   label="admin"
                 />
