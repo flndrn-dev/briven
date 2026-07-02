@@ -826,6 +826,9 @@ importers:
       geist:
         specifier: ^1.7.0
         version: 1.7.0(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
+      ip3country:
+        specifier: ^5.0.0
+        version: 5.0.0
       motion:
         specifier: ^12.38.0
         version: 12.38.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -9456,6 +9459,9 @@ packages:
 
   ip-num@1.5.2:
     resolution: {integrity: sha512-CUxHEJuJk74GIQA75LD9RDkpK/3NJv8yRnseOh79AlRmFwT1HgYPKDOiVkd0QVR5MNwMj9EnOnS1yJn9CaYNZA==}
+
+  ip3country@5.0.0:
+    resolution: {integrity: sha512-lcFLMFU4eO1Z7tIpbVFZkaZ5ltqpeaRx7L9NsAbA9uA7/O/rj3RF8+evE5gDitooaTTIqjdzZrenFO/OOxQ2ew==}
 
   ipaddr.js@1.9.1:
     resolution: {integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==}
@@ -21843,6 +21849,8 @@ snapshots:
   ip-address@10.2.0: {}
 
   ip-num@1.5.2: {}
+
+  ip3country@5.0.0: {}
 
   ipaddr.js@1.9.1: {}
 
