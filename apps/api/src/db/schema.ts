@@ -1237,3 +1237,50 @@ export const projectAutoSnapshotSettings = pgTable(
 
 export type ProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferSelect;
 export type NewProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferInsert;
+
+/* ─── platform_agents (admin-registered AI agents) ────────────────── */
+// Platform-level registry of named AI agents (anthropic / openai / ollama /
+// custom endpoints) that admins wire up from the cockpit. Unlike mcp_keys /
+// briven_auth_sdk_keys — where WE mint the secret and store only a hash —
+// the api key here is INPUT by the admin and must be recoverable server-side
+// (the /test ping and future outbound calls present it to the provider), so
+// it is stored AES-256-GCM encrypted via services/tenant-secret-store.ts
+// (HKDF key derivation salted with the agent id). Plaintext never lands in
+// the database, in logs, or in any response; the dashboard only ever sees
+// `key_prefix…key_suffix`, mirroring the mcp-access maskKey pattern.
+export const platformAgentScope = ['read', 'read-write', 'admin'] as const;
+export type PlatformAgentScope = (typeof platformAgentScope)[number];
+
+export const platformAgents = pgTable(
+  'platform_agents',
+  {
+    id: id(),
+    // Human-facing agent name — the registry identity, so it is unique.
+    name: text('name').notNull(),
+    // Freeform provider label ('anthropic' | 'openai' | 'ollama' | 'custom'
+    // by convention, but not constrained — new providers need no migration).
+    provider: text('provider').notNull(),
+    // Optional base URL. Required in practice for ollama / custom providers;
+    // hosted providers fall back to their well-known API origin.
+    endpoint: text('endpoint'),
+    model: text('model').notNull(),
+    scope: text('scope').$type<PlatformAgentScope>().notNull().default('read'),
+    enabled: boolean('enabled').notNull().default(true),
+    // AES-256-GCM ciphertext (base64 iv||tag||body) of the provider api key.
+    // Null when the agent is keyless (e.g. a local ollama endpoint).
+    encryptedApiKey: text('encrypted_api_key'),
+    // Display hint only — first chars + last 4 of the plaintext, safe to show.
+    keyPrefix: text('key_prefix'),
+    keySuffix: varchar('key_suffix', { length: 4 }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    nameIdx: uniqueIndex('platform_agents_name_idx').on(t.name),
+    enabledIdx: index('platform_agents_enabled_idx').on(t.enabled),
+  }),
+);
+
+export type PlatformAgent = typeof platformAgents.$inferSelect;
+export type NewPlatformAgent = typeof platformAgents.$inferInsert;

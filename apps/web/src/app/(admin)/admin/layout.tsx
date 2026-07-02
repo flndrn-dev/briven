@@ -73,7 +73,12 @@ export default async function AdminCockpitLayout({
 
       <div className="flex min-h-0 flex-1">
         <CockpitNav />
-        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-8">{children}</main>
+        {/* Command-deck spacing: generous padding and a wide-but-bounded
+            content column so dashboards breathe on big monitors without
+            stretching into unreadable line lengths. */}
+        <main className="min-w-0 flex-1 overflow-y-auto p-6 md:p-8 lg:p-10">
+          <div className="mx-auto w-full max-w-[1440px]">{children}</div>
+        </main>
       </div>
     </div>
   );

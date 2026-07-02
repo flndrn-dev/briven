@@ -40,7 +40,8 @@ export type IdPrefix =
   | 'mig' // migration request (customer-initiated import from convex/supabase/etc.)
   | 'me' // marketing event (funnel tracking for /migrate views + leads)
   | 'auk' // briven auth SDK key (issued from the Auth → API Keys panel)
-  | 'as'; // auto-snapshot settings row (per-project automatic save-points)
+  | 'as' // auto-snapshot settings row (per-project automatic save-points)
+  | 'agt'; // platform agent (admin-registered AI agent, encrypted provider key)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

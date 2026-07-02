@@ -60,6 +60,12 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/admin/mcp'),
   },
   {
+    href: '/admin/agents',
+    label: 'ai agents',
+    Icon: BotIcon as never,
+    match: (p) => p.startsWith('/admin/agents'),
+  },
+  {
     href: '/admin/projects',
     label: 'projects',
     Icon: FoldersIcon as never,
