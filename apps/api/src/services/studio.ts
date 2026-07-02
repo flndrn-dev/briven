@@ -120,21 +120,21 @@ export async function getTableColumns(
 ): Promise<readonly ColumnInfo[]> {
   await assertTableExists(projectId, tableName);
   // Single query: information_schema.columns LEFT JOINed against the
-  // table's PK column set sourced from pg_index, plus a LEFT JOIN against
-  // information_schema's FK metadata so each column row can carry its
-  // (table.column) reference if there is one.
+  // table's PK column set, plus a LEFT JOIN against information_schema's
+  // FK metadata so each column row can carry its (table.column) reference
+  // if there is one. PK columns come from information_schema.statistics
+  // (index_name = 'PRIMARY'), NOT pg_index — DoltGres rejects the pg_index
+  // join ("operator does not exist: smallint = int2vector"); same
+  // workaround as listIndexes below. Verified live against DoltGres.
   const rows = (await runInProjectDatabase(projectId, async (tx) =>
     tx.unsafe(
       `
     WITH pk_cols AS (
-      SELECT a.attname AS column_name
-      FROM pg_index i
-      JOIN pg_class c ON c.oid = i.indrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
-      WHERE i.indisprimary
-        AND n.nspname = 'public'
-        AND c.relname = $1
+      SELECT column_name
+      FROM information_schema.statistics
+      WHERE table_schema = 'public'
+        AND table_name = $1
+        AND index_name = 'PRIMARY'
     ),
     fk_cols AS (
       SELECT

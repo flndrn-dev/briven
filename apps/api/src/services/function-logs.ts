@@ -65,7 +65,10 @@ export async function getHourlyInvocations(
   projectId: string,
 ): Promise<readonly HourlyInvocations[]> {
   const db = getDb();
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // ISO string, not Date: postgres.js can't serialize a raw Date param in
+  // sql`` templates under Bun ("string argument … Received an instance of
+  // Date") — the ::timestamptz cast makes the string unambiguous.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   // generate_series fills missing hours so the chart is a stable 24 points.
   const rows = (await db.execute(sql`
     WITH hours AS (
@@ -121,7 +124,8 @@ export async function getFunctionStats(
   sinceHours = 24,
 ): Promise<FunctionStats> {
   const db = getDb();
-  const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+  // ISO string, not Date — same driver limitation as getHourlyInvocations.
+  const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000).toISOString();
   const rows = (await db.execute(sql`
     SELECT
       count(*)::int AS count,
@@ -131,7 +135,7 @@ export async function getFunctionStats(
     FROM function_logs
     WHERE project_id = ${projectId}
       AND function_name = ${functionName}
-      AND created_at >= ${since}
+      AND created_at >= ${since}::timestamptz
   `)) as Array<{
     count: number | string;
     err_count: number | string;
