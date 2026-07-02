@@ -692,3 +692,165 @@ function shell(title: string, body: string): string {
   <style>.muted { color:#6b7280;font-size:13px }</style>
 </body></html>`;
 }
+
+/* ─── RESTORED AFTER MERGE LOSS (2026-07-02): support-ticket emails ── */
+// This block was dropped when lib/email.ts was rewritten during a branch
+// merge; routes/contact.ts and services/support-tickets.ts still import
+// these senders. Restored verbatim from d48bceb.
+
+/* ─── support tickets ────────────────────────────────────────────── */
+
+/**
+ * Confirms to the sender that their tagged /contact submission became a
+ * support ticket, and gives them the ticket number to quote. Sent on
+ * ticket creation. `ticketNumber` is the rendered, '#'-prefixed value.
+ */
+export async function sendTicketCreatedConfirmation(
+  to: string,
+  ticketNumber: string,
+): Promise<void> {
+  await send('ticket_created', {
+    to,
+    subject: `we got your support request · ${ticketNumber}`,
+    html: ticketCreatedHtml(ticketNumber),
+    text: ticketCreatedText(ticketNumber),
+  });
+}
+
+/**
+ * Emails the sender an operator's reply on their ticket. `body` is the
+ * operator's message text; `ticketNumber` is the rendered '#'-prefixed value.
+ */
+export async function sendTicketReply(
+  to: string,
+  ticketNumber: string,
+  body: string,
+): Promise<void> {
+  await send('ticket_reply', {
+    to,
+    subject: `re: your support request · ${ticketNumber}`,
+    html: ticketReplyHtml(ticketNumber, body),
+    text: ticketReplyText(ticketNumber, body),
+  });
+}
+
+/**
+ * Notifies the sender that the status of their ticket changed (used for
+ * the 'replied'/'closed' transitions). `status` is the new status code.
+ */
+export async function sendTicketStatusUpdate(
+  to: string,
+  ticketNumber: string,
+  status: string,
+): Promise<void> {
+  await send('ticket_status_update', {
+    to,
+    subject: `update on your support request · ${ticketNumber}`,
+    html: ticketStatusHtml(ticketNumber, status),
+    text: ticketStatusText(ticketNumber, status),
+  });
+}
+
+const SUPPORT_CONTACT = 'support@flndrn.com';
+
+function ticketBlock(ticketNumber: string): string {
+  return `<p style="background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
+      ticket: <strong style="color:#f5f7fa">${escapeHtml(ticketNumber)}</strong>
+    </p>`;
+}
+
+function ticketCreatedHtml(ticketNumber: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    'we got your support request',
+    `
+    <p>thanks for reaching out. your message is now a support ticket and we'll get back to you by email.</p>
+    ${ticketBlock(ticketNumber)}
+    ${cta('view your tickets', `https://${domain}/dashboard/support`)}
+    <p class="muted">quote your ticket number above in any follow-up, or write to ${SUPPORT_CONTACT}.</p>
+  `,
+  );
+}
+
+function ticketCreatedText(ticketNumber: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    'we got your support request',
+    '',
+    `thanks for reaching out. your message is now a support ticket: ${ticketNumber}`,
+    '',
+    `view your tickets: https://${domain}/dashboard/support`,
+    '',
+    `quote your ticket number in any follow-up, or write to ${SUPPORT_CONTACT}.`,
+  ].join('\n');
+}
+
+function ticketReplyHtml(ticketNumber: string, body: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    'a reply on your support request',
+    `
+    <p>we've replied to your ticket:</p>
+    <p style="background:#1a1d24;border-radius:8px;padding:12px;white-space:pre-wrap;color:#d1d5db;border:1px solid #2a2e36;font-size:14px">${escapeHtml(body)}</p>
+    ${ticketBlock(ticketNumber)}
+    ${cta('open the ticket', `https://${domain}/dashboard/support`)}
+    <p class="muted">reply to this email or write to ${SUPPORT_CONTACT} and quote the ticket number above.</p>
+  `,
+  );
+}
+
+function ticketReplyText(ticketNumber: string, body: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    'a reply on your support request',
+    '',
+    body,
+    '',
+    `ticket: ${ticketNumber}`,
+    '',
+    `open the ticket: https://${domain}/dashboard/support`,
+    '',
+    `reply to this email or write to ${SUPPORT_CONTACT} and quote the ticket number.`,
+  ].join('\n');
+}
+
+function ticketStatusBlurb(status: string): string {
+  switch (status) {
+    case 'replied':
+      return 'we’ve replied to your ticket — check the thread for our latest message.';
+    case 'closed':
+      return 'we’ve marked your ticket as resolved. if you still need help, just reply and it’ll reopen.';
+    case 'in_review':
+      return 'your ticket is being looked at — we’ll follow up shortly.';
+    default:
+      return 'your ticket status was updated.';
+  }
+}
+
+function ticketStatusHtml(ticketNumber: string, status: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    'update on your support request',
+    `
+    <p>${ticketStatusBlurb(status)}</p>
+    ${ticketBlock(ticketNumber)}
+    ${cta('open the ticket', `https://${domain}/dashboard/support`)}
+    <p class="muted">need a human? reply to this email or write to ${SUPPORT_CONTACT}.</p>
+  `,
+  );
+}
+
+function ticketStatusText(ticketNumber: string, status: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    'update on your support request',
+    '',
+    ticketStatusBlurb(status),
+    '',
+    `ticket: ${ticketNumber}`,
+    '',
+    `open the ticket: https://${domain}/dashboard/support`,
+    '',
+    `need a human? reply to this email or write to ${SUPPORT_CONTACT}.`,
+  ].join('\n');
+}
