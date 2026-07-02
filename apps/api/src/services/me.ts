@@ -3,6 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { sessions, users } from '../db/schema.js';
 import { lookupIp } from '../lib/geoip.js';
+import { isSuperadminEmail } from '../lib/superadmin.js';
 import { getDefaultOrgForUser } from './orgs.js';
 
 export interface ProfilePatch {
@@ -73,6 +74,11 @@ export async function getProfile(userId: string) {
     .where(eq(users.id, userId))
     .limit(1);
   if (!row) throw new Error('user vanished mid-request');
+
+  // Env-pinned superadmin allowlist: when BRIVEN_SUPERADMIN_EMAILS is set,
+  // non-listed accounts are never reported as admin — so the web never
+  // renders the admin link for them (lib/superadmin.ts holds the why).
+  row.isAdmin = row.isAdmin && isSuperadminEmail(row.email);
 
   const [last] = await db
     .select({

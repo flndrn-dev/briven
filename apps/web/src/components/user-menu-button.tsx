@@ -147,17 +147,29 @@ export function UserMenuButton({
           </div>
           <ul className="p-1">
             <li>
-              {/* In the admin header this row pivots back to the user dashboard;
-                  everywhere else it links out to the public website. */}
-              <MenuRow
-                as="button"
-                onSelect={() => {
-                  setOpen(false);
-                  router.push(variant === 'admin' ? '/dashboard' : '/');
-                }}
-                icon={GlobeIcon}
-                label={variant === 'admin' ? 'dashboard' : 'website'}
-              />
+              {/* In the admin header this row pivots back to the user dashboard —
+                  as an ABSOLUTE link, because the admin cockpit lives on
+                  admin.briven.tech where a relative /dashboard 404s. Everywhere
+                  else it links out to the public website. */}
+              {variant === 'admin' ? (
+                <MenuRow
+                  as="a"
+                  href="https://briven.tech/dashboard"
+                  onSelect={() => setOpen(false)}
+                  icon={GlobeIcon}
+                  label="dashboard"
+                />
+              ) : (
+                <MenuRow
+                  as="button"
+                  onSelect={() => {
+                    setOpen(false);
+                    router.push('/');
+                  }}
+                  icon={GlobeIcon}
+                  label="website"
+                />
+              )}
             </li>
             <li>
               <MenuRow

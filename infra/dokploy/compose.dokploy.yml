@@ -272,6 +272,9 @@ services:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       BRIVEN_ADMIN_ORIGIN: https://admin.${BRIVEN_DOMAIN}
+      # Hard allowlist: only these emails can EVER be platform admin
+      # (see apps/api/src/lib/superadmin.ts). Value lives in the Dokploy env.
+      BRIVEN_SUPERADMIN_EMAILS: ${BRIVEN_SUPERADMIN_EMAILS:-}
       BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN},https://admin.${BRIVEN_DOMAIN}
       # Control plane — stock Postgres, postgres.js/drizzle.
       BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable

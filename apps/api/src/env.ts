@@ -154,6 +154,10 @@ const envSchema = z.object({
   // Dedicated admin cockpit host (admin.<domain>) — must be CORS-allowed or
   // every client-side fetch from the cockpit dies with "Failed to fetch".
   BRIVEN_ADMIN_ORIGIN: z.string().url().optional(),
+  // Comma-separated allowlist of emails that may EVER be platform admin.
+  // When set, the users.isAdmin DB flag alone no longer grants admin —
+  // see lib/superadmin.ts. Unset = DB flag decides (local dev).
+  BRIVEN_SUPERADMIN_EMAILS: z.string().optional(),
 
   // Comma-separated list of origins Better Auth will accept as `callbackURL`.
   // Must include every public hostname that serves the dashboard.
