@@ -118,12 +118,17 @@ export async function getAdminRevenue(): Promise<AdminRevenue> {
 
   const planMix = await planMixFromProjects();
 
+  // MRR = active paid subscriptions × their tier's published monthly price.
+  // Prices MUST match the pricing page (apps/web/.../pricing-section.tsx):
+  // free €0 · pro €29 · team €99 (approved by Jürgen 2026-06-15). €0 when
+  // there are no paid subs yet; null only when payments aren't connected.
+  const TIER_MRR_EUR: Record<string, number> = { free: 0, pro: 29, team: 99 };
+  const mrrValue = activeSubs.reduce((sum, s) => sum + (TIER_MRR_EUR[s.tier] ?? 0), 0);
+
   return {
     connected: isPaymentConnected(),
     currency: 'EUR',
-    // MRR stays null until real payments flow — there is no priced-plan table
-    // to derive it from yet. Honest null over a guessed figure.
-    mrr: null,
+    mrr: isPaymentConnected() ? mrrValue : null,
     planMix,
     activeSubscriptions: activeSubs.map((s) => ({
       orgId: s.orgId,

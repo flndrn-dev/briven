@@ -10,6 +10,8 @@ import { UsersIcon } from '@/components/ui/users';
 import { apiJson } from '@/lib/api';
 import { toValidDate } from '@/lib/utils';
 
+import { UserActions } from '../user-actions';
+
 import { EmptyState } from '../../_components/empty-state';
 import { Section } from '../../_components/section';
 import { StatCard } from '../../_components/stat-card';
@@ -189,6 +191,12 @@ export default async function AdminUserDetailPage({
           account detail — identity, geo-location, owned projects, and activity.
         </p>
         <p className="font-mono text-xs text-[var(--color-text-subtle)]">{user.id}</p>
+        <div className="pt-1">
+          <UserActions
+            user={{ id: user.id, isAdmin: user.isAdmin, suspendedAt: user.suspendedAt }}
+            apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+          />
+        </div>
       </header>
 
       {/* ── the numbers ──────────────────────────────────────────────── */}
