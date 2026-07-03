@@ -83,7 +83,12 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     `/v1/projects/${id}/realtime-stats`,
   ).catch(() => null);
 
-  const endpoint = `${project.slug}.apps.briven.tech`;
+  // The per-project app URL (<slug>.apps.briven.tech) is a v2 feature —
+  // its routing layer isn't built yet (see services/branches.ts), so it
+  // must NOT be presented as the live data endpoint. The working ways to
+  // reach this project's database today are mcp.briven.tech (agents) and
+  // api.briven.tech (sdk/cli), both scoped by the project's key.
+  const appUrl = `${project.slug}.apps.briven.tech`;
   const latest = deployments[0];
 
   // Banner copy + colour driven by fill ratio. 75% = yellow (heads-up),
@@ -123,8 +128,27 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         </div>
       ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card label="endpoint" value={endpoint} mono copy />
+        <Card
+          label="mcp endpoint"
+          value="https://mcp.briven.tech/mcp"
+          mono
+          copy
+          hint="agents connect here with this project's mcp key (see the mcp tab)"
+        />
+        <Card
+          label="api endpoint"
+          value="https://api.briven.tech"
+          mono
+          copy
+          hint="sdk / cli connect here with this project's api key"
+        />
         <Card label="project id" value={project.id} mono copy />
+        <Card
+          label="app url"
+          value={appUrl}
+          mono
+          hint="your deployed app's address — reserved, live in v2"
+        />
         <Card
           label="last deploy"
           value={
