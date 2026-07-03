@@ -59,7 +59,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </header>
 
       {/* Mobile-only nav row. Hidden md+ where the sidebar takes over. */}
-      <DashboardMobileNav isAdmin={user.isAdmin} />
+      <DashboardMobileNav />
 
       {/* Body area fills the remaining viewport height. Sidebar spans the
           full body height; main scrolls independently so the sidebar's

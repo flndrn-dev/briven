@@ -15,6 +15,7 @@ const NAV = [
   { href: '/admin', label: 'overview', exact: true },
   { href: '/admin/billing', label: 'subscribers & billing' },
   { href: '/admin/health', label: 'platform health' },
+  { href: '/admin/realtime', label: 'realtime' },
   { href: '/admin/mcp', label: 'mcp / agent access' },
   { href: '/admin/projects', label: 'projects' },
   { href: '/admin/users', label: 'users' },

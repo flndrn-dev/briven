@@ -54,6 +54,12 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/admin/health'),
   },
   {
+    href: '/admin/realtime',
+    label: 'realtime',
+    Icon: ZapIcon as never,
+    match: (p) => p.startsWith('/admin/realtime'),
+  },
+  {
     href: '/admin/mcp',
     label: 'mcp / agent access',
     Icon: BotIcon as never,

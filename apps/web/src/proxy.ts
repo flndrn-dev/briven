@@ -33,13 +33,6 @@ export default function proxy(req: NextRequest): NextResponse {
     return NextResponse.rewrite(url);
   }
 
-  // The legacy admin area is retired in favour of the admin.briven.tech
-  // cockpit — one admin surface, one address. Permanent redirect so old
-  // bookmarks and stale links land in the right place.
-  if (nextUrl.pathname.startsWith('/dashboard/admin')) {
-    return NextResponse.redirect('https://admin.briven.tech', 308);
-  }
-
   if (nextUrl.pathname.startsWith('/dashboard')) {
     const hasSession =
       req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);

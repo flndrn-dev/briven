@@ -1,5 +1,4 @@
 import { revalidatePath } from 'next/cache';
-import Link from 'next/link';
 
 import { ProfileBillingForm } from '../../../../components/profile-billing-form';
 import { apiFetch, apiJson } from '../../../../lib/api';
@@ -113,12 +112,12 @@ export default async function SettingsPage() {
             <span className="rounded bg-[var(--color-primary-subtle)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-primary)]">
               Platform admin
             </span>
-            <Link
-              href="/dashboard/admin"
+            <a
+              href="https://admin.briven.tech"
               className="ml-3 text-[var(--color-text-link)] hover:underline"
             >
               open admin →
-            </Link>
+            </a>
           </p>
         ) : null}
       </section>

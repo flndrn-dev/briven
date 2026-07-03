@@ -18,9 +18,11 @@ const NAV = [
   { href: '/dashboard/settings', label: 'settings' },
 ] as const;
 
-export function DashboardMobileNav({ isAdmin }: { isAdmin: boolean }) {
+// No 'admin' item here: the single admin entry is the avatar-dropdown row
+// pointing at admin.briven.tech (the only admin address).
+export function DashboardMobileNav() {
   const pathname = usePathname();
-  const items = isAdmin ? [...NAV, { href: '/dashboard/admin', label: 'admin' }] : NAV;
+  const items = NAV;
   return (
     <nav
       aria-label="dashboard sections"
