@@ -49,6 +49,10 @@ export function MessageActions({ message, apiOrigin }: Props) {
   const [replying, setReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
   const [sentReplies, setSentReplies] = useState<Reply[]>([]);
+  // When the reply hits an expired step-up, hold it so the StepUpPrompt
+  // can re-run it after the operator re-confirms — the reply text stays
+  // in `replyBody` (only cleared on success), so no re-typing.
+  const [pendingReply, setPendingReply] = useState(false);
 
   const [, startTransition] = useTransition();
 
@@ -95,7 +99,9 @@ export function MessageActions({ message, apiOrigin }: Props) {
       if (res.status === 403) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;
         if (body?.code === 'step_up_required') {
-          setReplyError('reply requires fresh step-up auth — change status first to confirm, then retry.');
+          // Show the password re-confirm prompt right here, then retry the
+          // reply automatically on success — no need to change status first.
+          setPendingReply(true);
           return;
         }
       }
@@ -199,6 +205,17 @@ export function MessageActions({ message, apiOrigin }: Props) {
         />
         {replyError ? (
           <p className="font-mono text-[10px] text-[var(--color-error)]">{replyError}</p>
+        ) : null}
+        {pendingReply ? (
+          <StepUpPrompt
+            apiOrigin={apiOrigin}
+            reason="sending a reply requires fresh step-up auth. confirm with your password."
+            onSuccess={async () => {
+              setPendingReply(false);
+              await sendReply();
+            }}
+            onCancel={() => setPendingReply(false)}
+          />
         ) : null}
         <div>
           <button
