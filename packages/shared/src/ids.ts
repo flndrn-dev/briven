@@ -15,6 +15,7 @@ export type IdPrefix =
   | 'p' // project
   | 'd' // deployment
   | 'k' // api key
+  | 'mck' // mcp project key (agent door — mcp.briven.tech)
   | 'm' // member
   | 'au' // audit log
   | 'ar' // abuse report
@@ -43,7 +44,8 @@ export type IdPrefix =
   | 'as' // auto-snapshot settings row (per-project automatic save-points)
   | 'agt' // platform agent (admin-registered AI agent, encrypted provider key)
   | 'ctc' // contact message (public /contact submission; ticketed or plain)
-  | 'crp'; // contact message reply (operator/user reply on a message thread)
+  | 'crp' // contact message reply (operator/user reply on a message thread)
+  | 'tsec'; // tenant secret (per-project encrypted credential, e.g. provider keys)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;
