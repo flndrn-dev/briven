@@ -10,7 +10,7 @@ import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
 import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/credit-card';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { LayoutGridIcon, type LayoutGridIconHandle } from '../../components/ui/layout-grid';
-import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
+import { type ShieldCheckIconHandle } from '../../components/ui/shield-check';
 import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
 const STORAGE_KEY = 'briven.sidebar.collapsed';
