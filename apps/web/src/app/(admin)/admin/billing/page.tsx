@@ -1,35 +1,44 @@
+import { ActivityIcon } from '@/components/ui/activity';
 import { CreditCardIcon } from '@/components/ui/credit-card';
+import { LayoutGridIcon } from '@/components/ui/layout-grid';
+import { TriangleAlertIcon } from '@/components/ui/triangle-alert';
 import { UsersIcon } from '@/components/ui/users';
 
 import { apiJson } from '@/lib/api';
 import { toValidDate } from '@/lib/utils';
 
+import { AreaChart, type AreaChartPoint } from '../_components/area-chart';
 import { EmptyState } from '../_components/empty-state';
 import { Section } from '../_components/section';
 import { CountUp, StatCard } from '../_components/stat-card';
 
-export const metadata = { title: 'subscribers & billing · admin' };
+export const metadata = { title: 'revenue · admin' };
 export const dynamic = 'force-dynamic';
 
-type Tier = 'free' | 'pro' | 'team';
-type SubStatus = 'trialing' | 'active' | 'past_due' | 'canceled';
+/* ─── payload type (mirrors /v1/admin/revenue) ───────────────────────────── */
 
-interface BillingTotals {
-  subscribers: number | null;
+interface Revenue {
+  connected: boolean;
+  currency: 'EUR';
   mrr: number | null;
-  currency: string | null;
-  planMix: Record<Tier, number> | null;
-  churn30d: number | null;
-}
-
-interface SubscriberRow {
-  orgId: string;
-  orgName: string;
-  ownerEmail: string | null;
-  tier: Tier;
-  status: SubStatus;
-  currentPeriodEnd: string | null;
-  since: string;
+  planMix: { free: number; pro: number; team: number };
+  activeSubscriptions: Array<{
+    orgId: string;
+    orgName: string;
+    tier: string;
+    status: string;
+    since: string;
+    currentPeriodEnd: string | null;
+  }>;
+  meteredUsage: Array<{
+    metric: string;
+    period: string;
+    quantity: number;
+    unit: string;
+    pushStatus: string;
+  }>;
+  monthlyTimeline: Array<{ month: string; invocations: number; storageRows: number }>;
+  note: string;
 }
 
 /** ISO currency code → display symbol, falling back to the code itself. */
@@ -57,22 +66,40 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-const TOTALS_FALLBACK: BillingTotals = {
-  subscribers: null,
+/** 'YYYY-MM' → midnight-UTC ms of the first of that month, or NaN if unparseable. */
+function monthToMs(month: string): number {
+  return Date.parse(`${month}-01T00:00:00Z`);
+}
+
+/** ms → 'jun 25' style lowercase month label. */
+function formatMonth(x: number): string {
+  return new Date(x)
+    .toLocaleDateString(undefined, { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    .toLowerCase();
+}
+
+const REVENUE_FALLBACK: Revenue = {
+  connected: false,
+  currency: 'EUR',
   mrr: null,
-  currency: null,
-  planMix: null,
-  churn30d: null,
+  planMix: { free: 0, pro: 0, team: 0 },
+  activeSubscriptions: [],
+  meteredUsage: [],
+  monthlyTimeline: [],
+  note: 'revenue data unavailable — the api didn’t answer or Mavi Pay is not wired up yet.',
 };
 
-export default async function AdminBillingPage() {
-  const [totals, subsResp] = await Promise.all([
-    apiJson<BillingTotals>('/v1/admin/billing/totals').catch(() => TOTALS_FALLBACK),
-    apiJson<{ subscribers: SubscriberRow[] }>('/v1/admin/billing/subscribers').catch(() => ({
-      subscribers: [] as SubscriberRow[],
-    })),
-  ]);
-  const subscribers = subsResp.subscribers;
+export default async function AdminRevenuePage() {
+  const data = await apiJson<Revenue>('/v1/admin/revenue').catch(() => REVENUE_FALLBACK);
+
+  const invocationSeries: AreaChartPoint[] = data.monthlyTimeline.map((m) => ({
+    x: monthToMs(m.month),
+    y: m.invocations,
+  }));
+  const storageSeries: AreaChartPoint[] = data.monthlyTimeline.map((m) => ({
+    x: monthToMs(m.month),
+    y: m.storageRows,
+  }));
 
   return (
     <div className="flex flex-col gap-10">
@@ -81,120 +108,243 @@ export default async function AdminBillingPage() {
           <span className="text-[var(--color-primary)]">
             <CreditCardIcon size={20} />
           </span>
-          <h1 className="font-mono text-xl tracking-tight">subscribers &amp; billing</h1>
+          <h1 className="font-mono text-xl tracking-tight">revenue</h1>
         </div>
         <p className="max-w-prose font-mono text-sm text-[var(--color-text-muted)]">
-          who pays what — plans, mrr, and churn across every account, wired to Mavi Pay. real
-          numbers only; anything we can&apos;t yet prove shows &ldquo;—&rdquo; rather than a fake
-          zero.
+          the money view — mrr, subscriptions, and what will bill, wired to Mavi Pay. real numbers
+          only; anything we can&apos;t yet prove shows &ldquo;—&rdquo; rather than a fake zero.
         </p>
       </header>
 
-      {/* ── totals row ───────────────────────────────────────────────── */}
-      <Section title="totals · Mavi Pay" icon={<CreditCardIcon size={16} />}>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="paid subscribers"
-            value={totals.subscribers}
-            icon={<UsersIcon size={14} />}
-            tone="primary"
-            hint="non-canceled subscriptions"
-            waitingOn="Mavi Pay not configured here"
+      {/* ── honest banner (only when the engine isn't connected) ──────── */}
+      {!data.connected ? (
+        <div className="flex items-start gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+          <span className="mt-0.5 shrink-0 text-[var(--color-warning)]">
+            <TriangleAlertIcon size={16} />
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <p className="font-mono text-sm text-[var(--color-text)]">
+              revenue engine not connected
+            </p>
+            <p className="font-mono text-xs text-[var(--color-text-muted)]">{data.note}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── top numbers ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard
+          label="mrr"
+          value={data.mrr}
+          prefix={currencySymbol(data.currency)}
+          decimals={data.mrr !== null && !Number.isInteger(data.mrr) ? 2 : 0}
+          icon={<CreditCardIcon size={14} />}
+          tone="primary"
+          hint="monthly recurring revenue"
+          waitingOn="Mavi Pay not connected"
+        />
+        <StatCard
+          label="active subscriptions"
+          value={data.activeSubscriptions.length}
+          icon={<UsersIcon size={14} />}
+          hint="non-canceled subscriptions"
+        />
+        <PlanMixCard planMix={data.planMix} />
+      </div>
+
+      {/* ── what will bill (metered usage) ───────────────────────────── */}
+      <Section
+        title="what will bill"
+        icon={<LayoutGridIcon size={16} />}
+        right={
+          <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+            metered — bills when Mavi Pay connects
+          </span>
+        }
+      >
+        {data.meteredUsage.length === 0 ? (
+          <EmptyState
+            icon={<LayoutGridIcon size={24} />}
+            title="no metered usage yet"
+            message="metered line-items appear here as the platform records billable usage."
           />
-          <StatCard
-            label="mrr"
-            value={totals.mrr}
-            prefix={currencySymbol(totals.currency)}
-            decimals={totals.mrr !== null && !Number.isInteger(totals.mrr) ? 2 : 0}
-            hint="monthly recurring revenue"
-            waitingOn="Mavi Pay not configured here"
+        ) : (
+          <MeteredUsageTable rows={data.meteredUsage} />
+        )}
+      </Section>
+
+      {/* ── monthly timeline (6 months) ──────────────────────────────── */}
+      <Section title="monthly · 6 months" icon={<ActivityIcon size={16} />}>
+        <div className="grid grid-cols-1 gap-6">
+          <TimelineChartCard
+            label="invocations"
+            data={invocationSeries}
+            ariaLabel="function invocations per month"
           />
-          <PlanMixCard planMix={totals.planMix} />
-          <StatCard
-            label="churn · 30d"
-            value={totals.churn30d}
-            hint="subscriptions canceled · last 30d"
-            waitingOn="Mavi Pay not configured here"
+          <TimelineChartCard
+            label="storage rows"
+            data={storageSeries}
+            ariaLabel="storage rows per month"
           />
         </div>
       </Section>
 
-      {/* ── subscriber table ─────────────────────────────────────────── */}
+      {/* ── active subscriptions ─────────────────────────────────────── */}
       <Section
-        title={`subscribers · ${subscribers.length.toLocaleString()}`}
+        title={`active subscriptions · ${data.activeSubscriptions.length}`}
         icon={<UsersIcon size={16} />}
       >
-        {subscribers.length === 0 ? (
+        {data.activeSubscriptions.length === 0 ? (
           <EmptyState
             icon={<CreditCardIcon size={24} />}
-            title="no paying subscribers yet"
-            message="accounts appear here the moment Mavi Pay records a subscription — no placeholder rows in the meantime."
+            title="no active subscriptions yet"
+            message="subscriptions appear here the moment Mavi Pay records one — no placeholder rows in the meantime."
           />
         ) : (
-          <SubscriberTable rows={subscribers} />
+          <SubscriptionTable rows={data.activeSubscriptions} />
         )}
       </Section>
     </div>
   );
 }
 
-function PlanMixCard({ planMix }: { planMix: Record<Tier, number> | null }) {
+/* ─── small pieces ───────────────────────────────────────────────────────── */
+
+function PlanMixCard({ planMix }: { planMix: { free: number; pro: number; team: number } }) {
   return (
     <div className="flex h-full flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
       <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
         plan mix
       </p>
-      {planMix === null ? (
-        <div className="flex flex-col gap-1.5">
-          <p className="font-mono text-4xl tracking-tight text-[var(--color-text-subtle)]">—</p>
-          <p className="font-mono text-[11px] text-[var(--color-text-subtle)]">
-            Mavi Pay not configured here
-          </p>
-        </div>
-      ) : (
-        <dl className="flex flex-col gap-2 font-mono text-sm">
-          {(['free', 'pro', 'team'] as const).map((tier) => (
-            <div key={tier} className="flex items-center justify-between">
-              <dt className="text-[var(--color-text-muted)]">{tier}</dt>
-              <dd className="text-[var(--color-text)]">
-                <CountUp value={planMix[tier] ?? 0} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <dl className="flex flex-col gap-2 font-mono text-sm">
+        {(['free', 'pro', 'team'] as const).map((tier) => (
+          <div key={tier} className="flex items-center justify-between">
+            <dt className="text-[var(--color-text-muted)]">{tier}</dt>
+            <dd className="text-[var(--color-text)]">
+              <CountUp value={planMix[tier]} />
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
 
-const STATUS_TONE: Record<SubStatus, string> = {
+/** One 6-month timeline series in a surface card, matching the overview cards. */
+function TimelineChartCard({
+  label,
+  data,
+  ariaLabel,
+}: {
+  label: string;
+  data: AreaChartPoint[];
+  ariaLabel: string;
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+        {label}
+      </p>
+      <AreaChart
+        data={data}
+        height={200}
+        yFormat={(y) => y.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+        xFormat={formatMonth}
+        ariaLabel={ariaLabel}
+        pendingLabel="not enough monthly history yet."
+      />
+    </div>
+  );
+}
+
+/** Push status → pill tone. Tolerant of free-form status strings. */
+function pushTone(status: string): string {
+  const s = status.toLowerCase();
+  if (/push|sent|ok|synced/.test(s)) {
+    return 'text-[var(--color-success)] border-[var(--color-success)]';
+  }
+  if (/pending|queued/.test(s)) {
+    return 'text-[var(--color-warning)] border-[var(--color-warning)]';
+  }
+  if (/error|failed/.test(s)) {
+    return 'text-[var(--color-error)] border-[var(--color-error)]';
+  }
+  return 'text-[var(--color-text-subtle)] border-[var(--color-border-subtle)]';
+}
+
+function MeteredUsageTable({ rows }: { rows: Revenue['meteredUsage'] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+      <table className="w-full border-collapse font-mono text-xs">
+        <thead>
+          <tr className="border-b border-[var(--color-border-subtle)] text-left text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+            <th className="px-6 py-3 font-normal">metric</th>
+            <th className="px-6 py-3 font-normal">period</th>
+            <th className="px-6 py-3 font-normal">quantity</th>
+            <th className="px-6 py-3 font-normal">push status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr
+              key={`${r.metric}-${r.period}-${i}`}
+              className="border-b border-[var(--color-border-subtle)] transition-colors last:border-0 hover:bg-[var(--color-surface-raised)]"
+            >
+              <td className="px-6 py-4 text-[var(--color-text)]">{r.metric}</td>
+              <td className="px-6 py-4 text-[var(--color-text-muted)]">{r.period}</td>
+              <td className="whitespace-nowrap px-6 py-4 text-[var(--color-text)]">
+                {r.quantity.toLocaleString()}{' '}
+                <span className="text-[var(--color-text-subtle)]">{r.unit}</span>
+              </td>
+              <td className="px-6 py-4">
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider ${pushTone(
+                    r.pushStatus,
+                  )}`}
+                >
+                  {r.pushStatus.replace(/_/g, ' ')}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const SUB_STATUS_TONE: Record<string, string> = {
   active: 'text-[var(--color-success)] border-[var(--color-success)]',
   trialing: 'text-[var(--color-text-link)] border-[var(--color-border-strong)]',
   past_due: 'text-[var(--color-warning)] border-[var(--color-warning)]',
   canceled: 'text-[var(--color-text-subtle)] border-[var(--color-border-subtle)]',
 };
 
-function StatusBadge({ status }: { status: SubStatus }) {
+/** Tolerant status badge — status is a free string per the contract. */
+function SubStatusBadge({ status }: { status: string }) {
+  const tone =
+    SUB_STATUS_TONE[status.toLowerCase()] ??
+    'text-[var(--color-text-subtle)] border-[var(--color-border-subtle)]';
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider ${STATUS_TONE[status]}`}
+      className={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider ${tone}`}
     >
-      {status.replace('_', ' ')}
+      {status.replace(/_/g, ' ')}
     </span>
   );
 }
 
-function SubscriberTable({ rows }: { rows: SubscriberRow[] }) {
+function SubscriptionTable({ rows }: { rows: Revenue['activeSubscriptions'] }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
       <table className="w-full border-collapse font-mono text-xs">
         <thead>
           <tr className="border-b border-[var(--color-border-subtle)] text-left text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
             <th className="px-6 py-3 font-normal">org</th>
-            <th className="px-6 py-3 font-normal">plan</th>
+            <th className="px-6 py-3 font-normal">tier</th>
             <th className="px-6 py-3 font-normal">status</th>
-            <th className="px-6 py-3 font-normal">renews</th>
             <th className="px-6 py-3 font-normal">since</th>
+            <th className="px-6 py-3 font-normal">renews</th>
           </tr>
         </thead>
         <tbody>
@@ -206,23 +356,19 @@ function SubscriberTable({ rows }: { rows: SubscriberRow[] }) {
               <td className="px-6 py-4">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[var(--color-text)]">{r.orgName}</span>
-                  {r.ownerEmail ? (
-                    <span className="text-[10px] text-[var(--color-text-subtle)]">
-                      {r.ownerEmail}
-                    </span>
-                  ) : null}
+                  <span className="text-[10px] text-[var(--color-text-subtle)]">{r.orgId}</span>
                 </div>
               </td>
               <td className="px-6 py-4">
                 <span className="text-[var(--color-primary)]">{r.tier}</span>
               </td>
               <td className="px-6 py-4">
-                <StatusBadge status={r.status} />
+                <SubStatusBadge status={r.status} />
               </td>
+              <td className="px-6 py-4 text-[var(--color-text-muted)]">{fmtDate(r.since)}</td>
               <td className="px-6 py-4 text-[var(--color-text-muted)]">
                 {fmtDate(r.currentPeriodEnd)}
               </td>
-              <td className="px-6 py-4 text-[var(--color-text-muted)]">{fmtDate(r.since)}</td>
             </tr>
           ))}
         </tbody>

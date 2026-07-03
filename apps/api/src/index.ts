@@ -15,6 +15,8 @@ import { attachSession, type Session, type User } from './middleware/session.js'
 import { abuseRouter } from './routes/abuse.js';
 import { adminRouter } from './routes/admin.js';
 import { adminAgentsRouter } from './routes/admin-agents.js';
+import { adminMcpRouter } from './routes/admin-mcp.js';
+import { adminRevenueRouter } from './routes/admin-revenue.js';
 import { adminManifestRouter } from './routes/admin-manifest.js';
 import { adminTimeseriesRouter } from './routes/admin-timeseries.js';
 import { aiRouter } from './routes/ai.js';
@@ -156,6 +158,8 @@ app.route('/', projectMcpRouter);
 app.route('/', invitationsRouter);
 app.route('/', adminRouter);
 app.route('/', adminAgentsRouter);
+app.route('/', adminMcpRouter);
+app.route('/', adminRevenueRouter);
 app.route('/', adminManifestRouter);
 app.route('/', adminTimeseriesRouter);
 app.route('/', billingRouter);

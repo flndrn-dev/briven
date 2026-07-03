@@ -14,7 +14,15 @@ import { Section } from '../_components/section';
 /* ─── payload types (mirror /v1/admin/agents) ────────────────────────────── */
 
 export type AgentScope = 'read' | 'read-write' | 'admin';
-export type AgentProvider = 'anthropic' | 'openai' | 'ollama' | 'custom';
+export type AgentProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'xai'
+  | 'zai'
+  | 'deepseek'
+  | 'ollama'
+  | 'flndrnai'
+  | 'custom';
 
 export interface MaskedAgent {
   id: string;
@@ -229,8 +237,49 @@ interface AgentFormValues {
   enabled: boolean;
 }
 
-const PROVIDERS: readonly AgentProvider[] = ['anthropic', 'openai', 'ollama', 'custom'];
+const PROVIDERS: readonly AgentProvider[] = [
+  'anthropic',
+  'openai',
+  'xai',
+  'zai',
+  'deepseek',
+  'ollama',
+  'flndrnai',
+  'custom',
+];
 const SCOPES: readonly AgentScope[] = ['read', 'read-write', 'admin'];
+
+// Default endpoint per provider. Auto-filled when a provider is picked, but
+// only if the endpoint is empty or still equals a known preset — never
+// clobbering a value the operator hand-typed. 'custom' stays blank.
+const PROVIDER_ENDPOINTS: Record<AgentProvider, string> = {
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com/v1',
+  xai: 'https://api.x.ai/v1',
+  zai: 'https://api.z.ai/api/paas/v4',
+  deepseek: 'https://api.deepseek.com',
+  ollama: 'http://localhost:11434/v1',
+  flndrnai: 'https://ai.flndrn.com/v1',
+  custom: '',
+};
+
+// Every known preset value — used to decide whether an endpoint is still a
+// preset (safe to overwrite) versus a hand-typed value (must be preserved).
+const KNOWN_ENDPOINTS: ReadonlySet<string> = new Set(
+  Object.values(PROVIDER_ENDPOINTS).filter((v) => v.length > 0),
+);
+
+// A helpful model-id hint per provider, shown as the input placeholder.
+const PROVIDER_MODEL_HINTS: Record<AgentProvider, string> = {
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-4o',
+  xai: 'grok-2',
+  zai: 'glm-4',
+  deepseek: 'deepseek-chat',
+  ollama: 'llama3.1',
+  flndrnai: 'llama3.1',
+  custom: 'e.g. claude-sonnet-4-6',
+};
 
 const INPUT_CLASS =
   'rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2.5 py-1.5 font-mono text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]';
@@ -260,6 +309,21 @@ function AgentForm({
   const [localError, setLocalError] = useState<string | null>(null);
 
   const endpointish = provider === 'custom' || provider === 'ollama';
+
+  // Switching provider auto-fills the endpoint from the preset — but only when
+  // the field is empty or still holds a known preset, so a hand-typed url is
+  // never overwritten. 'custom' has a blank preset, so it leaves things alone.
+  function handleProviderChange(next: string) {
+    setProvider(next);
+    const preset = PROVIDER_ENDPOINTS[next as AgentProvider] ?? '';
+    if (preset.length === 0) return;
+    const current = endpoint.trim();
+    if (current.length === 0 || KNOWN_ENDPOINTS.has(current)) {
+      setEndpoint(preset);
+    }
+  }
+
+  const modelHint = PROVIDER_MODEL_HINTS[provider as AgentProvider] ?? 'e.g. claude-sonnet-4-6';
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -308,7 +372,7 @@ function AgentForm({
           <span className={LABEL_CLASS}>provider</span>
           <select
             value={provider}
-            onChange={(e) => setProvider(e.currentTarget.value)}
+            onChange={(e) => handleProviderChange(e.currentTarget.value)}
             disabled={busy}
             className={INPUT_CLASS}
           >
@@ -333,6 +397,15 @@ function AgentForm({
           {endpointish && endpoint.trim().length === 0 ? (
             <span className="font-mono text-[10px] text-[var(--color-warning)]">
               {provider} agents usually need an endpoint url — where should requests go?
+            </span>
+          ) : (
+            <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+              auto-filled from the provider — edit if yours differs.
+            </span>
+          )}
+          {provider === 'flndrnai' ? (
+            <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+              points at ai.flndrn.com — the operator&apos;s own ollama gateway.
             </span>
           ) : null}
         </label>
@@ -360,7 +433,7 @@ function AgentForm({
           <input
             value={model}
             onChange={(e) => setModel(e.currentTarget.value)}
-            placeholder="e.g. claude-sonnet-4-6"
+            placeholder={`e.g. ${modelHint}`}
             maxLength={120}
             disabled={busy}
             className={INPUT_CLASS}

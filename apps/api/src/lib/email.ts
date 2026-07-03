@@ -61,6 +61,44 @@ function isConfigured(): boolean {
   return Boolean(env.BRIVEN_MITTERA_API_URL && env.BRIVEN_MITTERA_API_KEY);
 }
 
+/**
+ * What the admin cockpit can TRUTHFULLY report about the live sender,
+ * read straight off this module's own config + transport helpers so the
+ * dashboard never drifts from the real send path (Phase 8 §1).
+ *
+ * Note on provider: Briven talks only to mittera.eu, which abstracts the
+ * underlying provider (SES / Mailgun / Pando). That provider is NOT
+ * reported back to Briven on the send path or the webhook envelope, so we
+ * deliberately do not invent a provider field here — `activeTransport`
+ * reports the leg Briven itself drives (mittera vs the dev stdout sink),
+ * which is the part Briven can actually observe. There is no SMTP
+ * fallback in the current send path, so `smtpFallbackConfigured` is always
+ * false and `activeTransport` is only ever 'mittera' or 'dev-stdout'.
+ */
+export interface EmailSenderInfo {
+  /** The default From: every control-plane send uses (per-tenant sends override it). */
+  fromAddress: string;
+  mitteraConfigured: boolean;
+  /** The exact mittera POST endpoint, or null when unconfigured. */
+  mitteraEndpoint: string | null;
+  smtpFallbackConfigured: boolean;
+  /** The transport that WOULD carry the next control-plane send given current config. */
+  activeTransport: 'mittera' | 'smtp' | 'dev-stdout';
+}
+
+export function getEmailSenderInfo(): EmailSenderInfo {
+  const mittera = isConfigured();
+  return {
+    fromAddress: fromAddress(),
+    mitteraConfigured: mittera,
+    mitteraEndpoint: env.BRIVEN_MITTERA_API_URL
+      ? `${env.BRIVEN_MITTERA_API_URL.replace(/\/$/, '')}${SEND_PATH}`
+      : null,
+    smtpFallbackConfigured: false,
+    activeTransport: mittera ? 'mittera' : 'dev-stdout',
+  };
+}
+
 async function send(label: string, args: SendArgs): Promise<void> {
   // Suppression guard — never POST to mittera for a recipient on the
   // local suppression list (permanent bounce, complaint, mittera-side
