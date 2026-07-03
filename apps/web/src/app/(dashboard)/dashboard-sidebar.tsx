@@ -62,13 +62,9 @@ const NAV: NavItem[] = [
     Icon: CogIcon as never,
     match: (p) => p.startsWith('/dashboard/settings'),
   },
-  {
-    href: '/dashboard/admin',
-    label: 'admin',
-    Icon: ShieldCheckIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin'),
-    adminOnly: true,
-  },
+  // No 'admin' nav item here on purpose: the ONE admin entry lives in the
+  // avatar dropdown (UserMenuButton) and points to admin.briven.tech. The
+  // old /dashboard/admin area redirects there too (see proxy.ts).
 ];
 
 type IconHandle =
