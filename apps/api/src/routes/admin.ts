@@ -37,6 +37,7 @@ import {
   updateIncident,
 } from '../services/incidents.js';
 import {
+  sendContactReply,
   sendMigrationStatusUpdate,
   sendTicketReply,
   sendTicketStatusUpdate,
@@ -62,11 +63,16 @@ import {
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 import { incidentSeverity, ticketStatuses } from '../db/schema.js';
 import {
+  addContactReply,
   addReply as addTicketReply,
+  getContactMessageForAdmin,
   getTicketByIdForAdmin,
+  listContactMessages,
   listTicketsForAdmin,
   renderTicketNumber,
+  updateContactMessage,
   updateTicket,
+  type ContactMessageFilter,
   type UpdateTicketInput,
 } from '../services/support-tickets.js';
 import { NotFoundError, ValidationError } from '@briven/shared';
@@ -1023,6 +1029,32 @@ function serializeReply(r: {
   return { id: r.id, author: r.author, body: r.body, createdAt: r.createdAt.toISOString() };
 }
 
+/**
+ * Serialized shape for the all-messages inbox — the AdminTicket shape plus
+ * an `isTicket` flag (true when the row carries a ticket number, i.e. it's
+ * also visible on the tickets page). Contract with the web inbox client.
+ */
+type SerializedMessage = AdminTicket & { isTicket: boolean };
+
+function serializeAdminMessage(t: {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  name: string;
+  email: string;
+  subject: string | null;
+  message: string;
+  country: string | null;
+  assignedTo: string | null;
+  operatorNotes: string | null;
+  createdAt: Date;
+  handledAt: Date | null;
+}): SerializedMessage {
+  return { ...serializeAdminTicket(t), isTicket: t.ticketNumber != null };
+}
+
 const updateTicketSchema = z.object({
   status: z.enum(ticketStatuses).optional(),
   assignedTo: z.string().max(200).nullable().optional(),
@@ -1139,6 +1171,138 @@ adminRouter.post('/v1/admin/tickets/:id/reply', async (c) => {
       });
     }
     return c.json({ reply: serializeReply(reply) }, 201);
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+/* ─── all-messages inbox (tagged OR plain /contact submissions) ──────── */
+
+const contactMessageFilterSchema = z.enum(['all', 'plain', 'tickets']);
+
+const updateContactMessageSchema = z.object({
+  status: z.enum(ticketStatuses).optional(),
+  operatorNotes: z.string().max(20_000).nullable().optional(),
+});
+
+const contactReplySchema = z.object({
+  body: z.string().trim().min(1).max(8_000),
+});
+
+adminRouter.get('/v1/admin/contact-messages', async (c) => {
+  const filterParam = c.req.query('filter');
+  const parsed = filterParam ? contactMessageFilterSchema.safeParse(filterParam) : null;
+  if (filterParam && !parsed!.success) {
+    return c.json({ code: 'validation_failed', message: 'invalid filter' }, 400);
+  }
+  const filter: ContactMessageFilter = parsed?.success ? parsed.data : 'all';
+  const limitParam = c.req.query('limit');
+  const limit = limitParam ? Number(limitParam) || 100 : 100;
+  const rows = await listContactMessages({ filter, limit });
+  return c.json({ messages: rows.map(serializeAdminMessage) });
+});
+
+adminRouter.get('/v1/admin/contact-messages/:id', async (c) => {
+  const id = c.req.param('id');
+  try {
+    const { message, replies } = await getContactMessageForAdmin(id);
+    return c.json({
+      message: serializeAdminMessage(message),
+      replies: replies.map(serializeReply),
+    });
+  } catch {
+    return c.json({ code: 'not_found' }, 404);
+  }
+});
+
+adminRouter.post('/v1/admin/contact-messages/:id/reply', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = contactReplySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const { reply, message } = await addContactReply(id, 'operator', parsed.data.body);
+    // Store the reply THEN flip status → 'replied' so the inbox reflects
+    // the operator handled it (works for plain + ticketed alike).
+    await updateContactMessage(id, { status: 'replied' });
+    const rendered = renderTicketNumber(message.ticketNumber);
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_message.reply',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        messageId: id,
+        ticketNumber: rendered,
+        isTicket: message.ticketNumber != null,
+        replyId: reply.id,
+      },
+    });
+    // Email the sender. Ticketed → the ticket-reply email (quotes the
+    // number); plain → the contact-reply email (no ticket references).
+    // Fire-and-forget with a logged catch, like the ticket reply route.
+    if (rendered) {
+      void sendTicketReply(message.email, rendered, reply.body).catch((err) => {
+        log.error('contact_reply_email_failed', {
+          messageId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    } else {
+      void sendContactReply(message.email, reply.body).catch((err) => {
+        log.error('contact_reply_email_failed', {
+          messageId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    return c.json({ reply: serializeReply(reply) }, 201);
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+adminRouter.patch('/v1/admin/contact-messages/:id', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateContactMessageSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const before = await getContactMessageForAdmin(id);
+    const message = await updateContactMessage(id, parsed.data);
+    const statusChanged =
+      Boolean(parsed.data.status) && before.message.status !== message.status;
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_message.update',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        messageId: id,
+        ticketNumber: renderTicketNumber(message.ticketNumber),
+        isTicket: message.ticketNumber != null,
+        fields: Object.keys(parsed.data),
+        statusChanged,
+        newStatus: statusChanged ? message.status : null,
+      },
+    });
+    return c.json({ message: serializeAdminMessage(message) });
   } catch (err) {
     if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
     if (err instanceof ValidationError) {

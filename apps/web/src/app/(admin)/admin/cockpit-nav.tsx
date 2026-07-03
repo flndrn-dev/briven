@@ -149,6 +149,12 @@ const NAV_GROUPS: NavGroup[] = [
         match: (p) => p.startsWith('/admin/migrations'),
       },
       {
+        href: '/admin/messages',
+        label: 'messages',
+        Icon: MailIcon as never,
+        match: (p) => p.startsWith('/admin/messages'),
+      },
+      {
         href: '/admin/tickets',
         label: 'tickets',
         Icon: LifeBuoyIcon as never,

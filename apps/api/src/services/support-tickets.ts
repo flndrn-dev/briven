@@ -1,5 +1,5 @@
 import { newId, NotFoundError, ValidationError } from '@briven/shared';
-import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import {
@@ -241,6 +241,128 @@ export async function addReply(
     .returning();
   if (!reply) throw new Error('insert returned no row');
   return { reply, ticket };
+}
+
+/* ─── all-messages inbox (admin) — tagged OR plain ───────────────── */
+
+/** Filter for the all-messages inbox. 'all' = no ticket filter. */
+export type ContactMessageFilter = 'all' | 'plain' | 'tickets';
+
+/**
+ * List contact messages for the all-messages admin inbox. Unlike
+ * listTicketsForAdmin (which is hard-scoped to ticketed rows), this can
+ * surface EVERY submission so an operator can read + reply to plain
+ * (untagged) messages too. `filter` narrows: 'all' = no ticket filter,
+ * 'plain' = only non-ticketed rows (ticket_number IS NULL), 'tickets' =
+ * only ticketed rows. Newest first; limit capped at 200 (default 100).
+ */
+export async function listContactMessages(
+  opts: { filter?: ContactMessageFilter; limit?: number } = {},
+): Promise<ContactMessage[]> {
+  const db = getDb();
+  const limit = Math.min(200, Math.max(1, opts.limit ?? 100));
+  const filter = opts.filter ?? 'all';
+  const conds =
+    filter === 'plain'
+      ? [isNull(contactMessages.ticketNumber)]
+      : filter === 'tickets'
+        ? [isNotNull(contactMessages.ticketNumber)]
+        : [];
+  const q = db.select().from(contactMessages);
+  const filtered = conds.length ? q.where(and(...conds)) : q;
+  return filtered.orderBy(desc(contactMessages.createdAt)).limit(limit);
+}
+
+/**
+ * One contact message (by id) for the admin inbox, WITH its reply thread.
+ * Mirrors getTicketByIdForAdmin but WITHOUT the isNotNull(ticketNumber)
+ * scope so a plain (untagged) message is openable too.
+ */
+export async function getContactMessageForAdmin(
+  id: string,
+): Promise<{ message: ContactMessage; replies: ContactMessageReply[] }> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(contactMessages)
+    .where(eq(contactMessages.id, id))
+    .limit(1);
+  const message = rows[0];
+  if (!message) throw new NotFoundError('contact message', id);
+  const replies = await db
+    .select()
+    .from(contactMessageReplies)
+    .where(eq(contactMessageReplies.messageId, id))
+    .orderBy(asc(contactMessageReplies.createdAt));
+  return { message, replies };
+}
+
+/**
+ * Append an operator reply to ANY contact message thread — plain or
+ * ticketed. Same reply table + author validation as addReply, keyed by
+ * message_id, but the parent lookup is NOT scoped to ticketed rows.
+ * Returns the new reply plus the parent message (so the caller has the
+ * sender's email + ticketNumber to decide which email to send).
+ */
+export async function addContactReply(
+  id: string,
+  author: TicketReplyAuthor,
+  body: string,
+): Promise<{ reply: ContactMessageReply; message: ContactMessage }> {
+  if (!(ticketReplyAuthors as readonly string[]).includes(author)) {
+    throw new ValidationError('invalid reply author');
+  }
+  const trimmed = body.trim();
+  if (!trimmed) throw new ValidationError('reply body is required');
+  if (trimmed.length > REPLY_CAP) {
+    throw new ValidationError(`reply body exceeds ${REPLY_CAP}-character cap`);
+  }
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(contactMessages)
+    .where(eq(contactMessages.id, id))
+    .limit(1);
+  const message = rows[0];
+  if (!message) throw new NotFoundError('contact message', id);
+  const [reply] = await db
+    .insert(contactMessageReplies)
+    .values({ id: newId('crp'), messageId: id, author, body: trimmed })
+    .returning();
+  if (!reply) throw new Error('insert returned no row');
+  return { reply, message };
+}
+
+/**
+ * Patch ANY contact message (plain or ticketed) — the all-messages-inbox
+ * counterpart to updateTicket, minus the isNotNull(ticketNumber) scope so
+ * a plain message's status / notes are editable too. Only status +
+ * operatorNotes are exposed here (the inbox has no assignee lane).
+ */
+export async function updateContactMessage(
+  id: string,
+  input: { status?: string; operatorNotes?: string | null },
+): Promise<ContactMessage> {
+  const patch: { status?: TicketStatus; operatorNotes?: string | null } = {};
+  if (input.status !== undefined) {
+    assertStatus(input.status);
+    patch.status = input.status;
+  }
+  if (input.operatorNotes !== undefined) {
+    const v = (input.operatorNotes ?? '').trim();
+    if (v.length > NOTES_CAP) {
+      throw new ValidationError(`operatorNotes exceeds ${NOTES_CAP}-character cap`);
+    }
+    patch.operatorNotes = v === '' ? null : v;
+  }
+  const db = getDb();
+  const [row] = await db
+    .update(contactMessages)
+    .set(patch)
+    .where(eq(contactMessages.id, id))
+    .returning();
+  if (!row) throw new NotFoundError('contact message', id);
+  return row;
 }
 
 /* ─── user (dashboard) reads ─────────────────────────────────────── */

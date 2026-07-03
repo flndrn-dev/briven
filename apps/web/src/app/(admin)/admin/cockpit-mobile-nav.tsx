@@ -36,6 +36,7 @@ const NAV: readonly NavEntry[] = [
   { kind: 'link', href: '/admin/incidents', label: 'incidents' },
   { kind: 'link', href: '/admin/abuse-reports', label: 'abuse & allowlist' },
   { kind: 'link', href: '/admin/migrations', label: 'migrations' },
+  { kind: 'link', href: '/admin/messages', label: 'messages' },
   { kind: 'link', href: '/admin/tickets', label: 'tickets' },
   { kind: 'link', href: '/admin/email-events', label: 'email' },
   { kind: 'label', text: 'system' },

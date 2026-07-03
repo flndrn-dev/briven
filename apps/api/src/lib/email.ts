@@ -773,6 +773,22 @@ export async function sendTicketReply(
 }
 
 /**
+ * Emails the sender an operator's reply to a PLAIN (untagged) contact
+ * message — one that never became a support ticket, so there's no ticket
+ * number to quote. Same transport chain as sendTicketReply; the copy just
+ * references "your message to briven" instead of a ticket. `body` is the
+ * operator's message text.
+ */
+export async function sendContactReply(to: string, body: string): Promise<void> {
+  await send('contact_reply', {
+    to,
+    subject: 're: your message to briven',
+    html: contactReplyHtml(body),
+    text: contactReplyText(body),
+  });
+}
+
+/**
  * Notifies the sender that the status of their ticket changed (used for
  * the 'replied'/'closed' transitions). `status` is the new status code.
  */
@@ -849,6 +865,27 @@ function ticketReplyText(ticketNumber: string, body: string): string {
     `open the ticket: https://${domain}/dashboard/support`,
     '',
     `reply to this email or write to ${SUPPORT_CONTACT} and quote the ticket number.`,
+  ].join('\n');
+}
+
+function contactReplyHtml(body: string): string {
+  return shell(
+    'a reply to your message',
+    `
+    <p>we've replied to the message you sent us:</p>
+    <p style="background:#1a1d24;border-radius:8px;padding:12px;white-space:pre-wrap;color:#d1d5db;border:1px solid #2a2e36;font-size:14px">${escapeHtml(body)}</p>
+    <p class="muted">reply to this email or write to ${SUPPORT_CONTACT} and we'll pick it up from there.</p>
+  `,
+  );
+}
+
+function contactReplyText(body: string): string {
+  return [
+    'a reply to your message',
+    '',
+    body,
+    '',
+    `reply to this email or write to ${SUPPORT_CONTACT} and we'll pick it up from there.`,
   ].join('\n');
 }
 

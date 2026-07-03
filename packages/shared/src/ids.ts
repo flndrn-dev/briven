@@ -41,7 +41,9 @@ export type IdPrefix =
   | 'me' // marketing event (funnel tracking for /migrate views + leads)
   | 'auk' // briven auth SDK key (issued from the Auth → API Keys panel)
   | 'as' // auto-snapshot settings row (per-project automatic save-points)
-  | 'agt'; // platform agent (admin-registered AI agent, encrypted provider key)
+  | 'agt' // platform agent (admin-registered AI agent, encrypted provider key)
+  | 'ctc' // contact message (public /contact submission; ticketed or plain)
+  | 'crp'; // contact message reply (operator/user reply on a message thread)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;
