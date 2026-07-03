@@ -58,11 +58,31 @@ export interface Overview {
   counts: { projects: number; users: number };
 }
 
+/* ─── payload types (mirror /v1/admin/timeseries) ────────────────────────── */
+
+interface DailyPoint {
+  day: string; // 'YYYY-MM-DD'
+  count: number;
+}
+
+interface Timeseries {
+  signupsDaily: DailyPoint[];
+  deploysDaily: DailyPoint[];
+  invocationsDaily: DailyPoint[];
+  apiRequests: Array<{ t: string; perMin: number }> | null;
+  hostCpu: Array<{ t: string; pct: number }> | null;
+}
+
 /* ─── live-polled dashboard ──────────────────────────────────────────────── */
 
 const POLL_MS = 10_000;
 /** ~20 min of 10s samples for the live cpu chart. */
 const MAX_SAMPLES = 120;
+/**
+ * Daily/24h series barely move — refetching every 10s alongside the
+ * overview poll would be pure waste. Once on mount + every 5 min.
+ */
+const SERIES_POLL_MS = 5 * 60_000;
 
 export function OverviewDashboard({
   apiOrigin,
@@ -105,6 +125,31 @@ export function OverviewDashboard({
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [load]);
+
+  // 30-day + 24h activity series — real history from /v1/admin/timeseries.
+  const [series, setSeries] = useState<Timeseries | null>(null);
+
+  const loadSeries = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiOrigin}/v1/admin/timeseries`, {
+        credentials: 'include',
+        headers: { accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error(`timeseries failed: ${res.status}`);
+      setSeries((await res.json()) as Timeseries);
+    } catch {
+      // Keep the last good series — a missed 5-min refresh on daily data
+      // is invisible; the main overview poll already surfaces staleness.
+    }
+  }, [apiOrigin]);
+
+  useEffect(() => {
+    void loadSeries();
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void loadSeries();
+    }, SERIES_POLL_MS);
+    return () => clearInterval(timer);
+  }, [loadSeries]);
 
   if (data === null) {
     if (failed) {
@@ -215,6 +260,61 @@ export function OverviewDashboard({
         )}
       </Section>
 
+      {/* ── activity charts (30d dailies + 24h api traffic) ───────────── */}
+      <Section
+        title="activity"
+        icon={<ActivityIcon size={16} />}
+        right={
+          <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+            real history · refreshes every 5 min
+          </span>
+        }
+      >
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <DailyChartCard
+              label="signups · 30d"
+              points={series?.signupsDaily ?? null}
+              ariaLabel="new user signups per day, last 30 days"
+            />
+            <DailyChartCard
+              label="deploys · 30d"
+              points={series?.deploysDaily ?? null}
+              ariaLabel="platform deploys per day, last 30 days"
+            />
+            <DailyChartCard
+              label="invocations · 30d"
+              points={series?.invocationsDaily ?? null}
+              ariaLabel="function invocations per day, last 30 days"
+            />
+          </div>
+
+          {series !== null && series.apiRequests === null && series.hostCpu === null ? (
+            <EmptyState
+              icon={<TriangleAlertIcon size={24} />}
+              title="monitoring not connected"
+              message="api traffic and 24h host cpu appear here once Prometheus answers — start the observability stack. no fake demo curve in the meantime."
+            />
+          ) : null}
+          {series?.apiRequests ? (
+            <WideRangeChartCard
+              label="api traffic · 24h"
+              data={series.apiRequests.map((p) => ({ x: Date.parse(p.t), y: p.perMin }))}
+              yFormat={(y) => `${y.toLocaleString('en-US', { maximumFractionDigits: 1 })}/min`}
+              ariaLabel="api requests per minute over the last 24 hours"
+            />
+          ) : null}
+          {series?.hostCpu ? (
+            <WideRangeChartCard
+              label="host cpu · 24h"
+              data={series.hostCpu.map((p) => ({ x: Date.parse(p.t), y: p.pct }))}
+              yFormat={(y) => `${y.toFixed(0)}%`}
+              ariaLabel="host cpu percent over the last 24 hours"
+            />
+          ) : null}
+        </div>
+      </Section>
+
       {/* ── platform health tiles ─────────────────────────────────────── */}
       <Section
         title="platform health"
@@ -308,6 +408,81 @@ export function OverviewDashboard({
 }
 
 /* ─── small pieces ───────────────────────────────────────────────────────── */
+
+/** 'YYYY-MM-DD' midnight-UTC ms → 'jun 4' style lowercase label. */
+function formatDay(x: number): string {
+  return new Date(x)
+    .toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    .toLowerCase();
+}
+
+/** Sample ms → 'hh:mm' label for the 24h range charts. */
+function formatClock(x: number): string {
+  return new Date(x).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * One 30-day daily series in a surface card. `points === null` means the
+ * first fetch hasn't landed yet — the AreaChart's own pending frame keeps
+ * the grid stable without inventing data.
+ */
+function DailyChartCard({
+  label,
+  points,
+  ariaLabel,
+}: {
+  label: string;
+  points: DailyPoint[] | null;
+  ariaLabel: string;
+}) {
+  const data: AreaChartPoint[] = (points ?? []).map((p) => ({
+    x: Date.parse(`${p.day}T00:00:00Z`),
+    y: p.count,
+  }));
+  return (
+    <div className="flex h-full flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+        {label}
+      </p>
+      <AreaChart
+        data={data}
+        height={140}
+        yFormat={(y) => y.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+        xFormat={formatDay}
+        ariaLabel={ariaLabel}
+        pendingLabel={points === null ? 'loading 30-day history…' : 'no activity recorded yet.'}
+      />
+    </div>
+  );
+}
+
+/** Full-width 24h range chart (prometheus-backed, only rendered when real). */
+function WideRangeChartCard({
+  label,
+  data,
+  yFormat,
+  ariaLabel,
+}: {
+  label: string;
+  data: AreaChartPoint[];
+  yFormat: (y: number) => string;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+        {label}
+      </p>
+      <AreaChart
+        data={data}
+        height={200}
+        yFormat={yFormat}
+        xFormat={formatClock}
+        ariaLabel={ariaLabel}
+      />
+    </div>
+  );
+}
 
 /** ISO currency code → display symbol, falling back to the code itself. */
 function currencySymbol(code: string | null): string {

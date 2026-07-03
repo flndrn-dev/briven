@@ -272,6 +272,10 @@ services:
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       BRIVEN_ADMIN_ORIGIN: https://admin.${BRIVEN_DOMAIN}
+      # Observability stack (host-managed compose at /root/briven-observability
+      # on the France box, same dokploy-network) — powers admin host gauges,
+      # the live cpu chart, and /v1/admin/timeseries prom-backed series.
+      BRIVEN_PROMETHEUS_URL: ${BRIVEN_PROMETHEUS_URL:-}
       # Hard allowlist: only these emails can EVER be platform admin
       # (see apps/api/src/lib/superadmin.ts). Value lives in the Dokploy env.
       BRIVEN_SUPERADMIN_EMAILS: ${BRIVEN_SUPERADMIN_EMAILS:-}

@@ -175,6 +175,13 @@ const envSchema = z.object({
   // only writes invocations + storage_bytes.
   BRIVEN_REALTIME_URL: z.string().url().default('http://localhost:3004'),
 
+  // Prometheus base URL for the Phase 4 observability stack. Read by
+  // services/platform-health.ts (instant host metrics) and
+  // routes/admin-timeseries.ts (24h range queries for the cockpit charts).
+  // Optional — when unset those surfaces return null and the cockpit shows
+  // "monitoring not connected"; we never fabricate a number.
+  BRIVEN_PROMETHEUS_URL: z.string().url().optional(),
+
   // GeoIP — optional path to a MaxMind GeoLite2-City.mmdb file. When unset
   // or unreadable, IP → city lookups return null and callers show a dash.
   // Refresh the DB monthly via the free MaxMind account download portal.
