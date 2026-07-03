@@ -162,7 +162,7 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: '/admin/email-events',
-        label: 'email',
+        label: 'email log',
         Icon: MailIcon as never,
         match: (p) => p.startsWith('/admin/email-events'),
       },
