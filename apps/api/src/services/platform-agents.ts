@@ -239,14 +239,54 @@ export async function deletePlatformAgent(agentId: string): Promise<void> {
 /* ─── connectivity test ──────────────────────────────────────────────────── */
 
 /**
- * Well-known API origins for hosted providers, used when the agent has no
- * explicit endpoint. Both paths are cheap authenticated GETs, so a 200
- * means "reachable AND the key is accepted".
+ * Default BASE urls per provider — mirrors the admin add-agent form's auto-fill
+ * (agents-client.tsx). Used when the agent has no explicit endpoint. These are
+ * BASE urls (most already end in /v1), NOT the models path — buildProviderTestUrl
+ * appends the right models path below.
  */
-const PROVIDER_DEFAULT_URLS: Record<string, string> = {
-  anthropic: 'https://api.anthropic.com/v1/models',
-  openai: 'https://api.openai.com/v1/models',
+const PROVIDER_DEFAULT_BASES: Record<string, string> = {
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com/v1',
+  xai: 'https://api.x.ai/v1',
+  zai: 'https://api.z.ai/api/paas/v4',
+  deepseek: 'https://api.deepseek.com',
+  ollama: 'http://localhost:11434/v1',
+  flndrnai: 'https://ai.flndrn.com/v1',
 };
+
+/**
+ * Build the cheap "list models" URL used to probe reachability + key validity.
+ *
+ * The stored endpoint is a BASE url (the admin form auto-fills e.g.
+ * `https://api.anthropic.com` or `https://api.openai.com/v1`). Hitting the bare
+ * base returns 404 — THAT was the bug (the correct /v1/models url was only used
+ * as a no-endpoint fallback, which the auto-fill silently defeated). So:
+ *  - anthropic isn't OpenAI-compatible: its models list is always
+ *    `<origin>/v1/models` (probed with x-api-key + anthropic-version headers).
+ *  - every other provider is OpenAI-compatible: the check is `<base>/models`
+ *    (the base already carries any /v1 or /api/paas/v4 prefix). A 200 there
+ *    means reachable AND the key is accepted; 401/403 means the key was rejected.
+ * Verified against live endpoints 2026-07-04: bare origin -> 404, /v1/models -> 401.
+ * Falls back to the provider default base when no endpoint is set; returns null
+ * only for an unknown provider with no endpoint.
+ */
+function buildProviderTestUrl(provider: string, endpoint: string | null): string | null {
+  if (provider === 'anthropic') {
+    const base = endpoint ?? PROVIDER_DEFAULT_BASES.anthropic;
+    if (!base) return null;
+    try {
+      const u = new URL(base);
+      return `${u.protocol}//${u.host}/v1/models`;
+    } catch {
+      return null;
+    }
+  }
+  const base = endpoint ?? PROVIDER_DEFAULT_BASES[provider] ?? null;
+  if (!base) return null;
+  const trimmed = base.replace(/\/+$/, '');
+  // Already a models url? use as-is. Otherwise append the OpenAI-compat path.
+  return /\/models$/.test(trimmed) ? trimmed : `${trimmed}/models`;
+}
 
 const TEST_TIMEOUT_MS = 5_000;
 
@@ -267,7 +307,7 @@ export interface AgentTestResult {
 export async function testPlatformAgent(agentId: string): Promise<AgentTestResult> {
   const agent = await getAgentRow(agentId);
 
-  const url = agent.endpoint ?? PROVIDER_DEFAULT_URLS[agent.provider] ?? null;
+  const url = buildProviderTestUrl(agent.provider, agent.endpoint);
   if (!url) {
     return {
       ok: false,
