@@ -12,8 +12,9 @@
  * as a healthy 0%.
  */
 import { pingDb } from '../db/client.js';
-import { pingDataPlane } from '../db/data-plane.js';
+import { deepPingDataPlane } from '../db/data-plane.js';
 import { env } from '../env.js';
+import { log } from '../lib/logger.js';
 import { pingRedis } from '../lib/redis.js';
 
 export type HealthCheck = 'ok' | 'unreachable' | 'not_configured';
@@ -215,10 +216,71 @@ async function probeRealtime(): Promise<boolean> {
   }
 }
 
+/**
+ * Deep vault gate with a 3-strike SEATBELT.
+ *
+ * The data-plane readiness verdict that feeds /ready comes from the REAL-login
+ * probe (deepPingDataPlane), NOT a warm-pool SELECT 1 — so it catches the
+ * broken-auth outage that a pooled connection masks. But a single blip must
+ * NEVER pull the live site: the gate only flips to unhealthy after
+ * DEEP_FAIL_THRESHOLD *consecutive* failures. One success resets the streak.
+ *
+ * Probe results are cached for DEEP_PROBE_TTL_MS so /ready + the admin overview
+ * share one probe (no hammering the vault) — which also naturally spaces the
+ * strikes a few seconds apart, so 3 strikes ≈ ~15s of *sustained* failure
+ * before the site is ever gated. Fail-SAFE at boot: starts healthy so a cold
+ * start is never blocked before the first probe.
+ */
+const DEEP_PROBE_TTL_MS = 5_000;
+const DEEP_FAIL_THRESHOLD = 3;
+const deepGate = { at: 0, streak: 0, gatingOk: true, lastOk: true };
+
+/** Test-only: reset the seatbelt state between cases. */
+export function _resetDataPlaneGate(): void {
+  deepGate.at = 0;
+  deepGate.streak = 0;
+  deepGate.gatingOk = true;
+  deepGate.lastOk = true;
+}
+
+async function evaluateDataPlaneGate(): Promise<boolean> {
+  const now = Date.now();
+  if (deepGate.at !== 0 && now - deepGate.at < DEEP_PROBE_TTL_MS) {
+    return deepGate.gatingOk; // reuse the cached verdict within the window
+  }
+  const ok = await deepPingDataPlane();
+  deepGate.at = now;
+  deepGate.lastOk = ok;
+  if (ok) {
+    if (!deepGate.gatingOk) {
+      log.warn('data_plane_gate_recovered', { afterStreak: deepGate.streak });
+    }
+    deepGate.streak = 0;
+    deepGate.gatingOk = true;
+  } else {
+    deepGate.streak += 1;
+    if (deepGate.streak >= DEEP_FAIL_THRESHOLD && deepGate.gatingOk) {
+      deepGate.gatingOk = false;
+      // Site is being gated OFF — the loudest signal, so alerting catches it.
+      log.error('data_plane_gate_tripped', {
+        streak: deepGate.streak,
+        threshold: DEEP_FAIL_THRESHOLD,
+      });
+    } else if (deepGate.gatingOk) {
+      // Failing, but still inside the seatbelt — early warning, no gating yet.
+      log.warn('data_plane_gate_strike', {
+        streak: deepGate.streak,
+        threshold: DEEP_FAIL_THRESHOLD,
+      });
+    }
+  }
+  return deepGate.gatingOk;
+}
+
 export async function getHealthSummary(): Promise<HealthSummary> {
   const [controlOk, dataOk, runtimeOk, realtimeOk, redisOk, host] = await Promise.all([
     env.BRIVEN_DATABASE_URL ? pingDb() : Promise.resolve(false),
-    env.BRIVEN_DATA_PLANE_URL ? pingDataPlane() : Promise.resolve(false),
+    env.BRIVEN_DATA_PLANE_URL ? evaluateDataPlaneGate() : Promise.resolve(false),
     probeRuntime(),
     probeRealtime(),
     env.BRIVEN_REDIS_URL ? pingRedis() : Promise.resolve(false),
