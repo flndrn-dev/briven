@@ -12,11 +12,23 @@ import { MaintenanceControl, OpenSignupsControl } from './launch-controls';
 export const metadata = { title: 'launch controls · admin' };
 export const dynamic = 'force-dynamic';
 
+/** The maintenance object returned inside /v1/admin/launch-status. */
+interface MaintenanceState {
+  active: boolean;
+  scheduled: boolean;
+  upcoming: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  message: string | null;
+  manualOverride: boolean;
+}
+
 /** The slice of /v1/admin/launch-status these two switches need. */
 interface LaunchStatus {
   openSignups: boolean;
   openSignupsEnvDefault: boolean;
   maintenanceMode: boolean;
+  maintenance: MaintenanceState;
 }
 
 /**
@@ -54,7 +66,11 @@ export default async function AdminLaunchPage() {
         <>
           {/* ── maintenance brake ─────────────────────────────────────── */}
           <Section title="maintenance mode" icon={<TriangleAlertIcon size={16} />}>
-            <MaintenanceControl initial={launch.maintenanceMode} apiOrigin={apiOrigin} />
+            <MaintenanceControl
+              initial={launch.maintenanceMode}
+              schedule={launch.maintenance}
+              apiOrigin={apiOrigin}
+            />
           </Section>
 
           {/* ── signup gate ───────────────────────────────────────────── */}

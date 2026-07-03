@@ -77,3 +77,55 @@ export async function getOpenSignupsFlag(): Promise<boolean> {
   if (typeof dbValue === 'boolean') return dbValue;
   return env.BRIVEN_OPEN_SIGNUPS;
 }
+
+/**
+ * Scheduled maintenance window, stored under `platform_settings.maintenanceWindow`.
+ * All timestamps are ISO date-time strings (or null when unset).
+ */
+export interface MaintenanceWindow {
+  startsAt: string | null;
+  endsAt: string | null;
+  message: string | null;
+}
+
+/**
+ * Effective maintenance state, derived from two platform_settings keys:
+ *   - `maintenanceMode` (bool)  — manual immediate override (back-compat).
+ *   - `maintenanceWindow` (json) — { startsAt, endsAt, message }.
+ *
+ * Times are compared as Date.parse of ISO strings (pure JS date math — no
+ * DB date params, per the Bun sql`` gotcha).
+ *   - scheduled = startsAt != null && endsAt != null
+ *   - active    = manualOverride  OR  (scheduled && now >= startsAt && now < endsAt)
+ *   - upcoming  = scheduled && now < startsAt   (pre-announcement banner)
+ */
+export interface MaintenanceState {
+  active: boolean;
+  scheduled: boolean;
+  upcoming: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  message: string | null;
+}
+
+export async function getMaintenanceState(): Promise<MaintenanceState> {
+  const [manualOverride, window] = await Promise.all([
+    getPlatformSetting<boolean>('maintenanceMode', false),
+    getPlatformSetting<MaintenanceWindow | null>('maintenanceWindow', null),
+  ]);
+
+  const startsAt = window?.startsAt ?? null;
+  const endsAt = window?.endsAt ?? null;
+  const message = window?.message ?? null;
+
+  const scheduled = startsAt !== null && endsAt !== null;
+  const now = Date.now();
+  const startMs = startsAt !== null ? Date.parse(startsAt) : NaN;
+  const endMs = endsAt !== null ? Date.parse(endsAt) : NaN;
+
+  const inWindow = scheduled && now >= startMs && now < endMs;
+  const active = manualOverride === true || inWindow;
+  const upcoming = scheduled && now < startMs;
+
+  return { active, scheduled, upcoming, startsAt, endsAt, message };
+}

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { listIncidents } from '../services/incidents.js';
+import { getMaintenanceState } from '../services/platform-settings.js';
 import type { AppEnv } from '../types/app-env.js';
 
 /**
@@ -16,4 +17,14 @@ incidentsRouter.get('/v1/status/incidents', async (c) => {
   const activeOnly = c.req.query('active') === 'true';
   const rows = await listIncidents({ limit, activeOnly });
   return c.json({ incidents: rows });
+});
+
+/**
+ * Public maintenance state — no auth, no rate limit. Returns the effective
+ * maintenance state so the marketing site can render a scheduled/active/
+ * upcoming banner. Reachable during maintenance via the /v1/status/*
+ * whitelist in the maintenance middleware.
+ */
+incidentsRouter.get('/v1/status/maintenance', async (c) => {
+  return c.json(await getMaintenanceState());
 });

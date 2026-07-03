@@ -52,6 +52,7 @@ export function SiteFooter() {
 
         <FooterColumn title="company">
           <FooterLink href="/customers">customers</FooterLink>
+          <FooterLink href="/contact">contact</FooterLink>
           <FooterLink href="/compare">compare</FooterLink>
           <FooterLink href="/status">status</FooterLink>
           <FooterLink href="https://docs.briven.tech/changelog">changelog</FooterLink>

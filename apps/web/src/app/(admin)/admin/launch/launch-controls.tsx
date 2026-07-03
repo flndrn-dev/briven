@@ -49,16 +49,61 @@ function HeroCard({ children }: { children: React.ReactNode }) {
 /* ─── maintenance mode (hero control) ────────────────────────────────────── */
 
 /**
+ * The maintenance object as it arrives on /v1/admin/launch-status. Carries
+ * both the live flag (`active`) and the scheduled window so the schedule
+ * sub-panel can show the current plan.
+ */
+export interface MaintenanceState {
+  active: boolean;
+  scheduled: boolean;
+  upcoming: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  message: string | null;
+  manualOverride: boolean;
+}
+
+/**
+ * Turn an ISO string into the value a <input type="datetime-local"> expects
+ * (`YYYY-MM-DDTHH:mm`, in the browser's local time). Returns '' for null /
+ * unparseable input so the field renders empty.
+ */
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  // Shift by the local offset so toISOString's slice reads as local wall time.
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+/** "3 Jul, 14:30" — a compact, readable local timestamp for the summary. */
+function formatLocal(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
+/**
  * Maintenance-mode switch. Two-step confirm — entering maintenance mode
  * returns 503 across the customer-facing surface, so a stray click would
  * cause an outage. Posts to /v1/admin/launch-status/maintenance-mode and
  * retries through the shared StepUpPrompt when the api asks for fresh auth.
+ * The schedule sub-panel below sets a future window instead of flipping now.
  */
 export function MaintenanceControl({
   initial,
+  schedule,
   apiOrigin,
 }: {
   initial: boolean;
+  schedule: MaintenanceState;
   apiOrigin: string;
 }) {
   const router = useRouter();
@@ -76,7 +121,7 @@ export function MaintenanceControl({
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ maintenanceMode: next }),
+        body: JSON.stringify({ enabled: next }),
       });
       if (res.status === 403) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;
@@ -191,7 +236,199 @@ export function MaintenanceControl({
           onCancel={() => setPendingFlip(null)}
         />
       ) : null}
+
+      <MaintenanceSchedulePanel schedule={schedule} apiOrigin={apiOrigin} />
     </HeroCard>
+  );
+}
+
+/* ─── maintenance schedule (sub-panel) ───────────────────────────────────── */
+
+/**
+ * Plan a maintenance window ahead of time instead of flipping the brake now.
+ * Posts { startsAt, endsAt, message } (ISO) to the maintenance-mode endpoint;
+ * when the window opens the api starts serving the splash on its own. Shows
+ * the current scheduled window if one is set, with a one-click clear.
+ * Step-up is handled the same way the immediate flip does — a 403 with
+ * `step_up_required` re-runs the pending action through StepUpPrompt.
+ */
+function MaintenanceSchedulePanel({
+  schedule,
+  apiOrigin,
+}: {
+  schedule: MaintenanceState;
+  apiOrigin: string;
+}) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [startsAt, setStartsAt] = useState(isoToLocalInput(schedule.startsAt));
+  const [endsAt, setEndsAt] = useState(isoToLocalInput(schedule.endsAt));
+  const [message, setMessage] = useState(schedule.message ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // A queued POST body to replay verbatim after a step-up challenge succeeds.
+  const [pending, setPending] = useState<Record<string, string | null> | null>(null);
+
+  const hasSchedule = Boolean(schedule.startsAt && schedule.endsAt);
+
+  async function post(body: Record<string, string | null>) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiOrigin}/v1/admin/launch-status/maintenance-mode`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.status === 403) {
+        const b = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (b?.code === 'step_up_required') {
+          setPending(body);
+          setBusy(false);
+          return;
+        }
+      }
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(t || `request failed: ${res.status}`);
+      }
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'request failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function submitSchedule() {
+    setError(null);
+    if (!startsAt || !endsAt) {
+      setError('pick both a start and an end time.');
+      return;
+    }
+    const start = new Date(startsAt);
+    const end = new Date(endsAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setError('those dates don’t look valid — check the start and end.');
+      return;
+    }
+    if (start >= end) {
+      setError('the start must be before the end.');
+      return;
+    }
+    void post({
+      startsAt: start.toISOString(),
+      endsAt: end.toISOString(),
+      message: message.trim() ? message.trim() : null,
+    });
+  }
+
+  function clearSchedule() {
+    setError(null);
+    setStartsAt('');
+    setEndsAt('');
+    setMessage('');
+    void post({ startsAt: null, endsAt: null, message: null });
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg)] p-4">
+      <div className="flex flex-col gap-1">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+          schedule maintenance
+        </span>
+        <span className="font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+          plan a window ahead of time. when it opens the platform switches itself into maintenance —
+          no need to be at the keyboard. clear it any time before it starts.
+        </span>
+      </div>
+
+      {hasSchedule ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--color-border)] px-3 py-2 font-mono text-xs">
+          <span className="text-[var(--color-text)]">
+            scheduled: {formatLocal(schedule.startsAt)} → {formatLocal(schedule.endsAt)}
+            {schedule.upcoming ? (
+              <span className="ml-2 text-[var(--color-text-subtle)]">(upcoming)</span>
+            ) : null}
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={clearSchedule}
+            className="font-mono text-[10px] text-[var(--color-text-muted)] underline-offset-2 hover:text-[var(--color-error)] hover:underline disabled:opacity-50"
+          >
+            clear schedule
+          </button>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+            start
+          </span>
+          <input
+            type="datetime-local"
+            value={startsAt}
+            onChange={(e) => setStartsAt(e.target.value)}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-border-strong)]"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+            end
+          </span>
+          <input
+            type="datetime-local"
+            value={endsAt}
+            onChange={(e) => setEndsAt(e.target.value)}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs text-[var(--color-text)] outline-none focus:border-[var(--color-border-strong)]"
+          />
+        </label>
+      </div>
+
+      <label className="flex flex-col gap-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+          message
+        </span>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={2}
+          placeholder="shown to visitors on the maintenance page"
+          className="resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-xs text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-subtle)] focus:border-[var(--color-border-strong)]"
+        />
+      </label>
+
+      {error ? (
+        <p className="font-mono text-[10px] text-[var(--color-error)]">{error}</p>
+      ) : null}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={submitSchedule}
+          className="rounded-md border border-[var(--color-border)] px-4 py-2 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)] disabled:opacity-50"
+        >
+          {busy ? 'saving…' : 'schedule maintenance'}
+        </button>
+      </div>
+
+      {pending !== null ? (
+        <StepUpPrompt
+          apiOrigin={apiOrigin}
+          reason="scheduling maintenance changes the customer-facing platform. confirm with your password."
+          onSuccess={async () => {
+            const body = pending;
+            setPending(null);
+            if (body) await post(body);
+          }}
+          onCancel={() => setPending(null)}
+        />
+      ) : null}
+    </div>
   );
 }
 

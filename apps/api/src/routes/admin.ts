@@ -665,7 +665,7 @@ adminRouter.delete('/v1/admin/signup-allowlist/:email', async (c) => {
  */
 adminRouter.get('/v1/admin/launch-status', async (c) => {
   const actor = c.get('user')!;
-  const { getOpenSignupsFlag, getPlatformSetting } = await import(
+  const { getOpenSignupsFlag, getPlatformSetting, getMaintenanceState } = await import(
     '../services/platform-settings.js'
   );
   const { getDb } = await import('../db/client.js');
@@ -677,9 +677,10 @@ adminRouter.get('/v1/admin/launch-status', async (c) => {
     .from(users)
     .where(eq(users.id, actor.id))
     .limit(1);
-  const [openSignups, maintenanceMode] = await Promise.all([
+  const [openSignups, maintenanceMode, maintenanceState] = await Promise.all([
     getOpenSignupsFlag(),
     getPlatformSetting<boolean>('maintenanceMode', false),
+    getMaintenanceState(),
   ]);
   // Compute the actor's step-up freshness so the dashboard can show a
   // banner + re-attest button. Mirrors the 10-min window the
@@ -700,6 +701,18 @@ adminRouter.get('/v1/admin/launch-status', async (c) => {
     ),
     stepUpFresh,
     stepUpExpiresAt: stepUpExpiresAt?.toISOString() ?? null,
+    // Scheduled-maintenance state. manualOverride is the raw
+    // maintenanceMode bool (immediate on/off); the rest is the effective
+    // state derived from maintenanceMode + the maintenanceWindow schedule.
+    maintenance: {
+      active: maintenanceState.active,
+      scheduled: maintenanceState.scheduled,
+      upcoming: maintenanceState.upcoming,
+      startsAt: maintenanceState.startsAt,
+      endsAt: maintenanceState.endsAt,
+      message: maintenanceState.message,
+      manualOverride: maintenanceMode,
+    },
   });
 });
 
@@ -738,21 +751,67 @@ adminRouter.post('/v1/admin/launch-status/open-signups', async (c) => {
 adminRouter.post('/v1/admin/launch-status/maintenance-mode', async (c) => {
   const actor = c.get('user')!;
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ maintenanceMode: z.boolean() }).safeParse(body);
+  // Richer body — every field optional, all back-compat:
+  //  - enabled: immediate manual on/off of the maintenanceMode bool.
+  //  - startsAt/endsAt/message: write the scheduled maintenanceWindow json.
+  //    Passing all three as null clears the schedule.
+  // The old body { enabled: boolean } alone still works.
+  const isoDateTime = z.string().datetime();
+  const parsed = z
+    .object({
+      enabled: z.boolean().optional(),
+      startsAt: isoDateTime.nullable().optional(),
+      endsAt: isoDateTime.nullable().optional(),
+      message: z.string().max(2000).nullable().optional(),
+    })
+    .safeParse(body);
   if (!parsed.success) {
     return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
   }
+  const { enabled, startsAt, endsAt, message } = parsed.data;
+  const windowTouched =
+    startsAt !== undefined || endsAt !== undefined || message !== undefined;
+
+  // When both bounds are set, startsAt must be strictly before endsAt.
+  if (startsAt != null && endsAt != null && Date.parse(startsAt) >= Date.parse(endsAt)) {
+    return c.json(
+      { code: 'validation_failed', message: 'startsAt must be before endsAt' },
+      400,
+    );
+  }
+
   const { setPlatformSetting } = await import('../services/platform-settings.js');
-  await setPlatformSetting('maintenanceMode', parsed.data.maintenanceMode, actor.id);
+  if (enabled !== undefined) {
+    await setPlatformSetting('maintenanceMode', enabled, actor.id);
+  }
+  if (windowTouched) {
+    await setPlatformSetting(
+      'maintenanceWindow',
+      {
+        startsAt: startsAt ?? null,
+        endsAt: endsAt ?? null,
+        message: message ?? null,
+      },
+      actor.id,
+    );
+  }
+
   await audit({
     actorId: actor.id,
     projectId: null,
     action: 'admin.maintenance.toggle',
     ipHash: ipHash(c),
     userAgent: c.req.header('user-agent') ?? null,
-    metadata: { maintenanceMode: parsed.data.maintenanceMode },
+    metadata: {
+      ...(enabled !== undefined ? { maintenanceMode: enabled } : {}),
+      ...(windowTouched
+        ? { window: { startsAt: startsAt ?? null, endsAt: endsAt ?? null } }
+        : {}),
+    },
   });
-  return c.json({ maintenanceMode: parsed.data.maintenanceMode });
+
+  const { getMaintenanceState } = await import('../services/platform-settings.js');
+  return c.json(await getMaintenanceState());
 });
 
 /* ─── incidents (admin write surface; public list on /v1/status/incidents) ─── */
