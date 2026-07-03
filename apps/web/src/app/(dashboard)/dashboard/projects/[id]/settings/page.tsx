@@ -132,8 +132,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
           <div>
             <p className="text-sm text-[var(--color-text)]">Delete this project</p>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Soft-deletes the project. The schema and data are retained for 30 days before hard
-              deletion, per <code className="text-[var(--color-text)]">CLAUDE.md §5.5</code>.
+              Soft-deletes the project. The schema and data are retained for 30 days so you can
+              recover it, then permanently deleted.
             </p>
           </div>
           <DeleteProjectButton
