@@ -94,6 +94,20 @@ const envSchema = z.object({
   BRIVEN_MITTERA_API_KEY: z.string().optional(),
   BRIVEN_MITTERA_WEBHOOK_SECRET: z.string().optional(),
 
+  // Real SMTP transport. mittera.eu accepts sends (200) but does NOT
+  // deliver (proven by 44 `.sent` audit rows and ZERO `.delivered`
+  // webhooks), so once a real provider (Resend / Mailgun / Postmark / SES
+  // — all speak standard SMTP) is wired here, SMTP becomes the PRIMARY
+  // sender and mittera drops to a fallback. SMTP is "configured" only when
+  // HOST + USER + PASS are all non-empty; PORT defaults to 587 (STARTTLS),
+  // and secure TLS is used automatically on 465. FROM overrides the
+  // fromAddress() default when set (e.g. "Briven <noreply@briven.tech>").
+  BRIVEN_SMTP_HOST: z.string().optional(),
+  BRIVEN_SMTP_PORT: z.coerce.number().int().positive().default(587),
+  BRIVEN_SMTP_USER: z.string().optional(),
+  BRIVEN_SMTP_PASS: z.string().optional(),
+  BRIVEN_SMTP_FROM: z.string().optional(),
+
   // MinIO — object storage.
   //   _ENDPOINT          server-side (internal docker network OK).
   //   _PUBLIC_ENDPOINT   what the browser sees in presigned URLs. HTTPS

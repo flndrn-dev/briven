@@ -1,5 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+
 import { env } from '../env.js';
 import { audit } from '../services/audit.js';
 import { isSuppressed } from '../services/suppressions.js';
@@ -62,6 +65,106 @@ function isConfigured(): boolean {
 }
 
 /**
+ * SMTP is the real delivery path. It's "configured" only when HOST + USER
+ * + PASS are all non-empty (loadEnv treats empty strings as unset, so a
+ * blank var here reads as undefined). When configured, SMTP becomes the
+ * PRIMARY sender ahead of mittera — mittera accepts sends but never
+ * delivers, so a wired SMTP provider (Resend / Mailgun / Postmark / SES)
+ * takes precedence.
+ */
+function isSmtpConfigured(): boolean {
+  return Boolean(env.BRIVEN_SMTP_HOST && env.BRIVEN_SMTP_USER && env.BRIVEN_SMTP_PASS);
+}
+
+/**
+ * Lazily-built, module-scoped nodemailer transporter singleton. Built once
+ * on first send and reused for the pooled connection — rebuilding per send
+ * would defeat nodemailer's connection reuse. `secure` is true only on 465
+ * (implicit TLS); 587 uses STARTTLS which nodemailer negotiates itself. The
+ * ~10s greeting/socket timeouts mirror the mittera path's 10s AbortSignal
+ * so a hung SMTP host can't tie up the magic-link request.
+ */
+let smtpTransporter: Transporter | null = null;
+
+function getSmtpTransporter(): Transporter {
+  if (!smtpTransporter) {
+    const port = env.BRIVEN_SMTP_PORT;
+    smtpTransporter = nodemailer.createTransport({
+      host: env.BRIVEN_SMTP_HOST!,
+      port,
+      secure: port === 465,
+      auth: {
+        user: env.BRIVEN_SMTP_USER!,
+        pass: env.BRIVEN_SMTP_PASS!,
+      },
+      // Hard caps so a hung SMTP server doesn't tie up the request that
+      // triggered the send (mirrors the mittera fetch's 10s AbortSignal).
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
+      connectionTimeout: 10_000,
+    });
+  }
+  return smtpTransporter;
+}
+
+/**
+ * The From: SMTP sends use. Prefers the explicit BRIVEN_SMTP_FROM (e.g.
+ * "Briven <noreply@briven.tech>") so the operator can align it with their
+ * provider's verified sender; falls back to a per-call override, then the
+ * global fromAddress().
+ */
+function smtpFrom(args: SendArgs): string {
+  return env.BRIVEN_SMTP_FROM ?? args.from ?? fromAddress();
+}
+
+/**
+ * Send via the real SMTP provider. On success logs `smtp_send_ok` and
+ * writes an audit row with action `smtp.<label>.sent` carrying the
+ * provider messageId — mirroring the mittera path's `mittera.<label>.sent`
+ * so the Email Admin cockpit's per-template stats pick it up automatically
+ * (SEND_ACTION_RE already matches `smtp\.(.+)\.sent`). On failure logs
+ * `smtp_send_failed` and throws so the caller sees the error.
+ */
+async function sendViaSmtp(label: string, args: SendArgs): Promise<void> {
+  let messageId: string | null = null;
+  try {
+    const info = await getSmtpTransporter().sendMail({
+      from: smtpFrom(args),
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+    });
+    messageId = info.messageId ?? null;
+  } catch (err) {
+    log.error('smtp_send_failed', {
+      label,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err instanceof Error ? err : new Error(`smtp send failed: ${String(err)}`);
+  }
+
+  log.info('smtp_send_ok', { label, messageId });
+
+  // Audit-log the send so operators see it in the admin email-events
+  // stream, tagged with the template. Same audit() call shape as the
+  // mittera path so aggregateTemplateStats attributes it identically;
+  // recipient redacted per CLAUDE.md §5.1.
+  await audit({
+    actorId: null,
+    projectId: args.projectId ?? null,
+    action: `smtp.${label}.sent`,
+    ipHash: null,
+    userAgent: 'briven-api',
+    metadata: {
+      messageId,
+      recipientRedacted: redactEmail(args.to),
+      subject: args.subject,
+    },
+  });
+}
+
+/**
  * What the admin cockpit can TRUTHFULLY report about the live sender,
  * read straight off this module's own config + transport helpers so the
  * dashboard never drifts from the real send path (Phase 8 §1).
@@ -70,10 +173,11 @@ function isConfigured(): boolean {
  * underlying provider (SES / Mailgun / Pando). That provider is NOT
  * reported back to Briven on the send path or the webhook envelope, so we
  * deliberately do not invent a provider field here — `activeTransport`
- * reports the leg Briven itself drives (mittera vs the dev stdout sink),
- * which is the part Briven can actually observe. There is no SMTP
- * fallback in the current send path, so `smtpFallbackConfigured` is always
- * false and `activeTransport` is only ever 'mittera' or 'dev-stdout'.
+ * reports the leg Briven itself drives (smtp vs mittera vs the dev stdout
+ * sink), which is the part Briven can actually observe. When a real SMTP
+ * provider is configured (HOST + USER + PASS) it is the PRIMARY sender —
+ * `smtpFallbackConfigured` is true and `activeTransport` is 'smtp';
+ * otherwise the send path falls back to mittera, then dev stdout.
  */
 export interface EmailSenderInfo {
   /** The default From: every control-plane send uses (per-tenant sends override it). */
@@ -87,6 +191,7 @@ export interface EmailSenderInfo {
 }
 
 export function getEmailSenderInfo(): EmailSenderInfo {
+  const smtp = isSmtpConfigured();
   const mittera = isConfigured();
   return {
     fromAddress: fromAddress(),
@@ -94,8 +199,10 @@ export function getEmailSenderInfo(): EmailSenderInfo {
     mitteraEndpoint: env.BRIVEN_MITTERA_API_URL
       ? `${env.BRIVEN_MITTERA_API_URL.replace(/\/$/, '')}${SEND_PATH}`
       : null,
-    smtpFallbackConfigured: false,
-    activeTransport: mittera ? 'mittera' : 'dev-stdout',
+    smtpFallbackConfigured: smtp,
+    // Same precedence as send(): SMTP is primary when configured, then
+    // mittera, then the dev stdout sink.
+    activeTransport: smtp ? 'smtp' : mittera ? 'mittera' : 'dev-stdout',
   };
 }
 
@@ -113,6 +220,14 @@ async function send(label: string, args: SendArgs): Promise<void> {
     return;
   }
 
+  // Primary path: real SMTP provider. mittera accepts sends but never
+  // delivers, so once SMTP is configured it takes precedence over mittera.
+  if (isSmtpConfigured()) {
+    await sendViaSmtp(label, args);
+    return;
+  }
+
+  // Fallback: mittera's REST API (kept as the fallback, not deleted).
   // Dev fallback: print so j can complete bootstrap without external email.
   if (!isConfigured()) {
     log.warn(`${label}_logged_only`);
