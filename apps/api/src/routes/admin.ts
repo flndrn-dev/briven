@@ -17,6 +17,7 @@ import {
 } from '../services/abuse.js';
 import {
   adminStats,
+  deleteUserAsAdmin,
   forceSignOut,
   grantAdmin,
   listProjects,
@@ -416,6 +417,32 @@ adminRouter.post('/v1/admin/users/unsuspend', async (c) => {
     metadata: { userId: parsed.userId },
   });
   return c.json({ unsuspended: parsed.userId });
+});
+
+adminRouter.post('/v1/admin/users/delete', async (c) => {
+  const actor = c.get('user')!;
+  const parsed = await parseUserAction(c);
+  if (!parsed.ok) return c.json({ code: 'validation_failed', issues: parsed.error }, 400);
+  try {
+    // Guarded in the service: only a suspended, non-admin account can be
+    // deleted (GDPR soft-delete, 30-day reversible).
+    await deleteUserAsAdmin(parsed.userId);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    throw err;
+  }
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.user.delete',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { userId: parsed.userId },
+  });
+  return c.json({ deleted: parsed.userId });
 });
 
 adminRouter.post('/v1/admin/users/force-sign-out', async (c) => {

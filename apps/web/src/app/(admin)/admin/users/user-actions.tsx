@@ -61,14 +61,32 @@ export function UserActions({ user, apiOrigin }: Props) {
     <div className="flex flex-col items-end gap-1 font-mono text-xs">
       <div className="flex gap-2">
         {user.suspendedAt ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => trigger('unsuspend')}
-            className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[var(--color-primary)] disabled:opacity-50"
-          >
-            unsuspend
-          </button>
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => trigger('unsuspend')}
+              className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[var(--color-primary)] disabled:opacity-50"
+            >
+              unsuspend
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  !confirm(
+                    `delete ${user.id}? the account is soft-deleted (30-day reversible grace, then purged). only for a suspended account you want gone.`,
+                  )
+                )
+                  return;
+                void run('delete');
+              }}
+              className="rounded-md border border-red-500/40 px-2 py-1 text-red-400 disabled:opacity-50"
+            >
+              delete
+            </button>
+          </>
         ) : (
           <button
             type="button"
