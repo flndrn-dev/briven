@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { apiJson } from '../../../../../../lib/api';
 import { EnableAuthButton } from './enable-button';
 
@@ -126,8 +128,30 @@ export default async function AuthOverviewPage({
               'sender domain',
               state.config.branding.senderDomain ?? 'noreply@auth.briven.tech (fallback)',
             ],
-            ['primary color', state.config.branding.primaryColor],
-            ['logo', state.config.branding.logoUrl ?? 'briven default'],
+            [
+              'primary color',
+              <span key="pc" className="inline-flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block h-3.5 w-3.5 rounded-sm border border-[var(--color-border)]"
+                  style={{ background: state.config.branding.primaryColor }}
+                />
+                {state.config.branding.primaryColor}
+              </span>,
+            ],
+            [
+              'logo',
+              state.config.branding.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={state.config.branding.logoUrl}
+                  alt="logo"
+                  className="h-8 w-auto max-w-[10rem] rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] object-contain p-1"
+                />
+              ) : (
+                'briven default'
+              ),
+            ],
           ]}
         />
       </div>
@@ -157,7 +181,7 @@ export const auth = createBrivenAuth({
 
 interface SummaryCardProps {
   title: string;
-  rows: Array<[string, boolean | string]>;
+  rows: Array<[string, ReactNode]>;
 }
 
 function SummaryCard({ title, rows }: SummaryCardProps) {
