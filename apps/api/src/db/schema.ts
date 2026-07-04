@@ -57,6 +57,31 @@ export const projectAuthOrigins = pgTable(
   }),
 );
 
+/* ─── storage_keys (per-project scoped MinIO service-account keys) ─── */
+export const storageKeys = pgTable(
+  'storage_keys',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    // The MinIO service-account access key (not secret — the secret is shown once).
+    accessKeyId: text('access_key_id').notNull(),
+    // Last 4 of the secret, for a display hint only.
+    suffix: varchar('suffix', { length: 4 }).notNull(),
+    bucket: text('bucket').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => ({
+    accessKeyIdx: uniqueIndex('storage_keys_access_key_idx').on(t.accessKeyId),
+    projectIdx: index('storage_keys_project_idx').on(t.projectId),
+  }),
+);
+
 /* ─── users ──────────────────────────────────────────────────────── */
 export const users = pgTable(
   'users',

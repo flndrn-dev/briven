@@ -46,6 +46,7 @@ export type IdPrefix =
   | 'ctc' // contact message (public /contact submission; ticketed or plain)
   | 'crp' // contact message reply (operator/user reply on a message thread)
   | 'ao' // allowed app origin (per-project login domain for CORS + auth trust)
+  | 'sk' // storage key (per-project scoped MinIO service-account key)
   | 'tsec'; // tenant secret (per-project encrypted credential, e.g. provider keys)
 
 export function newId(prefix: IdPrefix): string {

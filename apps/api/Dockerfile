@@ -32,6 +32,13 @@ ARG BRIVEN_BUILD_SHA=dev
 ARG BRIVEN_BUILD_AT=dev
 ENV BRIVEN_BUILD_SHA=${BRIVEN_BUILD_SHA}
 ENV BRIVEN_BUILD_AT=${BRIVEN_BUILD_AT}
+# MinIO client (mc) — services/minio-admin.ts shells out to it to create
+# per-project buckets + scoped service-account keys. Arch-matched binary.
+RUN apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates && \
+    ARCH="$(dpkg --print-architecture)" && \
+    curl -fsSL "https://dl.min.io/client/mc/release/linux-${ARCH}/mc" -o /usr/local/bin/mc && \
+    chmod +x /usr/local/bin/mc && \
+    rm -rf /var/lib/apt/lists/*
 RUN groupadd -r app && useradd -r -g app app
 COPY --from=build --chown=app:app /repo /app
 USER app
