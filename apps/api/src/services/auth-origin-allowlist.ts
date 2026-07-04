@@ -245,6 +245,11 @@ export async function addOrigin(input: {
     );
   }
   const isWildcard = input.isWildcard || norm.includes('://*.');
+  // Store wildcards consistently in `scheme://*.host` form so the matcher
+  // (which keys off the `*.`) works whether the caller typed `*.` themselves
+  // or just ticked the wildcard box on a bare `https://host`.
+  const stored =
+    isWildcard && !norm.includes('://*.') ? norm.replace(/^(https?:\/\/)/, '$1*.') : norm;
   await ensureTable();
   const db = getDb();
 
@@ -261,7 +266,7 @@ export async function addOrigin(input: {
   const row = {
     id: newId('ao'),
     projectId: input.projectId,
-    origin: norm,
+    origin: stored,
     isWildcard,
     createdBy: input.createdBy,
   };
@@ -275,7 +280,7 @@ export async function addOrigin(input: {
     });
   }
   void loadCache(); // refresh the hot-path cache immediately
-  return { id: row.id, origin: norm, isWildcard, createdAt: new Date().toISOString() };
+  return { id: row.id, origin: stored, isWildcard, createdAt: new Date().toISOString() };
 }
 
 export async function removeOrigin(projectId: string, originId: string): Promise<boolean> {
