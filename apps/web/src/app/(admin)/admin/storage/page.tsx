@@ -27,6 +27,24 @@ interface ProjectStorageUsage {
   overLimit: boolean;
 }
 
+interface ObjectStorageUsage {
+  id: string;
+  name: string;
+  tier: Tier;
+  usedBytes: number;
+  capBytes: number;
+  recoveryDays: number;
+  keyCount: number;
+  over: boolean;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MiB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GiB`;
+}
+
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'admin · storage' };
 
@@ -76,15 +94,20 @@ function UsageBar({ used, max, over }: { used: number; max: number; over: boolea
 
 export default async function AdminStoragePage() {
   const apiOrigin = publicApiOrigin();
-  const [{ usage }, { caps }] = await Promise.all([
+  const [{ usage }, { caps }, { usage: objectUsage }] = await Promise.all([
     apiJson<{ usage: ProjectStorageUsage[] }>('/v1/admin/storage').catch(() => ({ usage: [] as ProjectStorageUsage[] })),
     apiJson<{ caps: Record<Tier, TierCap> }>('/v1/admin/storage/tier-caps').catch(() => ({ caps: { free: { maxRows: 0, maxTables: 0 }, pro: { maxRows: 0, maxTables: 0 }, team: { maxRows: 0, maxTables: 0 } } as Record<Tier, TierCap> })),
+    apiJson<{ usage: ObjectStorageUsage[] }>('/v1/admin/storage/object').catch(() => ({ usage: [] as ObjectStorageUsage[] })),
   ]);
 
   // Real totals derived from the fetched usage list — nothing invented.
   const overCount = usage.filter((u) => u.overLimit).length;
   const totalRows = usage.reduce((sum, u) => sum + u.rowCount, 0);
   const totalTables = usage.reduce((sum, u) => sum + u.tableCount, 0);
+
+  // Object-storage totals derived from the fetched object usage list.
+  const objectOverCount = objectUsage.filter((u) => u.over).length;
+  const totalObjectBytes = objectUsage.reduce((sum, u) => sum + u.usedBytes, 0);
 
   return (
     <div className="flex flex-col gap-10">
@@ -245,6 +268,77 @@ export default async function AdminStoragePage() {
                         enforcement={u.enforcement}
                       />
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      {/* ── object storage (S3 / file usage) · read-only mirror ──────── */}
+      <Section
+        title={`object storage · ${objectUsage.length.toLocaleString()}`}
+        icon={<DatabaseIcon size={16} />}
+        right={
+          <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+            {formatBytes(totalObjectBytes)} total
+            {objectOverCount > 0 ? (
+              <span className="ml-2 text-[var(--color-error)]">· {objectOverCount} over cap</span>
+            ) : null}
+          </span>
+        }
+      >
+        {objectUsage.length === 0 ? (
+          <EmptyState
+            icon={<DatabaseIcon size={24} />}
+            title="no object storage yet"
+            message="per-project file (S3) usage appears here once a project uploads its first object."
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)]">
+            <table className="w-full border-collapse font-mono text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-border-subtle)] text-left text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                  <th className="px-4 py-3 font-normal">project</th>
+                  <th className="px-4 py-3 font-normal">tier</th>
+                  <th className="px-4 py-3 font-normal">used / cap</th>
+                  <th className="px-4 py-3 font-normal">usage</th>
+                  <th className="px-4 py-3 font-normal">recovery</th>
+                  <th className="px-4 py-3 font-normal">active keys</th>
+                </tr>
+              </thead>
+              <tbody>
+                {objectUsage.map((u) => (
+                  <tr
+                    key={u.id}
+                    className="border-b border-[var(--color-border-subtle)] align-top transition-colors last:border-0 hover:bg-[var(--color-surface-raised)]"
+                  >
+                    <td className="px-4 py-4">
+                      <span className="text-[var(--color-text)]">{u.name}</span>
+                      {u.over ? (
+                        <span className="ml-2 inline-flex rounded-full bg-[var(--color-error)]/10 px-2 py-0.5 text-[10px] text-[var(--color-error)]">
+                          over limit
+                        </span>
+                      ) : null}
+                      <p className="mt-1 font-mono text-[10px] text-[var(--color-text-subtle)]">
+                        {u.id}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4 text-[var(--color-text-muted)]">{u.tier}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-[var(--color-text)]">
+                      {formatBytes(u.usedBytes)}{' '}
+                      <span className="text-[var(--color-text-subtle)]">
+                        / {formatBytes(u.capBytes)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <UsageBar used={u.usedBytes} max={u.capBytes} over={u.over} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-[var(--color-text-muted)]">
+                      {u.recoveryDays} days
+                    </td>
+                    <td className="px-4 py-4 text-[var(--color-text)]">{u.keyCount}</td>
                   </tr>
                 ))}
               </tbody>

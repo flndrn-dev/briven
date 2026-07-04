@@ -1,10 +1,11 @@
 import { ValidationError } from '@briven/shared';
-import { eq, isNull } from 'drizzle-orm';
+import { eq, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { runInProjectDatabase } from '../db/data-plane.js';
-import { projects, tierStorageCaps, type ProjectTier } from '../db/schema.js';
+import { projectFiles, projects, storageKeys, tierStorageCaps, type ProjectTier } from '../db/schema.js';
 import { log } from '../lib/logger.js';
+import { TIERS } from './tiers.js';
 
 /**
  * Storage admin (sprint plan Sprint 4).
@@ -216,4 +217,81 @@ export async function listStorageUsage(): Promise<readonly ProjectStorageUsage[]
       };
     }),
   );
+}
+
+/* ── Object-storage (S3/file) usage mirror (read-only) ───────────────────── */
+
+export interface ObjectStorageUsage {
+  readonly id: string;
+  readonly name: string;
+  readonly tier: ProjectTier;
+  /** SUM of non-deleted project_files.size_bytes (TEXT → number in SQL). */
+  readonly usedBytes: number;
+  /** Tier storage byte cap (TIERS[tier].storageBytes). */
+  readonly capBytes: number;
+  /** File-recovery window in days (TIERS[tier].storageRecoveryDays). */
+  readonly recoveryDays: number;
+  /** Count of active (not-revoked) storage_keys for the project. */
+  readonly keyCount: number;
+  readonly over: boolean;
+}
+
+/**
+ * Read-only object-storage mirror for the admin storage page. Additive to the
+ * DoltGres row/table view above: this reports each live project's S3 file usage
+ * (sum of non-deleted project_files bytes) against its tier byte cap, its
+ * recovery window, and its active storage-key count.
+ *
+ * Uses the SAME project source as listStorageUsage (so the same projects, with
+ * their tier, appear) and TWO grouped aggregate queries — one over project_files,
+ * one over storage_keys — joined to the project list in JS via Maps. No per-
+ * project queries. size_bytes is TEXT, so it's cast to numeric in SQL and read
+ * back as a number (missing project → 0).
+ */
+export async function listObjectStorageUsage(): Promise<readonly ObjectStorageUsage[]> {
+  const db = getDb();
+
+  const rows = await db
+    .select({ id: projects.id, name: projects.name, tier: projects.tier })
+    .from(projects)
+    .where(isNull(projects.deletedAt));
+
+  // Grouped SUM of non-deleted file bytes per project (size_bytes is TEXT).
+  const byteRows = await db
+    .select({
+      projectId: projectFiles.projectId,
+      usedBytes: sql<number>`coalesce(sum(cast(${projectFiles.sizeBytes} as bigint)), 0)::bigint`,
+    })
+    .from(projectFiles)
+    .where(isNull(projectFiles.deletedAt))
+    .groupBy(projectFiles.projectId);
+  const bytesByProject = new Map<string, number>();
+  for (const r of byteRows) bytesByProject.set(r.projectId, Number(r.usedBytes) || 0);
+
+  // Grouped count of active (not-revoked) storage keys per project.
+  const keyRows = await db
+    .select({
+      projectId: storageKeys.projectId,
+      keyCount: sql<number>`count(*)::int`,
+    })
+    .from(storageKeys)
+    .where(isNull(storageKeys.revokedAt))
+    .groupBy(storageKeys.projectId);
+  const keysByProject = new Map<string, number>();
+  for (const r of keyRows) keysByProject.set(r.projectId, Number(r.keyCount) || 0);
+
+  return rows.map((p) => {
+    const usedBytes = bytesByProject.get(p.id) ?? 0;
+    const capBytes = TIERS[p.tier].storageBytes;
+    return {
+      id: p.id,
+      name: p.name,
+      tier: p.tier,
+      usedBytes,
+      capBytes,
+      recoveryDays: TIERS[p.tier].storageRecoveryDays,
+      keyCount: keysByProject.get(p.id) ?? 0,
+      over: usedBytes > capBytes,
+    };
+  });
 }

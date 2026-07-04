@@ -57,6 +57,7 @@ import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
 import {
   getTierStorageCaps,
+  listObjectStorageUsage,
   listStorageUsage,
   setProjectStorageLimit,
   updateTierStorageCap,
@@ -155,6 +156,16 @@ adminRouter.get('/v1/admin/projects', async (c) => {
  */
 adminRouter.get('/v1/admin/storage', async (c) => {
   const usage = await listStorageUsage();
+  return c.json({ usage });
+});
+
+/**
+ * Object-storage (S3/file) usage mirror — read-only. Additive to the DoltGres
+ * row/table view above: per live project, sum of non-deleted file bytes vs its
+ * tier byte cap, recovery window, and active storage-key count.
+ */
+adminRouter.get('/v1/admin/storage/object', async (c) => {
+  const usage = await listObjectStorageUsage();
   return c.json({ usage });
 });
 
