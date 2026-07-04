@@ -13,6 +13,7 @@ export interface AuthConfig {
     github: { enabled: boolean; clientId: string | null };
     discord: { enabled: boolean; clientId: string | null };
     microsoft: { enabled: boolean; clientId: string | null };
+    konnos: { enabled: boolean; clientId: string | null };
   };
   branding: {
     logoUrl: string | null;
@@ -45,8 +46,8 @@ interface Props {
   initial: AuthConfig;
 }
 
-type OAuthKey = 'google' | 'github' | 'discord' | 'microsoft';
-const OAUTH_KEYS: OAuthKey[] = ['google', 'github', 'discord', 'microsoft'];
+type OAuthKey = 'konnos' | 'google' | 'github' | 'discord' | 'microsoft';
+const OAUTH_KEYS: OAuthKey[] = ['konnos', 'google', 'github', 'discord', 'microsoft'];
 
 /**
  * Client-side editor for the Providers panel. Local state holds the
@@ -262,6 +263,8 @@ function OAuthCard({ name, value, onToggle, onClientId }: OAuthCardProps) {
 
 function providerConsoleUrl(name: OAuthKey): string {
   switch (name) {
+    case 'konnos':
+      return 'code.konnos.org → Settings → Applications';
     case 'google':
       return 'console.cloud.google.com → APIs & Services → Credentials';
     case 'github':
