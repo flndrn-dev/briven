@@ -24,6 +24,14 @@ import {
 } from '../services/auth-sdk-keys.js';
 import { getProjectUserDetail, listProjectUsers } from '../services/auth-users.js';
 import {
+  brandingLogoPublicUrl,
+  deleteBrandingLogo,
+  getBrandingLogo,
+  isStorageConfigured,
+  putBrandingLogo,
+  validateLogoUpload,
+} from '../services/auth-branding-logo.js';
+import {
   getAuthConfig,
   isAuthEnabled,
   updateAuthConfig,
@@ -92,7 +100,149 @@ authServiceRouter.get('/v1/auth-service/ready', (c) => {
 
 // ─── admin (dashboard-driven) ───────────────────────────────────────────
 
+/**
+ * Serve a project's branding logo. World-readable on purpose: hosted login
+ * pages (and any embedder) load it via a plain <img src>, so it must work
+ * without a session or api key. Registered BEFORE the requireProjectAuth()
+ * group middleware below so the auth middleware never runs for this GET.
+ * The object stays PRIVATE in MinIO; we proxy the bytes with the stored
+ * content-type. nosniff + a locked-down CSP keep a customer SVG image-only.
+ */
+authServiceRouter.get('/v1/projects/:id/auth/branding/logo', async (c) => {
+  const projectId = c.req.param('id');
+  if (!projectId) {
+    return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+  }
+  if (!isStorageConfigured()) {
+    return c.json({ code: 'storage_not_configured' }, 503);
+  }
+  const obj = await getBrandingLogo(projectId);
+  if (!obj) {
+    return c.json({ code: 'not_found' }, 404);
+  }
+  return new Response(obj.bytes, {
+    status: 200,
+    headers: {
+      'content-type': obj.contentType,
+      'cache-control': 'public, max-age=300',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    },
+  });
+});
+
 authServiceRouter.use('/v1/projects/:id/auth/*', requireProjectAuth());
+
+/**
+ * Upload (or replace) the branding logo. Multipart form-data, field `file`.
+ * Stores the image PRIVATELY in MinIO at a stable key, then points
+ * `branding.logoUrl` at the public serve route above (cache-busted).
+ * Admin-gated like the branding config PATCH.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/branding/logo',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    if (!isStorageConfigured()) {
+      return c.json({ code: 'storage_not_configured' }, 503);
+    }
+
+    let file: File | null = null;
+    try {
+      const body = await c.req.parseBody();
+      const f = body.file;
+      if (f instanceof File) file = f;
+    } catch {
+      return c.json({ code: 'validation_failed', message: 'expected multipart form-data' }, 400);
+    }
+    if (!file) {
+      return c.json({ code: 'validation_failed', message: 'missing `file` form field' }, 400);
+    }
+
+    try {
+      validateLogoUpload({ contentType: file.type, size: file.size });
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await putBrandingLogo({ projectId, bytes, contentType: file.type });
+      const logoUrl = brandingLogoPublicUrl(projectId);
+      await updateAuthConfig(projectId, { branding: { logoUrl } });
+      // Drop the cached Better Auth instance so hosted pages rebuild with
+      // the new logo (mirrors the config PATCH path).
+      await invalidateAuthInstance(projectId);
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'auth.branding.logo.uploaded',
+        ipHash: hashIp(
+          c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+        ),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { contentType: file.type, sizeBytes: file.size },
+      });
+      return c.json({ logoUrl });
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      log.error('briven_auth_branding_logo_upload_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'logo_upload_failed' }, 500);
+    }
+  },
+);
+
+/**
+ * Remove the branding logo: delete the object + null out `branding.logoUrl`.
+ * Idempotent — a missing object is a no-op. Admin-gated like the upload.
+ */
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/branding/logo',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    if (!isStorageConfigured()) {
+      return c.json({ code: 'storage_not_configured' }, 503);
+    }
+
+    try {
+      await deleteBrandingLogo(projectId);
+      await updateAuthConfig(projectId, { branding: { logoUrl: null } });
+      await invalidateAuthInstance(projectId);
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'auth.branding.logo.removed',
+        ipHash: hashIp(
+          c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+        ),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: {},
+      });
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      log.error('briven_auth_branding_logo_remove_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'logo_remove_failed' }, 500);
+    }
+  },
+);
 
 /**
  * Provision the customer's auth schema. Idempotent — re-running on an
