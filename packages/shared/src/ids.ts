@@ -45,6 +45,7 @@ export type IdPrefix =
   | 'agt' // platform agent (admin-registered AI agent, encrypted provider key)
   | 'ctc' // contact message (public /contact submission; ticketed or plain)
   | 'crp' // contact message reply (operator/user reply on a message thread)
+  | 'ao' // allowed app origin (per-project login domain for CORS + auth trust)
   | 'tsec'; // tenant secret (per-project encrypted credential, e.g. provider keys)
 
 export function newId(prefix: IdPrefix): string {

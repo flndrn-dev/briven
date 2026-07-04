@@ -11,6 +11,7 @@ const TABS: Array<{ slug: string; label: string }> = [
   { slug: '', label: 'overview' },
   { slug: '/providers', label: 'providers' },
   { slug: '/branding', label: 'branding' },
+  { slug: '/domains', label: 'app domains' },
   { slug: '/users', label: 'users' },
   { slug: '/audit', label: 'audit' },
   { slug: '/api-keys', label: 'api keys' },

@@ -4,6 +4,7 @@ import { secureHeaders } from 'hono/secure-headers';
 
 import { env } from './env.js';
 import { log } from './lib/logger.js';
+import { resolveCorsOrigin, startOriginAllowlist } from './services/auth-origin-allowlist.js';
 import { accessLog } from './middleware/access-log.js';
 import { csrfOriginCheck } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error.js';
@@ -88,11 +89,10 @@ const app = new Hono<AppEnv>();
 app.use(
   '*',
   cors({
-    origin: [
-      env.BRIVEN_WEB_ORIGIN,
-      env.BRIVEN_STUDIO_ORIGIN,
-      ...(env.BRIVEN_ADMIN_ORIGIN ? [env.BRIVEN_ADMIN_ORIGIN] : []),
-    ],
+    // Dynamic guest list: briven's own origins + any project-registered app
+    // domain (services/auth-origin-allowlist). FAILS SAFE — an empty or errored
+    // allowlist falls back to briven-own origins only, never an outage.
+    origin: (origin) => resolveCorsOrigin(origin),
     credentials: true,
     allowHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     exposeHeaders: ['x-request-id'],
@@ -201,6 +201,10 @@ app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 40
 app.onError(errorHandler);
 
 log.info('api_boot', { port: env.BRIVEN_API_PORT, origin: env.BRIVEN_API_ORIGIN });
+
+// Warm the per-project allowed-origin allowlist into memory (best-effort;
+// the CORS/CSRF gates fall back to briven-own origins until it loads).
+startOriginAllowlist();
 
 // Background workers — both degrade gracefully when redis/data-plane
 // isn't configured (log-fanout sleeps, retention prunes nothing).

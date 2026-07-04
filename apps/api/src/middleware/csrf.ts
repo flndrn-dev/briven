@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from 'hono';
 
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
+import { isRegisteredOrigin } from '../services/auth-origin-allowlist.js';
 import type { Session } from './session.js';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -127,6 +128,9 @@ export const csrfOriginCheck = (): MiddlewareHandler => async (c, next) => {
   const origin = c.req.header('origin') ?? null;
 
   if (
+    // A project-registered app domain (or briven-own origin) is trusted — skip
+    // the CSRF rejection for it (supports wildcard subdomains).
+    !isRegisteredOrigin(origin) &&
     shouldRejectAsCsrf({
       method: c.req.method,
       hasSession: Boolean(session),

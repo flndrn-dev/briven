@@ -13,6 +13,7 @@ import {
   sendBrivenAuthEmailVerification,
   sendBrivenAuthPasswordReset,
 } from './auth-mailer.js';
+import { brivenOwnOrigins, originsForProject } from './auth-origin-allowlist.js';
 import { TenantInstancePool } from './tenant-instance-pool.js';
 
 /**
@@ -101,6 +102,10 @@ async function createAuthInstance(projectId: string) {
   });
   const db = drizzle(pgPool);
 
+  // This tenant trusts its own project's registered app domains (+ briven-own)
+  // so the customer's login flow accepts requests from their website.
+  const projectOrigins = await originsForProject(projectId);
+
   const instance = betterAuth({
     appName: `briven-auth-${projectId}`,
     secret: authSecret(),
@@ -154,6 +159,7 @@ async function createAuthInstance(projectId: string) {
         disableIpTracking: true,
       },
     },
+    trustedOrigins: [env.BRIVEN_API_ORIGIN, ...brivenOwnOrigins(), ...projectOrigins],
   });
 
   return {

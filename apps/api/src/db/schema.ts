@@ -35,6 +35,28 @@ const createdAt = () => ts('created_at').defaultNow().notNull();
 const updatedAt = () => ts('updated_at').defaultNow().notNull();
 const deletedAt = () => ts('deleted_at');
 
+/* ─── project_auth_origins (per-project allowed login domains / CORS gate) ─── */
+export const projectAuthOrigins = pgTable(
+  'project_auth_origins',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    origin: text('origin').notNull(),
+    isWildcard: boolean('is_wildcard').notNull().default(false),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    projectOriginIdx: uniqueIndex('project_auth_origins_project_origin_idx').on(
+      t.projectId,
+      t.origin,
+    ),
+    originLookupIdx: index('project_auth_origins_origin_idx').on(t.origin),
+  }),
+);
+
 /* ─── users ──────────────────────────────────────────────────────── */
 export const users = pgTable(
   'users',

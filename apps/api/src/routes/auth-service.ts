@@ -31,6 +31,16 @@ import {
   putBrandingLogo,
   validateLogoUpload,
 } from '../services/auth-branding-logo.js';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client.js';
+import { users } from '../db/schema.js';
+import { isSuperadminEmail } from '../lib/superadmin.js';
+import {
+  AppDomainLimitExceeded,
+  addOrigin,
+  listOrigins,
+  removeOrigin,
+} from '../services/auth-origin-allowlist.js';
 import {
   getAuthConfig,
   isAuthEnabled,
@@ -410,6 +420,113 @@ authServiceRouter.patch(
     });
 
     return c.json({ config: next });
+  },
+);
+
+/**
+ * Allowed app domains — the browser guest list. Each project registers the
+ * origins its own app is served from so briven auth trusts login requests from
+ * that site (consumed by the CORS gate + CSRF check + each tenant's Better Auth
+ * trustedOrigins). Admin-gated; capped per project unless the caller is the
+ * platform founder/superadmin.
+ */
+authServiceRouter.get(
+  '/v1/projects/:id/auth/allowed-domains',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const domains = await listOrigins(projectId);
+    return c.json({ domains });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/allowed-domains',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = (await c.req.json().catch(() => null)) as
+      | { origin?: unknown; isWildcard?: unknown }
+      | null;
+    const origin = typeof body?.origin === 'string' ? body.origin : '';
+    const isWildcard = body?.isWildcard === true;
+    if (!origin) {
+      return c.json({ code: 'validation_failed', message: 'missing `origin`' }, 400);
+    }
+
+    // Founder/superadmin (isAdmin + env allowlist) has no per-project cap.
+    const [urow] = await getDb()
+      .select({ email: users.email, isAdmin: users.isAdmin })
+      .from(users)
+      .where(eq(users.id, actor.id))
+      .limit(1);
+    const unlimited = Boolean(urow?.isAdmin) && isSuperadminEmail(urow?.email);
+
+    try {
+      const domain = await addOrigin({ projectId, origin, isWildcard, createdBy: actor.id, unlimited });
+      await invalidateAuthInstance(projectId);
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'auth.allowed_domain.added',
+        ipHash: hashIp(
+          c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+        ),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { origin: domain.origin, isWildcard: domain.isWildcard },
+      });
+      return c.json({ domain });
+    } catch (err) {
+      if (err instanceof AppDomainLimitExceeded) {
+        return c.json({ code: err.code, message: err.message }, 402);
+      }
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      log.error('briven_auth_allowed_domain_add_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'allowed_domain_add_failed' }, 500);
+    }
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/allowed-domains/:originId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const originId = c.req.param('originId');
+    if (!projectId || !originId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id/:originId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const removed = await removeOrigin(projectId, originId);
+    if (!removed) return c.json({ code: 'not_found' }, 404);
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.allowed_domain.removed',
+      ipHash: hashIp(
+        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      ),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { originId },
+    });
+    return c.json({ ok: true });
   },
 );
 
