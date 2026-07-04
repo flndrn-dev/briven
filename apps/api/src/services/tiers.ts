@@ -45,6 +45,13 @@ export interface TierLimits {
    * 250k figure.
    */
   readonly authMauPerMonth: number;
+  /**
+   * File-recovery window (days) — how long deleted/overwritten objects in a
+   * project's storage bucket are kept (bucket versioning + lifecycle expiry)
+   * so they can be restored on request. Kept copies COUNT toward storageBytes.
+   * Storage sprint decision Q13: free 7 / pro 30 / team 90.
+   */
+  readonly storageRecoveryDays: number;
 }
 
 export const TIERS: Record<ProjectTier, TierLimits> = {
@@ -56,6 +63,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     connectionSecondsPerMonth: 1_000_000, // ~12 days of one continuous connection
     concurrentSubscriptions: 100,
     authMauPerMonth: 1_000, // placeholder per BUILD_PLAN.md "Decisions locked" Q5
+    storageRecoveryDays: 7,
   },
   pro: {
     projectsPerOrg: 20,
@@ -65,6 +73,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     connectionSecondsPerMonth: 10_000_000, // ~115 days = roughly 4 always-on subs
     concurrentSubscriptions: 1_000,
     authMauPerMonth: 25_000, // placeholder per BUILD_PLAN.md "Decisions locked" Q5
+    storageRecoveryDays: 30,
   },
   team: {
     projectsPerOrg: 100,
@@ -74,6 +83,7 @@ export const TIERS: Record<ProjectTier, TierLimits> = {
     connectionSecondsPerMonth: 100_000_000, // ~1158 days = roughly 38 always-on
     concurrentSubscriptions: 10_000,
     authMauPerMonth: 250_000, // locked: BUILD_PLAN.md "Decisions locked" Q5
+    storageRecoveryDays: 90,
   },
 };
 
