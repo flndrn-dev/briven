@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson, ApiError } from '../../../../../../lib/api';
+import { StorageKeysPanel } from './storage-keys-panel';
 import { UploadButton } from './upload-button';
 
 interface ProjectFile {
@@ -18,6 +19,17 @@ interface FilesResult {
   files: ProjectFile[];
 }
 
+interface StorageKeyRow {
+  id: string;
+  name: string;
+  accessKeyId: string;
+  suffix: string;
+  bucket: string;
+  enabled: boolean;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
 export const dynamic = 'force-dynamic';
 
 // Surfaced from the api/lib/env helper on the server. The browser also
@@ -31,10 +43,15 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
   const { id } = await params;
 
   let files: ProjectFile[] = [];
+  let storageKeys: StorageKeyRow[] = [];
   let notConfigured = false;
   try {
     const result = await apiJson<FilesResult>(`/v1/projects/${id}/files`);
     files = result.files;
+    const keysResult = await apiJson<{ keys: StorageKeyRow[] }>(
+      `/v1/projects/${id}/storage-keys`,
+    ).catch(() => ({ keys: [] as StorageKeyRow[] }));
+    storageKeys = keysResult.keys;
   } catch (err) {
     if (err instanceof ApiError && err.status === 503) {
       // BRIVEN_MINIO_* env vars not set on the api. The page still
@@ -149,6 +166,8 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
               </ul>
             )}
           </section>
+
+          <StorageKeysPanel projectId={id} initial={storageKeys} />
         </>
       )}
     </div>
