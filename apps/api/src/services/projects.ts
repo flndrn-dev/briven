@@ -15,6 +15,7 @@ import {
 import { log } from '../lib/logger.js';
 import { resolveProjectAccess, type ProjectAccess } from './access.js';
 import { getTierForOrg } from './billing.js';
+import { McpPlanRequiredError, enableForProject } from './mcp-access.js';
 import { assertProjectCreateAllowed } from './tiers.js';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -117,6 +118,26 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       });
     }
     throw err;
+  }
+
+  // Agent access (MCP) is ON by default for plan-eligible projects — the
+  // operator wants every current AND future project reachable by agents
+  // without a manual toggle (keys stay per-project and explicit). Best
+  // effort: a plan-gate refusal (free tier, no comp) or a transient
+  // failure must never fail project creation itself.
+  try {
+    await enableForProject(created.id, {
+      id: input.createdByUserId,
+      ipHash: null,
+      userAgent: 'project-create-auto-enable',
+    });
+  } catch (err) {
+    if (!(err instanceof McpPlanRequiredError)) {
+      log.warn('project_mcp_auto_enable_failed', {
+        projectId: created.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   return created;

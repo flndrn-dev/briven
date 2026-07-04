@@ -1,7 +1,6 @@
 import { brivenError, ValidationError } from '@briven/shared';
 
 import { runInProjectDatabase } from '../db/data-plane.js';
-import { assertWithinStorageLimit } from './storage-admin.js';
 
 /**
  * Studio read-mode services. Phase 2 first slice — table listing only.
@@ -121,36 +120,24 @@ export async function getTableColumns(
 ): Promise<readonly ColumnInfo[]> {
   await assertTableExists(projectId, tableName);
   // Single query: information_schema.columns LEFT JOINed against the
-  // table's PK column set, plus a LEFT JOIN against information_schema's FK
-  // metadata so each column row can carry its (table.column) reference.
-  //
-  // PK detection MUST come from information_schema, NOT the pg_index /
-  // pg_attribute catalog join (`a.attnum = ANY(i.indkey)`): DoltGres has no
-  // `smallint = int2vector` operator and 500s on it ("operator does not exist:
-  // smallint = int2vector"). This is the same DoltGres gap S1.4 hit in
-  // listIndexes — sourcing PKs from table_constraints + key_column_usage (the
-  // exact shape the fk_cols CTE below already uses successfully) avoids it.
+  // table's PK column set, plus a LEFT JOIN against information_schema's
+  // FK metadata so each column row can carry its (table.column) reference
+  // if there is one. PK columns come from information_schema.statistics
+  // (index_name = 'PRIMARY'), NOT pg_index — DoltGres rejects the pg_index
+  // join ("operator does not exist: smallint = int2vector"); same
+  // workaround as listIndexes below. Verified live against DoltGres.
   const rows = (await runInProjectDatabase(projectId, async (tx) =>
     tx.unsafe(
       `
     WITH pk_cols AS (
-      -- NOTE: the kcu join MUST include table_name. In DoltGres/MySQL every
-      -- primary key is named 'PRIMARY', so joining tc→kcu on constraint_name
-      -- alone matches the PK column of EVERY table in the schema, fanning out
-      -- the column list (e.g. an 'id' PK column appearing once per table that
-      -- also has an 'id' PK). DISTINCT is a belt-and-suspenders guard.
-      SELECT DISTINCT kcu.column_name
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage kcu
-        ON kcu.constraint_name = tc.constraint_name
-       AND kcu.table_schema = tc.table_schema
-       AND kcu.table_name = tc.table_name
-      WHERE tc.constraint_type = 'PRIMARY KEY'
-        AND tc.table_schema = 'public'
-        AND tc.table_name = $1
+      SELECT column_name
+      FROM information_schema.statistics
+      WHERE table_schema = 'public'
+        AND table_name = $1
+        AND index_name = 'PRIMARY'
     ),
     fk_cols AS (
-      SELECT DISTINCT
+      SELECT
         kcu.column_name,
         ccu.table_name AS fk_table,
         ccu.column_name AS fk_column
@@ -158,7 +145,6 @@ export async function getTableColumns(
       JOIN information_schema.key_column_usage kcu
         ON kcu.constraint_name = tc.constraint_name
        AND kcu.table_schema = tc.table_schema
-       AND kcu.table_name = tc.table_name
       JOIN information_schema.constraint_column_usage ccu
         ON ccu.constraint_name = tc.constraint_name
        AND ccu.table_schema = tc.table_schema
@@ -504,10 +490,6 @@ export async function insertRow(input: InsertRowInput): Promise<InsertRowResult>
   if (keys.length === 0) {
     throw new ValidationError('insert requires at least one column', {});
   }
-
-  // Phase 4: in 'block' mode, reject the write when the project is at its row
-  // cap. No-op fast path for 'flag' projects (the default) — no count runs.
-  await assertWithinStorageLimit(input.projectId, 'row');
 
   const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
   const cols_sql = keys.map((k) => `"${k}"`).join(', ');
@@ -881,10 +863,6 @@ export async function createTable(input: CreateTableInput): Promise<{ name: stri
       await assertFkTarget(input.projectId, col.references, input.tableName);
     }
   }
-
-  // Phase 4: in 'block' mode, reject when the project is at its table cap.
-  // No-op fast path for 'flag' projects (the default).
-  await assertWithinStorageLimit(input.projectId, 'table');
 
   // Composite PK → table-level constraint; single PK stays inline so the
   // SQL output is unchanged for every non-M2M shape.

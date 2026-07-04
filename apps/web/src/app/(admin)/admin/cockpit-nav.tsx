@@ -12,6 +12,7 @@ import { CreditCardIcon } from '@/components/ui/credit-card';
 import { DatabaseIcon } from '@/components/ui/database';
 import { FoldersIcon } from '@/components/ui/folders';
 import { LayoutGridIcon } from '@/components/ui/layout-grid';
+import { LifeBuoyIcon } from '@/components/ui/life-buoy';
 import { MailIcon } from '@/components/ui/mail';
 import { RocketIcon } from '@/components/ui/rocket';
 import { ShieldCheckIcon } from '@/components/ui/shield-check';
@@ -38,85 +39,151 @@ interface NavItem {
   match: (pathname: string) => boolean;
 }
 
-const NAV: NavItem[] = [
-  { href: '/admin', label: 'overview', Icon: LayoutGridIcon as never, match: (p) => p === '/admin' },
+interface NavGroup {
+  // Small uppercase header above the group; null for the top (overview) group.
+  title: string | null;
+  items: NavItem[];
+}
+
+// Grouped nav. Order matters — groups render top-to-bottom, items in-order.
+const NAV_GROUPS: NavGroup[] = [
   {
-    href: '/admin/billing',
-    label: 'subscribers & billing',
-    Icon: CreditCardIcon as never,
-    match: (p) => p.startsWith('/admin/billing'),
+    title: null,
+    items: [
+      { href: '/admin', label: 'overview', Icon: LayoutGridIcon as never, match: (p) => p === '/admin' },
+    ],
   },
   {
-    href: '/admin/health',
-    label: 'platform health',
-    Icon: ActivityIcon as never,
-    match: (p) => p.startsWith('/admin/health'),
+    title: 'money',
+    items: [
+      {
+        href: '/admin/billing',
+        label: 'subscribers & billing',
+        Icon: CreditCardIcon as never,
+        match: (p) => p.startsWith('/admin/billing'),
+      },
+    ],
   },
   {
-    href: '/admin/mcp',
-    label: 'mcp / agent access',
-    Icon: BotIcon as never,
-    match: (p) => p.startsWith('/admin/mcp'),
+    title: 'customers',
+    items: [
+      {
+        href: '/admin/users',
+        label: 'users',
+        Icon: UsersIcon as never,
+        match: (p) => p.startsWith('/admin/users'),
+      },
+      {
+        href: '/admin/projects',
+        label: 'projects',
+        Icon: FoldersIcon as never,
+        match: (p) => p.startsWith('/admin/projects'),
+      },
+    ],
   },
   {
-    href: '/dashboard/admin/projects',
-    label: 'projects',
-    Icon: FoldersIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/projects'),
+    title: 'agents',
+    items: [
+      {
+        href: '/admin/mcp',
+        label: 'mcp / agent access',
+        Icon: BotIcon as never,
+        match: (p) => p.startsWith('/admin/mcp'),
+      },
+      {
+        href: '/admin/agents',
+        label: 'ai agents',
+        Icon: BotIcon as never,
+        match: (p) => p.startsWith('/admin/agents'),
+      },
+    ],
   },
   {
-    href: '/dashboard/admin/users',
-    label: 'users',
-    Icon: UsersIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/users'),
+    title: 'platform',
+    items: [
+      {
+        href: '/admin/health',
+        label: 'platform health',
+        Icon: ActivityIcon as never,
+        match: (p) => p.startsWith('/admin/health'),
+      },
+      {
+        href: '/admin/realtime',
+        label: 'realtime',
+        Icon: ZapIcon as never,
+        match: (p) => p.startsWith('/admin/realtime'),
+      },
+      {
+        href: '/admin/storage',
+        label: 'storage',
+        Icon: DatabaseIcon as never,
+        match: (p) => p.startsWith('/admin/storage'),
+      },
+      {
+        href: '/admin/deploys',
+        label: 'deploys',
+        Icon: RocketIcon as never,
+        match: (p) => p.startsWith('/admin/deploys'),
+      },
+    ],
   },
   {
-    href: '/dashboard/admin/storage',
-    label: 'storage',
-    Icon: DatabaseIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/storage'),
+    title: 'operations',
+    items: [
+      {
+        href: '/admin/incidents',
+        label: 'incidents',
+        Icon: TriangleAlertIcon as never,
+        match: (p) => p.startsWith('/admin/incidents'),
+      },
+      {
+        href: '/admin/abuse-reports',
+        label: 'abuse & allowlist',
+        Icon: ShieldCheckIcon as never,
+        match: (p) => p.startsWith('/admin/abuse-reports'),
+      },
+      {
+        href: '/admin/migrations',
+        label: 'migrations',
+        Icon: ArrowLeftRightIcon as never,
+        match: (p) => p.startsWith('/admin/migrations'),
+      },
+      {
+        href: '/admin/messages',
+        label: 'messages',
+        Icon: MailIcon as never,
+        match: (p) => p.startsWith('/admin/messages'),
+      },
+      {
+        href: '/admin/tickets',
+        label: 'tickets',
+        Icon: LifeBuoyIcon as never,
+        match: (p) => p.startsWith('/admin/tickets'),
+      },
+      {
+        href: '/admin/email-events',
+        label: 'email log',
+        Icon: MailIcon as never,
+        match: (p) => p.startsWith('/admin/email-events'),
+      },
+    ],
   },
   {
-    href: '/dashboard/admin/deploys',
-    label: 'deploys',
-    Icon: RocketIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/deploys'),
-  },
-  {
-    href: '/dashboard/admin/incidents',
-    label: 'incidents',
-    Icon: TriangleAlertIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/incidents'),
-  },
-  {
-    href: '/dashboard/admin/abuse-reports',
-    label: 'abuse & allowlist',
-    Icon: ShieldCheckIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/abuse-reports'),
-  },
-  {
-    href: '/dashboard/admin/email-events',
-    label: 'email',
-    Icon: MailIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/email-events'),
-  },
-  {
-    href: '/dashboard/admin/migrations',
-    label: 'migrations',
-    Icon: ArrowLeftRightIcon as never,
-    match: (p) => p.startsWith('/dashboard/admin/migrations'),
-  },
-  {
-    href: '/admin/launch',
-    label: 'launch controls',
-    Icon: ZapIcon as never,
-    match: (p) => p.startsWith('/admin/launch'),
-  },
-  {
-    href: '/admin/settings',
-    label: 'settings',
-    Icon: CogIcon as never,
-    match: (p) => p.startsWith('/admin/settings'),
+    title: 'system',
+    items: [
+      {
+        href: '/admin/launch',
+        label: 'launch controls',
+        Icon: ZapIcon as never,
+        match: (p) => p.startsWith('/admin/launch'),
+      },
+      {
+        href: '/admin/settings',
+        label: 'settings',
+        Icon: CogIcon as never,
+        match: (p) => p.startsWith('/admin/settings'),
+      },
+    ],
   },
 ];
 
@@ -129,8 +196,19 @@ export function CockpitNav() {
       className="hidden h-full w-[200px] shrink-0 overflow-y-auto border-r border-[var(--color-border-subtle)] px-3 py-4 md:block"
     >
       <ul className="flex flex-col gap-1">
-        {NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={item.match(pathname)} />
+        {NAV_GROUPS.map((group) => (
+          <li key={group.title ?? 'overview'} className={group.title ? 'mt-4 first:mt-0' : undefined}>
+            {group.title ? (
+              <span className="block px-3 pb-1 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                {group.title}
+              </span>
+            ) : null}
+            <ul className="flex flex-col gap-1">
+              {group.items.map((item) => (
+                <NavLink key={item.href} item={item} active={item.match(pathname)} />
+              ))}
+            </ul>
+          </li>
         ))}
       </ul>
     </aside>

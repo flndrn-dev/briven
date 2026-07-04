@@ -239,48 +239,6 @@
       "when": 1779570000000,
       "tag": "0033_storage_limits",
       "breakpoints": true
-    },
-    {
-      "idx": 34,
-      "version": "7",
-      "when": 1779640000000,
-      "tag": "0034_briven_auth_sdk_keys",
-      "breakpoints": true
-    },
-    {
-      "idx": 35,
-      "version": "7",
-      "when": 1779710000000,
-      "tag": "0035_storage_enforcement",
-      "breakpoints": true
-    },
-    {
-      "idx": 36,
-      "version": "7",
-      "when": 1779780000000,
-      "tag": "0036_contact_messages",
-      "breakpoints": true
-    },
-    {
-      "idx": 37,
-      "version": "7",
-      "when": 1779850000000,
-      "tag": "0037_contact_message_country",
-      "breakpoints": true
-    },
-    {
-      "idx": 38,
-      "version": "7",
-      "when": 1779920000000,
-      "tag": "0038_mcp_keys",
-      "breakpoints": true
-    },
-    {
-      "idx": 39,
-      "version": "7",
-      "when": 1779990000000,
-      "tag": "0039_api_key_encrypted",
-      "breakpoints": true
     }
   ]
 }

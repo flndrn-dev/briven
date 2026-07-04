@@ -2,20 +2,20 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import { newId, NotFoundError } from '@briven/shared';
 
-import { and, desc, eq, inArray, isNull, like } from 'drizzle-orm';
+import { desc, eq, inArray, isNull, like } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import {
   mcpKeys,
   platformSettings,
   projects,
-  subscriptions,
   type McpKey,
   type McpKeyScope,
   type NewMcpKey,
   type ProjectTier,
 } from '../db/schema.js';
 import { audit, listAuditByActionPrefix, type AuditEntry, type AuditRow } from './audit.js';
+import { getTierForOrg } from './billing.js';
 import { getPlatformSetting, setPlatformSetting } from './platform-settings.js';
 
 /**
@@ -67,6 +67,19 @@ export class McpPlanRequiredError extends Error {
   ) {
     super('MCP access requires a Pro or Team plan');
     this.name = 'McpPlanRequiredError';
+  }
+}
+
+/**
+ * Thrown when a DELETE is attempted on a key that is still ACTIVE (revoked_at is
+ * null). Delete is a tidy-up of an already-cut key — a live key must be revoked
+ * first, so it can never be removed by accident. Routes map this to a 409.
+ */
+export class McpKeyNotRevokedError extends Error {
+  readonly code = 'mcp_key_not_revoked' as const;
+  constructor(readonly keyId: string) {
+    super('cannot delete an active key — revoke it first');
+    this.name = 'McpKeyNotRevokedError';
   }
 }
 
@@ -145,6 +158,8 @@ export interface McpAccessDeps {
   getKeyById(keyId: string): Promise<McpKey | null>;
   /** Set revoked_at = now() AND enabled = false. */
   setKeyRevoked(keyId: string): Promise<void>;
+  /** Hard-delete the key row. Only ever called on an already-revoked key. */
+  deleteKey(keyId: string): Promise<void>;
   audit(entry: AuditEntry): Promise<void>;
 }
 
@@ -161,18 +176,11 @@ export const defaultMcpAccessDeps: McpAccessDeps = {
       .where(eq(projects.id, projectId))
       .limit(1);
     if (!proj || proj.deletedAt) return null;
-    const [sub] = await db
-      .select({ tier: subscriptions.tier, status: subscriptions.status })
-      .from(subscriptions)
-      .where(
-        and(
-          eq(subscriptions.orgId, proj.orgId),
-          inArray(subscriptions.status, ['trialing', 'active', 'past_due']),
-        ),
-      )
-      .limit(1);
-    if (sub && (sub.tier === 'pro' || sub.tier === 'team')) return sub.tier;
-    return 'free';
+    // Resolve through getTierForOrg so the founder comp (owner-email → team)
+    // counts for MCP exactly as it does for /billing + project creation. A real
+    // customer still resolves to their live subscription tier; a non-comped free
+    // org still resolves to 'free' and stays gated.
+    return getTierForOrg(proj.orgId);
   },
   async setProjectEnabled(projectId, on, actorId) {
     await setPlatformSetting(projectFlagKey(projectId), on, actorId);
@@ -194,6 +202,10 @@ export const defaultMcpAccessDeps: McpAccessDeps = {
       .update(mcpKeys)
       .set({ revokedAt: new Date(), enabled: false })
       .where(eq(mcpKeys.id, keyId));
+  },
+  async deleteKey(keyId) {
+    const db = getDb();
+    await db.delete(mcpKeys).where(eq(mcpKeys.id, keyId));
   },
   async audit(entry) {
     await audit(entry);
@@ -341,6 +353,34 @@ export async function revokeKey(
   return { keyId, revoked: true };
 }
 
+/**
+ * Hard-delete a key — but ONLY if it is already revoked. REVOKE-THEN-DELETE: a
+ * live key must be cut (revoked) before it can be tidied away, so a deletion can
+ * never remove an in-use key by accident.
+ *   - unknown key       → NotFoundError (route → 404)
+ *   - still active       → McpKeyNotRevokedError (route → 409)
+ *   - already revoked    → row hard-deleted + mcp.key.deleted audited
+ */
+export async function deleteRevokedKey(
+  keyId: string,
+  actor: McpActor,
+  deps: McpAccessDeps = defaultMcpAccessDeps,
+): Promise<{ keyId: string; deleted: true }> {
+  const row = await deps.getKeyById(keyId);
+  if (!row) throw new NotFoundError('mcp_key', keyId);
+  if (!row.revokedAt) throw new McpKeyNotRevokedError(keyId);
+  await deps.deleteKey(keyId);
+  await deps.audit({
+    actorId: actor.id,
+    projectId: row.projectId,
+    action: 'mcp.key.deleted',
+    ipHash: actor.ipHash,
+    userAgent: actor.userAgent,
+    metadata: { projectId: row.projectId, keyId },
+  });
+  return { keyId, deleted: true };
+}
+
 /* ─── read surfaces (cockpit) ────────────────────────────────────────────── */
 
 export interface ProjectAccessRow {
@@ -379,21 +419,16 @@ export async function listProjectAccess(limit = 500): Promise<ProjectAccessRow[]
   const orgIds = [...new Set(projectRows.map((p) => p.orgId))];
   const projectIds = projectRows.map((p) => p.id);
 
-  // Paid tiers come from the SAME source Phase 3 used: the org's non-canceled
-  // subscriptions. A project with no paid subscription is 'free'.
-  const subs = await db
-    .select({ orgId: subscriptions.orgId, tier: subscriptions.tier })
-    .from(subscriptions)
-    .where(
-      and(
-        inArray(subscriptions.orgId, orgIds),
-        inArray(subscriptions.status, ['trialing', 'active', 'past_due']),
-      ),
-    );
+  // Resolve each org's tier through getTierForOrg so the founder comp
+  // (owner-email → team) is honoured here exactly as on the gate + /billing —
+  // otherwise a comped owner's projects wrongly show "requires Pro/Team" and get
+  // no enable button. Real customers resolve to their live subscription tier.
   const tierByOrg = new Map<string, ProjectTier>();
-  for (const s of subs) {
-    if (s.tier === 'pro' || s.tier === 'team') tierByOrg.set(s.orgId, s.tier);
-  }
+  await Promise.all(
+    orgIds.map(async (orgId) => {
+      tierByOrg.set(orgId, await getTierForOrg(orgId));
+    }),
+  );
 
   // Per-project enablement lives in platform_settings under mcp.project.<id>.
   const flagRows = await db
@@ -430,7 +465,130 @@ export async function listProjectAccess(limit = 500): Promise<ProjectAccessRow[]
   });
 }
 
+/**
+ * Masked keys for a SINGLE project, newest first. Powers the per-project user
+ * dashboard (the project admin's own Agent-Access tab) — the project-scoped
+ * read that mirrors `listProjectAccess`'s key column without loading every
+ * project. Same query style + `maskKey()` so a hash never leaves the service.
+ */
+export async function listKeysForProject(projectId: string): Promise<MaskedMcpKey[]> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(mcpKeys)
+    .where(eq(mcpKeys.projectId, projectId))
+    .orderBy(desc(mcpKeys.createdAt));
+  return rows.map(maskKey);
+}
+
 /** Recent mcp.* audit rows for the cockpit audit-trail table. */
 export async function listMcpAudit(limit = 200): Promise<AuditRow[]> {
   return listAuditByActionPrefix('mcp.', limit);
+}
+
+/* ─── key verification (the live MCP-server auth gate) ───────────────────── */
+
+/**
+ * Hash a presented plaintext key EXACTLY the way `generateMcpKey()` does, so a
+ * lookup by hash finds the row issued for that plaintext. sha-256 hex of the
+ * full plaintext (prefix included). Kept as its own helper so the hashing rule
+ * lives in one place and the verifier can never drift from the issuer.
+ */
+export function hashMcpKey(plaintext: string): string {
+  return createHash('sha256').update(plaintext).digest('hex');
+}
+
+/** Why a presented key was refused. 401 = auth (bad key); 403 = gate (plan/switch). */
+export type McpVerifyFailure =
+  | 'missing_key'
+  | 'malformed_key'
+  | 'unknown_key'
+  | 'revoked_key'
+  | 'global_disabled'
+  | 'project_disabled'
+  | 'plan_ineligible';
+
+/**
+ * Result of verifying a presented MCP key. On success it carries the ONLY
+ * facts the MCP server is allowed to trust: which key, which project it is
+ * hard-locked to, and what it may do. There is deliberately no way for a
+ * caller to widen `projectId` — it comes from the stored row, never the wire.
+ */
+export type McpVerifyResult =
+  | { ok: true; keyId: string; projectId: string; scope: McpKeyScope }
+  | { ok: false; status: 401 | 403; reason: McpVerifyFailure };
+
+/** Injectable seam so the verifier is unit-testable without a live DB. */
+export interface McpVerifyDeps {
+  getKeyByHash(hash: string): Promise<McpKey | null>;
+  touchKeyLastUsed(keyId: string): Promise<void>;
+  isGlobalEnabled(): Promise<boolean>;
+  isProjectEnabled(projectId: string): Promise<boolean>;
+  getProjectPlanTier(projectId: string): Promise<ProjectTier | null>;
+}
+
+/** Real, DB-backed verification dependencies. */
+export const defaultMcpVerifyDeps: McpVerifyDeps = {
+  async getKeyByHash(hash) {
+    const db = getDb();
+    const [row] = await db.select().from(mcpKeys).where(eq(mcpKeys.hash, hash)).limit(1);
+    return row ?? null;
+  },
+  async touchKeyLastUsed(keyId) {
+    const db = getDb();
+    await db.update(mcpKeys).set({ lastUsedAt: new Date() }).where(eq(mcpKeys.id, keyId));
+  },
+  isGlobalEnabled() {
+    return getGlobalEnabled();
+  },
+  async isProjectEnabled(projectId) {
+    const value = await getPlatformSetting<unknown>(projectFlagKey(projectId), false);
+    return value === true;
+  },
+  getProjectPlanTier(projectId) {
+    return defaultMcpAccessDeps.getProjectPlanTier(projectId);
+  },
+};
+
+/**
+ * Verify a presented plaintext key and resolve its project binding + scope.
+ *
+ * Order matters — auth first (is this a real, live key?), then the gates (is
+ * MCP even on for this project, and does the plan still qualify?):
+ *   1. present + well-formed prefix          → else 401 missing/malformed
+ *   2. hash matches a stored row             → else 401 unknown
+ *   3. not revoked and still enabled         → else 401 revoked
+ *   4. global kill-switch is ON              → else 403 global_disabled
+ *   5. project is enabled for MCP            → else 403 project_disabled
+ *   6. project's plan is Pro/Team            → else 403 plan_ineligible
+ *
+ * The plaintext key is NEVER logged or returned. On success `lastUsedAt` is
+ * stamped. The caller binds the returned `projectId`/`scope` to the request —
+ * no tool ever sees a project id from the wire.
+ */
+export async function verifyMcpKey(
+  presented: string | null | undefined,
+  deps: McpVerifyDeps = defaultMcpVerifyDeps,
+): Promise<McpVerifyResult> {
+  if (!presented) return { ok: false, status: 401, reason: 'missing_key' };
+  if (!presented.startsWith(MCP_KEY_PREFIX)) {
+    return { ok: false, status: 401, reason: 'malformed_key' };
+  }
+  const row = await deps.getKeyByHash(hashMcpKey(presented));
+  if (!row) return { ok: false, status: 401, reason: 'unknown_key' };
+  if (row.revokedAt || !row.enabled) return { ok: false, status: 401, reason: 'revoked_key' };
+
+  if (!(await deps.isGlobalEnabled())) {
+    return { ok: false, status: 403, reason: 'global_disabled' };
+  }
+  if (!(await deps.isProjectEnabled(row.projectId))) {
+    return { ok: false, status: 403, reason: 'project_disabled' };
+  }
+  const tier = await deps.getProjectPlanTier(row.projectId);
+  if (!isPlanEligibleForMcp(tier)) {
+    return { ok: false, status: 403, reason: 'plan_ineligible' };
+  }
+
+  await deps.touchKeyLastUsed(row.id);
+  return { ok: true, keyId: row.id, projectId: row.projectId, scope: row.scope };
 }

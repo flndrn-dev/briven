@@ -348,6 +348,47 @@ export async function pingDataPlane(): Promise<boolean> {
   }
 }
 
+/**
+ * DEEP vault liveness — a REAL-login probe, not a warm-pool `SELECT 1`.
+ *
+ * Why this exists: `pingDataPlane` reuses the long-lived admin pool, whose
+ * connection authenticated ONCE at pool-creation. If the vault's auth state
+ * later breaks (stale-password / auth.db corruption — the exact 2026-07-02
+ * outage), that warm connection keeps answering `SELECT 1` while database
+ * creation is dead. This probe opens a FRESH connection every call (so the
+ * auth handshake is re-tested now) and runs the SAME `pg_database` catalog
+ * read that gates every `CREATE DATABASE` in provisionProjectDatabase — so a
+ * green result genuinely means "provisioning could run", not just "a socket
+ * is open". DoltGres-proven query (see provisionProjectDatabase:91).
+ *
+ * Timeouts are client-side (node-postgres), so they don't depend on DoltGres
+ * honouring a server-side statement_timeout. Never throws — collapses any
+ * failure to false. The 3-strike seatbelt that decides /ready lives in
+ * platform-health.ts so a single blip can never pull the live site.
+ */
+export async function deepPingDataPlane(): Promise<boolean> {
+  if (!env.BRIVEN_DATA_PLANE_URL) return false;
+  const probe = new pg.Client({
+    connectionString: env.BRIVEN_DATA_PLANE_URL,
+    connectionTimeoutMillis: 3000,
+    query_timeout: 3000,
+  });
+  try {
+    await probe.connect();
+    await probe.query('SELECT 1 FROM pg_database LIMIT 1');
+    return true;
+  } catch (err) {
+    log.warn('data_plane_deep_ping_failed', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  } finally {
+    // Close the throwaway connection; ignore teardown errors so a failed
+    // end() can't mask the probe verdict.
+    await probe.end().catch(() => {});
+  }
+}
+
 export async function closeDataPlane(): Promise<void> {
   await closeProjectDbPools();
   if (_client) {

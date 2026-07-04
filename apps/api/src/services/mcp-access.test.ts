@@ -2,12 +2,14 @@ import { describe, expect, test } from 'bun:test';
 
 import type { AuditEntry } from './audit.js';
 import {
+  deleteRevokedKey,
   disableForProject,
   enableForProject,
   generateMcpKey,
   isPlanEligibleForMcp,
   issueKey,
   MCP_KEY_PREFIX,
+  McpKeyNotRevokedError,
   McpPlanRequiredError,
   maskKey,
   revokeKey,
@@ -53,7 +55,7 @@ function makeFake(planByProject: Record<string, ProjectTier | null>): Fake {
         suffix: row.suffix,
         scope: row.scope ?? 'read',
         enabled: row.enabled ?? true,
-        createdBy: row.createdBy,
+        createdBy: row.createdBy ?? null,
         createdAt: new Date(),
         lastUsedAt: null,
         revokedAt: null,
@@ -67,6 +69,9 @@ function makeFake(planByProject: Record<string, ProjectTier | null>): Fake {
     async setKeyRevoked(keyId) {
       const row = keys.get(keyId);
       if (row) keys.set(keyId, { ...row, revokedAt: new Date(), enabled: false });
+    },
+    async deleteKey(keyId) {
+      keys.delete(keyId);
     },
     async audit(entry) {
       audits.push(entry);
@@ -194,6 +199,42 @@ describe('revokeKey', () => {
   test('throws NotFound for an unknown key id', async () => {
     const fake = makeFake({});
     await expect(revokeKey('mck_nope', actor, fake.deps)).rejects.toThrow();
+  });
+});
+
+describe('deleteRevokedKey (revoke-then-delete)', () => {
+  test('refuses an ACTIVE key with McpKeyNotRevokedError — row survives', async () => {
+    const fake = makeFake({ proj_pro: 'pro' });
+    const issued = await issueKey(
+      { projectId: 'proj_pro', name: 'agent-1', scope: 'read' },
+      actor,
+      fake.deps,
+    );
+    await expect(deleteRevokedKey(issued.key.id, actor, fake.deps)).rejects.toThrow(
+      McpKeyNotRevokedError,
+    );
+    expect(fake.keys.has(issued.key.id)).toBe(true);
+    expect(fake.audits.some((a) => a.action === 'mcp.key.deleted')).toBe(false);
+  });
+
+  test('deletes an already-revoked key (row gone) and audits mcp.key.deleted', async () => {
+    const fake = makeFake({ proj_pro: 'pro' });
+    const issued = await issueKey(
+      { projectId: 'proj_pro', name: 'agent-1', scope: 'read' },
+      actor,
+      fake.deps,
+    );
+    await revokeKey(issued.key.id, actor, fake.deps);
+
+    const res = await deleteRevokedKey(issued.key.id, actor, fake.deps);
+    expect(res).toEqual({ keyId: issued.key.id, deleted: true });
+    expect(fake.keys.has(issued.key.id)).toBe(false);
+    expect(fake.audits.some((a) => a.action === 'mcp.key.deleted')).toBe(true);
+  });
+
+  test('throws NotFound for an unknown key id', async () => {
+    const fake = makeFake({});
+    await expect(deleteRevokedKey('mck_nope', actor, fake.deps)).rejects.toThrow();
   });
 });
 

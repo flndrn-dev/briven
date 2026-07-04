@@ -62,7 +62,7 @@ export default function Error({
       </div>
 
       <footer className="mt-auto pt-8 font-mono text-[10px] text-[var(--color-text-subtle)]">
-        built with <span className="text-[#e8344a]">♥</span> in Flanders · flndrn
+        built with <span className="text-[#e8344a]">♥</span> in Flanders · flndrn Limited
       </footer>
     </main>
   );

@@ -3,8 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { CopyButton } from '@/components/ui/copy-button';
-
 type Scope = 'read' | 'read-write' | 'admin';
 
 interface Props {
@@ -73,6 +71,11 @@ export function CreateKeyForm({ projectId }: Props) {
     setCreated(null);
   }
 
+  function copyPlaintext(): void {
+    if (!created) return;
+    void navigator.clipboard.writeText(created.plaintext).catch(() => undefined);
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-4">
       <h3 className="font-mono text-sm text-[var(--color-text)]">create key</h3>
@@ -128,13 +131,14 @@ export function CreateKeyForm({ projectId }: Props) {
           <pre className="overflow-x-auto rounded-sm bg-[var(--color-surface-raised)] p-2 font-mono text-[11px] text-[var(--color-text)]">
             {created.plaintext}
           </pre>
-          <div className="flex items-center gap-2">
-            <CopyButton
-              value={created.plaintext}
-              label="copy"
-              showLabel
-              className="border border-[var(--color-border)] px-3 py-1.5 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-            />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={copyPlaintext}
+              className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+            >
+              copy
+            </button>
             <button
               type="button"
               onClick={dismiss}

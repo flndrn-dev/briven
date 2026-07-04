@@ -1,0 +1,367 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+
+import { runInProjectDatabase } from '../db/data-plane.js';
+import type { McpKeyScope } from '../db/schema.js';
+import { audit } from './audit.js';
+import {
+  STUDIO_COLUMN_TYPES,
+  createTable,
+  getTableColumns,
+  insertRow,
+  listProjectTables,
+} from './studio.js';
+
+/**
+ * B Phase 5 / mcp.briven.tech — the MCP tool set.
+ *
+ * THE ISOLATION CONTRACT (must never bend):
+ *   - NO tool accepts a `projectId` argument. Every tool derives the project
+ *     id ONLY from the verified key binding (`McpToolContext.projectId`) and
+ *     runs through `runInProjectDatabase(boundProjectId, …)`, which opens a
+ *     connection bound to that one project's DoltGres database. An agent can
+ *     therefore never reach another project's data, whatever it sends.
+ *   - A read-only key never even SEES the write tools: create_table/insert/
+ *     update/delete are only REGISTERED when scope ∈ {read-write, admin}, so
+ *     they are absent from `tools/list` for a `read` key.
+ *   - Every `tools/call` is audited under the `mcp.*` prefix (actor = keyId,
+ *     project = bound projectId). Row values are never written to the audit log.
+ *
+ * The read tools mirror the Studio service's already-proven DoltGres-safe read
+ * path (table listing, column introspection) rather than inventing new SQL
+ * handling; the write tools reuse / mirror the same validated-identifier +
+ * parameterised-value discipline.
+ */
+
+/** The verified, immutable binding a built server closes over. */
+export interface McpToolContext {
+  readonly keyId: string;
+  readonly projectId: string;
+  readonly scope: McpKeyScope;
+  readonly ipHash: string | null;
+  readonly userAgent: string | null;
+}
+
+/** Same identifier rule Studio enforces — blocks SQL-injection via column names. */
+const COLUMN_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
+
+/** Hard cap on rows a single `query` call returns, so a huge table can't OOM. */
+const QUERY_ROW_CAP = 1000;
+
+/**
+ * Read-only guard for the `query` tool. Only a single SELECT/WITH statement is
+ * allowed; any DML/DDL keyword or a second statement is refused. This is the
+ * real defence — the tool deliberately does NOT issue `SET dolt_transaction_commit`,
+ * but the keyword gate is what stops a data-modifying CTE from ever running.
+ */
+const READONLY_LEAD_RE = /^\s*(select|with)\b/i;
+const FORBIDDEN_KEYWORD_RE =
+  /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|merge|replace)\b/i;
+
+export function assertReadOnlyQuery(sql: string): string {
+  if (typeof sql !== 'string' || sql.trim() === '') {
+    throw new Error('sql is required');
+  }
+  if (sql.length > 16 * 1024) {
+    throw new Error('sql payload too large');
+  }
+  const trimmed = sql.trim().replace(/;\s*$/, '');
+  if (trimmed.includes(';')) {
+    throw new Error('only a single statement is allowed');
+  }
+  if (!READONLY_LEAD_RE.test(trimmed)) {
+    throw new Error('only read-only SELECT / WITH queries are allowed');
+  }
+  if (FORBIDDEN_KEYWORD_RE.test(trimmed)) {
+    throw new Error('query contains a forbidden (write) keyword');
+  }
+  return trimmed;
+}
+
+/** Turn any tool payload into the MCP text-content result shape. */
+function jsonResult(payload: unknown): {
+  content: { type: 'text'; text: string }[];
+} {
+  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
+}
+
+/** Validate a column→value map against the table's real columns; return the keys. */
+async function validatedColumns(
+  projectId: string,
+  table: string,
+  values: Record<string, unknown>,
+  label: string,
+): Promise<string[]> {
+  // getTableColumns also asserts the table exists in THIS project and refuses
+  // the platform-owned `_briven_*` tables — so it doubles as the existence gate.
+  const cols = await getTableColumns(projectId, table);
+  const colNames = new Set(cols.map((c) => c.name));
+  const keys = Object.keys(values);
+  if (keys.length === 0) {
+    throw new Error(`${label} requires at least one column`);
+  }
+  for (const k of keys) {
+    if (!COLUMN_NAME_RE.test(k)) throw new Error(`invalid column name: ${k}`);
+    if (!colNames.has(k)) throw new Error(`column not found on table: ${k}`);
+  }
+  return keys;
+}
+
+/** Parameterised UPDATE bound to the project's own database. */
+async function runUpdate(
+  projectId: string,
+  table: string,
+  match: Record<string, unknown>,
+  set: Record<string, unknown>,
+): Promise<number> {
+  const setKeys = await validatedColumns(projectId, table, set, 'update set');
+  const matchKeys = await validatedColumns(projectId, table, match, 'update match');
+  // Refuse an unbounded UPDATE — a missing match would rewrite every row.
+  const params: unknown[] = [];
+  const setSql = setKeys
+    .map((k) => {
+      params.push(set[k]);
+      return `"${k}" = $${params.length}`;
+    })
+    .join(', ');
+  const whereSql = matchKeys
+    .map((k) => {
+      params.push(match[k]);
+      return `"${k}" = $${params.length}`;
+    })
+    .join(' AND ');
+  const rows = await runInProjectDatabase(projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    return tx.unsafe(
+      `UPDATE "${table}" SET ${setSql} WHERE ${whereSql} RETURNING 1`,
+      params,
+    );
+  });
+  return rows.length;
+}
+
+/** Parameterised DELETE bound to the project's own database. */
+async function runDelete(
+  projectId: string,
+  table: string,
+  match: Record<string, unknown>,
+): Promise<number> {
+  const matchKeys = await validatedColumns(projectId, table, match, 'delete match');
+  // Refuse an unbounded DELETE — `validatedColumns` already requires ≥1 key.
+  const params: unknown[] = [];
+  const whereSql = matchKeys
+    .map((k) => {
+      params.push(match[k]);
+      return `"${k}" = $${params.length}`;
+    })
+    .join(' AND ');
+  const rows = await runInProjectDatabase(projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    return tx.unsafe(`DELETE FROM "${table}" WHERE ${whereSql} RETURNING 1`, params);
+  });
+  return rows.length;
+}
+
+/**
+ * Build a fresh `McpServer` hard-bound to one verified key's project + scope.
+ * One server is created per request in the stateless transport model, so the
+ * binding can never leak across keys / sessions.
+ */
+export function buildMcpServer(ctx: McpToolContext): McpServer {
+  const server = new McpServer(
+    { name: 'briven-mcp', version: '1.0.0' },
+    {
+      instructions:
+        'Briven data-plane access. Every tool operates ONLY on the single ' +
+        'project this key is bound to; you cannot select another project.',
+    },
+  );
+
+  // Audit helper — actor is the keyId, project is the bound project id. Never
+  // logs row values, only the tool name + table touched.
+  const auditCall = (tool: string, metadata: Record<string, unknown>): Promise<void> =>
+    audit({
+      actorId: ctx.keyId,
+      projectId: ctx.projectId,
+      action: `mcp.tool.${tool}`,
+      ipHash: ctx.ipHash,
+      userAgent: ctx.userAgent,
+      metadata: { ...metadata, keyId: ctx.keyId, scope: ctx.scope },
+    });
+
+  /* ── read tools — available to EVERY key (read, read-write, admin) ──── */
+
+  server.registerTool(
+    'list_tables',
+    {
+      title: 'List tables',
+      description:
+        'List the tables in your project database (name, approx row count, size). ' +
+        'Platform-owned tables are hidden.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      await auditCall('list_tables', {});
+      const tables = await listProjectTables(ctx.projectId);
+      return jsonResult({ tables });
+    },
+  );
+
+  server.registerTool(
+    'describe_table',
+    {
+      title: 'Describe a table',
+      description:
+        'Return the columns of one table (name, type, nullability, default, ' +
+        'primary key, foreign-key references).',
+      inputSchema: { table: z.string().describe('Table name in your project') },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ table }) => {
+      await auditCall('describe_table', { table });
+      const columns = await getTableColumns(ctx.projectId, table);
+      return jsonResult({ table, columns });
+    },
+  );
+
+  server.registerTool(
+    'query',
+    {
+      title: 'Run a read-only query',
+      description:
+        'Run a single read-only SELECT (or WITH … SELECT) statement against your ' +
+        `project database. Writes are rejected. At most ${QUERY_ROW_CAP} rows are returned.`,
+      inputSchema: { sql: z.string().describe('A single read-only SELECT/WITH statement') },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ sql }) => {
+      const safeSql = assertReadOnlyQuery(sql);
+      await auditCall('query', { length: safeSql.length });
+      const rows = (await runInProjectDatabase(ctx.projectId, async (tx) =>
+        tx.unsafe(safeSql),
+      )) as Array<Record<string, unknown>>;
+      const truncated = rows.length > QUERY_ROW_CAP;
+      return jsonResult({
+        rowCount: Math.min(rows.length, QUERY_ROW_CAP),
+        truncated,
+        rows: truncated ? rows.slice(0, QUERY_ROW_CAP) : rows,
+      });
+    },
+  );
+
+  /* ── write tools — ONLY registered for read-write / admin keys ──────── */
+
+  if (ctx.scope === 'read-write' || ctx.scope === 'admin') {
+    server.registerTool(
+      'create_table',
+      {
+        title: 'Create a table',
+        description:
+          'Create a new table in your project. Exactly one column must be marked ' +
+          'primaryKey. Types: text, integer, bigint, boolean, timestamptz, jsonb, ' +
+          'uuid, numeric. Reuses the same validated path as the Studio "+ new table" button.',
+        inputSchema: {
+          table: z.string().describe('New table name (snake_case)'),
+          columns: z
+            .array(
+              z.object({
+                name: z.string().describe('Column name'),
+                type: z.enum(STUDIO_COLUMN_TYPES).describe('Column type'),
+                primaryKey: z.boolean().optional().describe('Exactly one column must be true'),
+                notNull: z.boolean().optional(),
+                defaultExpr: z
+                  .string()
+                  .nullable()
+                  .optional()
+                  .describe("SQL default, e.g. 'now()' or 'gen_random_uuid()'"),
+                references: z
+                  .object({
+                    table: z.string(),
+                    column: z.string(),
+                    onDelete: z
+                      .enum(['cascade', 'restrict', 'setNull', 'noAction'])
+                      .optional(),
+                  })
+                  .nullable()
+                  .optional()
+                  .describe('Optional foreign-key target (same project)'),
+              }),
+            )
+            .min(1)
+            .describe('Column definitions'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ table, columns }) => {
+        await auditCall('create_table', { table });
+        const result = await createTable({ projectId: ctx.projectId, tableName: table, columns });
+        return jsonResult(result);
+      },
+    );
+
+    server.registerTool(
+      'insert',
+      {
+        title: 'Insert a row',
+        description: 'Insert one row into a table. Returns the stored row (defaults filled in).',
+        inputSchema: {
+          table: z.string().describe('Target table in your project'),
+          values: z.record(z.string(), z.unknown()).describe('Column → value map'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ table, values }) => {
+        await auditCall('insert', { table });
+        const result = await insertRow({ projectId: ctx.projectId, tableName: table, values });
+        return jsonResult(result);
+      },
+    );
+
+    server.registerTool(
+      'update',
+      {
+        title: 'Update rows',
+        description:
+          'Update rows that match every column in `match`, setting the columns in `set`. ' +
+          'Both maps are required (an unbounded update is refused). Returns affected row count.',
+        inputSchema: {
+          table: z.string().describe('Target table in your project'),
+          match: z.record(z.string(), z.unknown()).describe('Column → value AND-matched WHERE'),
+          set: z.record(z.string(), z.unknown()).describe('Column → new value'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ table, match, set }) => {
+        await auditCall('update', { table });
+        const affected = await runUpdate(ctx.projectId, table, match, set);
+        return jsonResult({ affected });
+      },
+    );
+
+    server.registerTool(
+      'delete',
+      {
+        title: 'Delete rows',
+        description:
+          'Delete rows that match every column in `match`. `match` is required (an ' +
+          'unbounded delete is refused). Returns affected row count.',
+        inputSchema: {
+          table: z.string().describe('Target table in your project'),
+          match: z.record(z.string(), z.unknown()).describe('Column → value AND-matched WHERE'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ table, match }) => {
+        await auditCall('delete', { table });
+        const affected = await runDelete(ctx.projectId, table, match);
+        return jsonResult({ affected });
+      },
+    );
+  }
+
+  return server;
+}
+
+/** The tool names a key of each scope is allowed to see. Exported for tests. */
+export const READ_TOOLS = ['list_tables', 'describe_table', 'query'] as const;
+export const WRITE_TOOLS = ['insert', 'update', 'delete'] as const;

@@ -94,6 +94,20 @@ const envSchema = z.object({
   BRIVEN_MITTERA_API_KEY: z.string().optional(),
   BRIVEN_MITTERA_WEBHOOK_SECRET: z.string().optional(),
 
+  // Real SMTP transport. mittera.eu accepts sends (200) but does NOT
+  // deliver (proven by 44 `.sent` audit rows and ZERO `.delivered`
+  // webhooks), so once a real provider (Resend / Mailgun / Postmark / SES
+  // — all speak standard SMTP) is wired here, SMTP becomes the PRIMARY
+  // sender and mittera drops to a fallback. SMTP is "configured" only when
+  // HOST + USER + PASS are all non-empty; PORT defaults to 587 (STARTTLS),
+  // and secure TLS is used automatically on 465. FROM overrides the
+  // fromAddress() default when set (e.g. "Briven <noreply@briven.tech>").
+  BRIVEN_SMTP_HOST: z.string().optional(),
+  BRIVEN_SMTP_PORT: z.coerce.number().int().positive().default(587),
+  BRIVEN_SMTP_USER: z.string().optional(),
+  BRIVEN_SMTP_PASS: z.string().optional(),
+  BRIVEN_SMTP_FROM: z.string().optional(),
+
   // MinIO — object storage.
   //   _ENDPOINT          server-side (internal docker network OK).
   //   _PUBLIC_ENDPOINT   what the browser sees in presigned URLs. HTTPS
@@ -151,6 +165,13 @@ const envSchema = z.object({
   // Web origin for email link callbacks.
   BRIVEN_WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
   BRIVEN_STUDIO_ORIGIN: z.string().url().default('http://localhost:8082'),
+  // Dedicated admin cockpit host (admin.<domain>) — must be CORS-allowed or
+  // every client-side fetch from the cockpit dies with "Failed to fetch".
+  BRIVEN_ADMIN_ORIGIN: z.string().url().optional(),
+  // Comma-separated allowlist of emails that may EVER be platform admin.
+  // When set, the users.isAdmin DB flag alone no longer grants admin —
+  // see lib/superadmin.ts. Unset = DB flag decides (local dev).
+  BRIVEN_SUPERADMIN_EMAILS: z.string().optional(),
 
   // Comma-separated list of origins Better Auth will accept as `callbackURL`.
   // Must include every public hostname that serves the dashboard.
@@ -168,12 +189,11 @@ const envSchema = z.object({
   // only writes invocations + storage_bytes.
   BRIVEN_REALTIME_URL: z.string().url().default('http://localhost:3004'),
 
-  // Prometheus — the observability stack's query endpoint (Phase 4). The
-  // superadmin Health cockpit reads real host metrics (CPU/RAM/disk/steal)
-  // from node-exporter via Prometheus's instant-query API. Optional: when
-  // unset, getHostMetrics() returns null and the cockpit honestly shows
-  // "—" with a "monitoring not connected" note rather than a fake zero.
-  // Point this at the in-cluster Prometheus (e.g. http://prometheus:9090).
+  // Prometheus base URL for the Phase 4 observability stack. Read by
+  // services/platform-health.ts (instant host metrics) and
+  // routes/admin-timeseries.ts (24h range queries for the cockpit charts).
+  // Optional — when unset those surfaces return null and the cockpit shows
+  // "monitoring not connected"; we never fabricate a number.
   BRIVEN_PROMETHEUS_URL: z.string().url().optional(),
 
   // GeoIP — optional path to a MaxMind GeoLite2-City.mmdb file. When unset
@@ -239,17 +259,6 @@ if (env.BRIVEN_ENV !== 'development') {
   if (!env.BRIVEN_WEB_ORIGIN.startsWith('https://')) {
     throw new Error(
       `BRIVEN_WEB_ORIGIN must be HTTPS outside development (got: ${env.BRIVEN_WEB_ORIGIN})`,
-    );
-  }
-  // why: BRIVEN_BETTER_AUTH_SECRET is the HS256 key for session cookies AND
-  // CLI JWTs (lib/cli-jwt.ts). It's marked .optional() so local dev/tests can
-  // boot, and cli-jwt.ts already fails closed at sign/verify time. But a
-  // deployed environment that booted WITHOUT it would silently run with no
-  // stable signing key — so fail at boot here instead of on the first auth.
-  // Pre-flight: production/staging MUST have BRIVEN_BETTER_AUTH_SECRET set.
-  if (!env.BRIVEN_BETTER_AUTH_SECRET) {
-    throw new Error(
-      'BRIVEN_BETTER_AUTH_SECRET must be set outside development (HS256 key for sessions + CLI JWTs — an unset key makes CLI tokens forgeable)',
     );
   }
   // why: BRIVEN_ENCRYPTION_KEY decrypts customer env vars at rest. If

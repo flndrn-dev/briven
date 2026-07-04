@@ -105,20 +105,22 @@ export function ProjectsList({
           no projects match that filter.
         </p>
       ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        // Responsive card grid: 1 col on phones, 2 on tablets, 3 on
+        // regular screens, 4 on large screens.
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((p) => (
             <li
               key={p.id}
-              className="group flex flex-col justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] transition hover:border-[var(--color-border)]"
+              className="group relative flex flex-col rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] transition hover:border-[var(--color-border)]"
             >
               <Link
                 href={projectHref(p.id)}
-                className="flex flex-1 flex-col gap-1 px-4 py-3"
+                className="flex flex-1 flex-col gap-1.5 p-4"
                 {...(studioOrigin
                   ? { rel: 'noopener', target: '_self' }
                   : {})}
               >
-                <p className="truncate font-mono text-sm">{p.name}</p>
+                <p className="pr-8 font-mono text-sm">{p.name}</p>
                 <p className="font-mono text-xs text-[var(--color-text-subtle)]">
                   {p.slug} · {p.region} · {p.tier}
                   {p.orgName ? (
@@ -131,11 +133,11 @@ export function ProjectsList({
                     </span>
                   ) : null}
                 </p>
-              </Link>
-              <div className="flex items-center justify-between border-t border-[var(--color-border-subtle)] px-4 py-2">
-                <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+                <span className="mt-auto pt-2 font-mono text-xs text-[var(--color-text-subtle)]">
                   {new Date(p.createdAt).toISOString().slice(0, 10)}
                 </span>
+              </Link>
+              <div className="absolute right-2 top-2">
                 <RowDeleteProjectButton
                   projectId={p.id}
                   projectName={p.name}

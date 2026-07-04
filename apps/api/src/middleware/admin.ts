@@ -4,11 +4,13 @@ import type { MiddlewareHandler } from 'hono';
 
 import { getDb } from '../db/client.js';
 import { users } from '../db/schema.js';
+import { isSuperadminEmail } from '../lib/superadmin.js';
 import type { User } from './session.js';
 
 /**
- * Require that the authenticated user has `isAdmin = true`. Mount on every
- * /v1/admin/* route.
+ * Require that the authenticated user has `isAdmin = true` AND — when
+ * BRIVEN_SUPERADMIN_EMAILS is set — that their email is on the env-pinned
+ * allowlist (lib/superadmin.ts). Mount on every /v1/admin/* route.
  *
  * Note: step-up auth (2FA/password re-entry within last 10 min) is
  * enforced by `requireFreshAuth` in a separate middleware — this one only
@@ -20,11 +22,11 @@ export const requireAdmin = (): MiddlewareHandler => async (c, next) => {
 
   const db = getDb();
   const [row] = await db
-    .select({ isAdmin: users.isAdmin, suspendedAt: users.suspendedAt })
+    .select({ email: users.email, isAdmin: users.isAdmin, suspendedAt: users.suspendedAt })
     .from(users)
     .where(eq(users.id, user.id))
     .limit(1);
-  if (!row?.isAdmin) throw new ForbiddenError('admin only');
+  if (!row?.isAdmin || !isSuperadminEmail(row.email)) throw new ForbiddenError('admin only');
   if (row.suspendedAt) throw new ForbiddenError('account suspended');
 
   await next();

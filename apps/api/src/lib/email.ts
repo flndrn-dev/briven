@@ -1,5 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+
 import { env } from '../env.js';
 import { audit } from '../services/audit.js';
 import { isSuppressed } from '../services/suppressions.js';
@@ -61,6 +64,148 @@ function isConfigured(): boolean {
   return Boolean(env.BRIVEN_MITTERA_API_URL && env.BRIVEN_MITTERA_API_KEY);
 }
 
+/**
+ * SMTP is the real delivery path. It's "configured" only when HOST + USER
+ * + PASS are all non-empty (loadEnv treats empty strings as unset, so a
+ * blank var here reads as undefined). When configured, SMTP becomes the
+ * PRIMARY sender ahead of mittera — mittera accepts sends but never
+ * delivers, so a wired SMTP provider (Resend / Mailgun / Postmark / SES)
+ * takes precedence.
+ */
+function isSmtpConfigured(): boolean {
+  return Boolean(env.BRIVEN_SMTP_HOST && env.BRIVEN_SMTP_USER && env.BRIVEN_SMTP_PASS);
+}
+
+/**
+ * Lazily-built, module-scoped nodemailer transporter singleton. Built once
+ * on first send and reused for the pooled connection — rebuilding per send
+ * would defeat nodemailer's connection reuse. `secure` is true only on 465
+ * (implicit TLS); 587 uses STARTTLS which nodemailer negotiates itself. The
+ * ~10s greeting/socket timeouts mirror the mittera path's 10s AbortSignal
+ * so a hung SMTP host can't tie up the magic-link request.
+ */
+let smtpTransporter: Transporter | null = null;
+
+function getSmtpTransporter(): Transporter {
+  if (!smtpTransporter) {
+    const port = env.BRIVEN_SMTP_PORT;
+    smtpTransporter = nodemailer.createTransport({
+      host: env.BRIVEN_SMTP_HOST!,
+      port,
+      secure: port === 465,
+      auth: {
+        user: env.BRIVEN_SMTP_USER!,
+        pass: env.BRIVEN_SMTP_PASS!,
+      },
+      // Hard caps so a hung SMTP server doesn't tie up the request that
+      // triggered the send (mirrors the mittera fetch's 10s AbortSignal).
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
+      connectionTimeout: 10_000,
+    });
+  }
+  return smtpTransporter;
+}
+
+/**
+ * The From: SMTP sends use. Prefers the explicit BRIVEN_SMTP_FROM (e.g.
+ * "Briven <noreply@briven.tech>") so the operator can align it with their
+ * provider's verified sender; falls back to a per-call override, then the
+ * global fromAddress().
+ */
+function smtpFrom(args: SendArgs): string {
+  return env.BRIVEN_SMTP_FROM ?? args.from ?? fromAddress();
+}
+
+/**
+ * Send via the real SMTP provider. On success logs `smtp_send_ok` and
+ * writes an audit row with action `smtp.<label>.sent` carrying the
+ * provider messageId — mirroring the mittera path's `mittera.<label>.sent`
+ * so the Email Admin cockpit's per-template stats pick it up automatically
+ * (SEND_ACTION_RE already matches `smtp\.(.+)\.sent`). On failure logs
+ * `smtp_send_failed` and throws so the caller sees the error.
+ */
+async function sendViaSmtp(label: string, args: SendArgs): Promise<void> {
+  let messageId: string | null = null;
+  try {
+    const info = await getSmtpTransporter().sendMail({
+      from: smtpFrom(args),
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+    });
+    messageId = info.messageId ?? null;
+  } catch (err) {
+    log.error('smtp_send_failed', {
+      label,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err instanceof Error ? err : new Error(`smtp send failed: ${String(err)}`);
+  }
+
+  log.info('smtp_send_ok', { label, messageId });
+
+  // Audit-log the send so operators see it in the admin email-events
+  // stream, tagged with the template. Same audit() call shape as the
+  // mittera path so aggregateTemplateStats attributes it identically;
+  // recipient redacted per CLAUDE.md §5.1.
+  await audit({
+    actorId: null,
+    projectId: args.projectId ?? null,
+    action: `smtp.${label}.sent`,
+    ipHash: null,
+    userAgent: 'briven-api',
+    metadata: {
+      messageId,
+      recipientRedacted: redactEmail(args.to),
+      subject: args.subject,
+    },
+  });
+}
+
+/**
+ * What the admin cockpit can TRUTHFULLY report about the live sender,
+ * read straight off this module's own config + transport helpers so the
+ * dashboard never drifts from the real send path (Phase 8 §1).
+ *
+ * Note on provider: Briven talks only to mittera.eu, which abstracts the
+ * underlying provider (SES / Mailgun / Pando). That provider is NOT
+ * reported back to Briven on the send path or the webhook envelope, so we
+ * deliberately do not invent a provider field here — `activeTransport`
+ * reports the leg Briven itself drives (smtp vs mittera vs the dev stdout
+ * sink), which is the part Briven can actually observe. When a real SMTP
+ * provider is configured (HOST + USER + PASS) it is the PRIMARY sender —
+ * `smtpFallbackConfigured` is true and `activeTransport` is 'smtp';
+ * otherwise the send path falls back to mittera, then dev stdout.
+ */
+export interface EmailSenderInfo {
+  /** The default From: every control-plane send uses (per-tenant sends override it). */
+  fromAddress: string;
+  mitteraConfigured: boolean;
+  /** The exact mittera POST endpoint, or null when unconfigured. */
+  mitteraEndpoint: string | null;
+  smtpFallbackConfigured: boolean;
+  /** The transport that WOULD carry the next control-plane send given current config. */
+  activeTransport: 'mittera' | 'smtp' | 'dev-stdout';
+}
+
+export function getEmailSenderInfo(): EmailSenderInfo {
+  const smtp = isSmtpConfigured();
+  const mittera = isConfigured();
+  return {
+    fromAddress: fromAddress(),
+    mitteraConfigured: mittera,
+    mitteraEndpoint: env.BRIVEN_MITTERA_API_URL
+      ? `${env.BRIVEN_MITTERA_API_URL.replace(/\/$/, '')}${SEND_PATH}`
+      : null,
+    smtpFallbackConfigured: smtp,
+    // Same precedence as send(): SMTP is primary when configured, then
+    // mittera, then the dev stdout sink.
+    activeTransport: smtp ? 'smtp' : mittera ? 'mittera' : 'dev-stdout',
+  };
+}
+
 async function send(label: string, args: SendArgs): Promise<void> {
   // Suppression guard — never POST to mittera for a recipient on the
   // local suppression list (permanent bounce, complaint, mittera-side
@@ -75,6 +220,14 @@ async function send(label: string, args: SendArgs): Promise<void> {
     return;
   }
 
+  // Primary path: real SMTP provider. mittera accepts sends but never
+  // delivers, so once SMTP is configured it takes precedence over mittera.
+  if (isSmtpConfigured()) {
+    await sendViaSmtp(label, args);
+    return;
+  }
+
+  // Fallback: mittera's REST API (kept as the fallback, not deleted).
   // Dev fallback: print so j can complete bootstrap without external email.
   if (!isConfigured()) {
     log.warn(`${label}_logged_only`);
@@ -517,7 +670,7 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Customer-visible contact addresses route to the parent flndrn
+// Customer-visible contact addresses route to the parent flndrn Limited
 // inbox (admin.flndrn.com queue). Outbound product From: stays on
 // briven.tech for SPF/DKIM alignment — only inbound contact moves.
 const MIGRATIONS_CONTACT = 'migrations@flndrn.com';
@@ -683,7 +836,7 @@ function shell(title: string, body: string): string {
             briven · <a style="color:#9ba3af" href="https://${domain}">${domain}</a><br/>
             made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn<br/>
             100% self-funded, sustainable &amp; independent<br/>
-            flndrn, Limassol, Cyprus
+            flndrn Limited, Limassol, Cyprus
           </p>
         </td></tr>
       </table>
@@ -691,4 +844,203 @@ function shell(title: string, body: string): string {
   </table>
   <style>.muted { color:#6b7280;font-size:13px }</style>
 </body></html>`;
+}
+
+/* ─── RESTORED AFTER MERGE LOSS (2026-07-02): support-ticket emails ── */
+// This block was dropped when lib/email.ts was rewritten during a branch
+// merge; routes/contact.ts and services/support-tickets.ts still import
+// these senders. Restored verbatim from d48bceb.
+
+/* ─── support tickets ────────────────────────────────────────────── */
+
+/**
+ * Confirms to the sender that their tagged /contact submission became a
+ * support ticket, and gives them the ticket number to quote. Sent on
+ * ticket creation. `ticketNumber` is the rendered, '#'-prefixed value.
+ */
+export async function sendTicketCreatedConfirmation(
+  to: string,
+  ticketNumber: string,
+): Promise<void> {
+  await send('ticket_created', {
+    to,
+    subject: `we got your support request · ${ticketNumber}`,
+    html: ticketCreatedHtml(ticketNumber),
+    text: ticketCreatedText(ticketNumber),
+  });
+}
+
+/**
+ * Emails the sender an operator's reply on their ticket. `body` is the
+ * operator's message text; `ticketNumber` is the rendered '#'-prefixed value.
+ */
+export async function sendTicketReply(
+  to: string,
+  ticketNumber: string,
+  body: string,
+): Promise<void> {
+  await send('ticket_reply', {
+    to,
+    subject: `re: your support request · ${ticketNumber}`,
+    html: ticketReplyHtml(ticketNumber, body),
+    text: ticketReplyText(ticketNumber, body),
+  });
+}
+
+/**
+ * Emails the sender an operator's reply to a PLAIN (untagged) contact
+ * message — one that never became a support ticket, so there's no ticket
+ * number to quote. Same transport chain as sendTicketReply; the copy just
+ * references "your message to briven" instead of a ticket. `body` is the
+ * operator's message text.
+ */
+export async function sendContactReply(to: string, body: string): Promise<void> {
+  await send('contact_reply', {
+    to,
+    subject: 're: your message to briven',
+    html: contactReplyHtml(body),
+    text: contactReplyText(body),
+  });
+}
+
+/**
+ * Notifies the sender that the status of their ticket changed (used for
+ * the 'replied'/'closed' transitions). `status` is the new status code.
+ */
+export async function sendTicketStatusUpdate(
+  to: string,
+  ticketNumber: string,
+  status: string,
+): Promise<void> {
+  await send('ticket_status_update', {
+    to,
+    subject: `update on your support request · ${ticketNumber}`,
+    html: ticketStatusHtml(ticketNumber, status),
+    text: ticketStatusText(ticketNumber, status),
+  });
+}
+
+const SUPPORT_CONTACT = 'support@flndrn.com';
+
+function ticketBlock(ticketNumber: string): string {
+  return `<p style="background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
+      ticket: <strong style="color:#f5f7fa">${escapeHtml(ticketNumber)}</strong>
+    </p>`;
+}
+
+function ticketCreatedHtml(ticketNumber: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    'we got your support request',
+    `
+    <p>thanks for reaching out. your message is now a support ticket and we'll get back to you by email.</p>
+    ${ticketBlock(ticketNumber)}
+    ${cta('view your tickets', `https://${domain}/dashboard/support`)}
+    <p class="muted">quote your ticket number above in any follow-up, or write to ${SUPPORT_CONTACT}.</p>
+  `,
+  );
+}
+
+function ticketCreatedText(ticketNumber: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    'we got your support request',
+    '',
+    `thanks for reaching out. your message is now a support ticket: ${ticketNumber}`,
+    '',
+    `view your tickets: https://${domain}/dashboard/support`,
+    '',
+    `quote your ticket number in any follow-up, or write to ${SUPPORT_CONTACT}.`,
+  ].join('\n');
+}
+
+function ticketReplyHtml(ticketNumber: string, body: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    'a reply on your support request',
+    `
+    <p>we've replied to your ticket:</p>
+    <p style="background:#1a1d24;border-radius:8px;padding:12px;white-space:pre-wrap;color:#d1d5db;border:1px solid #2a2e36;font-size:14px">${escapeHtml(body)}</p>
+    ${ticketBlock(ticketNumber)}
+    ${cta('open the ticket', `https://${domain}/dashboard/support`)}
+    <p class="muted">reply to this email or write to ${SUPPORT_CONTACT} and quote the ticket number above.</p>
+  `,
+  );
+}
+
+function ticketReplyText(ticketNumber: string, body: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    'a reply on your support request',
+    '',
+    body,
+    '',
+    `ticket: ${ticketNumber}`,
+    '',
+    `open the ticket: https://${domain}/dashboard/support`,
+    '',
+    `reply to this email or write to ${SUPPORT_CONTACT} and quote the ticket number.`,
+  ].join('\n');
+}
+
+function contactReplyHtml(body: string): string {
+  return shell(
+    'a reply to your message',
+    `
+    <p>we've replied to the message you sent us:</p>
+    <p style="background:#1a1d24;border-radius:8px;padding:12px;white-space:pre-wrap;color:#d1d5db;border:1px solid #2a2e36;font-size:14px">${escapeHtml(body)}</p>
+    <p class="muted">reply to this email or write to ${SUPPORT_CONTACT} and we'll pick it up from there.</p>
+  `,
+  );
+}
+
+function contactReplyText(body: string): string {
+  return [
+    'a reply to your message',
+    '',
+    body,
+    '',
+    `reply to this email or write to ${SUPPORT_CONTACT} and we'll pick it up from there.`,
+  ].join('\n');
+}
+
+function ticketStatusBlurb(status: string): string {
+  switch (status) {
+    case 'replied':
+      return 'we’ve replied to your ticket — check the thread for our latest message.';
+    case 'closed':
+      return 'we’ve marked your ticket as resolved. if you still need help, just reply and it’ll reopen.';
+    case 'in_review':
+      return 'your ticket is being looked at — we’ll follow up shortly.';
+    default:
+      return 'your ticket status was updated.';
+  }
+}
+
+function ticketStatusHtml(ticketNumber: string, status: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return shell(
+    'update on your support request',
+    `
+    <p>${ticketStatusBlurb(status)}</p>
+    ${ticketBlock(ticketNumber)}
+    ${cta('open the ticket', `https://${domain}/dashboard/support`)}
+    <p class="muted">need a human? reply to this email or write to ${SUPPORT_CONTACT}.</p>
+  `,
+  );
+}
+
+function ticketStatusText(ticketNumber: string, status: string): string {
+  const domain = env.BRIVEN_DOMAIN ?? 'briven.tech';
+  return [
+    'update on your support request',
+    '',
+    ticketStatusBlurb(status),
+    '',
+    `ticket: ${ticketNumber}`,
+    '',
+    `open the ticket: https://${domain}/dashboard/support`,
+    '',
+    `need a human? reply to this email or write to ${SUPPORT_CONTACT}.`,
+  ].join('\n');
 }

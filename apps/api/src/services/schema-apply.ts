@@ -99,16 +99,6 @@ function triggerFnName(table: string): string {
 }
 
 function renderColumnType(def: ColumnDef): string {
-  // DoltGres has no `vector(N)` type; an add_column carrying one (e.g. from a
-  // wire snapshot that bypassed the SDK builder) would otherwise emit DDL that
-  // crashes DoltGres with a raw `at or near "(": syntax error`. Reject it here
-  // with a friendly message before it reaches the data plane. Vector search is
-  // coming with LanceDB.
-  if (/^vector\b/i.test(def.sqlType)) {
-    throw new Error(
-      "vector columns aren't supported yet — vector search is coming with LanceDB",
-    );
-  }
   const parts = [def.sqlType];
   if (!def.nullable && !def.primaryKey) parts.push('NOT NULL');
   if (def.unique && !def.primaryKey) parts.push('UNIQUE');

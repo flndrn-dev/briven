@@ -13,6 +13,9 @@ const TABS = [
   { href: '/snapshots', label: 'snapshots', dev: false },
   { href: '/auth', label: 'auth', dev: false },
   { href: '/storage', label: 'storage', dev: false },
+  // Agent access (MCP keys) — always visible: agents are first-class users
+  // of Briven, so the door to them can't hide behind developer mode.
+  { href: '/mcp', label: 'mcp', dev: false },
   { href: '/members', label: 'members', dev: false },
   { href: '/functions', label: 'functions', dev: true },
   { href: '/cron', label: 'cron', dev: true },

@@ -2,6 +2,7 @@ import { ValidationError } from '@briven/shared';
 import { z } from 'zod';
 
 import { runInProjectDatabase } from '../db/data-plane.js';
+import { hasTenantSecret } from './tenant-secrets.js';
 
 /**
  * Non-secret per-tenant auth config (BUILD_PLAN.md §6 Providers panel +
@@ -29,6 +30,48 @@ const oauthProviderConfig = z.object({
   clientId: z.string().nullable(),
 });
 
+/**
+ * Generic / custom OIDC (OpenID Connect) provider configured by the customer.
+ * Same non-secret split as the built-in social providers: the public client id
+ * + endpoints live here (project DoltGres `_briven_meta`), the client secret
+ * rides the encrypted control-plane tenant-secret-store under the name
+ * `oidc_<id>_client_secret` (service 'auth').
+ *
+ * The provider can be configured EITHER via an OIDC `issuer` (the engine fetches
+ * `<issuer>/.well-known/openid-configuration`) OR via the three explicit
+ * endpoints. Either path is gated on enabled + clientId + a stored secret before
+ * it reaches the Better Auth `genericOAuth` plugin (mirrors the konnos gate).
+ */
+const customOidcProviderConfig = z.object({
+  /** URL-safe slug; also the Better Auth `providerId` + the `provider` query value. */
+  id: z
+    .string()
+    .min(1)
+    .max(40)
+    .regex(/^[a-z0-9-]+$/, 'id must be a slug of lowercase letters, digits and hyphens'),
+  /** Human label shown on the hosted-pages + SDK button (e.g. "Acme SSO"). */
+  displayName: z.string().min(1).max(64),
+  enabled: z.boolean(),
+  /** Public OAuth client id from the upstream provider — not a secret. */
+  clientId: z.string().nullable(),
+  /**
+   * OIDC issuer base URL. When set, the engine discovers the
+   * authorization/token/userinfo endpoints from
+   * `<issuer>/.well-known/openid-configuration`. Mutually-sufficient with the
+   * three explicit endpoints below — supply one or the other.
+   */
+  issuer: z.string().url().nullable(),
+  authorizationUrl: z.string().url().nullable(),
+  tokenUrl: z.string().url().nullable(),
+  userinfoUrl: z.string().url().nullable(),
+  /** Space-separated OAuth scopes. Defaults to the standard OIDC trio. */
+  scopes: z.string().min(1).default('openid profile email'),
+  /** Whether to use PKCE on the authorization code exchange. Defaults on. */
+  pkce: z.boolean().optional(),
+});
+
+export type CustomOidcProvider = z.infer<typeof customOidcProviderConfig>;
+
 const authConfigSchema = z.object({
   providers: z.object({
     emailPassword: z.object({ enabled: z.boolean() }),
@@ -46,6 +89,11 @@ const authConfigSchema = z.object({
     github: oauthProviderConfig,
     discord: oauthProviderConfig,
     microsoft: oauthProviderConfig,
+    // Generic OIDC/OAuth provider (Forgejo at code.konnos.org). Same
+    // {enabled, clientId} shape as the built-in social providers — the
+    // public client id is non-secret; the secret rides the encrypted
+    // tenant-secret-store like the others.
+    konnos: oauthProviderConfig,
   }),
   branding: z.object({
     /** Customer-uploaded logo URL. Null means use the briven default mark. */
@@ -75,6 +123,12 @@ const authConfigSchema = z.object({
     /** Display name in the From: header. */
     senderName: z.string().min(1).max(64),
   }),
+  /**
+   * Customer-defined generic OIDC providers (in addition to the built-in
+   * social providers above). Optional so configs written before this field
+   * existed still parse — `getAuthConfig` callers treat a missing array as `[]`.
+   */
+  customOidc: z.array(customOidcProviderConfig).optional(),
 });
 
 export type AuthConfig = z.infer<typeof authConfigSchema>;
@@ -108,6 +162,7 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     github: { enabled: false, clientId: null },
     discord: { enabled: false, clientId: null },
     microsoft: { enabled: false, clientId: null },
+    konnos: { enabled: false, clientId: null },
   },
   branding: {
     logoUrl: null,
@@ -115,6 +170,7 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     senderDomain: null,
     senderName: 'briven auth',
   },
+  customOidc: [],
 }) as AuthConfig;
 
 // ─── pure helpers (unit-testable without postgres) ───────────────────────
@@ -240,8 +296,161 @@ export async function isAuthEnabled(projectId: string): Promise<boolean> {
   return rows[0]!.value === true;
 }
 
+// ─── enabled-providers signal (render-gating) ────────────────────────────
+
+/**
+ * Built-in social provider keys, konnos-first (our own product leads). These
+ * map 1:1 to the secret name convention `<key>_client_secret` and the Better
+ * Auth `provider` value used to start a sign-in.
+ */
+const SOCIAL_PROVIDER_KEYS = [
+  'konnos',
+  'google',
+  'github',
+  'discord',
+  'microsoft',
+] as const;
+
+/**
+ * Does a custom-OIDC entry have a usable endpoint set — an issuer OR all three
+ * explicit endpoints? Mirrors the gate `buildGenericOAuthConfigs` applies in
+ * the pool, so the "enabled" signal never lists a provider the engine would
+ * skip.
+ */
+function oidcHasEndpoints(o: CustomOidcProvider): boolean {
+  return Boolean(o.issuer) || Boolean(o.authorizationUrl && o.tokenUrl && o.userinfoUrl);
+}
+
+/**
+ * Pure gate: which providers are fully configured given a secret-presence
+ * probe. The SINGLE source of truth for "is this provider live?" — the exact
+ * same `enabled && clientId && secret-present` rule `createAuthInstance` wires
+ * with (custom-OIDC additionally needs an endpoint set). `hasSecret` is the
+ * `<name>` half of the (projectId,'auth',name) triple so this stays sync +
+ * unit-testable with a plain map.
+ *
+ * Returns provider keys for built-ins and the slug `id` for custom-OIDC,
+ * konnos-first then the rest, then custom-OIDC in declaration order.
+ */
+export function computeEnabledProviders(
+  config: AuthConfig,
+  hasSecret: (name: string) => boolean,
+): string[] {
+  const out: string[] = [];
+  for (const key of SOCIAL_PROVIDER_KEYS) {
+    const c = config.providers[key];
+    if (c.enabled && c.clientId && hasSecret(`${key}_client_secret`)) out.push(key);
+  }
+  for (const o of config.customOidc ?? []) {
+    if (o.enabled && o.clientId && oidcHasEndpoints(o) && hasSecret(`oidc_${o.id}_client_secret`)) {
+      out.push(o.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * Async wrapper over `computeEnabledProviders` that resolves secret presence
+ * from the encrypted control-plane store. Batches the presence probes (never
+ * decrypts) and feeds the result set into the one shared gate. Pass `preloaded`
+ * to reuse a config already in hand and skip the extra meta read.
+ */
+export async function listEnabledProviders(
+  projectId: string,
+  preloaded?: AuthConfig,
+): Promise<string[]> {
+  const config = preloaded ?? (await getAuthConfig(projectId));
+  const names = [
+    ...SOCIAL_PROVIDER_KEYS.map((k) => `${k}_client_secret`),
+    ...(config.customOidc ?? []).map((o) => `oidc_${o.id}_client_secret`),
+  ];
+  const present = await Promise.all(
+    names.map((name) => hasTenantSecret(projectId, 'auth', name)),
+  );
+  const set = new Set(names.filter((_, i) => present[i]));
+  return computeEnabledProviders(config, (name) => set.has(name));
+}
+
+/**
+ * Shape of the public, UNAUTHENTICATED branding/config payload. Carries only
+ * non-secret presentation + the enabled-provider signal — NEVER a clientId,
+ * secret, toggle, or endpoint. The hosted pages + SDK read this to decide which
+ * OAuth buttons to render.
+ */
+export interface AuthBrandingPublicPayload {
+  primaryColor: string;
+  senderName: string;
+  /** Enabled provider keys / custom-OIDC slugs — the `provider` start value. */
+  socialProviders: string[];
+  /** Display labels for the enabled custom-OIDC entries (built-ins self-label). */
+  customOidc: Array<{ id: string; displayName: string }>;
+}
+
+/**
+ * Build the public branding/config payload from a config + its already-computed
+ * enabled list. Deliberately projects ONLY safe fields so a clientId/secret can
+ * never leak through this unauthenticated surface.
+ */
+export function buildAuthBrandingPublicPayload(
+  config: AuthConfig,
+  enabledProviders: string[],
+): AuthBrandingPublicPayload {
+  const enabled = new Set(enabledProviders);
+  return {
+    primaryColor: config.branding.primaryColor,
+    senderName: config.branding.senderName,
+    socialProviders: enabledProviders,
+    customOidc: (config.customOidc ?? [])
+      .filter((o) => enabled.has(o.id))
+      .map((o) => ({ id: o.id, displayName: o.displayName })),
+  };
+}
+
+// ─── custom-OIDC CRUD ────────────────────────────────────────────────────
+
+/**
+ * Validate + upsert a single custom-OIDC provider (keyed by `id`) into the
+ * project's config, persisting via `updateAuthConfig`. Replacing the whole
+ * `customOidc` array is intentional — `deepMerge` treats arrays as wholesale
+ * replacements, so we recompute the array here. Returns the new full config.
+ * Throws `ValidationError` on a malformed entry (bad slug, missing displayName…).
+ */
+export async function upsertCustomOidcProvider(
+  projectId: string,
+  entry: unknown,
+): Promise<AuthConfig> {
+  const parsed = customOidcProviderConfig.safeParse(entry);
+  if (!parsed.success) {
+    throw new ValidationError('custom OIDC provider failed validation', {
+      issues: parsed.error.issues,
+    });
+  }
+  const e = parsed.data;
+  const current = await getAuthConfig(projectId);
+  const list = (current.customOidc ?? []).filter((o) => o.id !== e.id);
+  return updateAuthConfig(projectId, { customOidc: [...list, e] });
+}
+
+/**
+ * Remove a custom-OIDC provider by `id`. Idempotent — removing an absent id is
+ * a no-op write that still re-validates the stored shape. The encrypted secret
+ * (`oidc_<id>_client_secret`) is left in place (harmless: nothing references it
+ * once the entry is gone, and the gate requires the entry to exist).
+ */
+export async function removeCustomOidcProvider(
+  projectId: string,
+  id: string,
+): Promise<AuthConfig> {
+  const current = await getAuthConfig(projectId);
+  const list = (current.customOidc ?? []).filter((o) => o.id !== id);
+  return updateAuthConfig(projectId, { customOidc: list });
+}
+
 /**
  * Visible-for-tests: the raw zod schema. Lets test files exercise
  * validation without going through the postgres path.
  */
 export const __authConfigSchema = authConfigSchema;
+
+/** Visible-for-tests: the custom-OIDC element schema. */
+export const __customOidcSchema = customOidcProviderConfig;

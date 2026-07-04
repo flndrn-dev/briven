@@ -22,6 +22,24 @@ export interface AuthConfig {
   };
 }
 
+/**
+ * One tenant-defined custom OIDC provider (the generic escape hatch next
+ * to the built-in google/github/discord/microsoft toggles). Mirrors the
+ * API's nullable shape; `scopes` is the raw space-separated string.
+ */
+export interface CustomOidcProvider {
+  id: string;
+  displayName: string;
+  enabled: boolean;
+  clientId: string | null;
+  issuer: string | null;
+  authorizationUrl: string | null;
+  tokenUrl: string | null;
+  userinfoUrl: string | null;
+  scopes: string;
+  pkce: boolean | null;
+}
+
 interface Props {
   projectId: string;
   initial: AuthConfig;

@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 export const metadata = { title: 'terms of service' };
 
 export default function TermsPage() {
@@ -13,8 +11,8 @@ export default function TermsPage() {
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">1. who and what</h2>
       <p>
         briven is an open-core reactive Postgres backend platform operated by{' '}
-        <strong>flndrn</strong> (the &ldquo;Operator&rdquo;, &ldquo;we&rdquo;,
-        &ldquo;us&rdquo;), operating from Arch. Makariou III 171, Vanezis Business
+        <strong>flndrn Limited</strong> (the &ldquo;Operator&rdquo;, &ldquo;we&rdquo;,
+        &ldquo;us&rdquo;), a company registered at Arch. Makariou III 171, Vanezis Business
         Center 4th floor, 3027 Limassol, Cyprus. Day-to-day development happens in Flanders,
         Belgium. This document, together with the{' '}
         <a href="/privacy" className="text-[var(--color-text-link)]">
@@ -225,23 +223,11 @@ export default function TermsPage() {
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">17. contact</h2>
       <p>
-        Reach us through our{' '}
-        <Link href="/contact" className="text-[var(--color-text-link)] underline">
-          contact form
-        </Link>
-        , picking the matching topic:{' '}
-        <Link href="/contact?topic=legal" className="text-[var(--color-text-link)] underline">
-          legal notices
-        </Link>
-        ,{' '}
-        <Link href="/contact?topic=support" className="text-[var(--color-text-link)] underline">
-          operational issues
-        </Link>
-        , or{' '}
-        <Link href="/contact?topic=security" className="text-[var(--color-text-link)] underline">
-          security disclosures
-        </Link>{' '}
-        (PGP key on the trust page).
+        Legal notices: <strong>legal@flndrn.com</strong>. Operational issues:{' '}
+        <strong>support@flndrn.com</strong>. Security disclosures:{' '}
+        <strong>security@flndrn.com</strong> (PGP key on the trust page). Until brand-fronted
+        email is fully wired up, mail to those addresses is forwarded to{' '}
+        <strong>flandriendev@hotmail.com</strong>.
       </p>
     </>
   );

@@ -15,6 +15,7 @@ export type IdPrefix =
   | 'p' // project
   | 'd' // deployment
   | 'k' // api key
+  | 'mck' // mcp project key (agent door — mcp.briven.tech)
   | 'm' // member
   | 'au' // audit log
   | 'ar' // abuse report
@@ -39,10 +40,12 @@ export type IdPrefix =
   | 'al' // allowlist entry (invite-only beta signup gate)
   | 'mig' // migration request (customer-initiated import from convex/supabase/etc.)
   | 'me' // marketing event (funnel tracking for /migrate views + leads)
-  | 'ctc' // contact message (public /contact form submission)
   | 'auk' // briven auth SDK key (issued from the Auth → API Keys panel)
-  | 'mck' // mcp / agent-access key (issued from the MCP control panel)
-  | 'as'; // auto-snapshot settings row (per-project automatic save-points)
+  | 'as' // auto-snapshot settings row (per-project automatic save-points)
+  | 'agt' // platform agent (admin-registered AI agent, encrypted provider key)
+  | 'ctc' // contact message (public /contact submission; ticketed or plain)
+  | 'crp' // contact message reply (operator/user reply on a message thread)
+  | 'tsec'; // tenant secret (per-project encrypted credential, e.g. provider keys)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

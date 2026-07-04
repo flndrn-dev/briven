@@ -30,7 +30,7 @@ const HELP_LINKS: readonly HelpLink[] = [
     body: 'guides, troubleshooting and the support handbook — the fastest path for most questions.',
   },
   {
-    href: 'https://codeberg.org/flndrn/briven',
+    href: 'https://github.com/flndrn-dev/briven',
     title: 'source & issues',
     body: 'briven is open. read the code, file a bug, or follow along with what we’re building.',
   },
@@ -47,6 +47,7 @@ const SUPPORT_TOPICS: readonly { label: string; body: string }[] = [
   { label: 'general', body: 'anything that doesn’t fit a box below.' },
   { label: 'support', body: 'something broken or not working as expected.' },
   { label: 'sales', body: 'plans, pricing, limits and getting started.' },
+  { label: 'self-host', body: 'running briven on your own server — we’ll get the process started.' },
   { label: 'security', body: 'vulnerabilities and responsible disclosure.' },
   { label: 'privacy', body: 'your data, access requests and deletion.' },
   { label: 'legal', body: 'terms, contracts and compliance questions.' },

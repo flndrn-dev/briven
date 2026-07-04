@@ -17,8 +17,8 @@ import {
 } from '../services/abuse.js';
 import {
   adminStats,
+  deleteUserAsAdmin,
   forceSignOut,
-  getUserDetailForAdmin,
   grantAdmin,
   listProjects,
   listUsers,
@@ -27,18 +27,25 @@ import {
   unsuspendUser,
 } from '../services/admin.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
-import { getBillingTotals, listSubscribers } from '../services/billing/mavi-pay.js';
-import { getHealthSummary } from '../services/platform-health.js';
 import { listDeploys } from '../services/deploy-history.js';
+import { getHealthSummary } from '../services/platform-health.js';
+import { getAdminOverview } from '../services/admin-overview.js';
+import { getUserDeepDetailForAdmin } from '../services/admin-user-detail.js';
 import {
   createIncident,
   listIncidents,
   resolveIncident,
   updateIncident,
 } from '../services/incidents.js';
-import { sendMigrationStatusUpdate } from '../lib/email.js';
+import {
+  sendContactReply,
+  sendMigrationStatusUpdate,
+  sendTicketReply,
+  sendTicketStatusUpdate,
+} from '../lib/email.js';
 import { translateConvexSchema } from '../services/convex-schema-translator.js';
 import { getMarketingFunnel } from '../services/marketing-events.js';
+import { getEmailAdminSummary } from '../services/email-admin.js';
 import { log } from '../lib/logger.js';
 import {
   getMigrationRequest,
@@ -51,24 +58,24 @@ import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admi
 import {
   getTierStorageCaps,
   listStorageUsage,
-  setProjectEnforcement,
   setProjectStorageLimit,
   updateTierStorageCap,
 } from '../services/storage-admin.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
+import { incidentSeverity, ticketStatuses } from '../db/schema.js';
 import {
-  disableForProject as mcpDisableForProject,
-  enableForProject as mcpEnableForProject,
-  getGlobalEnabled as mcpGetGlobalEnabled,
-  issueKey as mcpIssueKey,
-  listMcpAudit,
-  listProjectAccess as mcpListProjectAccess,
-  McpPlanRequiredError,
-  revokeKey as mcpRevokeKey,
-  setGlobalEnabled as mcpSetGlobalEnabled,
-  type McpActor,
-} from '../services/mcp-access.js';
-import { incidentSeverity, mcpKeyScope } from '../db/schema.js';
+  addContactReply,
+  addReply as addTicketReply,
+  getContactMessageForAdmin,
+  getTicketByIdForAdmin,
+  listContactMessages,
+  listTicketsForAdmin,
+  renderTicketNumber,
+  updateContactMessage,
+  updateTicket,
+  type ContactMessageFilter,
+  type UpdateTicketInput,
+} from '../services/support-tickets.js';
 import { NotFoundError, ValidationError } from '@briven/shared';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
@@ -100,60 +107,19 @@ adminRouter.use('/v1/admin/*', async (c, next) => {
 adminRouter.get('/v1/admin/stats', async (c) => c.json(await adminStats()));
 
 /**
- * Superadmin Overview — the 3-second glance. One aggregate fan-out so the
- * cockpit home renders from a single round-trip. Every number is REAL or
- * explicitly null; the web layer renders "—" for nulls (Mavi Pay MRR/churn
- * + host metrics) rather than a fake zero. Read-only, so no audit row.
+ * Admin landing overview — one fan-out of REAL platform signals. Contract with
+ * apps/web/(admin)/admin/overview-client.tsx (the Overview type). Billing
+ * subscribers/mrr/churn are null while Mavi Pay is not connected (honest, not
+ * fabricated); planMix + counts + deploys + health + open incidents are live.
  */
-adminRouter.get('/v1/admin/overview', async (c) => {
-  const [billing, health, incidents, deploys, stats] = await Promise.all([
-    getBillingTotals(),
-    getHealthSummary(),
-    listIncidents({ activeOnly: true, limit: 100 }),
-    listDeploys({ limit: 3 }),
-    adminStats(),
-  ]);
-  return c.json({
-    billing,
-    health,
-    openIncidents: incidents.length,
-    recentDeploys: deploys.map((r) => ({
-      id: r.id,
-      service: r.service,
-      buildSha: r.buildSha,
-      buildAt: r.buildAt,
-      env: r.env,
-      bootedAt: r.bootedAt,
-    })),
-    counts: { projects: stats.projects, users: stats.users },
-  });
-});
+adminRouter.get('/v1/admin/overview', async (c) => c.json(await getAdminOverview()));
 
 /**
- * Platform health — the full summary (the four upstream checks + real
- * host CPU/RAM/disk/steal from Prometheus). Backs the cockpit Health
- * page. Host metrics are REAL or null; the web layer renders "—" with a
- * "monitoring not connected" note for null rather than a fabricated 0%.
- * Read-only, no audit row.
+ * Platform health — checks + host metrics, literally getHealthSummary(). The
+ * web health page consumes { checks, host }. host is null when Prometheus is
+ * unset/unreachable.
  */
 adminRouter.get('/v1/admin/health', async (c) => c.json(await getHealthSummary()));
-
-/**
- * Mavi Pay (backed by Polar.sh) — billing totals for the Subscribers &
- * Billing page. Same shape the Overview reads; every number is REAL or
- * explicitly null (MRR degrades to null when Polar isn't configured).
- * Read-only, no audit row.
- */
-adminRouter.get('/v1/admin/billing/totals', async (c) => c.json(await getBillingTotals()));
-
-/**
- * Mavi Pay — non-canceled subscriber list (org, plan, status, period-end,
- * since), joined to the owning org for operator triage. Read-only.
- */
-adminRouter.get('/v1/admin/billing/subscribers', async (c) => {
-  const subscribers = await listSubscribers();
-  return c.json({ subscribers });
-});
 
 adminRouter.get('/v1/admin/users', async (c) => {
   const rows = await listUsers(200);
@@ -163,7 +129,11 @@ adminRouter.get('/v1/admin/users', async (c) => {
 adminRouter.get('/v1/admin/users/:id', async (c) => {
   const userId = c.req.param('id');
   try {
-    const detail = await getUserDetailForAdmin(userId);
+    // Deep per-user detail: profile + company + geo-resolved last sign-in +
+    // per-project storage usage + totals + audit activity. Contract mirrors
+    // apps/web/(admin)/admin/users/[id] (Overview `user`/`projects`/`totals`/
+    // `activity` shape). Real numbers or null — never fabricated.
+    const detail = await getUserDeepDetailForAdmin(userId);
     return c.json(detail);
   } catch (err) {
     if (err instanceof Error && /not found/i.test(err.message)) {
@@ -243,30 +213,6 @@ adminRouter.patch('/v1/admin/storage/projects/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-const enforcementBody = z.object({
-  enforcement: z.enum(['flag', 'block']),
-});
-
-/** Flip a project between 'flag' (surface over-cap only) and 'block' (reject over-cap writes). */
-adminRouter.patch('/v1/admin/storage/projects/:id/enforcement', async (c) => {
-  const projectId = c.req.param('id');
-  const body = enforcementBody.safeParse(await c.req.json().catch(() => null));
-  if (!body.success) {
-    throw new ValidationError("expected { enforcement: 'flag' | 'block' }");
-  }
-  const user = c.get('user');
-  await setProjectEnforcement(projectId, body.data.enforcement, user?.id ?? null);
-  await audit({
-    actorId: user?.id ?? null,
-    projectId,
-    action: 'admin.storage.enforcement.set',
-    ipHash: ipHash(c),
-    userAgent: c.req.header('user-agent') ?? null,
-    metadata: { enforcement: body.data.enforcement },
-  });
-  return c.json({ ok: true });
-});
-
 /**
  * Mittera email events — pulled from audit_logs filtered to the
  * `mittera.email.*` action prefix. Returns the most recent 200 with a
@@ -314,6 +260,13 @@ adminRouter.get('/v1/admin/email-suppressions', async (c) => {
   const rows = await listSuppressions(500);
   return c.json({ suppressions: rows });
 });
+
+/**
+ * Email overview — deliverability + volume roll-up for the admin email
+ * events page. Literally getEmailAdminSummary(); shape mirrors what
+ * apps/web/(admin)/admin/email-events consumes.
+ */
+adminRouter.get('/v1/admin/email-overview', async (c) => c.json(await getEmailAdminSummary()));
 
 /**
  * Deploy history — last N api/realtime/runtime boots. Paired with the
@@ -464,6 +417,32 @@ adminRouter.post('/v1/admin/users/unsuspend', async (c) => {
     metadata: { userId: parsed.userId },
   });
   return c.json({ unsuspended: parsed.userId });
+});
+
+adminRouter.post('/v1/admin/users/delete', async (c) => {
+  const actor = c.get('user')!;
+  const parsed = await parseUserAction(c);
+  if (!parsed.ok) return c.json({ code: 'validation_failed', issues: parsed.error }, 400);
+  try {
+    // Guarded in the service: only a suspended, non-admin account can be
+    // deleted (GDPR soft-delete, 30-day reversible).
+    await deleteUserAsAdmin(parsed.userId);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    throw err;
+  }
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.user.delete',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { userId: parsed.userId },
+  });
+  return c.json({ deleted: parsed.userId });
 });
 
 adminRouter.post('/v1/admin/users/force-sign-out', async (c) => {
@@ -713,7 +692,7 @@ adminRouter.delete('/v1/admin/signup-allowlist/:email', async (c) => {
  */
 adminRouter.get('/v1/admin/launch-status', async (c) => {
   const actor = c.get('user')!;
-  const { getOpenSignupsFlag, getPlatformSetting } = await import(
+  const { getOpenSignupsFlag, getPlatformSetting, getMaintenanceState } = await import(
     '../services/platform-settings.js'
   );
   const { getDb } = await import('../db/client.js');
@@ -725,9 +704,10 @@ adminRouter.get('/v1/admin/launch-status', async (c) => {
     .from(users)
     .where(eq(users.id, actor.id))
     .limit(1);
-  const [openSignups, maintenanceMode] = await Promise.all([
+  const [openSignups, maintenanceMode, maintenanceState] = await Promise.all([
     getOpenSignupsFlag(),
     getPlatformSetting<boolean>('maintenanceMode', false),
+    getMaintenanceState(),
   ]);
   // Compute the actor's step-up freshness so the dashboard can show a
   // banner + re-attest button. Mirrors the 10-min window the
@@ -748,6 +728,18 @@ adminRouter.get('/v1/admin/launch-status', async (c) => {
     ),
     stepUpFresh,
     stepUpExpiresAt: stepUpExpiresAt?.toISOString() ?? null,
+    // Scheduled-maintenance state. manualOverride is the raw
+    // maintenanceMode bool (immediate on/off); the rest is the effective
+    // state derived from maintenanceMode + the maintenanceWindow schedule.
+    maintenance: {
+      active: maintenanceState.active,
+      scheduled: maintenanceState.scheduled,
+      upcoming: maintenanceState.upcoming,
+      startsAt: maintenanceState.startsAt,
+      endsAt: maintenanceState.endsAt,
+      message: maintenanceState.message,
+      manualOverride: maintenanceMode,
+    },
   });
 });
 
@@ -786,21 +778,67 @@ adminRouter.post('/v1/admin/launch-status/open-signups', async (c) => {
 adminRouter.post('/v1/admin/launch-status/maintenance-mode', async (c) => {
   const actor = c.get('user')!;
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ maintenanceMode: z.boolean() }).safeParse(body);
+  // Richer body — every field optional, all back-compat:
+  //  - enabled: immediate manual on/off of the maintenanceMode bool.
+  //  - startsAt/endsAt/message: write the scheduled maintenanceWindow json.
+  //    Passing all three as null clears the schedule.
+  // The old body { enabled: boolean } alone still works.
+  const isoDateTime = z.string().datetime();
+  const parsed = z
+    .object({
+      enabled: z.boolean().optional(),
+      startsAt: isoDateTime.nullable().optional(),
+      endsAt: isoDateTime.nullable().optional(),
+      message: z.string().max(2000).nullable().optional(),
+    })
+    .safeParse(body);
   if (!parsed.success) {
     return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
   }
+  const { enabled, startsAt, endsAt, message } = parsed.data;
+  const windowTouched =
+    startsAt !== undefined || endsAt !== undefined || message !== undefined;
+
+  // When both bounds are set, startsAt must be strictly before endsAt.
+  if (startsAt != null && endsAt != null && Date.parse(startsAt) >= Date.parse(endsAt)) {
+    return c.json(
+      { code: 'validation_failed', message: 'startsAt must be before endsAt' },
+      400,
+    );
+  }
+
   const { setPlatformSetting } = await import('../services/platform-settings.js');
-  await setPlatformSetting('maintenanceMode', parsed.data.maintenanceMode, actor.id);
+  if (enabled !== undefined) {
+    await setPlatformSetting('maintenanceMode', enabled, actor.id);
+  }
+  if (windowTouched) {
+    await setPlatformSetting(
+      'maintenanceWindow',
+      {
+        startsAt: startsAt ?? null,
+        endsAt: endsAt ?? null,
+        message: message ?? null,
+      },
+      actor.id,
+    );
+  }
+
   await audit({
     actorId: actor.id,
     projectId: null,
     action: 'admin.maintenance.toggle',
     ipHash: ipHash(c),
     userAgent: c.req.header('user-agent') ?? null,
-    metadata: { maintenanceMode: parsed.data.maintenanceMode },
+    metadata: {
+      ...(enabled !== undefined ? { maintenanceMode: enabled } : {}),
+      ...(windowTouched
+        ? { window: { startsAt: startsAt ?? null, endsAt: endsAt ?? null } }
+        : {}),
+    },
   });
-  return c.json({ maintenanceMode: parsed.data.maintenanceMode });
+
+  const { getMaintenanceState } = await import('../services/platform-settings.js');
+  return c.json(await getMaintenanceState());
 });
 
 /* ─── incidents (admin write surface; public list on /v1/status/incidents) ─── */
@@ -1015,6 +1053,351 @@ adminRouter.patch('/v1/admin/migration-requests/:id', async (c) => {
   }
 });
 
+/* ─── support tickets (tagged /contact submissions) ──────────────────── */
+
+interface AdminTicket {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  name: string;
+  email: string;
+  subject: string | null;
+  message: string;
+  country: string | null;
+  assignedTo: string | null;
+  operatorNotes: string | null;
+  createdAt: string;
+  handledAt: string | null;
+}
+
+function serializeAdminTicket(t: {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  name: string;
+  email: string;
+  subject: string | null;
+  message: string;
+  country: string | null;
+  assignedTo: string | null;
+  operatorNotes: string | null;
+  createdAt: Date;
+  handledAt: Date | null;
+}): AdminTicket {
+  return {
+    id: t.id,
+    ticketNumber: renderTicketNumber(t.ticketNumber),
+    status: t.status,
+    topic: t.topic,
+    topicCode: t.topicCode,
+    name: t.name,
+    email: t.email,
+    subject: t.subject,
+    message: t.message,
+    country: t.country,
+    assignedTo: t.assignedTo,
+    operatorNotes: t.operatorNotes,
+    createdAt: t.createdAt.toISOString(),
+    handledAt: t.handledAt ? t.handledAt.toISOString() : null,
+  };
+}
+
+function serializeReply(r: {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: Date;
+}): { id: string; author: string; body: string; createdAt: string } {
+  return { id: r.id, author: r.author, body: r.body, createdAt: r.createdAt.toISOString() };
+}
+
+/**
+ * Serialized shape for the all-messages inbox — the AdminTicket shape plus
+ * an `isTicket` flag (true when the row carries a ticket number, i.e. it's
+ * also visible on the tickets page). Contract with the web inbox client.
+ */
+type SerializedMessage = AdminTicket & { isTicket: boolean };
+
+function serializeAdminMessage(t: {
+  id: string;
+  ticketNumber: string | null;
+  status: string;
+  topic: string;
+  topicCode: string | null;
+  name: string;
+  email: string;
+  subject: string | null;
+  message: string;
+  country: string | null;
+  assignedTo: string | null;
+  operatorNotes: string | null;
+  createdAt: Date;
+  handledAt: Date | null;
+}): SerializedMessage {
+  return { ...serializeAdminTicket(t), isTicket: t.ticketNumber != null };
+}
+
+const updateTicketSchema = z.object({
+  status: z.enum(ticketStatuses).optional(),
+  assignedTo: z.string().max(200).nullable().optional(),
+  operatorNotes: z.string().max(20_000).nullable().optional(),
+});
+
+const ticketReplySchema = z.object({
+  body: z.string().trim().min(1).max(8_000),
+});
+
+adminRouter.get('/v1/admin/tickets', async (c) => {
+  const statusParam = c.req.query('status');
+  const status =
+    statusParam && (ticketStatuses as readonly string[]).includes(statusParam)
+      ? (statusParam as (typeof ticketStatuses)[number])
+      : undefined;
+  const limitParam = c.req.query('limit');
+  const limit = limitParam ? Number(limitParam) || 100 : 100;
+  const rows = await listTicketsForAdmin({ status, limit });
+  return c.json({ tickets: rows.map(serializeAdminTicket) });
+});
+
+adminRouter.get('/v1/admin/tickets/:id', async (c) => {
+  const id = c.req.param('id');
+  try {
+    const { ticket, replies } = await getTicketByIdForAdmin(id);
+    return c.json({
+      ticket: serializeAdminTicket(ticket),
+      replies: replies.map(serializeReply),
+    });
+  } catch {
+    return c.json({ code: 'not_found' }, 404);
+  }
+});
+
+adminRouter.patch('/v1/admin/tickets/:id', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateTicketSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const before = await getTicketByIdForAdmin(id);
+    const patch: UpdateTicketInput = parsed.data;
+    const ticket = await updateTicket(id, patch);
+    const statusChanged = Boolean(patch.status) && before.ticket.status !== ticket.status;
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_ticket.update',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        ticketId: id,
+        ticketNumber: renderTicketNumber(ticket.ticketNumber),
+        fields: Object.keys(patch),
+        statusChanged,
+        newStatus: statusChanged ? ticket.status : null,
+      },
+    });
+    // Notify the sender on a real status change to 'replied'/'closed'.
+    // Fire-and-forget so mittera latency never blocks the operator.
+    const rendered = renderTicketNumber(ticket.ticketNumber);
+    if (
+      statusChanged &&
+      rendered &&
+      (ticket.status === 'replied' || ticket.status === 'closed')
+    ) {
+      void sendTicketStatusUpdate(ticket.email, rendered, ticket.status).catch((err) => {
+        log.error('ticket_status_email_failed', {
+          ticketId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    return c.json({ ticket: serializeAdminTicket(ticket) });
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+adminRouter.post('/v1/admin/tickets/:id/reply', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = ticketReplySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const { reply, ticket } = await addTicketReply(id, 'operator', parsed.data.body);
+    const rendered = renderTicketNumber(ticket.ticketNumber);
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_ticket.reply',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { ticketId: id, ticketNumber: rendered, replyId: reply.id },
+    });
+    // Email the sender the reply. Fire-and-forget.
+    if (rendered) {
+      void sendTicketReply(ticket.email, rendered, reply.body).catch((err) => {
+        log.error('ticket_reply_email_failed', {
+          ticketId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    return c.json({ reply: serializeReply(reply) }, 201);
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+/* ─── all-messages inbox (tagged OR plain /contact submissions) ──────── */
+
+const contactMessageFilterSchema = z.enum(['all', 'plain', 'tickets']);
+
+const updateContactMessageSchema = z.object({
+  status: z.enum(ticketStatuses).optional(),
+  operatorNotes: z.string().max(20_000).nullable().optional(),
+});
+
+const contactReplySchema = z.object({
+  body: z.string().trim().min(1).max(8_000),
+});
+
+adminRouter.get('/v1/admin/contact-messages', async (c) => {
+  const filterParam = c.req.query('filter');
+  const parsed = filterParam ? contactMessageFilterSchema.safeParse(filterParam) : null;
+  if (filterParam && !parsed!.success) {
+    return c.json({ code: 'validation_failed', message: 'invalid filter' }, 400);
+  }
+  const filter: ContactMessageFilter = parsed?.success ? parsed.data : 'all';
+  const limitParam = c.req.query('limit');
+  const limit = limitParam ? Number(limitParam) || 100 : 100;
+  const rows = await listContactMessages({ filter, limit });
+  return c.json({ messages: rows.map(serializeAdminMessage) });
+});
+
+adminRouter.get('/v1/admin/contact-messages/:id', async (c) => {
+  const id = c.req.param('id');
+  try {
+    const { message, replies } = await getContactMessageForAdmin(id);
+    return c.json({
+      message: serializeAdminMessage(message),
+      replies: replies.map(serializeReply),
+    });
+  } catch {
+    return c.json({ code: 'not_found' }, 404);
+  }
+});
+
+adminRouter.post('/v1/admin/contact-messages/:id/reply', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = contactReplySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const { reply, message } = await addContactReply(id, 'operator', parsed.data.body);
+    // Store the reply THEN flip status → 'replied' so the inbox reflects
+    // the operator handled it (works for plain + ticketed alike).
+    await updateContactMessage(id, { status: 'replied' });
+    const rendered = renderTicketNumber(message.ticketNumber);
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_message.reply',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        messageId: id,
+        ticketNumber: rendered,
+        isTicket: message.ticketNumber != null,
+        replyId: reply.id,
+      },
+    });
+    // Email the sender. Ticketed → the ticket-reply email (quotes the
+    // number); plain → the contact-reply email (no ticket references).
+    // Fire-and-forget with a logged catch, like the ticket reply route.
+    if (rendered) {
+      void sendTicketReply(message.email, rendered, reply.body).catch((err) => {
+        log.error('contact_reply_email_failed', {
+          messageId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    } else {
+      void sendContactReply(message.email, reply.body).catch((err) => {
+        log.error('contact_reply_email_failed', {
+          messageId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    return c.json({ reply: serializeReply(reply) }, 201);
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+adminRouter.patch('/v1/admin/contact-messages/:id', async (c) => {
+  const actor = c.get('user')!;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateContactMessageSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  try {
+    const before = await getContactMessageForAdmin(id);
+    const message = await updateContactMessage(id, parsed.data);
+    const statusChanged =
+      Boolean(parsed.data.status) && before.message.status !== message.status;
+    await audit({
+      actorId: actor.id,
+      projectId: null,
+      action: 'contact_message.update',
+      ipHash: ipHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        messageId: id,
+        ticketNumber: renderTicketNumber(message.ticketNumber),
+        isTicket: message.ticketNumber != null,
+        fields: Object.keys(parsed.data),
+        statusChanged,
+        newStatus: statusChanged ? message.status : null,
+      },
+    });
+    return c.json({ message: serializeAdminMessage(message) });
+  } catch (err) {
+    if (err instanceof NotFoundError) return c.json({ code: 'not_found' }, 404);
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
 /**
  * Promote an unauth lead to a user account. Used when an operator
  * verifies (via the contact email match) that the briven user signing
@@ -1080,145 +1463,6 @@ adminRouter.post('/v1/admin/migration-requests/:id/promote-to-user', async (c) =
   } catch (err) {
     if (err instanceof ValidationError) {
       return c.json({ code: 'validation_failed', message: err.message }, 400);
-    }
-    throw err;
-  }
-});
-
-/* ─── MCP / Agent-Access (B Phase 5) ─────────────────────────────────────
- * The on/off + key-issuing + audit SURFACE for the future MCP server. The
- * socket server that consumes these keys is a separate track. Every mutation
- * is step-up-gated (the global middleware above) and audited via the service
- * with the `mcp.*` action namespace. The plan gate is SERVER-SIDE: enabling /
- * issuing for a non-paying project returns 403 mcp_plan_required.
- */
-
-/** Build the audit actor from the request — id + hashed IP + user-agent. */
-function mcpActor(c: Context<AppEnv>): McpActor {
-  const user = c.get('user');
-  return {
-    id: user?.id ?? null,
-    ipHash: ipHash(c),
-    userAgent: c.req.header('user-agent') ?? null,
-  };
-}
-
-/** Status: global flag + per-project access list + recent mcp.* audit. */
-adminRouter.get('/v1/admin/mcp', async (c) => {
-  const [globalEnabled, projects, recentAudit] = await Promise.all([
-    mcpGetGlobalEnabled(),
-    mcpListProjectAccess(),
-    listMcpAudit(100),
-  ]);
-  return c.json({
-    globalEnabled,
-    projects,
-    audit: recentAudit.map((r) => ({
-      id: r.id,
-      action: r.action,
-      actorId: r.actorId,
-      metadata: r.metadata,
-      createdAt: r.createdAt.toISOString(),
-    })),
-  });
-});
-
-/** Flip the global MCP kill-switch. OFF cuts ALL agent access at once. */
-adminRouter.post('/v1/admin/mcp/global', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ enabled: z.boolean() }).safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  const result = await mcpSetGlobalEnabled(parsed.data.enabled, mcpActor(c));
-  return c.json(result);
-});
-
-const mcpProjectBody = z.object({ projectId: z.string().min(1) });
-
-/** Enable MCP for a project — SERVER-SIDE plan gate (Pro/Team only). */
-adminRouter.post('/v1/admin/mcp/projects/enable', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = mcpProjectBody.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const result = await mcpEnableForProject(parsed.data.projectId, mcpActor(c));
-    return c.json(result);
-  } catch (err) {
-    if (err instanceof McpPlanRequiredError) {
-      return c.json(
-        {
-          code: err.code,
-          message: 'MCP access requires a Pro or Team plan',
-          tier: err.tier,
-        },
-        403,
-      );
-    }
-    throw err;
-  }
-});
-
-/** Disable MCP for a project (no plan gate — always allowed). */
-adminRouter.post('/v1/admin/mcp/projects/disable', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = mcpProjectBody.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  const result = await mcpDisableForProject(parsed.data.projectId, mcpActor(c));
-  return c.json(result);
-});
-
-const mcpIssueBody = z.object({
-  projectId: z.string().min(1),
-  name: z.string().min(1).max(120),
-  scope: z.enum(mcpKeyScope),
-});
-
-/** Issue a key — returns the FULL plaintext EXACTLY once. */
-adminRouter.post('/v1/admin/mcp/keys', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = mcpIssueBody.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const result = await mcpIssueKey(
-      { projectId: parsed.data.projectId, name: parsed.data.name, scope: parsed.data.scope },
-      mcpActor(c),
-    );
-    return c.json(result, 201);
-  } catch (err) {
-    if (err instanceof McpPlanRequiredError) {
-      return c.json(
-        {
-          code: err.code,
-          message: 'MCP access requires a Pro or Team plan',
-          tier: err.tier,
-        },
-        403,
-      );
-    }
-    throw err;
-  }
-});
-
-/** Revoke a key — sets revoked_at + enabled=false. */
-adminRouter.post('/v1/admin/mcp/keys/revoke', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ keyId: z.string().min(1) }).safeParse(body);
-  if (!parsed.success) {
-    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
-  }
-  try {
-    const result = await mcpRevokeKey(parsed.data.keyId, mcpActor(c));
-    return c.json(result);
-  } catch (err) {
-    if (err instanceof NotFoundError) {
-      return c.json({ code: 'not_found' }, 404);
     }
     throw err;
   }

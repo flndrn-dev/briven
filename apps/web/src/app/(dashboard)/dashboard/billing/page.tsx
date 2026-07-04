@@ -169,7 +169,7 @@ export default async function BillingPage({
               </span>
             </div>
           </div>
-          <dl className="grid grid-cols-[110px_1fr] gap-y-1 font-mono text-xs">
+          <dl className="grid grid-cols-[1fr] gap-y-2 sm:grid-cols-[110px_1fr] font-mono text-xs">
             <dt className="text-[var(--color-text-subtle)]">status</dt>
             <dd className="text-[var(--color-text)]">
               {STATUS_LABEL[subscription.status] ?? subscription.status}

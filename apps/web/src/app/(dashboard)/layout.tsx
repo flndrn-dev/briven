@@ -29,7 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
       <LiveRefresh />
-      <header className="shrink-0">
+      <header className="shrink-0 border-b border-[var(--color-border-subtle)]">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/dashboard" className="flex items-center gap-3" aria-label="briven dashboard">
             <Image src="/icon.svg" alt="" width={24} height={24} priority />
@@ -59,7 +59,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </header>
 
       {/* Mobile-only nav row. Hidden md+ where the sidebar takes over. */}
-      <DashboardMobileNav isAdmin={user.isAdmin} />
+      <DashboardMobileNav />
 
       {/* Body area fills the remaining viewport height. Sidebar spans the
           full body height; main scrolls independently so the sidebar's
@@ -86,7 +86,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               made with <span className="text-[#e8344a]">♥</span> in Flanders by flndrn
             </span>
             <span>100% self-funded, sustainable &amp; independent</span>
-            <span>flndrn, Limassol, Cyprus</span>
+            <span>flndrn Limited, Limassol, Cyprus</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="https://docs.briven.tech" className="hover:text-[var(--color-text-muted)]">

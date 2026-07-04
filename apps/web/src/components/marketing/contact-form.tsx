@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { ROUTING_TAGS, SubjectTagsInput } from './subject-tags-input';
+
 interface Props {
   apiOrigin: string;
   /** Pre-selected topic (e.g. from a /contact?topic=privacy deep link). Falls
@@ -18,12 +20,21 @@ interface Props {
   initialEmail?: string;
 }
 
-type Topic = 'general' | 'support' | 'sales' | 'security' | 'privacy' | 'legal' | 'other';
+type Topic =
+  | 'general'
+  | 'support'
+  | 'sales'
+  | 'self-host'
+  | 'security'
+  | 'privacy'
+  | 'legal'
+  | 'other';
 
 const TOPICS: readonly { value: Topic; label: string }[] = [
   { value: 'general', label: 'general' },
   { value: 'support', label: 'support' },
   { value: 'sales', label: 'sales' },
+  { value: 'self-host', label: 'self-host' },
   { value: 'security', label: 'security' },
   { value: 'privacy', label: 'privacy' },
   { value: 'legal', label: 'legal' },
@@ -37,6 +48,7 @@ function coerceTopic(value: string | undefined): Topic {
 
 interface SubmittedState {
   requestId: string;
+  ticketNumber: string | null;
 }
 
 const FIELD_CLASS =
@@ -64,7 +76,11 @@ export function ContactForm({
   // Locked, read-only value sent to the backend. Never editable in the UI.
   const country = initialCountry ?? null;
   const [subject, setSubject] = useState('');
-  const [topic, setTopic] = useState<Topic>(coerceTopic(initialTopic));
+  const [tags, setTags] = useState<string[]>([]);
+  // Topic still routes the ticket server-side; it now defaults from the page
+  // (e.g. 'support' on the dashboard) and from the #tags typed in the subject —
+  // the explicit dropdown was redundant, so it was removed.
+  const [topic] = useState<Topic>(coerceTopic(initialTopic));
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +91,13 @@ export function ContactForm({
     if (busy) return;
     setBusy(true);
     setError(null);
+    // Serialise the #tag chips + free text into the single subject string the
+    // api already accepts (the admin dashboard reads the #tags back out for
+    // routing). No backend change needed until structured tags land.
+    const subjectPayload = [tags.map((t) => `#${t}`).join(' '), subject.trim()]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
     try {
       const res = await fetch(`${apiOrigin}/v1/contact`, {
         method: 'POST',
@@ -86,7 +109,7 @@ export function ContactForm({
           message: message.trim(),
           // Optional extras — only sent when present so the backend's
           // optional() schema stays happy on older clients.
-          ...(subject.trim() ? { subject: subject.trim() } : {}),
+          ...(subjectPayload ? { subject: subjectPayload } : {}),
           ...(country ? { country: country.name } : {}),
         }),
       });
@@ -99,8 +122,8 @@ export function ContactForm({
         setError(body?.message ?? `submit failed: ${res.status}`);
         return;
       }
-      const data = (await res.json()) as { requestId: string };
-      setSubmitted({ requestId: data.requestId });
+      const data = (await res.json()) as { requestId: string; ticketNumber?: string | null };
+      setSubmitted({ requestId: data.requestId, ticketNumber: data.ticketNumber ?? null });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'submit failed');
     } finally {
@@ -118,10 +141,22 @@ export function ContactForm({
           your message is queued. we&apos;ll reply to the address you gave us — keep an eye
           on your inbox. no marketing emails, ever.
         </p>
-        <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
-          reference:{' '}
-          <code className="text-[var(--color-text-muted)]">{submitted.requestId}</code>
-        </p>
+        {submitted.ticketNumber ? (
+          <>
+            <p className="mt-4 font-mono text-sm font-medium text-[var(--color-text)]">
+              your ticket number:{' '}
+              <code className="text-[var(--color-primary)]">{submitted.ticketNumber}</code>
+            </p>
+            <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+              we&apos;ve emailed it to you — use it to follow up or check your ticket status.
+            </p>
+          </>
+        ) : (
+          <p className="mt-4 font-mono text-xs text-[var(--color-text-subtle)]">
+            reference:{' '}
+            <code className="text-[var(--color-text-muted)]">{submitted.requestId}</code>
+          </p>
+        )}
         <p className="mt-3 font-mono text-[10px] text-[var(--color-text-subtle)]">
           if you don&apos;t hear back within one business day, wait an hour and send it again,
           quoting the reference above.
@@ -184,34 +219,31 @@ export function ContactForm({
         </span>
       </label>
 
-      {/* 3 — subject (free text) + topic (routing select) */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">subject</span>
-          <input
-            type="text"
-            maxLength={200}
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="what's this about?"
-            className={FIELD_CLASS}
-          />
-        </label>
+      {/* 3 — subject (#tag chips) with the available routing topics shown tight
+          beneath it, so the form reads as one clean block. */}
+      <div className="flex flex-col gap-2">
+        <SubjectTagsInput
+          tags={tags}
+          onTagsChange={setTags}
+          text={subject}
+          onTextChange={setSubject}
+        />
 
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-xs text-[var(--color-text-muted)]">topic</span>
-          <select
-            value={topic}
-            onChange={(e) => setTopic(e.target.value as Topic)}
-            className={FIELD_CLASS}
-          >
-            {TOPICS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono uppercase tracking-[0.12em] text-[var(--color-text-subtle)] text-[10px]">
+            topic
+          </span>
+          <div className="grid grid-cols-4 gap-2">
+            {ROUTING_TAGS.map((t) => (
+              <span
+                key={t}
+                className="font-mono text-[var(--color-text-subtle)] text-[var(--text-xs)]"
+              >
+                #{t}
+              </span>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
       </div>
 
       {/* 4 — message */}

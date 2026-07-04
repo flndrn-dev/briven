@@ -122,12 +122,12 @@ export default async function MigratePage() {
           >
             start a migration
           </Link>
-          <Link
-            href="/contact?topic=sales"
+          <a
+            href="mailto:migrations@flndrn.com"
             className="inline-flex h-12 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-6 font-sans font-medium text-[var(--color-text)] transition-colors duration-[var(--duration-fast)] ease-[var(--ease-briven)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)]"
           >
-            talk to a human first
-          </Link>
+            email a human first
+          </a>
         </div>
       </section>
 
@@ -202,13 +202,13 @@ export default async function MigratePage() {
             don&apos;t see your platform?
           </h2>
           <p className="mt-3 leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
-            we still do it. reach us via our{' '}
-            <Link
-              href="/contact?topic=sales"
+            we still do it. email{' '}
+            <a
+              href="mailto:migrations@flndrn.com"
               className="text-[var(--color-text-link)] underline underline-offset-2"
             >
-              contact form
-            </Link>{' '}
+              migrations@flndrn.com
+            </a>{' '}
             with a one-paragraph description of where your project lives today and we&apos;ll
             scope a free beta migration for you. supabase / firebase / mongodb / hasura /
             nextauth / drizzle / prisma / convex / raw postgres covered; everything else

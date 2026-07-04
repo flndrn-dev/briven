@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 import { apiJson } from '../../../../../../../lib/api';
 
-import { CopyKeyButton } from './copy-key-button';
 import { CreateKeyForm } from './create-key-form';
 import { RevokeKeyButton } from './revoke-key-button';
 
@@ -66,14 +65,10 @@ export default async function AuthApiKeysPage({
       <header>
         <h2 className="font-mono text-lg tracking-tight">auth · api keys</h2>
         <p className="mt-1 max-w-2xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          SDK keys for <code>@briven/auth</code>. each key is now also stored
-          encrypted at rest, so you can copy it again later with the copy
-          button — the value is never shown on screen, only copied to your
-          clipboard, and every copy is recorded. revoked keys (and any key made
-          before this change) can&apos;t be copied — rotate to get a copyable
-          one. a sha-256 digest is still what verifies the key. revoked keys
-          remain in the list with a strike-through so the audit trail stays
-          intact.
+          SDK keys for <code>@briven/auth</code>. plaintext is shown exactly
+          once on creation — copy it immediately. only a sha-256 digest persists.
+          revoked keys remain in the list with a strike-through so the audit
+          trail stays intact.
         </p>
       </header>
 
@@ -129,10 +124,7 @@ export default async function AuthApiKeysPage({
                   </td>
                   <td className="px-3 py-2 text-right">
                     {k.revokedAt ? null : (
-                      <span className="inline-flex items-center justify-end gap-2">
-                        <CopyKeyButton projectId={id} keyId={k.id} />
-                        <RevokeKeyButton projectId={id} keyId={k.id} />
-                      </span>
+                      <RevokeKeyButton projectId={id} keyId={k.id} />
                     )}
                   </td>
                 </tr>

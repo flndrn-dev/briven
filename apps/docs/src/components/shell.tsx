@@ -23,17 +23,6 @@ const GROUPS: readonly NavGroup[] = [
     ],
   },
   {
-    label: 'doltgres',
-    items: [
-      { href: '/doltgres', label: 'overview' },
-      { href: '/doltgres/install', label: 'install + run' },
-      { href: '/doltgres/version-control', label: 'version control' },
-      { href: '/doltgres/history', label: 'history + time travel' },
-      { href: '/doltgres/types', label: 'types + sql support' },
-      { href: '/doltgres/limitations', label: 'beta + limitations' },
-    ],
-  },
-  {
     label: 'build',
     items: [
       { href: '/schema', label: 'schema dsl' },
@@ -138,7 +127,7 @@ export async function DocsShell({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-[var(--color-border-subtle)] py-6">
         <p className="mx-auto max-w-6xl px-6 font-mono text-xs text-[var(--color-text-subtle)]">
           briven · open-core reactive postgres · ©{' '}
-          {new Date().getFullYear()} flndrn ·{' '}
+          {new Date().getFullYear()} flndrn Limited ·{' '}
           <Link
             href="https://codeberg.org/flndrn/briven"
             className="underline underline-offset-2 hover:text-[var(--color-text-muted)]"

@@ -120,24 +120,11 @@ export interface DeleteQuery extends PromiseLike<unknown[]> {
   returning(columns?: readonly string[]): PromiseLike<unknown[]>;
 }
 
-export interface VectorSearchInput {
-  readonly column: string;
-  readonly vector: readonly number[];
-  readonly distance?: 'l2' | 'inner_product' | 'cosine';
-  readonly limit?: number;
-}
-
-export interface VectorSearchQuery extends PromiseLike<unknown[]> {
-  where(predicate: Record<string, unknown>): VectorSearchQuery;
-  select(columns: readonly string[]): VectorSearchQuery;
-}
-
 export interface TableQuery {
   select(columns?: readonly string[]): SelectQuery;
   insert(values: Record<string, unknown> | readonly Record<string, unknown>[]): InsertQuery;
   update(patch: Record<string, unknown>): UpdateQuery;
   delete(): DeleteQuery;
-  vectorSearch(input: VectorSearchInput): VectorSearchQuery;
 }
 
 export interface DbClient {
@@ -227,7 +214,6 @@ function makeTableProxy(table: string): TableQuery {
     insert: (values) => makeInsertProxy(table, values),
     update: (patch) => makeUpdateProxy(table, patch),
     delete: () => makeDeleteProxy(table),
-    vectorSearch: (input) => makeVectorSearchProxy(table, input),
   };
 }
 
@@ -353,38 +339,6 @@ function makeDeleteProxy(
     },
     returning(cols) {
       return makeDeleteProxy(table, state, cols ?? []);
-    },
-    then(onfulfilled, onrejected) {
-      return run().then(onfulfilled as never, onrejected as never);
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// VECTOR SEARCH
-// ---------------------------------------------------------------------------
-
-/**
- * Phase 5 stub — mirrors apps/runtime/src/query-builder.ts VectorSearchImpl.
- * pgvector operators (`<->`, `<#>`, `<=>`) ship with LanceDB embedded in
- * Phase 5. Until then `where()`/`select()` are no-ops and awaiting the query
- * throws the same friendly error the inline executor raises, so both
- * executors behave identically under deno and inline.
- */
-function makeVectorSearchProxy(table: string, input: VectorSearchInput): VectorSearchQuery {
-  const run = (): Promise<unknown[]> =>
-    Promise.reject(
-      new Error(
-        `ctx.db('${table}').vectorSearch({ column: '${input.column}' }) ` +
-          'is not available yet. Vector search will ship with LanceDB in Phase 5.',
-      ),
-    );
-  return {
-    where() {
-      return makeVectorSearchProxy(table, input);
-    },
-    select() {
-      return makeVectorSearchProxy(table, input);
     },
     then(onfulfilled, onrejected) {
       return run().then(onfulfilled as never, onrejected as never);

@@ -3,10 +3,12 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { contactTopics } from '../db/schema.js';
+import { sendTicketCreatedConfirmation } from '../lib/email.js';
 import { log } from '../lib/logger.js';
 import { ipKey, rateLimit } from '../middleware/rate-limit.js';
 import { audit, hashIp } from '../services/audit.js';
 import { createContactMessage } from '../services/contact.js';
+import { renderTicketNumber } from '../services/support-tickets.js';
 import type { AppEnv } from '../types/app-env.js';
 
 /**
@@ -49,7 +51,7 @@ contactPublicRouter.post(
       );
     }
     try {
-      const requestId = await createContactMessage({
+      const { id: requestId, ticketNumber } = await createContactMessage({
         name: parsed.data.name,
         email: parsed.data.email,
         topic: parsed.data.topic,
@@ -59,17 +61,30 @@ contactPublicRouter.post(
         ipHash: hashIpFromReq(c.req.raw.headers.get('x-forwarded-for')),
         userAgent: c.req.header('user-agent') ?? null,
       });
+      const rendered = renderTicketNumber(ticketNumber);
       await audit({
         actorId: null,
         projectId: null,
         action: 'contact_message.public_create',
         ipHash: hashIpFromReq(c.req.raw.headers.get('x-forwarded-for')),
         userAgent: c.req.header('user-agent') ?? null,
-        metadata: { requestId, topic: parsed.data.topic },
+        metadata: { requestId, topic: parsed.data.topic, ticketNumber: rendered },
       });
-      // We deliberately return only the reference id — no PII echo to a
-      // public endpoint, and never the email back to a curl caller.
-      return c.json({ requestId }, 201);
+      // Confirmation email with the ticket number — only for tagged
+      // submissions that became a ticket. Fire-and-forget so a slow
+      // mittera never blocks the public POST response.
+      if (ticketNumber && rendered) {
+        void sendTicketCreatedConfirmation(parsed.data.email, rendered).catch((err) => {
+          log.error('ticket_created_email_failed', {
+            requestId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
+      // We deliberately return only the reference id + the public ticket
+      // number — no other PII echo to a public endpoint, and never the
+      // email back to a curl caller.
+      return c.json({ requestId, ticketNumber: rendered }, 201);
     } catch (err) {
       if (err instanceof ValidationError) {
         return c.json({ code: 'validation_failed', message: err.message }, 400);

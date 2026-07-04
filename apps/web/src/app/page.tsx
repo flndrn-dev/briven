@@ -1,15 +1,61 @@
 import Link from 'next/link';
 
 import { BackgroundGrid } from '../components/marketing/background-grid';
+import { MaintenanceBanner } from '../components/marketing/maintenance-banner';
 import { SiteFooter } from '../components/marketing/site-footer';
 import { SiteHeader } from '../components/marketing/site-header';
 import { getSessionUser } from '../lib/session';
 import { PricingSection } from './pricing-section';
 
+interface MaintenanceStatus {
+  upcoming: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+}
+
+/**
+ * Pre-formatted "starts–ends" window when maintenance is scheduled but not yet
+ * live, else null. Fetched from the public api and failed soft to null so a
+ * hiccup never blocks the homepage from rendering.
+ */
+async function getUpcomingWindow(): Promise<string | null> {
+  const origin = process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+  if (!origin) return null;
+  try {
+    const res = await fetch(`${origin}/v1/status/maintenance`, {
+      cache: 'no-store',
+      headers: { accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const status = (await res.json()) as MaintenanceStatus;
+    if (!status.upcoming || !status.startsAt || !status.endsAt) return null;
+    const fmt = (iso: string) => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(d);
+    };
+    const start = fmt(status.startsAt);
+    const end = fmt(status.endsAt);
+    if (!start || !end) return null;
+    return `${start}–${end} local`;
+  } catch {
+    return null;
+  }
+}
+
 export default async function HomePage() {
-  const user = await getSessionUser().catch(() => null);
+  const [user, upcomingWindow] = await Promise.all([
+    getSessionUser().catch(() => null),
+    getUpcomingWindow(),
+  ]);
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
+      {upcomingWindow ? <MaintenanceBanner window={upcomingWindow} /> : null}
       <BackgroundGrid />
       <SiteHeader user={user} />
 

@@ -1,8 +1,9 @@
-import { NotFoundError } from '@briven/shared';
+import { NotFoundError, ValidationError } from '@briven/shared';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { auditLogs, orgMembers, organizations, projects, sessions, users } from '../db/schema.js';
+import { softDeleteAccount } from './account-deletion.js';
 
 export interface AdminUserRow {
   id: string;
@@ -79,6 +80,27 @@ export async function suspendUser(userId: string): Promise<void> {
 export async function unsuspendUser(userId: string): Promise<void> {
   const db = getDb();
   await db.update(users).set({ suspendedAt: null }).where(eq(users.id, userId));
+}
+
+/**
+ * Admin-initiated account deletion. Guarded so a slip can't wipe the
+ * wrong person: ONLY a suspended, non-admin account can be deleted. Reuses
+ * the GDPR soft-delete (30-day reversible grace window; the
+ * account-deletion-gc worker hard-purges after that). Keeps the users
+ * dashboard clean without a hard, irreversible wipe.
+ */
+export async function deleteUserAsAdmin(userId: string): Promise<void> {
+  const db = getDb();
+  const [row] = await db
+    .select({ suspendedAt: users.suspendedAt, isAdmin: users.isAdmin, deletedAt: users.deletedAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!row) throw new NotFoundError('user', userId);
+  if (row.deletedAt) throw new ValidationError('this account is already scheduled for deletion');
+  if (row.isAdmin) throw new ValidationError('cannot delete an admin account — revoke admin first');
+  if (!row.suspendedAt) throw new ValidationError('suspend the account before deleting it');
+  await softDeleteAccount({ userId, reason: 'admin-deleted' });
 }
 
 /**
@@ -204,7 +226,9 @@ export async function adminStats(): Promise<{
   suppressions: number;
 }> {
   const db = getDb();
-  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // ISO string, not Date — postgres.js can't serialize a raw Date param in
+  // sql`` templates under Bun (see services/function-logs.ts).
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [u] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(users)
@@ -219,7 +243,7 @@ export async function adminStats(): Promise<{
   // Each one is a single COUNT(*) on a small or indexed scope, so the
   // overall admin home stays sub-50ms at Phase 3 scale.
   const [s24] = await db.execute<{ c: number }>(
-    sql`SELECT count(*)::int AS c FROM users WHERE created_at >= ${since24h} AND deleted_at IS NULL`,
+    sql`SELECT count(*)::int AS c FROM users WHERE created_at >= ${since24h}::timestamptz AND deleted_at IS NULL`,
   );
   const [om] = await db.execute<{ c: number }>(
     sql`SELECT count(*)::int AS c FROM migration_requests WHERE status NOT IN ('completed', 'cancelled')`,

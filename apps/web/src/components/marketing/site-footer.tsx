@@ -1,8 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { LanguageSelector } from './language-selector';
-
 const YEAR = new Date().getFullYear();
 
 export function SiteFooter() {
@@ -54,8 +52,8 @@ export function SiteFooter() {
 
         <FooterColumn title="company">
           <FooterLink href="/customers">customers</FooterLink>
-          <FooterLink href="/compare">compare</FooterLink>
           <FooterLink href="/contact">contact</FooterLink>
+          <FooterLink href="/compare">compare</FooterLink>
           <FooterLink href="/status">status</FooterLink>
           <FooterLink href="https://docs.briven.tech/changelog">changelog</FooterLink>
           <FooterLink href="https://docs.briven.tech/roadmap">roadmap</FooterLink>
@@ -88,10 +86,7 @@ export function SiteFooter() {
             100% self-funded, sustainable &amp; independent
           </span>
           {/* right */}
-          <span className="flex items-center gap-3 whitespace-nowrap">
-            <LanguageSelector />
-            <span>flndrn</span>
-          </span>
+          <span className="whitespace-nowrap">flndrn Limited</span>
         </div>
       </div>
     </footer>

@@ -11,21 +11,37 @@ import { usePathname } from 'next/navigation';
  * DashboardMobileNav. Labels/hrefs mirror CockpitNav; icons are omitted
  * here since the strip is text-only by design.
  */
-const NAV = [
-  { href: '/admin', label: 'overview', exact: true },
-  { href: '/admin/billing', label: 'subscribers & billing' },
-  { href: '/admin/health', label: 'platform health' },
-  { href: '/admin/mcp', label: 'mcp / agent access' },
-  { href: '/dashboard/admin/projects', label: 'projects' },
-  { href: '/dashboard/admin/users', label: 'users' },
-  { href: '/dashboard/admin/storage', label: 'storage' },
-  { href: '/dashboard/admin/deploys', label: 'deploys' },
-  { href: '/dashboard/admin/incidents', label: 'incidents' },
-  { href: '/dashboard/admin/abuse-reports', label: 'abuse & allowlist' },
-  { href: '/dashboard/admin/email-events', label: 'email' },
-  { href: '/dashboard/admin/migrations', label: 'migrations' },
-  { href: '/admin/launch', label: 'launch controls' },
-  { href: '/admin/settings', label: 'settings' },
+type NavEntry =
+  | { kind: 'label'; text: string }
+  | { kind: 'link'; href: string; label: string; exact?: boolean };
+
+// Mirrors CockpitNav's grouping. Group titles render as small inline
+// dividers between the links so the strip stays scannable on phones.
+const NAV: readonly NavEntry[] = [
+  { kind: 'link', href: '/admin', label: 'overview', exact: true },
+  { kind: 'label', text: 'money' },
+  { kind: 'link', href: '/admin/billing', label: 'subscribers & billing' },
+  { kind: 'label', text: 'customers' },
+  { kind: 'link', href: '/admin/users', label: 'users' },
+  { kind: 'link', href: '/admin/projects', label: 'projects' },
+  { kind: 'label', text: 'agents' },
+  { kind: 'link', href: '/admin/mcp', label: 'mcp / agent access' },
+  { kind: 'link', href: '/admin/agents', label: 'ai agents' },
+  { kind: 'label', text: 'platform' },
+  { kind: 'link', href: '/admin/health', label: 'platform health' },
+  { kind: 'link', href: '/admin/realtime', label: 'realtime' },
+  { kind: 'link', href: '/admin/storage', label: 'storage' },
+  { kind: 'link', href: '/admin/deploys', label: 'deploys' },
+  { kind: 'label', text: 'operations' },
+  { kind: 'link', href: '/admin/incidents', label: 'incidents' },
+  { kind: 'link', href: '/admin/abuse-reports', label: 'abuse & allowlist' },
+  { kind: 'link', href: '/admin/migrations', label: 'migrations' },
+  { kind: 'link', href: '/admin/messages', label: 'messages' },
+  { kind: 'link', href: '/admin/tickets', label: 'tickets' },
+  { kind: 'link', href: '/admin/email-events', label: 'email log' },
+  { kind: 'label', text: 'system' },
+  { kind: 'link', href: '/admin/launch', label: 'launch controls' },
+  { kind: 'link', href: '/admin/settings', label: 'settings' },
 ] as const;
 
 export function CockpitMobileNav() {
@@ -33,13 +49,20 @@ export function CockpitMobileNav() {
   return (
     <nav
       aria-label="admin sections"
-      className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] px-4 py-2 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] px-4 py-2 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {NAV.map((item) => {
-        const active =
-          'exact' in item && item.exact
-            ? pathname === item.href
-            : pathname.startsWith(item.href);
+        if (item.kind === 'label') {
+          return (
+            <span
+              key={`label-${item.text}`}
+              className="shrink-0 whitespace-nowrap pl-2 pr-1 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]"
+            >
+              {item.text}
+            </span>
+          );
+        }
+        const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}

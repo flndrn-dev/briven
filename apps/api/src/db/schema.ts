@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -242,11 +243,6 @@ export const projects = pgTable(
     // unmeasurable on DoltGres, so limits are expressed as rows + tables.
     storageMaxRows: bigint('storage_max_rows', { mode: 'number' }),
     storageMaxTables: bigint('storage_max_tables', { mode: 'number' }),
-    // Sprint 4 Phase 4 enforcement lever. 'flag' (default) only surfaces an
-    // over-limit project in the admin dashboard and NEVER blocks a customer.
-    // 'block' rejects new writes (createTable / insertRow) while the project
-    // is over its effective cap. An admin opts a specific project into 'block'.
-    storageEnforcement: text('storage_enforcement').$type<'flag' | 'block'>().notNull().default('flag'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -916,50 +912,6 @@ export const migrationRequests = pgTable(
   }),
 );
 
-/* ─── contact_messages (public /contact form intake) ─────────────── */
-// Public, unauthenticated contact-form submissions from the /contact
-// marketing page. The sender's email is collected + stored here so the
-// operator can reply privately — it is never rendered back to the
-// website. Triaged out-of-band; `handled_at` is stamped once an operator
-// has actioned the message.
-
-export const contactTopics = [
-  'general',
-  'support',
-  'sales',
-  'security',
-  'privacy',
-  'legal',
-  'other',
-] as const;
-export type ContactTopic = (typeof contactTopics)[number];
-
-export const contactMessages = pgTable(
-  'contact_messages',
-  {
-    id: id(),
-    name: text('name').notNull(),
-    email: text('email').notNull(),
-    topic: text('topic').$type<ContactTopic>().notNull(),
-    // Free-text "what's this about" line from the form. Nullable: the
-    // topic-only flow (and older clients) submit without it.
-    subject: text('subject'),
-    message: text('message').notNull(),
-    // Visitor country auto-detected from their IP on the /contact page and
-    // submitted as a locked field — a hint for the operator. Nullable when
-    // it couldn't be resolved (localhost, unknown block).
-    country: text('country'),
-    ipHash: text('ip_hash'),
-    userAgent: text('user_agent'),
-    createdAt: createdAt(),
-    handledAt: ts('handled_at'),
-  },
-  (t) => ({
-    createdIdx: index('contact_messages_created_idx').on(t.createdAt),
-  }),
-);
-export type ContactMessage = typeof contactMessages.$inferSelect;
-
 /* ─── platform_settings (single-row dashboard-controllable flags) ─── */
 // Key/value JSONB store for platform-level flags an admin needs to flip
 // without a container restart. Today: `openSignups` (boolean). Future:
@@ -1223,14 +1175,6 @@ export const brivenAuthSdkKeys = pgTable(
     // Last 4 chars of the plaintext — safe to display.
     suffix: varchar('suffix', { length: 4 }).notNull(),
     scope: text('scope').$type<BrivenAuthSdkKeyScope>().notNull().default('read'),
-    // AES-256-GCM ciphertext of the plaintext key, encrypted at rest with
-    // BRIVEN_ENCRYPTION_KEY (services/project-env.ts wire format). Lets an
-    // owner copy the full key again later via the authenticated + audited
-    // reveal endpoint — the value is NEVER returned in list/create masks and
-    // never rendered in HTML. NULL for keys minted before 0039: those cannot
-    // be revealed (rotate to get a copyable key). `hash` stays the only
-    // auth-verification mechanism; this column is copy-again only.
-    encryptedKey: text('encrypted_key'),
     lastUsedAt: ts('last_used_at'),
     expiresAt: ts('expires_at'),
     createdAt: createdAt(),
@@ -1244,51 +1188,6 @@ export const brivenAuthSdkKeys = pgTable(
 
 export type BrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferSelect;
 export type NewBrivenAuthSdkKey = typeof brivenAuthSdkKeys.$inferInsert;
-
-/* ─── mcp_keys (B Phase 5 — MCP / Agent-Access keys) ───────────────────── */
-// Keys an agent / MCP client presents to reach a project once MCP access is
-// turned on for it. Same one-time-reveal discipline as api_keys and
-// briven_auth_sdk_keys: the plaintext is returned exactly once on issue; only
-// a sha-256 hex digest persists. `prefix` is the constant `pk_briven_mcp_`
-// (kept as a column so a future v2 scheme can coexist without a migration);
-// `suffix` is the safe-to-show last 4 chars for the `<prefix>•••<suffix>`
-// dashboard hint. `enabled` is the per-key live switch — revoke flips it false
-// AND stamps revoked_at. This is only the access SURFACE; the MCP socket
-// server that consumes these keys is a separate track.
-export const mcpKeyScope = ['read', 'read-write', 'admin'] as const;
-export type McpKeyScope = (typeof mcpKeyScope)[number];
-
-export const mcpKeys = pgTable(
-  'mcp_keys',
-  {
-    id: id(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    // sha-256 hex digest of the plaintext token. Never the plaintext itself.
-    hash: text('hash').notNull(),
-    // Plaintext prefix — currently always `pk_briven_mcp_`.
-    prefix: text('prefix').notNull(),
-    // Last 4 chars of the plaintext — safe to display.
-    suffix: varchar('suffix', { length: 4 }).notNull(),
-    scope: text('scope').$type<McpKeyScope>().notNull().default('read'),
-    enabled: boolean('enabled').notNull().default(true),
-    createdBy: text('created_by')
-      .notNull()
-      .references(() => users.id),
-    createdAt: createdAt(),
-    lastUsedAt: ts('last_used_at'),
-    revokedAt: ts('revoked_at'),
-  },
-  (t) => ({
-    hashIdx: uniqueIndex('mcp_keys_hash_idx').on(t.hash),
-    projectIdx: index('mcp_keys_project_idx').on(t.projectId),
-  }),
-);
-
-export type McpKey = typeof mcpKeys.$inferSelect;
-export type NewMcpKey = typeof mcpKeys.$inferInsert;
 
 /* ─── project_auto_snapshot_settings (automatic scheduled snapshots) ─ */
 // One row per project that has automatic save-points configured. Drives
@@ -1339,3 +1238,267 @@ export const projectAutoSnapshotSettings = pgTable(
 
 export type ProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferSelect;
 export type NewProjectAutoSnapshotSettings = typeof projectAutoSnapshotSettings.$inferInsert;
+
+/* ─── platform_agents (admin-registered AI agents) ────────────────── */
+// Platform-level registry of named AI agents (anthropic / openai / ollama /
+// custom endpoints) that admins wire up from the cockpit. Unlike mcp_keys /
+// briven_auth_sdk_keys — where WE mint the secret and store only a hash —
+// the api key here is INPUT by the admin and must be recoverable server-side
+// (the /test ping and future outbound calls present it to the provider), so
+// it is stored AES-256-GCM encrypted via services/tenant-secret-store.ts
+// (HKDF key derivation salted with the agent id). Plaintext never lands in
+// the database, in logs, or in any response; the dashboard only ever sees
+// `key_prefix…key_suffix`, mirroring the mcp-access maskKey pattern.
+export const platformAgentScope = ['read', 'read-write', 'admin'] as const;
+export type PlatformAgentScope = (typeof platformAgentScope)[number];
+
+export const platformAgents = pgTable(
+  'platform_agents',
+  {
+    id: id(),
+    // Human-facing agent name — the registry identity, so it is unique.
+    name: text('name').notNull(),
+    // Freeform provider label ('anthropic' | 'openai' | 'ollama' | 'custom'
+    // by convention, but not constrained — new providers need no migration).
+    provider: text('provider').notNull(),
+    // Optional base URL. Required in practice for ollama / custom providers;
+    // hosted providers fall back to their well-known API origin.
+    endpoint: text('endpoint'),
+    model: text('model').notNull(),
+    scope: text('scope').$type<PlatformAgentScope>().notNull().default('read'),
+    enabled: boolean('enabled').notNull().default(true),
+    // AES-256-GCM ciphertext (base64 iv||tag||body) of the provider api key.
+    // Null when the agent is keyless (e.g. a local ollama endpoint).
+    encryptedApiKey: text('encrypted_api_key'),
+    // Display hint only — first chars + last 4 of the plaintext, safe to show.
+    keyPrefix: text('key_prefix'),
+    keySuffix: varchar('key_suffix', { length: 4 }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    nameIdx: uniqueIndex('platform_agents_name_idx').on(t.name),
+    enabledIdx: index('platform_agents_enabled_idx').on(t.enabled),
+  }),
+);
+
+export type PlatformAgent = typeof platformAgents.$inferSelect;
+export type NewPlatformAgent = typeof platformAgents.$inferInsert;
+
+/* ═══════════════════════════════════════════════════════════════════
+ * RESTORED AFTER MERGE LOSS (2026-07-02)
+ * The blocks below were dropped when schema.ts was rewritten during a
+ * branch merge, but their tables exist in production (created by the
+ * original migrations) and live services still import them. Restored
+ * verbatim from: 6f2e4ad (mcp_keys), a66783a (tenant_secrets),
+ * d48bceb (contact/support-ticket blocks, superset of a77d17c).
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── mcp_keys (B Phase 5 — MCP / Agent-Access keys) ───────────────────── */
+// Keys an agent / MCP client presents to reach a project once MCP access is
+// turned on for it. Same one-time-reveal discipline as api_keys and
+// briven_auth_sdk_keys: the plaintext is returned exactly once on issue; only
+// a sha-256 hex digest persists. `prefix` is the constant `pk_briven_mcp_`
+// (kept as a column so a future v2 scheme can coexist without a migration);
+// `suffix` is the safe-to-show last 4 chars for the `<prefix>•••<suffix>`
+// dashboard hint. `enabled` is the per-key live switch — revoke flips it false
+// AND stamps revoked_at. This is only the access SURFACE; the MCP socket
+// server that consumes these keys is a separate track.
+export const mcpKeyScope = ['read', 'read-write', 'admin'] as const;
+export type McpKeyScope = (typeof mcpKeyScope)[number];
+
+export const mcpKeys = pgTable(
+  'mcp_keys',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    // sha-256 hex digest of the plaintext token. Never the plaintext itself.
+    hash: text('hash').notNull(),
+    // Plaintext prefix — currently always `pk_briven_mcp_`.
+    prefix: text('prefix').notNull(),
+    // Last 4 chars of the plaintext — safe to display.
+    suffix: varchar('suffix', { length: 4 }).notNull(),
+    scope: text('scope').$type<McpKeyScope>().notNull().default('read'),
+    enabled: boolean('enabled').notNull().default(true),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    lastUsedAt: ts('last_used_at'),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('mcp_keys_hash_idx').on(t.hash),
+    projectIdx: index('mcp_keys_project_idx').on(t.projectId),
+  }),
+);
+
+export type McpKey = typeof mcpKeys.$inferSelect;
+export type NewMcpKey = typeof mcpKeys.$inferInsert;
+
+/* ─── tenant_secrets (per-tenant encrypted secrets — OAuth client secrets) ─ */
+// Persistence layer for the Layer-2 secret primitive in
+// services/tenant-secret-store.ts (HKDF-SHA256 per-tenant key +
+// AES-256-GCM). One row per (project, service, name) secret — e.g. a
+// project's `google_client_secret` for the `auth` service. The ciphertext
+// in `encrypted_value` is the base64 blob `encryptTenantSecret` returns;
+// it is NEVER read directly — always through services/tenant-secrets.ts
+// which wraps decrypt. `service` stores the TenantService string
+// ('auth' | 'pay') so a single table serves both briven auth and pay
+// without colliding (key derivation is service-scoped). Control-plane
+// table (Postgres 17), so `onConflictDoUpdate` upserts are available.
+export const tenantSecrets = pgTable(
+  'tenant_secrets',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // TenantService discriminator ('auth' | 'pay'). Stored as text so the
+    // table doesn't need a migration when a third service appears.
+    service: text('service').notNull(),
+    // Logical secret name within the (project, service) namespace, e.g.
+    // 'google_client_secret', 'github_client_secret'.
+    name: text('name').notNull(),
+    // base64 ciphertext from encryptTenantSecret. Never read directly.
+    encryptedValue: text('encrypted_value').notNull(),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    projectServiceNameIdx: uniqueIndex('tenant_secrets_project_service_name_idx').on(
+      t.projectId,
+      t.service,
+      t.name,
+    ),
+    projectServiceIdx: index('tenant_secrets_project_service_idx').on(t.projectId, t.service),
+  }),
+);
+
+export type TenantSecret = typeof tenantSecrets.$inferSelect;
+export type NewTenantSecret = typeof tenantSecrets.$inferInsert;
+
+/* ─── contact_messages (public /contact form intake) ─────────────── */
+// Public, unauthenticated contact-form submissions from the /contact
+// marketing page. The sender's email is collected + stored here so the
+// operator can reply privately — it is never rendered back to the
+// website. Triaged out-of-band; `handled_at` is stamped once an operator
+// has actioned the message.
+
+export const contactTopics = [
+  'general',
+  'support',
+  'sales',
+  'self-host',
+  'security',
+  'privacy',
+  'legal',
+  'other',
+] as const;
+export type ContactTopic = (typeof contactTopics)[number];
+
+// Support-ticket lifecycle. A contact submission becomes a ticket only
+// when the sender tagged it with a routing tag (#support/#billing/etc).
+// A fresh ticket starts at `no_response`; an operator can move it through
+// the rest. Non-ticketed contact rows leave ticket_number/topic_code NULL
+// and carry the default status (never surfaced for them).
+export const ticketStatuses = ['no_response', 'in_review', 'replied', 'closed'] as const;
+export type TicketStatus = (typeof ticketStatuses)[number];
+
+// Per-topic 3-letter code stamped on a ticket. Derived from the primary
+// routing tag (support→SUP, billing→BIL, technical→TEC, self-hosting→SLF).
+export const ticketTopicCodes = ['SUP', 'BIL', 'TEC', 'SLF'] as const;
+export type TicketTopicCode = (typeof ticketTopicCodes)[number];
+
+// Who authored a thread message: the operator (admin reply) or the user.
+export const ticketReplyAuthors = ['operator', 'user'] as const;
+export type TicketReplyAuthor = (typeof ticketReplyAuthors)[number];
+
+export const contactMessages = pgTable(
+  'contact_messages',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    email: text('email').notNull(),
+    topic: text('topic').$type<ContactTopic>().notNull(),
+    // Free-text "what's this about" line from the form. Nullable: the
+    // topic-only flow (and older clients) submit without it. Also holds the
+    // serialized `#tag` routing chips the support form sends.
+    subject: text('subject'),
+    message: text('message').notNull(),
+    // Visitor country auto-detected from their IP on the /contact page and
+    // submitted as a locked field — a hint for the operator. Nullable when
+    // it couldn't be resolved (localhost, unknown block).
+    country: text('country'),
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    // ── Support-ticket columns (0045) ──
+    // Lifecycle status. NOT NULL with a default so every row has one; only
+    // meaningful for ticketed rows (ticket_number IS NOT NULL).
+    status: text('status').$type<TicketStatus>().notNull().default('no_response'),
+    // Human-facing ticket number stored WITHOUT the leading '#'
+    // (e.g. SUP260629-000001). NULL for non-ticketed contact messages.
+    // UNIQUE — a unique index on a nullable column lets the many
+    // non-ticket rows keep NULL while ticketed rows stay unique.
+    ticketNumber: text('ticket_number'),
+    // Primary topic code (SUP/BIL/TEC/SLF). NULL for non-ticketed rows.
+    topicCode: text('topic_code').$type<TicketTopicCode>(),
+    // Operator the ticket is assigned to (free-text handle). NULL = unassigned.
+    assignedTo: text('assigned_to'),
+    // Internal operator-only triage notes. NEVER surfaced to the user.
+    operatorNotes: text('operator_notes'),
+    createdAt: createdAt(),
+    handledAt: ts('handled_at'),
+  },
+  (t) => ({
+    createdIdx: index('contact_messages_created_idx').on(t.createdAt),
+    // Nullable-unique: multiple NULLs allowed (non-ticket rows), ticketed
+    // rows are globally unique.
+    ticketNumberIdx: uniqueIndex('contact_messages_ticket_number_idx').on(t.ticketNumber),
+  }),
+);
+export type ContactMessage = typeof contactMessages.$inferSelect;
+
+/* ─── ticket_counters (daily, per-topic-code sequence) ───────────── */
+// One row per (topic_code, day). The counter is atomically incremented by
+// an INSERT ... ON CONFLICT DO UPDATE on ticket creation, giving a
+// race-safe, gap-tolerant sequence that resets to 1 each new day per code.
+export const ticketCounters = pgTable(
+  'ticket_counters',
+  {
+    topicCode: text('topic_code').notNull(),
+    // Calendar day (UTC) the sequence belongs to. String mode → 'YYYY-MM-DD'.
+    day: date('day', { mode: 'string' }).notNull(),
+    counter: integer('counter').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.topicCode, t.day] }),
+  }),
+);
+export type TicketCounter = typeof ticketCounters.$inferSelect;
+
+/* ─── contact_message_replies (ticket thread) ────────────────────── */
+// Append-only thread of messages on a ticket. An operator reply emails the
+// sender; a user reply (future inbound path) is recorded too. Cascades when
+// the parent contact_messages row is deleted.
+export const contactMessageReplies = pgTable(
+  'contact_message_replies',
+  {
+    id: id(),
+    messageId: text('message_id')
+      .notNull()
+      .references(() => contactMessages.id, { onDelete: 'cascade' }),
+    author: text('author').$type<TicketReplyAuthor>().notNull(),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    messageIdx: index('contact_message_replies_message_idx').on(t.messageId),
+  }),
+);
+export type ContactMessageReply = typeof contactMessageReplies.$inferSelect;
