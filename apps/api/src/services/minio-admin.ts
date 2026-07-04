@@ -70,12 +70,70 @@ async function runMc(args: string[]): Promise<{ code: number; stdout: string; st
   return { code, stdout, stderr };
 }
 
-/** Create the project's bucket if absent. Idempotent. */
+/** Create the project's bucket if absent + turn on versioning. Idempotent. */
 export async function ensureBucket(bucket: string): Promise<void> {
   const r = await runMc(['mb', '--ignore-existing', `${ALIAS}/${bucket}`]);
   if (r.code !== 0) {
     throw new Error(`minio create bucket failed: ${(r.stderr || r.stdout).slice(0, 300)}`);
   }
+  // Versioning = the recovery safety net: a delete/overwrite keeps the old
+  // version so a file can be restored within the tier's recovery window.
+  // Idempotent; a failure just means recovery isn't active (bucket still works).
+  const v = await runMc(['version', 'enable', `${ALIAS}/${bucket}`]);
+  if (v.code !== 0) {
+    log.warn('minio_versioning_enable_failed', {
+      bucket,
+      err: (v.stderr || v.stdout).slice(0, 200),
+    });
+  }
+}
+
+/**
+ * Expire OLD (noncurrent) versions after `days` — the tier's recovery window.
+ * Keeps deleted/overwritten copies restorable for `days`, then MinIO reclaims
+ * the space so recovery storage stays bounded (and priced into the tier cap).
+ */
+export async function setRecoveryLifecycle(bucket: string, days: number): Promise<void> {
+  const window = String(Math.max(1, Math.floor(days)));
+  const r = await runMc([
+    'ilm',
+    'rule',
+    'add',
+    `${ALIAS}/${bucket}`,
+    '--noncurrent-expire-days',
+    window,
+  ]);
+  if (r.code !== 0) {
+    log.warn('minio_lifecycle_set_failed', {
+      bucket,
+      days,
+      err: (r.stderr || r.stdout).slice(0, 200),
+    });
+  }
+}
+
+/**
+ * Total bytes stored in a bucket, INCLUDING kept (noncurrent) versions so the
+ * recovery copies count toward quota. Falls back to current-only if the
+ * `--versions` flag isn't supported. Returns 0 if it can't be read.
+ */
+export async function bucketUsageBytes(bucket: string): Promise<number> {
+  let r = await runMc(['du', '--versions', `${ALIAS}/${bucket}`]);
+  if (r.code !== 0) r = await runMc(['du', `${ALIAS}/${bucket}`]);
+  if (r.code !== 0) return 0;
+  // mc --json du emits one JSON object per line; take the last size seen.
+  let bytes = 0;
+  for (const line of r.stdout.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const o = JSON.parse(t) as { size?: number };
+      if (typeof o.size === 'number') bytes = o.size;
+    } catch {
+      // skip non-JSON lines
+    }
+  }
+  return bytes;
 }
 
 function singleBucketPolicy(bucket: string): string {
