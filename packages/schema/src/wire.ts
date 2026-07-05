@@ -60,37 +60,38 @@ const columnDef = z
         onDelete: onDelete.optional(),
       })
       .optional(),
-  })
-  .strict();
+  });
 
 const indexDef = z
   .object({
     columns: z.array(identifier).min(1),
     unique: z.boolean(),
-  })
-  .strict();
+  });
 
 const accessRules = z
   .object({
     read: z.string().max(2048).optional(),
     write: z.string().max(2048).optional(),
-  })
-  .strict();
+  });
 
 const tableDef = z
   .object({
     columns: z.record(identifier, columnDef),
     indexes: z.array(indexDef),
     access: accessRules.optional(),
-  })
-  .strict();
+  });
 
-export const schemaSnapshotSchema = z
-  .object({
-    version: z.literal(1),
-    tables: z.record(userTableName, tableDef),
-  })
-  .strict();
+// Unknown keys are STRIPPED (zod's default), not rejected — this makes the wire
+// format forward-compatible with newer @briven/cli versions that add fields to
+// the snapshot. A `.strict()` reject was the cause of the 0.2 ↔ 0.3 CLI schema
+// mismatch. Safety is unaffected: the value-level guards (identifier /
+// safeSqlType / safeDefault) still block anything unsafe, and schema-apply only
+// reads fields it knows. `version` stays a hard literal — bump only on a
+// genuinely breaking change (that's the deliberate compatibility gate).
+export const schemaSnapshotSchema = z.object({
+  version: z.literal(1),
+  tables: z.record(userTableName, tableDef),
+});
 
 export type SchemaSnapshotWire = z.infer<typeof schemaSnapshotSchema>;
 
