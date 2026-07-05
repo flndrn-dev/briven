@@ -50,6 +50,7 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
   let files: ProjectFile[] = [];
   let deleted: ProjectFile[] = [];
   let storageKeys: StorageKeyRow[] = [];
+  let storageEndpoint = '';
   let publicIds = new Set<string>();
   let notConfigured = false;
   try {
@@ -63,10 +64,11 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
       `/v1/projects/${id}/files/deleted`,
     ).catch(() => ({ files: [] as ProjectFile[] }));
     deleted = deletedResult.files;
-    const keysResult = await apiJson<{ keys: StorageKeyRow[] }>(
+    const keysResult = await apiJson<{ keys: StorageKeyRow[]; endpoint?: string }>(
       `/v1/projects/${id}/storage-keys`,
-    ).catch(() => ({ keys: [] as StorageKeyRow[] }));
+    ).catch(() => ({ keys: [] as StorageKeyRow[], endpoint: '' }));
     storageKeys = keysResult.keys;
+    storageEndpoint = keysResult.endpoint ?? '';
   } catch (err) {
     if (err instanceof ApiError && err.status === 503) {
       // BRIVEN_MINIO_* env vars not set on the api. The page still
@@ -281,7 +283,7 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
             </section>
           ) : null}
 
-          <StorageKeysPanel projectId={id} initial={storageKeys} />
+          <StorageKeysPanel projectId={id} endpoint={storageEndpoint} initial={storageKeys} />
         </>
       )}
     </div>

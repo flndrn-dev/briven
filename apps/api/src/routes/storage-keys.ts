@@ -43,7 +43,7 @@ storageKeysRouter.get('/v1/projects/:id/storage-keys', async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'viewer');
   const keys = await listStorageKeys(project.id);
-  return c.json({ keys });
+  return c.json({ keys, endpoint: env.BRIVEN_MINIO_PUBLIC_ENDPOINT ?? env.BRIVEN_MINIO_ENDPOINT ?? '' });
 });
 
 storageKeysRouter.post('/v1/projects/:id/storage-keys', async (c) => {

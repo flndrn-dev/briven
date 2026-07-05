@@ -26,6 +26,7 @@ interface CreatedKey {
 
 interface Props {
   projectId: string;
+  endpoint: string;
   initial: StorageKey[];
 }
 
@@ -34,13 +35,14 @@ interface Props {
  * is shown ONCE on creation (never stored), so the panel surfaces the full
  * connection details right after minting, with a clear "copy it now" warning.
  */
-export function StorageKeysPanel({ projectId, initial }: Props) {
+export function StorageKeysPanel({ projectId, endpoint, initial }: Props) {
   const router = useRouter();
   const [keys, setKeys] = useState(initial);
   const [name, setName] = useState('');
   const [pending, setPending] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedKey | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   async function create(): Promise<void> {
     const label = name.trim();
@@ -167,22 +169,55 @@ export function StorageKeysPanel({ projectId, initial }: Props) {
           {active.map((k) => (
             <li
               key={k.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
+              className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
             >
-              <div className="min-w-0">
-                <p className="truncate font-mono text-sm text-[var(--color-text)]">{k.name}</p>
-                <p className="mt-0.5 font-mono text-[11px] text-[var(--color-text-muted)]">
-                  {k.accessKeyId} · •••{k.suffix} · {new Date(k.createdAt).toISOString().slice(0, 10)}
-                </p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-sm text-[var(--color-text)]">{k.name}</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-[var(--color-text-muted)]">
+                    {k.accessKeyId} · •••{k.suffix} · {new Date(k.createdAt).toISOString().slice(0, 10)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOpenId((cur) => (cur === k.id ? null : k.id))}
+                    className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-text-muted)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+                  >
+                    {openId === k.id ? 'hide' : 'view'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void revoke(k.id)}
+                    disabled={pending}
+                    className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-text-muted)] transition hover:border-[var(--color-error)] hover:text-[var(--color-error)] disabled:opacity-50"
+                  >
+                    revoke
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => void revoke(k.id)}
-                disabled={pending}
-                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-text-muted)] transition hover:border-[var(--color-error)] hover:text-[var(--color-error)] disabled:opacity-50"
-              >
-                revoke
-              </button>
+              {openId === k.id ? (
+                <div className="flex flex-col gap-2.5 border-t border-[var(--color-border-subtle)] pt-3">
+                  {(
+                    [
+                      ['endpoint', endpoint],
+                      ['bucket', k.bucket],
+                      ['access key', k.accessKeyId],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="flex flex-col gap-1">
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                        {label}
+                      </span>
+                      <CopyField value={value} label={label} />
+                    </div>
+                  ))}
+                  <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
+                    the secret key was shown only once at creation and isn&apos;t stored — revoke and
+                    mint a new key if you&apos;ve lost it.
+                  </p>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
