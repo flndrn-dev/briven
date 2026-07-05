@@ -347,6 +347,13 @@ services:
       - 'traefik.http.routers.briven-api.entrypoints=websecure'
       - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
       - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
+      # media.briven.tech -> the api (serves GET /media/<project>/<file> public
+      # objects with per-tenant CORS). Same service/port as briven-api; Traefik
+      # auto-issues the Let's Encrypt cert so the padlock is valid.
+      - 'traefik.http.routers.briven-media.rule=Host(`media.${BRIVEN_DOMAIN}`)'
+      - 'traefik.http.routers.briven-media.entrypoints=websecure'
+      - 'traefik.http.routers.briven-media.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-media.service=briven-api'
 
   runtime:
     build:
