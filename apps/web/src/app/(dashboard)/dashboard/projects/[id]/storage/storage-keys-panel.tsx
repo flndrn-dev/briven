@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { CopyField } from '@/components/copy-field';
+
 interface StorageKey {
   id: string;
   name: string;
@@ -104,18 +106,26 @@ export function StorageKeysPanel({ projectId, initial }: Props) {
       {created ? (
         <div className="rounded-md border border-[var(--color-primary)] bg-[var(--color-surface-raised)] p-4">
           <p className="font-mono text-xs text-[var(--color-text)]">
-            copy these now — the secret key is shown only once.
+            copy these now — the secret key is shown only once. these four are the
+            connection details a project or S3 tool needs.
           </p>
-          <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 font-mono text-[11px]">
-            <dt className="text-[var(--color-text-muted)]">endpoint</dt>
-            <dd className="break-all text-[var(--color-text)]">{created.endpoint}</dd>
-            <dt className="text-[var(--color-text-muted)]">bucket</dt>
-            <dd className="break-all text-[var(--color-text)]">{created.bucket}</dd>
-            <dt className="text-[var(--color-text-muted)]">access key</dt>
-            <dd className="break-all text-[var(--color-text)]">{created.accessKey}</dd>
-            <dt className="text-[var(--color-text-muted)]">secret key</dt>
-            <dd className="break-all text-[var(--color-primary)]">{created.secretKey}</dd>
-          </dl>
+          <div className="mt-3 flex flex-col gap-2.5">
+            {(
+              [
+                ['endpoint', created.endpoint],
+                ['bucket', created.bucket],
+                ['access key', created.accessKey],
+                ['secret key', created.secretKey],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="flex flex-col gap-1">
+                <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                  {label}
+                </span>
+                <CopyField value={value} label={label} />
+              </div>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => setCreated(null)}
