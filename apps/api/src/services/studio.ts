@@ -419,35 +419,97 @@ function assertPrimaryKeyMatches(
  *    rows and clobber every one
  */
 export async function updateCell(input: UpdateCellInput): Promise<UpdateCellResult> {
+  // Single-column update is the one-value special case of a multi-column
+  // update — delegate so both paths share one validated, snap-back-safe
+  // SQL builder (see updateRow).
+  return updateRow({
+    projectId: input.projectId,
+    tableName: input.tableName,
+    primaryKey: input.primaryKey,
+    values: { [input.column]: input.value },
+  });
+}
+
+export interface UpdateRowInput {
+  readonly projectId: string;
+  readonly tableName: string;
+  readonly primaryKey: ReadonlyArray<PrimaryKeyValue>;
+  /**
+   * Column → new value. Every key is validated against the real schema and
+   * COLUMN_NAME_RE; every value is parameter-bound. Must contain ≥1 column.
+   */
+  readonly values: Record<string, unknown>;
+}
+
+/**
+ * Update one OR many columns on a single row, matched by primary key.
+ * Backs both the single-column studio cell edit (`updateCell` delegates
+ * here) and the multi-column dashboard save. Like `updateCell` it:
+ *
+ *  - validates the table + every column identifier against existence in the
+ *    project's schema (no SQL injection through identifiers)
+ *  - refuses to touch platform-owned `_briven_*` tables
+ *  - requires the primary-key array to match the table's pk EXACTLY —
+ *    a partial PK on a composite-keyed table would silently match many rows
+ *  - parameterises every SET value + every row-key value; the only things
+ *    interpolated are verified table/column names
+ *  - SETs all columns in ONE `UPDATE ... SET c1=$1, c2=$2, ... WHERE ...`
+ *    statement inside the same `runInProjectDatabase` +
+ *    `SET dolt_transaction_commit = 1` pattern as the rest of studio
+ *
+ * Snap-back fix: recovers the affected-row count via `RETURNING <pkColumn>`
+ * (a guaranteed-real column) rather than `RETURNING 1`. DoltGres accepts
+ * `RETURNING <column>` (proven by the dolt-compat alarm) but a bare literal
+ * `RETURNING 1` on UPDATE threw — which reverted single-cell edits in the
+ * dashboard ("snap-back"). The pg ProjectTx adapter returns only the rows
+ * array (no `.count`), so a real RETURNING column is how we count.
+ */
+export async function updateRow(input: UpdateRowInput): Promise<UpdateCellResult> {
   await assertTableExists(input.projectId, input.tableName);
-  if (!COLUMN_NAME_RE.test(input.column)) {
-    throw new ValidationError('invalid column name', { column: input.column });
+  const setKeys = Object.keys(input.values);
+  if (setKeys.length === 0) {
+    throw new ValidationError('update requires at least one column', {});
+  }
+  for (const k of setKeys) {
+    if (!COLUMN_NAME_RE.test(k)) {
+      throw new ValidationError('invalid column name', { column: k });
+    }
   }
   const cols = await getTableColumns(input.projectId, input.tableName);
-  if (!cols.find((c) => c.name === input.column)) {
-    throw new ValidationError('column not found on table', {
-      table: input.tableName,
-      column: input.column,
-    });
+  const colNames = new Set(cols.map((c) => c.name));
+  for (const k of setKeys) {
+    if (!colNames.has(k)) {
+      throw new ValidationError('column not found on table', {
+        table: input.tableName,
+        column: k,
+      });
+    }
   }
   assertPrimaryKeyMatches(cols, input.primaryKey);
 
-  // Param positions: $1 is the SET value, $2..$N+1 are the WHERE clauses.
-  // Building the WHERE this way keeps every identifier inside backticks
-  // and every value parameter-bound.
+  // Param layout: $1..$M are the SET values (in setKeys order), then
+  // $M+1..$M+N are the WHERE (primary-key) values. Every identifier stays
+  // inside double-quotes; every value is parameter-bound.
+  const params: unknown[] = [];
+  const setSql = setKeys
+    .map((k) => {
+      params.push(input.values[k]);
+      return `"${k}" = $${params.length}`;
+    })
+    .join(', ');
   const whereSql = input.primaryKey
-    .map((p, i) => `"${p.column}" = $${i + 2}`)
+    .map((p) => {
+      params.push(p.value);
+      return `"${p.column}" = $${params.length}`;
+    })
     .join(' AND ');
-  const params: ReadonlyArray<never> = [
-    input.value as never,
-    ...input.primaryKey.map((p) => p.value as never),
-  ];
-  // The pg ProjectTx adapter returns the rows array (not a result object with
-  // `.count`), so `RETURNING 1` lets us recover the affected-row count.
+  // `RETURNING <pkColumn>` (a real column) recovers the affected-row count —
+  // see the snap-back note above; a bare `RETURNING 1` reverted edits.
+  const pkReturn = `"${input.primaryKey[0]!.column}"`;
   const rows = await runInProjectDatabase(input.projectId, async (tx) => {
     await tx.unsafe('SET dolt_transaction_commit = 1');
     return tx.unsafe(
-      `UPDATE "${input.tableName}" SET "${input.column}" = $1 WHERE ${whereSql} RETURNING 1`,
+      `UPDATE "${input.tableName}" SET ${setSql} WHERE ${whereSql} RETURNING ${pkReturn}`,
       params as unknown as never[],
     );
   });
@@ -1450,11 +1512,13 @@ export async function deleteRow(input: DeleteRowInput): Promise<DeleteRowResult>
     .join(' AND ');
   const params: ReadonlyArray<never> = input.primaryKey.map((p) => p.value as never);
   // The pg ProjectTx adapter returns the rows array (not a result object with
-  // `.count`), so `RETURNING 1` lets us recover the affected-row count.
+  // `.count`), so `RETURNING *` lets us recover the affected-row count. NOT a
+  // bare `RETURNING 1` — DoltGres rejects an integer literal in RETURNING and
+  // throws (same snap-back bug that broke single-cell UPDATEs; see updateRow).
   const rows = await runInProjectDatabase(input.projectId, async (tx) => {
     await tx.unsafe('SET dolt_transaction_commit = 1');
     return tx.unsafe(
-      `DELETE FROM "${input.tableName}" WHERE ${whereSql} RETURNING 1`,
+      `DELETE FROM "${input.tableName}" WHERE ${whereSql} RETURNING *`,
       params as unknown as never[],
     );
   });

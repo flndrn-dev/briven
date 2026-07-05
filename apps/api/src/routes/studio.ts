@@ -29,6 +29,7 @@ import {
   STUDIO_COLUMN_TYPES,
   FILTER_OPS,
   updateCell,
+  updateRow,
   type FilterOp,
   type PrimaryKeyValue,
   type StudioColumnReference,
@@ -278,20 +279,34 @@ studioRouter.get(
     // to asc. Validated against the actual column set inside the service.
     const orderByCol = c.req.query('orderBy');
     const orderByDir = c.req.query('dir') === 'desc' ? 'desc' : 'asc';
-    // filters: `?col__op=value` per Phase 2 §2.3. Op is parsed off the
-    // suffix and passed through to the service, which validates against
-    // the FILTER_OPS allow-list. Unknown ops are silently dropped at the
-    // route layer; the service raises ValidationError for unknown columns,
-    // which the router converts to 400 upstream.
+    // Query params:
+    //   ?limit / ?offset / ?cursor  → pagination (reserved; never a filter)
+    //   ?orderBy / ?dir             → sort (reserved; never a filter)
+    //   ?<col>__<op>=value          → operator filter (op ∈ FILTER_OPS: eq,
+    //                                 contains, gt, lt, gte, lte)
+    //   ?<col>=value                → shorthand equality filter (same as
+    //                                 ?<col>__eq=value); any real column.
+    // Multiple filter params are AND-ed together. Every filter column is
+    // validated against the table's real columns inside the service (via
+    // getTableColumns + COLUMN_NAME_RE); unknown columns raise a 400. Values
+    // are parameter-bound in buildFilterClauses — never interpolated.
+    const RESERVED_PARAMS = new Set(['limit', 'offset', 'cursor', 'orderBy', 'dir']);
     const filters: Array<{ column: string; op: FilterOp; value: string }> = [];
     for (const [k, v] of Object.entries(c.req.queries())) {
-      const sepAt = k.lastIndexOf('__');
-      if (sepAt <= 0) continue;
-      const col = k.slice(0, sepAt);
-      const op = k.slice(sepAt + 2);
-      if (!(FILTER_OPS as readonly string[]).includes(op)) continue;
+      if (RESERVED_PARAMS.has(k)) continue;
       if (!Array.isArray(v) || v[0] === undefined) continue;
-      filters.push({ column: col, op: op as FilterOp, value: v[0] });
+      const sepAt = k.lastIndexOf('__');
+      if (sepAt > 0) {
+        // Operator form: `?col__op=value`. Unknown ops are dropped here; the
+        // service validates the column and raises 400 on unknown columns.
+        const col = k.slice(0, sepAt);
+        const op = k.slice(sepAt + 2);
+        if (!(FILTER_OPS as readonly string[]).includes(op)) continue;
+        filters.push({ column: col, op: op as FilterOp, value: v[0] });
+      } else {
+        // Shorthand equality form: `?col=value` → `col = value`.
+        filters.push({ column: k, op: 'eq', value: v[0] });
+      }
     }
     const result = await getTableRows(projectId, tableName, {
       limit: Number.isFinite(limit) ? limit : undefined,
@@ -319,18 +334,71 @@ studioRouter.patch(
     if (!projectId || !tableName) {
       return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
     }
+    // Two body shapes (branch on which is present):
+    //   Single column (backward compatible):
+    //     { primaryKey: [{column, value}, ...], column, value }
+    //   Multi column (one UPDATE SETs all columns):
+    //     { primaryKey: [{column, value}, ...], values: { col1: v1, col2: v2, ... } }
     const body = (await c.req.json().catch(() => null)) as {
       primaryKey?: Array<{ column?: unknown; value?: unknown }>;
       column?: string;
       value?: unknown;
+      values?: Record<string, unknown>;
     } | null;
     const primaryKey = parsePrimaryKey(body?.primaryKey);
-    if (!body || typeof body.column !== 'string' || !primaryKey) {
+    if (!body || !primaryKey) {
       return c.json(
         {
           code: 'validation_failed',
           message:
-            'expected { primaryKey: [{column, value}, ...], column, value } — primaryKey must be a non-empty array of {column: string, value: string | number}',
+            'expected { primaryKey: [{column, value}, ...], column, value } (single column) or { primaryKey: [{column, value}, ...], values: { col: value, ... } } (multi column) — primaryKey must be a non-empty array of {column: string, value: string | number}',
+        },
+        400,
+      );
+    }
+
+    // Multi-column path: `values` is a plain column→value object → one UPDATE
+    // that SETs every column. (Arrays are rejected so `values` is a map, not a
+    // row list.)
+    if (body.values && typeof body.values === 'object' && !Array.isArray(body.values)) {
+      const columns = Object.keys(body.values);
+      if (columns.length === 0) {
+        return c.json(
+          { code: 'validation_failed', message: 'values must contain at least one column' },
+          400,
+        );
+      }
+      const result = await updateRow({
+        projectId,
+        tableName,
+        primaryKey,
+        values: body.values,
+      });
+      const user = c.get('user');
+      await audit({
+        actorId: user?.id ?? null,
+        projectId,
+        action: 'studio.cell.update',
+        ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: {
+          table: tableName,
+          // Per CLAUDE.md §5.1 — record the column names touched, never values.
+          columns,
+          primaryKeyColumns: primaryKey.map((p) => p.column),
+          affected: result.affected,
+        },
+      });
+      return c.json(result);
+    }
+
+    // Single-column path (unchanged): `{ column, value }`.
+    if (typeof body.column !== 'string') {
+      return c.json(
+        {
+          code: 'validation_failed',
+          message:
+            'expected { primaryKey: [{column, value}, ...], column, value } (single column) or { primaryKey: [{column, value}, ...], values: { col: value, ... } } (multi column) — primaryKey must be a non-empty array of {column: string, value: string | number}',
         },
         400,
       );
