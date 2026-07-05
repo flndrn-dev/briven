@@ -136,7 +136,7 @@ function OidcCard({
         const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
         throw new Error(body.message ?? body.code ?? `http ${res.status}`);
       }
-      setNote('saved · pool invalidated');
+      setNote('saved — changes are live');
       onChanged();
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : 'save failed');

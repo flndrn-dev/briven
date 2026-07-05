@@ -171,7 +171,7 @@ export function BrandingForm({ projectId, initial }: Props) {
           <span className="font-mono text-xs text-[var(--color-error)]">{errMsg}</span>
         ) : savedAt ? (
           <span className="font-mono text-[11px] text-[var(--color-text-muted)]">
-            saved · pool invalidated
+            saved — changes are live
           </span>
         ) : null}
       </div>

@@ -199,7 +199,7 @@ export function ProviderToggles({ projectId, initial, initialSecrets }: Props) {
           <span className="font-mono text-xs text-[var(--color-error)]">{errMsg}</span>
         ) : savedAt ? (
           <span className="font-mono text-[11px] text-[var(--color-text-muted)]">
-            saved · pool invalidated
+            saved — changes are live
           </span>
         ) : null}
       </div>
@@ -279,7 +279,7 @@ function OAuthCard({
         throw new Error(body.message ?? body.code ?? `http ${res.status}`);
       }
       setSecret('');
-      setNote('secret saved · pool invalidated');
+      setNote('secret saved — now live');
       onSecretSaved();
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : 'secret save failed');
