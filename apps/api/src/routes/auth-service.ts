@@ -5,6 +5,7 @@ import { ValidationError } from '@briven/shared';
 import { runInProjectDatabase } from '../db/data-plane.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
+import { runWithRequestContext } from '../lib/request-context.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import { audit, hashIp } from '../services/audit.js';
 import { renderAuthProvisioningSql } from '../services/auth-provisioning.js';
@@ -991,12 +992,25 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     );
   }
 
+  // Raw visitor IP for the control-plane sign-up geo capture. Better Auth's
+  // user.create hook can't read the HTTP request, so we stash the IP in an
+  // AsyncLocalStorage context around the handler call; the hook reads it back
+  // via getRequestContext(). Take the first comma-separated x-forwarded-for
+  // value (the original client, before proxy appends). Independent of Better
+  // Auth's own disableIpTracking — this is control-plane analytics only.
+  const ip =
+    c.req.header('cf-connecting-ip') ??
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
+    null;
+
   try {
     const instance = await getAuthInstance(projectId);
     // `c.req.raw` is the underlying Fetch API Request — Better Auth's
     // handler expects exactly that shape. The Response that comes back
     // already carries Set-Cookie headers, status, body — no rewriting.
-    return await instance.betterAuth.handler(c.req.raw);
+    return await runWithRequestContext({ ip, projectId }, () =>
+      instance.betterAuth.handler(c.req.raw),
+    );
   } catch (err) {
     log.error('briven_auth_tenant_bridge_failed', {
       projectId,

@@ -239,6 +239,13 @@
       "when": 1779570000000,
       "tag": "0033_storage_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780500000000,
+      "tag": "0048_auth_signup_geo",
+      "breakpoints": true
     }
   ]
 }

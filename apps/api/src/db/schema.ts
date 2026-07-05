@@ -1549,3 +1549,48 @@ export const contactMessageReplies = pgTable(
   }),
 );
 export type ContactMessageReply = typeof contactMessageReplies.$inferSelect;
+
+/* ─── auth_signup_geo (platform-wide sign-up IP + geo, admin-only SEO) ─── */
+// One row per end-user sign-up across ALL briven-auth tenant projects.
+// Written fire-and-forget from the per-tenant Better Auth user.create hook
+// (services/auth-tenant-pool.ts → services/signup-geo.ts). Feeds the
+// admin-only "sign-ups · geo" dashboard for the future SEO AI Agency —
+// "which countries / cities are sign-ups coming from".
+//
+// DELIBERATE privacy posture (flndrn-approved): the RAW ip is stored here,
+// in the control plane, admin-side only. This is INDEPENDENT of Better
+// Auth's own session.ip_address (which stays disabled via
+// disableIpTracking) and of the per-project customer users page, which
+// never sees these rows. Never surface this table in a customer-facing view.
+//
+// No FK on user_id — the end-user lives in a per-tenant customer database,
+// not the control-plane users table, so a control-plane FK would be wrong.
+// project_id DOES FK to projects (cascade) so cleaning up a project reaps
+// its analytics rows.
+export const authSignupGeo = pgTable(
+  'auth_signup_geo',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // The end-user id as minted by the tenant's Better Auth instance.
+    userId: text('user_id'),
+    email: text('email'),
+    // Raw visitor IP at sign-up. Nullable — private/unresolvable requests
+    // (localhost, missing proxy header) store null rather than a fake value.
+    ip: text('ip'),
+    country: text('country'),
+    city: text('city'),
+    region: text('region'),
+    createdAt: createdAt(),
+  },
+  (t) => ({
+    createdIdx: index('auth_signup_geo_created_idx').on(t.createdAt),
+    projectCreatedIdx: index('auth_signup_geo_project_created_idx').on(t.projectId, t.createdAt),
+    countryIdx: index('auth_signup_geo_country_idx').on(t.country),
+  }),
+);
+
+export type AuthSignupGeo = typeof authSignupGeo.$inferSelect;
+export type NewAuthSignupGeo = typeof authSignupGeo.$inferInsert;

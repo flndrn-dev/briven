@@ -33,40 +33,26 @@ function isPrivateIp(ip: string): boolean {
   return false;
 }
 
-async function lookupViaIpApi(ip: string): Promise<GeoLookup | null> {
-  try {
-    const res = await fetch(
-      `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=city,regionName,country`,
-      { signal: AbortSignal.timeout(5_000) },
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as { city?: string; regionName?: string; country?: string };
-    const city = data.city ?? null;
-    const region = data.regionName ?? null;
-    const country = data.country ?? null;
-    if (!city && !region && !country) return null;
-    return { city, region, country };
-  } catch {
-    return null;
-  }
-}
-
+// SELF-HOSTED ONLY (flndrn decision, 2026-07-05): geo lookups NEVER leave this
+// server. There is deliberately no third-party fallback (the old ip-api.com HTTP
+// call was removed) — an IP that the local GeoLite2 DB can't resolve returns null
+// and the caller records the raw IP with geo left blank ("pending") until the
+// GeoLite2-City .mmdb file is installed at BRIVEN_GEOIP_DB_PATH.
 export async function lookupIp(ip: string | null | undefined): Promise<GeoLookup | null> {
   if (!ip) return null;
   if (isPrivateIp(ip)) return null;
   const reader = await getReader();
-  if (reader) {
-    try {
-      const response = reader.get(ip);
-      if (response) {
-        const city = response.city?.names?.en ?? null;
-        const region = response.subdivisions?.[0]?.names?.en ?? null;
-        const country = response.country?.names?.en ?? response.registered_country?.names?.en ?? null;
-        if (city || region || country) return { city, region, country };
-      }
-    } catch {
-      // MaxMind DB read failure — fall back to the HTTP lookup below.
+  if (!reader) return null;
+  try {
+    const response = reader.get(ip);
+    if (response) {
+      const city = response.city?.names?.en ?? null;
+      const region = response.subdivisions?.[0]?.names?.en ?? null;
+      const country = response.country?.names?.en ?? response.registered_country?.names?.en ?? null;
+      if (city || region || country) return { city, region, country };
     }
+  } catch {
+    // Local MaxMind DB read failure — return null; caller stores the raw IP only.
   }
-  return lookupViaIpApi(ip);
+  return null;
 }

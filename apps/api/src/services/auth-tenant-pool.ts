@@ -10,6 +10,8 @@ import { authSchema } from '../db/auth-customer-schema.js';
 import { dbNameFor } from '../db/data-plane.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
+import { getRequestContext } from '../lib/request-context.js';
+import { captureSignupGeo } from './signup-geo.js';
 import {
   sendBrivenAuthEmailVerification,
   sendBrivenAuthMagicLink,
@@ -229,6 +231,19 @@ export function buildAuthDatabaseHooks(
     user: {
       create: {
         after: async (user: { id: string; email: string; createdAt?: unknown }) => {
+          // Control-plane sign-up geo capture (admin-only SEO analytics).
+          // Fire-and-forget: captureSignupGeo swallows all its own errors, so
+          // an unawaited promise can never reject or delay the auth response.
+          // The IP rides an AsyncLocalStorage context set by the auth-tenant
+          // bridge (routes/auth-service.ts) since this hook can't read the
+          // HTTP request itself.
+          void captureSignupGeo({
+            projectId,
+            userId: user.id,
+            email: user.email,
+            ip: getRequestContext()?.ip ?? null,
+          });
+
           await dispatch(projectId, 'auth.signup', {
             userId: user.id,
             email: user.email,

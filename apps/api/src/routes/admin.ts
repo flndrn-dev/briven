@@ -45,6 +45,7 @@ import {
 } from '../lib/email.js';
 import { translateConvexSchema } from '../services/convex-schema-translator.js';
 import { getMarketingFunnel } from '../services/marketing-events.js';
+import { getSignupGeoSummary } from '../services/signup-geo-admin.js';
 import { getEmailAdminSummary } from '../services/email-admin.js';
 import { log } from '../lib/logger.js';
 import {
@@ -1437,6 +1438,20 @@ adminRouter.patch('/v1/admin/contact-messages/:id', async (c) => {
 adminRouter.get('/v1/admin/marketing-funnel', async (c) => {
   const sinceDays = Math.max(1, Math.min(365, Number(c.req.query('days')) || 30));
   return c.json(await getMarketingFunnel({ sinceDays }));
+});
+
+/**
+ * Platform-wide sign-up geo analytics (SEO). Aggregates auth_signup_geo:
+ * counts by country + by country/city, a total, and a recent-events list
+ * (raw IPs included — admin-only, that's the point). Optional `?projectId=`
+ * filter and `?days=` window (default 30). Admin-guarded like every route
+ * under /v1/admin/* (see adminRouter.use above). The per-project customer
+ * users page never reads this data — control-plane analytics only.
+ */
+adminRouter.get('/v1/admin/auth/signups/geo', async (c) => {
+  const sinceDays = Math.max(1, Math.min(365, Number(c.req.query('days')) || 30));
+  const projectId = c.req.query('projectId') ?? null;
+  return c.json(await getSignupGeoSummary({ sinceDays, projectId }));
 });
 
 /**

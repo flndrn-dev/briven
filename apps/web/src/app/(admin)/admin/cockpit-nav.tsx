@@ -11,6 +11,7 @@ import { CogIcon } from '@/components/ui/cog';
 import { CreditCardIcon } from '@/components/ui/credit-card';
 import { DatabaseIcon } from '@/components/ui/database';
 import { FoldersIcon } from '@/components/ui/folders';
+import { GlobeIcon } from '@/components/ui/globe';
 import { LayoutGridIcon } from '@/components/ui/layout-grid';
 import { LifeBuoyIcon } from '@/components/ui/life-buoy';
 import { MailIcon } from '@/components/ui/mail';
@@ -61,6 +62,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: 'subscribers & billing',
         Icon: CreditCardIcon as never,
         match: (p) => p.startsWith('/admin/billing'),
+      },
+      {
+        href: '/admin/seo',
+        label: 'sign-ups · geo (seo)',
+        Icon: GlobeIcon as never,
+        match: (p) => p.startsWith('/admin/seo'),
       },
     ],
   },
