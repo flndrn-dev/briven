@@ -4,7 +4,14 @@ import { and, asc, eq, isNull, sql as drizzleSql } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { projectFiles, type ProjectFile } from '../db/schema.js';
 import { env } from '../env.js';
+import { log } from '../lib/logger.js';
 import { presignS3Url } from '../lib/s3-presign.js';
+import {
+  bucketNameFor,
+  ensureBucket,
+  isMinioAdminConfigured,
+  setRecoveryLifecycle,
+} from './minio-admin.js';
 import { getProjectTier, TIERS, TierLimitExceeded } from './tiers.js';
 
 /**
@@ -72,6 +79,53 @@ function requireStorageEnv(): StorageEnv {
     accessKey,
     secretKey,
   };
+}
+
+// Per-project bucket unify (M2). The `bucket` column on project_files is managed
+// by raw SQL (NOT in the drizzle schema) so it can never break existing selects.
+// Everything here fails safe to the shared bucket.
+let bucketColState: 'unknown' | 'ready' | 'unavailable' = 'unknown';
+const provisionedBuckets = new Set<string>();
+
+async function ensureFileBucketColumn(db: ReturnType<typeof getDb>): Promise<boolean> {
+  if (bucketColState !== 'unknown') return bucketColState === 'ready';
+  try {
+    const res = (await db.execute(
+      drizzleSql.raw(
+        "select 1 as present from information_schema.columns where table_name = 'project_files' and column_name = 'bucket' limit 1",
+      ),
+    )) as unknown;
+    const rows = Array.isArray(res) ? res : ((res as { rows?: unknown[] })?.rows ?? []);
+    if (rows.length === 0) {
+      await db.execute(drizzleSql.raw('alter table project_files add column bucket text'));
+    }
+    bucketColState = 'ready';
+    return true;
+  } catch (err) {
+    log.warn('storage_bucket_column_unavailable', { err: String(err).slice(0, 200) });
+    bucketColState = 'unavailable';
+    return false;
+  }
+}
+
+/** Read a file's bucket (raw), falling back to the shared bucket on any miss/error. */
+async function bucketForFile(
+  db: ReturnType<typeof getDb>,
+  fileId: string,
+  projectId: string,
+  fallback: string,
+): Promise<string> {
+  if (bucketColState === 'unavailable') return fallback;
+  try {
+    const res = (await db.execute(
+      drizzleSql`select bucket from project_files where id = ${fileId} and project_id = ${projectId} limit 1`,
+    )) as unknown;
+    const rows = Array.isArray(res) ? res : ((res as { rows?: unknown[] })?.rows ?? []);
+    const b = (rows[0] as { bucket?: unknown } | undefined)?.bucket;
+    return typeof b === 'string' && b.length > 0 ? b : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -171,6 +225,29 @@ export async function presignUpload(input: PresignUploadInput): Promise<PresignU
     );
   }
 
+  // Decide the destination bucket. Default = legacy shared bucket. Only switch to
+  // the project's own bucket if the bucket column is usable AND minio admin is
+  // configured AND provisioning succeeds — otherwise fall back to shared.
+  const colReady = await ensureFileBucketColumn(db);
+  let targetBucket = cfg.bucket;
+  if (colReady && isMinioAdminConfigured()) {
+    const perProject = bucketNameFor(input.projectId);
+    try {
+      if (!provisionedBuckets.has(perProject)) {
+        await ensureBucket(perProject); // creates bucket + enables versioning (idempotent)
+        await setRecoveryLifecycle(perProject, TIERS[tier].storageRecoveryDays);
+        provisionedBuckets.add(perProject);
+      }
+      targetBucket = perProject;
+    } catch (err) {
+      log.warn('storage_per_project_provision_failed', {
+        projectId: input.projectId,
+        err: String(err).slice(0, 200),
+      });
+      targetBucket = cfg.bucket; // fail safe
+    }
+  }
+
   const inserted = await db
     .insert(projectFiles)
     .values({
@@ -186,10 +263,24 @@ export async function presignUpload(input: PresignUploadInput): Promise<PresignU
   const file = inserted[0];
   if (!file) throw new Error('file row insert returned nothing');
 
+  // Record which bucket this object lives in (raw — the column isn't in the
+  // drizzle schema). If we can't record it, upload to the shared bucket instead
+  // so download/delete (which fall back to shared) can always find it.
+  if (colReady && targetBucket !== cfg.bucket) {
+    try {
+      await db.execute(
+        drizzleSql`update project_files set bucket = ${targetBucket} where id = ${fileId}`,
+      );
+    } catch (err) {
+      log.warn('storage_bucket_record_failed', { fileId, err: String(err).slice(0, 200) });
+      targetBucket = cfg.bucket;
+    }
+  }
+
   const uploadUrl = presignS3Url({
     endpoint: cfg.publicEndpoint,
     region: cfg.region,
-    bucket: cfg.bucket,
+    bucket: targetBucket,
     key: objectKey,
     method: 'PUT',
     accessKey: cfg.accessKey,
@@ -218,10 +309,12 @@ export async function presignDownload(
 ): Promise<PresignDownloadResult> {
   const file = await getFile(fileId, projectId);
   const cfg = requireStorageEnv();
+  const db = getDb();
+  const bucket = await bucketForFile(db, fileId, projectId, cfg.bucket);
   const downloadUrl = presignS3Url({
     endpoint: cfg.publicEndpoint,
     region: cfg.region,
-    bucket: cfg.bucket,
+    bucket,
     key: file.objectKey,
     method: 'GET',
     accessKey: cfg.accessKey,
@@ -240,6 +333,7 @@ export async function deleteFile(fileId: string, projectId: string): Promise<Pro
   // tied to this row so it'll never be reissued — a future janitor can
   // sweep orphaned objects safely.
   const db = getDb();
+  const bucket = await bucketForFile(db, file.id, projectId, cfg.bucket);
   await db
     .update(projectFiles)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
@@ -250,7 +344,7 @@ export async function deleteFile(fileId: string, projectId: string): Promise<Pro
   const internalDeleteUrl = presignS3Url({
     endpoint: cfg.endpoint,
     region: cfg.region,
-    bucket: cfg.bucket,
+    bucket,
     key: file.objectKey,
     method: 'DELETE',
     accessKey: cfg.accessKey,
