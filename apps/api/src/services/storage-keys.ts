@@ -105,7 +105,7 @@ export async function listStorageKeys(projectId: string): Promise<StorageKeyReco
 export async function createStorageKey(input: {
   projectId: string;
   name: string;
-  createdBy: string;
+  createdBy: string | null;
   publicEndpoint: string;
 }): Promise<CreatedStorageKey> {
   if (!isMinioAdminConfigured()) {

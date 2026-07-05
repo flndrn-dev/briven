@@ -3,7 +3,16 @@ import { z } from 'zod';
 
 import { runInProjectDatabase } from '../db/data-plane.js';
 import type { McpKeyScope } from '../db/schema.js';
+import { env } from '../env.js';
 import { audit } from './audit.js';
+import {
+  deleteFile,
+  listFiles,
+  presignDownload,
+  presignUpload,
+  setFilePublic,
+} from './storage.js';
+import { createStorageKey } from './storage-keys.js';
 import {
   STUDIO_COLUMN_TYPES,
   createTable,
@@ -11,6 +20,7 @@ import {
   insertRow,
   listProjectTables,
 } from './studio.js';
+import { TIERS, getProjectTier } from './tiers.js';
 
 /**
  * B Phase 5 / mcp.briven.tech — the MCP tool set.
@@ -245,6 +255,167 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         rowCount: Math.min(rows.length, QUERY_ROW_CAP),
         truncated,
         rows: truncated ? rows.slice(0, QUERY_ROW_CAP) : rows,
+      });
+    },
+  );
+
+  /* ── storage tools — per-project object storage, bound to this key ──── */
+
+  server.registerTool(
+    'storage_list_files',
+    {
+      title: 'List storage files',
+      description:
+        'List the files in your project storage (id, name, content type, size, ' +
+        'timestamps). Deleted files are excluded.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      await auditCall('storage_list_files', {});
+      const files = await listFiles(ctx.projectId);
+      return jsonResult({ files });
+    },
+  );
+
+  server.registerTool(
+    'storage_usage',
+    {
+      title: 'Storage usage',
+      description:
+        'Report your project storage usage: bytes used, file count, tier, and the ' +
+        'tier byte cap.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      await auditCall('storage_usage', {});
+      const files = await listFiles(ctx.projectId);
+      const usedBytes = files.reduce((sum, f) => sum + Number(f.sizeBytes), 0);
+      const fileCount = files.length;
+      const tier = (await getProjectTier(ctx.projectId)) ?? 'free';
+      const capBytes = TIERS[tier].storageBytes;
+      return jsonResult({ usedBytes, capBytes, fileCount, tier });
+    },
+  );
+
+  server.registerTool(
+    'storage_upload_url',
+    {
+      title: 'Get an upload URL',
+      description:
+        'Reserve a file and get a presigned upload URL. You then PUT the raw bytes ' +
+        'directly to `uploadUrl`, sending every header in `requiredHeaders` — the ' +
+        'bytes never pass through this tool. The URL expires after `expiresInSec`.',
+      inputSchema: {
+        name: z.string().describe('File name (no forward slash)'),
+        contentType: z.string().describe("MIME type, e.g. 'image/png'"),
+        sizeBytes: z.number().describe('Exact byte size of the file you will upload'),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ name, contentType, sizeBytes }) => {
+      await auditCall('storage_upload_url', { name });
+      const result = await presignUpload({
+        projectId: ctx.projectId,
+        name,
+        contentType,
+        sizeBytes,
+        uploadedBy: null,
+      });
+      return jsonResult({
+        fileId: result.file.id,
+        uploadUrl: result.uploadUrl,
+        requiredHeaders: result.requiredHeaders,
+        expiresInSec: result.expiresInSec,
+      });
+    },
+  );
+
+  server.registerTool(
+    'storage_download_url',
+    {
+      title: 'Get a download URL',
+      description:
+        'Get a presigned download URL for one of your project files. Fetch the bytes ' +
+        'directly from `downloadUrl`; it expires after `expiresInSec`.',
+      inputSchema: { fileId: z.string().describe('File id in your project') },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ fileId }) => {
+      await auditCall('storage_download_url', { fileId });
+      const result = await presignDownload(fileId, ctx.projectId);
+      return jsonResult({
+        downloadUrl: result.downloadUrl,
+        expiresInSec: result.expiresInSec,
+      });
+    },
+  );
+
+  server.registerTool(
+    'storage_delete_file',
+    {
+      title: 'Delete a storage file',
+      description:
+        'Delete one file from your project storage. Returns the deleted file id.',
+      inputSchema: { fileId: z.string().describe('File id in your project') },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ fileId }) => {
+      await auditCall('storage_delete_file', { fileId });
+      await deleteFile(fileId, ctx.projectId);
+      return jsonResult({ deleted: true, fileId });
+    },
+  );
+
+  server.registerTool(
+    'storage_make_public',
+    {
+      title: 'Make a file public or private',
+      description:
+        'Flip a file between public and private serving. When public, it is served ' +
+        'at the returned `url`; when private, `url` is null.',
+      inputSchema: {
+        fileId: z.string().describe('File id in your project'),
+        public: z.boolean().describe('true = publicly served, false = private'),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ fileId, public: publicFlag }) => {
+      await auditCall('storage_make_public', { fileId, public: publicFlag });
+      await setFilePublic(fileId, ctx.projectId, publicFlag);
+      return jsonResult({
+        fileId,
+        public: publicFlag,
+        url: publicFlag
+          ? `https://media.briven.tech/media/${ctx.projectId}/${fileId}`
+          : null,
+      });
+    },
+  );
+
+  server.registerTool(
+    'storage_mint_key',
+    {
+      title: 'Mint an S3 storage key',
+      description:
+        'Mint a bucket-scoped S3 access key for your project storage, usable in any ' +
+        'S3 tool. The secret is shown only once — save it now.',
+      inputSchema: { name: z.string().describe('A label for this key') },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ name }) => {
+      await auditCall('storage_mint_key', { name });
+      const result = await createStorageKey({
+        projectId: ctx.projectId,
+        name,
+        createdBy: null,
+        publicEndpoint: env.BRIVEN_MINIO_PUBLIC_ENDPOINT ?? '',
+      });
+      return jsonResult({
+        accessKey: result.accessKey,
+        secretKey: result.secretKey,
+        endpoint: result.endpoint,
+        bucket: result.bucket,
+        note: 'the secret is shown only once',
       });
     },
   );
