@@ -1,3 +1,4 @@
+import { env } from '../env.js';
 import { sendTenantEmail } from '../lib/email.js';
 import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
 
@@ -12,14 +13,21 @@ import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
  *
  * Sender resolution (per BUILD_PLAN.md §8):
  *   - tenant has verified `senderDomain`  → `"${senderName}" <noreply@${senderDomain}>`
- *   - no verified domain                  → `briven auth <noreply@auth.briven.tech>`
+ *   - no verified domain                  → `briven auth <noreply@${BRIVEN_DOMAIN}>`
+ *
+ * The fallback domain MUST be a sender verified with the email provider
+ * (mittera.eu / SMTP). It tracks `BRIVEN_DOMAIN` (briven.tech) — the SAME
+ * verified address the control-plane sender uses (lib/email.ts `fromAddress`)
+ * — NOT a bare `auth.` subdomain. The old `auth.briven.tech` fallback was
+ * never verified in mittera, so every tenant send on the fallback was
+ * rejected instantly with a 500 (broke Konnos magic-link, 2026-07-05).
  *
  * Templates are dark-themed by default to match the briven brand. Every
  * template includes a "you didn't request this" disclaimer to soften the
  * impact of a misdirected send.
  */
 
-const FALLBACK_DOMAIN = 'auth.briven.tech';
+const FALLBACK_DOMAIN = env.BRIVEN_DOMAIN ?? 'briven.tech';
 
 // ─── pure HTML escape (no DOM, no library) ──────────────────────────────
 

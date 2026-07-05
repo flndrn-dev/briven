@@ -128,7 +128,7 @@ export default async function AuthOverviewPage({
             ['sender name', state.config.branding.senderName],
             [
               'sender domain',
-              state.config.branding.senderDomain ?? 'noreply@auth.briven.tech (fallback)',
+              state.config.branding.senderDomain ?? 'noreply@briven.tech (fallback)',
             ],
             [
               'primary color',
