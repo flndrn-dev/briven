@@ -1,11 +1,17 @@
 import Link from 'next/link';
 
 import { apiJson } from '../../../../../../../lib/api';
-import { ProviderToggles, type AuthConfig } from './provider-toggles';
+import {
+  ProviderToggles,
+  type AuthConfig,
+  type SocialSecretStatus,
+} from './provider-toggles';
 
 interface AuthStateResponse {
   enabled: boolean;
   config: AuthConfig;
+  /** Presence-only (booleans) — which built-in providers have a secret on file. */
+  secretSet?: SocialSecretStatus;
 }
 
 export const metadata = { title: 'auth · providers' };
@@ -52,7 +58,11 @@ export default async function AuthProvidersPage({
         </p>
       </header>
 
-      <ProviderToggles projectId={id} initial={state.config} />
+      <ProviderToggles
+        projectId={id}
+        initial={state.config}
+        initialSecrets={state.secretSet ?? {}}
+      />
     </section>
   );
 }

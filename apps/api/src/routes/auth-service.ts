@@ -42,10 +42,13 @@ import {
   removeOrigin,
 } from '../services/auth-origin-allowlist.js';
 import {
+  SOCIAL_PROVIDER_KEYS,
   getAuthConfig,
   isAuthEnabled,
+  isSocialProviderKey,
   updateAuthConfig,
 } from '../services/tenant-config-store.js';
+import { hasTenantSecret, setTenantSecret } from '../services/tenant-secrets.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 
 /**
@@ -349,7 +352,18 @@ authServiceRouter.get(
       isAuthEnabled(projectId),
       getAuthConfig(projectId),
     ]);
-    return c.json({ enabled, config });
+    // Surface secret PRESENCE only (booleans) so the UI can render a
+    // "secret set ✓" indicator. Never the ciphertext or plaintext —
+    // `hasTenantSecret` is a pure existence probe and does not decrypt.
+    const presence = await Promise.all(
+      SOCIAL_PROVIDER_KEYS.map((key) =>
+        hasTenantSecret(projectId, 'auth', `${key}_client_secret`),
+      ),
+    );
+    const secretSet = Object.fromEntries(
+      SOCIAL_PROVIDER_KEYS.map((key, i) => [key, presence[i]]),
+    ) as Record<(typeof SOCIAL_PROVIDER_KEYS)[number], boolean>;
+    return c.json({ enabled, config, secretSet });
   },
 );
 
@@ -420,6 +434,77 @@ authServiceRouter.patch(
     });
 
     return c.json({ config: next });
+  },
+);
+
+/** Max accepted client-secret length. Real OAuth secrets are well under this
+ * (Google ~24, GitHub ~40, Microsoft ~40); the cap just rejects garbage. */
+const MAX_CLIENT_SECRET_LEN = 500;
+
+/**
+ * Set (or replace) one built-in social provider's OAuth **client secret**
+ * (BUILD_PLAN.md §6 Providers panel). The public client id travels through
+ * the plain config PATCH above; the secret travels HERE, into the encrypted
+ * tenant-secret store, so it never lands in the config blob or an audit log.
+ *
+ * Admin-gated exactly like the config PATCH. Write-only by design: the value
+ * is never returned by this or any other endpoint — the UI only ever learns
+ * presence via `secretSet` on the config GET.
+ *
+ * On success the cached Better Auth instance is evicted so the next sign-in
+ * rebuilds with the now-complete (client id + secret) provider.
+ */
+authServiceRouter.put(
+  '/v1/projects/:id/auth/providers/:provider/secret',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const provider = c.req.param('provider');
+    if (!isSocialProviderKey(provider)) {
+      return c.json({ code: 'validation_failed', message: 'unknown provider' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = (await c.req.json().catch(() => null)) as { secret?: unknown } | null;
+    if (body === null) {
+      return c.json({ code: 'validation_failed', message: 'body must be JSON' }, 400);
+    }
+    const secret = body.secret;
+    if (typeof secret !== 'string' || secret.length === 0) {
+      return c.json(
+        { code: 'validation_failed', message: 'secret must be a non-empty string' },
+        400,
+      );
+    }
+    if (secret.length > MAX_CLIENT_SECRET_LEN) {
+      return c.json(
+        { code: 'validation_failed', message: 'secret too long' },
+        400,
+      );
+    }
+
+    await setTenantSecret(projectId, 'auth', `${provider}_client_secret`, secret, actor.id);
+
+    // Evict the cached instance so the next sign-in rebuilds with the
+    // freshly-complete provider (client id + secret both present now).
+    await invalidateAuthInstance(projectId);
+
+    const cfIp = c.req.header('cf-connecting-ip') ?? null;
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.provider.secret.set',
+      ipHash: cfIp ? hashIp(cfIp) : null,
+      userAgent: c.req.header('user-agent') ?? null,
+      // Record WHICH provider was rotated — NEVER the secret value or length.
+      metadata: { provider },
+    });
+
+    return c.json({ ok: true });
   },
 );
 

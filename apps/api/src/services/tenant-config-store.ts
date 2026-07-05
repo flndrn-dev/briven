@@ -303,13 +303,21 @@ export async function isAuthEnabled(projectId: string): Promise<boolean> {
  * map 1:1 to the secret name convention `<key>_client_secret` and the Better
  * Auth `provider` value used to start a sign-in.
  */
-const SOCIAL_PROVIDER_KEYS = [
+export const SOCIAL_PROVIDER_KEYS = [
   'konnos',
   'google',
   'github',
   'discord',
   'microsoft',
 ] as const;
+
+/** One social provider key — the `<key>` half of `<key>_client_secret`. */
+export type SocialProviderKey = (typeof SOCIAL_PROVIDER_KEYS)[number];
+
+/** Type guard: is `v` one of the built-in social provider keys? */
+export function isSocialProviderKey(v: unknown): v is SocialProviderKey {
+  return typeof v === 'string' && (SOCIAL_PROVIDER_KEYS as readonly string[]).includes(v);
+}
 
 /**
  * Does a custom-OIDC entry have a usable endpoint set — an issuer OR all three
