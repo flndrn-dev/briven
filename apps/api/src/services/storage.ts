@@ -5,6 +5,7 @@ import { getDb } from '../db/client.js';
 import { projectFiles, type ProjectFile } from '../db/schema.js';
 import { env } from '../env.js';
 import { presignS3Url } from '../lib/s3-presign.js';
+import { getProjectTier, TIERS, TierLimitExceeded } from './tiers.js';
 
 /**
  * Per-project object storage. Each project's files live under the prefix
@@ -149,6 +150,27 @@ export async function presignUpload(input: PresignUploadInput): Promise<PresignU
   const objectKey = `projects/${input.projectId}/${fileId}`;
 
   const db = getDb();
+
+  // Tier storage cap — hard-block over-quota uploads (M2). Sums this project's
+  // live file bytes; refuses the presign if the new file would bust the tier cap.
+  // Existing files stay readable — only the new upload is blocked. (Kept recovery
+  // versions aren't counted yet; that arrives with the per-project bucket meter.)
+  const tier = (await getProjectTier(input.projectId)) ?? 'free';
+  const cap = TIERS[tier].storageBytes;
+  const [usageRow] = await db
+    .select({
+      used: drizzleSql<number>`coalesce(sum(cast(${projectFiles.sizeBytes} as bigint)), 0)::bigint`,
+    })
+    .from(projectFiles)
+    .where(and(eq(projectFiles.projectId, input.projectId), isNull(projectFiles.deletedAt)));
+  const used = Number(usageRow?.used ?? 0);
+  if (used + input.sizeBytes > cap) {
+    throw new TierLimitExceeded(
+      `storage full: ${used} + ${input.sizeBytes} bytes exceeds the '${tier}' tier cap of ${cap}`,
+      { projectId: input.projectId, tier, used, incoming: input.sizeBytes, cap },
+    );
+  }
+
   const inserted = await db
     .insert(projectFiles)
     .values({
