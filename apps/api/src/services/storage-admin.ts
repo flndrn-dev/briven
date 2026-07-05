@@ -1,10 +1,11 @@
 import { ValidationError } from '@briven/shared';
-import { eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { runInProjectDatabase } from '../db/data-plane.js';
 import { projectFiles, projects, storageKeys, tierStorageCaps, type ProjectTier } from '../db/schema.js';
 import { log } from '../lib/logger.js';
+import { listProjectsForUser } from './projects.js';
 import { TIERS } from './tiers.js';
 
 /**
@@ -290,6 +291,77 @@ export async function listObjectStorageUsage(): Promise<readonly ObjectStorageUs
       usedBytes,
       capBytes,
       recoveryDays: TIERS[p.tier].storageRecoveryDays,
+      keyCount: keysByProject.get(p.id) ?? 0,
+      over: usedBytes > capBytes,
+    };
+  });
+}
+
+/* ── Per-user object-storage usage (dashboard "S3 bucket" home) ──────────── */
+
+export interface MyStorageUsage {
+  readonly id: string;
+  readonly name: string;
+  readonly tier: ProjectTier;
+  /** SUM of non-deleted project_files.size_bytes (TEXT → number in SQL). */
+  readonly usedBytes: number;
+  /** Tier storage byte cap (TIERS[tier].storageBytes). */
+  readonly capBytes: number;
+  /** Count of active (not-revoked) storage_keys for the project. */
+  readonly keyCount: number;
+  readonly over: boolean;
+}
+
+/**
+ * The signed-in user's object-storage usage across every project they belong
+ * to — the cross-project "S3 bucket" dashboard home. The user-scoped mirror of
+ * listObjectStorageUsage: same two grouped aggregate queries (file bytes +
+ * active key count), but restricted to the caller's own project ids via
+ * listProjectsForUser (org- OR project-scoped membership). Never leaks another
+ * user's project. Returns [] when the user has no projects.
+ */
+export async function listMyStorageUsage(
+  userId: string,
+): Promise<readonly MyStorageUsage[]> {
+  const mine = await listProjectsForUser(userId);
+  if (mine.length === 0) return [];
+  const ids = mine.map((p) => p.id);
+  const db = getDb();
+
+  // Grouped SUM of non-deleted file bytes per project, restricted to the
+  // user's project ids (size_bytes is TEXT → cast to bigint in SQL).
+  const byteRows = await db
+    .select({
+      projectId: projectFiles.projectId,
+      usedBytes: sql<number>`coalesce(sum(cast(${projectFiles.sizeBytes} as bigint)), 0)::bigint`,
+    })
+    .from(projectFiles)
+    .where(and(isNull(projectFiles.deletedAt), inArray(projectFiles.projectId, ids)))
+    .groupBy(projectFiles.projectId);
+  const bytesByProject = new Map<string, number>();
+  for (const r of byteRows) bytesByProject.set(r.projectId, Number(r.usedBytes) || 0);
+
+  // Grouped count of active (not-revoked) storage keys per project.
+  const keyRows = await db
+    .select({
+      projectId: storageKeys.projectId,
+      keyCount: sql<number>`count(*)::int`,
+    })
+    .from(storageKeys)
+    .where(and(isNull(storageKeys.revokedAt), inArray(storageKeys.projectId, ids)))
+    .groupBy(storageKeys.projectId);
+  const keysByProject = new Map<string, number>();
+  for (const r of keyRows) keysByProject.set(r.projectId, Number(r.keyCount) || 0);
+
+  return mine.map((p) => {
+    const usedBytes = bytesByProject.get(p.id) ?? 0;
+    const capBytes = TIERS[p.tier].storageBytes;
+    return {
+      id: p.id,
+      name: p.name,
+      tier: p.tier,
+      usedBytes,
+      capBytes,
       keyCount: keysByProject.get(p.id) ?? 0,
       over: usedBytes > capBytes,
     };

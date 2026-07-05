@@ -20,6 +20,7 @@ import {
 } from '../services/me.js';
 import { listOrgsForUser } from '../services/orgs.js';
 import { listProjectsForUser } from '../services/projects.js';
+import { listMyStorageUsage } from '../services/storage-admin.js';
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
@@ -91,6 +92,16 @@ meRouter.get('/v1/me/projects', requireAuth(), async (c) => {
     orgName: orgsById.get(p.orgId)?.name ?? null,
   }));
   return c.json({ projects });
+});
+
+// Cross-project object-storage ("S3 bucket") usage for the dashboard home:
+// every project the caller belongs to, with its file bytes used vs tier cap
+// and active storage-key count. User-scoped via listMyStorageUsage — only the
+// caller's own projects are ever returned.
+meRouter.get('/v1/me/storage', requireAuth(), async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ code: 'unauthorized', message: 'authentication required' }, 401);
+  return c.json({ usage: await listMyStorageUsage(user.id) });
 });
 
 meRouter.patch('/v1/me', requireAuth(), async (c) => {

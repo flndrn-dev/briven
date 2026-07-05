@@ -8,6 +8,7 @@ import { UserMenuButton } from '../../components/user-menu-button';
 import { ChevronRightIcon, type ChevronRightIconHandle } from '../../components/ui/chevron-right';
 import { CogIcon, type CogIconHandle } from '../../components/ui/cog';
 import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/credit-card';
+import { DatabaseIcon, type DatabaseIconHandle } from '../../components/ui/database';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { LayoutGridIcon, type LayoutGridIconHandle } from '../../components/ui/layout-grid';
 import { type ShieldCheckIconHandle } from '../../components/ui/shield-check';
@@ -45,6 +46,12 @@ const NAV: NavItem[] = [
     match: (p) => p.startsWith('/dashboard/projects'),
   },
   {
+    href: '/dashboard/s3',
+    label: 'S3 bucket',
+    Icon: DatabaseIcon as never,
+    match: (p) => p.startsWith('/dashboard/s3'),
+  },
+  {
     href: '/dashboard/teams',
     label: 'teams',
     Icon: UsersIcon as never,
@@ -72,6 +79,7 @@ type IconHandle =
   | CogIconHandle
   | ShieldCheckIconHandle
   | CreditCardIconHandle
+  | DatabaseIconHandle
   | UsersIconHandle
   | LayoutGridIconHandle;
 

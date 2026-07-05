@@ -13,6 +13,7 @@ import { usePathname } from 'next/navigation';
 const NAV = [
   { href: '/dashboard', label: 'overview' },
   { href: '/dashboard/projects', label: 'projects' },
+  { href: '/dashboard/s3', label: 'S3 bucket' },
   { href: '/dashboard/teams', label: 'teams' },
   { href: '/dashboard/billing', label: 'billing' },
   { href: '/dashboard/settings', label: 'settings' },
