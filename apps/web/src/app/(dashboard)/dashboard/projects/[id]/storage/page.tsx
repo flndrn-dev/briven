@@ -133,11 +133,11 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h2 className="font-mono text-sm text-[var(--color-text)]">storage</h2>
+        <h2 className="font-mono text-sm text-[var(--color-text)]">S3 bucket</h2>
         <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
-          per-project object storage. uploads go directly from the browser to minio via short-lived
-          presigned urls. each project lives under <code>projects/&lt;id&gt;/</code> in the shared
-          bucket — keys are random ulids so they can&apos;t be enumerated.
+          this project&apos;s own private S3 bucket. everything is managed here in the dashboard —
+          uploads and downloads happen through short-lived signed links, so the storage endpoint
+          stays a locked door (no valid link, no access). you never need to touch it directly.
         </p>
       </header>
 
