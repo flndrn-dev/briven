@@ -72,12 +72,7 @@ export default async function AuthUsersPage({
       <header>
         <h2 className="font-mono text-lg tracking-tight">auth · users</h2>
         <p className="mt-1 max-w-2xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          authenticated end-users for this project. emails + raw IPs are
-          never returned by the api (CLAUDE.md §5.1) — you see the domain
-          hint and the first character of the user&apos;s name only. these
-          rows live in your own database under{' '}
-          <code>_briven_auth_users</code>; you can join against them from
-          any other table in your project schema.
+          authenticated end-users for this project.
         </p>
       </header>
 
