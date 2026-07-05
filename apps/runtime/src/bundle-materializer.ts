@@ -78,20 +78,44 @@ export async function materializeIsolate(
 }
 
 function generateEntry(bundle: Bundle): string {
-  const imports = bundle.functionNames
-    .map((n, i) => `import * as fn${i} from './briven/functions/${n}.ts';`)
-    .join('\n');
-  const dispatchAssigns = bundle.functionNames
-    .map((n, i) => `dispatch.${n} = (fn${i} as any).${n} ?? (fn${i} as any).default;`)
+  // Fault isolation: load each function file with its OWN dynamic import()
+  // inside a try/catch, rather than a single static top-level import graph.
+  //
+  // A static `import * as fn from './briven/functions/<bad>.ts'` fails during
+  // __entry.ts's module evaluation if that one file has a bad/unresolvable
+  // import — which happens BEFORE runIsolateLoop() runs, so the isolate never
+  // emits `ready` and EVERY sibling function in the bundle is killed at spawn.
+  //
+  // Dynamic import per function contains the blast radius: a broken file is
+  // captured in `loadErrors` and excluded from `dispatch`, while every healthy
+  // function still loads and the isolate still emits `ready`. Invoking a broken
+  // function later surfaces its real load error (handled in runIsolateLoop).
+  const loadBlocks = bundle.functionNames
+    .map(
+      (n) => `try {
+  const mod = (await import('./briven/functions/${JSON.stringify(n).slice(1, -1)}.ts')) as Record<string, unknown>;
+  const handler = (mod[${JSON.stringify(n)}] ?? mod.default) as
+    | ((ctx: any, args: any) => unknown)
+    | undefined;
+  if (typeof handler === 'function') {
+    dispatch[${JSON.stringify(n)}] = handler;
+  } else {
+    loadErrors[${JSON.stringify(n)}] =
+      'function ${JSON.stringify(n).slice(1, -1)} has no matching or default export';
+  }
+} catch (err) {
+  loadErrors[${JSON.stringify(n)}] = err instanceof Error ? err.message : String(err);
+}`,
+    )
     .join('\n');
   return `// host-generated entry
 import { runIsolateLoop } from './.briven-runtime/loop.ts';
-${imports}
 
 const dispatch: Record<string, (ctx: any, args: any) => unknown> = {};
-${dispatchAssigns}
+const loadErrors: Record<string, string> = {};
+${loadBlocks}
 
-await runIsolateLoop(dispatch, ${JSON.stringify(bundle.deploymentId)});
+await runIsolateLoop(dispatch, ${JSON.stringify(bundle.deploymentId)}, loadErrors);
 `;
 }
 

@@ -475,6 +475,11 @@ export async function runQuery(): Promise<never> {
 export async function runIsolateLoop(
   dispatch: Record<string, (ctx: Ctx, args: unknown) => Promise<unknown> | unknown>,
   deploymentId: string,
+  // Per-function load failures captured by __entry.ts. A function whose file
+  // had a bad import (or no valid export) lands here instead of in `dispatch`;
+  // invoking it surfaces this message rather than a generic "not found". Empty
+  // in the healthy case.
+  loadErrors: Record<string, string> = {},
 ): Promise<void> {
   // Send ready handshake.
   await writeStdout({ type: 'ready', deploymentId });
@@ -516,7 +521,7 @@ export async function runIsolateLoop(
         // it concurrently lets the loop keep reading; handleInvoke writes its
         // own result/error frame to stdout when it finishes. The host
         // serialises one invocation per isolate, so at most one is in flight.
-        void handleInvoke(msg as never, dispatch).catch(() => undefined);
+        void handleInvoke(msg as never, dispatch, loadErrors).catch(() => undefined);
       } else if (msg.type === 'query_result') {
         const m = msg as { qid: string; rows?: readonly unknown[]; error?: { code: string; message: string } };
         const pending = pendingQueries.get(m.qid);
@@ -535,12 +540,28 @@ export async function runIsolateLoop(
 async function handleInvoke(
   msg: { requestId: string; functionName: string; args: unknown; auth: AuthContext | null },
   dispatch: Record<string, (ctx: Ctx, args: unknown) => Promise<unknown> | unknown>,
+  loadErrors: Record<string, string> = {},
 ): Promise<void> {
   currentRequestId = msg.requestId;
   const started = performance.now();
   const fn = dispatch[msg.functionName];
+  // A function excluded from `dispatch` because its file failed to load gets a
+  // structured import error carrying the real cause, not a generic not-found.
+  const loadError = loadErrors[msg.functionName];
   try {
-    if (!fn) throw new Error(`function not found: ${msg.functionName}`);
+    if (!fn) {
+      if (loadError !== undefined) {
+        await writeStdout({
+          type: 'error',
+          requestId: msg.requestId,
+          code: 'import_blocked',
+          message: `function ${msg.functionName} failed to load: ${loadError}`,
+          durationMs: Math.round(performance.now() - started),
+        });
+        return;
+      }
+      throw new Error(`function not found: ${msg.functionName}`);
+    }
     const ctx = makeCtx(msg.auth, msg.requestId);
     const value = await fn(ctx, msg.args);
     const durationMs = Math.round(performance.now() - started);

@@ -63,9 +63,12 @@ describe('bundle-materializer', () => {
     expect(result.importMapPath).toBe(join(result.tmpDir, 'import-map.json'));
 
     const entryContent = await readFile(result.entryPath, 'utf8');
-    expect(entryContent).toContain("import * as fn0 from './briven/functions/poolStats.ts';");
-    expect(entryContent).toContain('dispatch.poolStats =');
-    expect(entryContent).toContain("runIsolateLoop(dispatch, \"d1\")");
+    // Fault isolation: each function is loaded via its own dynamic import()
+    // wrapped in try/catch, so one bad file can't kill the whole bundle.
+    expect(entryContent).toContain("await import('./briven/functions/poolStats.ts')");
+    expect(entryContent).toContain('dispatch["poolStats"] = handler;');
+    expect(entryContent).toContain('loadErrors["poolStats"]');
+    expect(entryContent).toContain('runIsolateLoop(dispatch, "d1", loadErrors)');
 
     const importMap = JSON.parse(await readFile(result.importMapPath, 'utf8'));
     expect(importMap.imports['@briven/cli/server']).toBe('./.briven-runtime/server.ts');
