@@ -96,7 +96,7 @@ app.use(
     // allowlist falls back to briven-own origins only, never an outage.
     origin: (origin) => resolveCorsOrigin(origin),
     credentials: true,
-    allowHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'x-briven-project-id'],
     exposeHeaders: ['x-request-id'],
   }),
 );
