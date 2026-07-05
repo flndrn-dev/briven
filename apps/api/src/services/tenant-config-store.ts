@@ -2,6 +2,7 @@ import { ValidationError } from '@briven/shared';
 import { z } from 'zod';
 
 import { runInProjectDatabase } from '../db/data-plane.js';
+import { log } from '../lib/logger.js';
 import { hasTenantSecret } from './tenant-secrets.js';
 
 /**
@@ -233,6 +234,20 @@ const META_KEY = 'auth_config';
  * Reads run inside a `runInProjectDatabase` transaction against the
  * project's own DoltGres database. Single-statement read.
  */
+/**
+ * DoltGres (via node-postgres) can hand a `jsonb` column back as a raw JSON
+ * *string* rather than a parsed object. Normalise both shapes so a read never
+ * silently fails on a perfectly-valid stored value.
+ */
+function normaliseJsonb(raw: unknown): unknown {
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export async function getAuthConfig(projectId: string): Promise<AuthConfig> {
   const rows = await runInProjectDatabase<{ value: unknown }[]>(projectId, async (tx) =>
     (await tx.unsafe(
@@ -241,10 +256,16 @@ export async function getAuthConfig(projectId: string): Promise<AuthConfig> {
     )) as { value: unknown }[],
   );
   if (rows.length === 0) return DEFAULT_AUTH_CONFIG;
-  const parsed = authConfigSchema.safeParse(rows[0]!.value);
+  const parsed = authConfigSchema.safeParse(normaliseJsonb(rows[0]!.value));
   if (!parsed.success) {
-    // Stale config row written by an older schema version. Don't fail
-    // the read — fall back to defaults and let the next write fix it.
+    // A stored row exists but doesn't match the current schema (older shape,
+    // or unparseable). Fall back to defaults so the read never throws — but
+    // LOG it, because this silent fallback is exactly what hid a real bug
+    // where valid saved config was read back as a string and discarded.
+    log.warn('auth_config_parse_failed_fallback_default', {
+      projectId,
+      issues: parsed.error.issues.slice(0, 3),
+    });
     return DEFAULT_AUTH_CONFIG;
   }
   return parsed.data;
@@ -262,20 +283,24 @@ export async function updateAuthConfig(
   const current = await getAuthConfig(projectId);
   const next = mergeAuthConfig(current, patch);
   await runInProjectDatabase(projectId, async (tx) => {
-    // DoltGres has no `ON CONFLICT ... DO UPDATE` (the `excluded` pseudo-table
-    // is unsupported). Emulate the upsert manually: insert if absent, then
-    // unconditionally update. Both run inside the same transaction so the
-    // pair is atomic, giving identical set-or-overwrite behaviour.
-    await tx.unsafe(
-      `INSERT INTO "_briven_meta" (key, value)
-       VALUES ($1, $2::jsonb)
-       ON CONFLICT (key) DO NOTHING`,
-      [META_KEY, JSON.stringify(next)],
-    );
-    await tx.unsafe(
-      `UPDATE "_briven_meta" SET value = $2::jsonb WHERE key = $1`,
-      [META_KEY, JSON.stringify(next)],
-    );
+    // DoltGres upsert WITHOUT `ON CONFLICT` (its `excluded` pseudo-table is
+    // unsupported and ON CONFLICT behaviour has been unreliable): probe for an
+    // existing row, then UPDATE or INSERT. Atomic within the BEGIN/COMMIT.
+    const existing = (await tx.unsafe(
+      `SELECT 1 FROM "_briven_meta" WHERE key = $1 LIMIT 1`,
+      [META_KEY],
+    )) as unknown[];
+    if (existing.length > 0) {
+      await tx.unsafe(
+        `UPDATE "_briven_meta" SET value = $2::jsonb WHERE key = $1`,
+        [META_KEY, JSON.stringify(next)],
+      );
+    } else {
+      await tx.unsafe(
+        `INSERT INTO "_briven_meta" (key, value) VALUES ($1, $2::jsonb)`,
+        [META_KEY, JSON.stringify(next)],
+      );
+    }
   });
   return next;
 }
@@ -293,7 +318,7 @@ export async function isAuthEnabled(projectId: string): Promise<boolean> {
     )) as { value: unknown }[],
   );
   if (rows.length === 0) return false;
-  return rows[0]!.value === true;
+  return normaliseJsonb(rows[0]!.value) === true;
 }
 
 // ─── enabled-providers signal (render-gating) ────────────────────────────
