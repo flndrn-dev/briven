@@ -54,14 +54,19 @@ export function DeleteRowButton({ primaryKey, action }: Props) {
         title={confirming ? 'click again to confirm' : 'delete row'}
         className={`rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-wide transition ${
           confirming
-            ? 'bg-[var(--color-text-error)] text-[var(--color-text-inverse)]'
+            ? 'bg-[var(--color-error)] text-[var(--color-text-inverse)] ring-1 ring-[var(--color-error)]'
             : 'border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
         } ${pending ? 'opacity-60' : ''}`}
       >
-        {pending ? '…' : confirming ? 'confirm?' : 'delete'}
+        {pending ? '…' : confirming ? 'confirm delete?' : 'delete'}
       </button>
+      {confirming && !pending ? (
+        <span className="font-mono text-[10px] font-semibold text-[var(--color-error)]">
+          click again to delete
+        </span>
+      ) : null}
       {error ? (
-        <span className="font-mono text-[10px] text-[var(--color-text-error)]" title={error}>
+        <span className="font-mono text-[10px] text-[var(--color-error)]" title={error}>
           {error.slice(0, 60)}
         </span>
       ) : null}
