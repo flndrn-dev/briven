@@ -10,6 +10,8 @@ import { EmptyState } from '../_components/empty-state';
 import { Section } from '../_components/section';
 import { StatCard } from '../_components/stat-card';
 
+import { SetMineToProButton } from './project-actions';
+
 interface AdminProject {
   id: string;
   slug: string;
@@ -42,12 +44,15 @@ export default async function AdminProjectsPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[var(--color-primary)]">
-            <FoldersIcon size={20} />
-          </span>
-          <h1 className="font-mono text-xl tracking-tight">projects</h1>
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[var(--color-primary)]">
+              <FoldersIcon size={20} />
+            </span>
+            <h1 className="font-mono text-xl tracking-tight">projects</h1>
+          </div>
+          <SetMineToProButton apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''} />
         </div>
         <p className="max-w-prose font-mono text-sm text-[var(--color-text-muted)]">
           every project on the platform, with its plan tier and owner. counts come straight from
@@ -96,7 +101,7 @@ export default async function AdminProjectsPage() {
                 <div className="flex flex-col gap-1">
                   <p className="flex flex-wrap items-center gap-2 font-mono text-sm">
                     <Link
-                      href={`/dashboard/projects/${p.id}`}
+                      href={`/admin/projects/${p.id}`}
                       className="hover:text-[var(--color-primary)]"
                     >
                       {p.name}

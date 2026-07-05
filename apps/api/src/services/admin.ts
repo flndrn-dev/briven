@@ -2,7 +2,15 @@ import { NotFoundError, ValidationError } from '@briven/shared';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
-import { auditLogs, orgMembers, organizations, projects, sessions, users } from '../db/schema.js';
+import {
+  auditLogs,
+  orgMembers,
+  organizations,
+  projects,
+  sessions,
+  users,
+  type ProjectTier,
+} from '../db/schema.js';
 import { softDeleteAccount } from './account-deletion.js';
 
 export interface AdminUserRow {
@@ -66,6 +74,96 @@ export async function listProjects(limit = 500): Promise<AdminProjectRow[]> {
     .where(isNull(projects.deletedAt))
     .orderBy(desc(projects.createdAt))
     .limit(limit);
+}
+
+export interface AdminProjectDetail {
+  id: string;
+  slug: string;
+  name: string;
+  orgId: string;
+  tier: ProjectTier;
+  suspendedAt: Date | null;
+  suspendReason: string | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Single-project admin getter — the drill-down counterpart to listProjects.
+ * Includes suspend/delete state so the admin project-detail page can render
+ * the same "suspended"/"deleted" badges the users page shows. Returns null
+ * (not throwing) when no project matches, so the route can emit a clean 404.
+ */
+export async function getProjectForAdmin(projectId: string): Promise<AdminProjectDetail | null> {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      id: projects.id,
+      slug: projects.slug,
+      name: projects.name,
+      orgId: projects.orgId,
+      tier: projects.tier,
+      suspendedAt: projects.suspendedAt,
+      suspendReason: projects.suspendReason,
+      deletedAt: projects.deletedAt,
+      createdAt: projects.createdAt,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Superadmin plan-tier override for ONE project. Returns the previous tier
+ * (so the route can audit old→new) or null when the project doesn't exist.
+ * Does NOT touch the in-process tier cache — the route calls
+ * invalidateTierCache() after so the change takes effect on the next request.
+ */
+export async function setProjectTier(
+  projectId: string,
+  tier: ProjectTier,
+): Promise<{ previousTier: ProjectTier } | null> {
+  const db = getDb();
+  const [before] = await db
+    .select({ tier: projects.tier })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!before) return null;
+  await db.update(projects).set({ tier, updatedAt: new Date() }).where(eq(projects.id, projectId));
+  return { previousTier: before.tier };
+}
+
+/**
+ * Bulk plan-tier override for EVERY non-deleted project the calling admin
+ * OWNS. Ownership is strict: a project is "owned" only when its org was
+ * created by this admin (organizations.created_by = ownerUserId). The WHERE
+ * clause below can never reach a project in an org the admin didn't create,
+ * so this is safe to expose as a self-service "upgrade all my projects"
+ * action — it is structurally impossible to upgrade someone else's project.
+ * Returns the ids of the projects that were changed so the caller can
+ * invalidate each one's tier cache.
+ */
+export async function setProjectsTierForOwner(
+  ownerUserId: string,
+  tier: ProjectTier,
+): Promise<{ changedProjectIds: string[] }> {
+  const db = getDb();
+  // Orgs this admin literally created — the tightest ownership signal.
+  const ownedOrgs = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(and(eq(organizations.createdBy, ownerUserId), isNull(organizations.deletedAt)));
+  const ownedOrgIds = ownedOrgs.map((o) => o.id);
+  if (ownedOrgIds.length === 0) return { changedProjectIds: [] };
+
+  const changed = await db
+    .update(projects)
+    .set({ tier, updatedAt: new Date() })
+    .where(and(inArray(projects.orgId, ownedOrgIds), isNull(projects.deletedAt)))
+    .returning({ id: projects.id });
+  return { changedProjectIds: changed.map((r) => r.id) };
 }
 
 export async function suspendUser(userId: string): Promise<void> {

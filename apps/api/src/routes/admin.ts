@@ -19,13 +19,17 @@ import {
   adminStats,
   deleteUserAsAdmin,
   forceSignOut,
+  getProjectForAdmin,
   grantAdmin,
   listProjects,
   listUsers,
   revokeAdmin,
+  setProjectsTierForOwner,
+  setProjectTier,
   suspendUser,
   unsuspendUser,
 } from '../services/admin.js';
+import { invalidateTierCache } from '../services/tiers.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
 import { listDeploys } from '../services/deploy-history.js';
 import { getHealthSummary } from '../services/platform-health.js';
@@ -149,6 +153,31 @@ adminRouter.get('/v1/admin/users/:id', async (c) => {
 adminRouter.get('/v1/admin/projects', async (c) => {
   const rows = await listProjects(500);
   return c.json({ projects: rows });
+});
+
+/**
+ * Single-project admin drill-down. Contract with apps/web/(admin)/admin/
+ * projects/[id]. Returns the control-plane project row incl. tier + suspend/
+ * delete state so the detail page can render the same badges the users page
+ * does. 404s cleanly when no project matches so the page shows a not-found
+ * state rather than an error.
+ */
+adminRouter.get('/v1/admin/projects/:id', async (c) => {
+  const project = await getProjectForAdmin(c.req.param('id'));
+  if (!project) return c.json({ code: 'not_found' }, 404);
+  return c.json({
+    project: {
+      id: project.id,
+      slug: project.slug,
+      name: project.name,
+      ownerId: project.orgId,
+      tier: project.tier,
+      suspendedAt: project.suspendedAt ? project.suspendedAt.toISOString() : null,
+      suspendReason: project.suspendReason,
+      deletedAt: project.deletedAt ? project.deletedAt.toISOString() : null,
+      createdAt: project.createdAt.toISOString(),
+    },
+  });
 });
 
 /**
@@ -637,6 +666,64 @@ adminRouter.post('/v1/admin/projects/unsuspend', async (c) => {
     userAgent: c.req.header('user-agent') ?? null,
   });
   return c.json({ projectId: parsed.data.projectId, unsuspended: ok });
+});
+
+/* ─── admin: project plan-tier override ─────────────────────────────── */
+
+const projectTierBody = z.object({ tier: tierParam });
+
+/**
+ * Superadmin override of a single project's plan tier. Writes
+ * control-plane projects.tier, drops the in-process tier cache so the new
+ * limits apply on the very next request (not after the 60s TTL), and audits
+ * old→new. Used by the admin project-detail tier control.
+ */
+adminRouter.post('/v1/admin/projects/:id/tier', async (c) => {
+  const actor = c.get('user')!;
+  const projectId = c.req.param('id');
+  const parsed = projectTierBody.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const result = await setProjectTier(projectId, parsed.data.tier);
+  if (!result) return c.json({ code: 'not_found' }, 404);
+  invalidateTierCache(projectId);
+  await audit({
+    actorId: actor.id,
+    projectId,
+    action: 'admin.project.tier.update',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { from: result.previousTier, to: parsed.data.tier },
+  });
+  return c.json({ projectId, tier: parsed.data.tier });
+});
+
+/**
+ * Bulk set the plan tier for EVERY non-deleted project the CALLING admin
+ * owns — powers the "set all my projects to pro" button. Ownership is
+ * scoped strictly in the service to orgs the admin created
+ * (organizations.created_by = actor.id), so it can never touch another
+ * user's projects. Invalidates each changed project's tier cache and audits
+ * once with { tier, count }.
+ */
+adminRouter.post('/v1/admin/projects/set-mine-tier', async (c) => {
+  const actor = c.get('user')!;
+  const parsed = projectTierBody.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const { changedProjectIds } = await setProjectsTierForOwner(actor.id, parsed.data.tier);
+  for (const id of changedProjectIds) invalidateTierCache(id);
+  await audit({
+    actorId: actor.id,
+    projectId: null,
+    action: 'admin.project.tier.bulk_update',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { tier: parsed.data.tier, count: changedProjectIds.length },
+  });
+  return c.json({ updated: changedProjectIds.length });
 });
 
 /**
