@@ -13,6 +13,7 @@ interface ProjectFile {
   sizeBytes: string;
   uploadedBy: string | null;
   createdAt: string;
+  deletedAt?: string | null;
 }
 
 interface FilesResult {
@@ -43,11 +44,16 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
   const { id } = await params;
 
   let files: ProjectFile[] = [];
+  let deleted: ProjectFile[] = [];
   let storageKeys: StorageKeyRow[] = [];
   let notConfigured = false;
   try {
     const result = await apiJson<FilesResult>(`/v1/projects/${id}/files`);
     files = result.files;
+    const deletedResult = await apiJson<FilesResult>(
+      `/v1/projects/${id}/files/deleted`,
+    ).catch(() => ({ files: [] as ProjectFile[] }));
+    deleted = deletedResult.files;
     const keysResult = await apiJson<{ keys: StorageKeyRow[] }>(
       `/v1/projects/${id}/storage-keys`,
     ).catch(() => ({ keys: [] as StorageKeyRow[] }));
@@ -70,6 +76,18 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(body || `delete failed: ${res.status}`);
+    }
+    revalidatePath(`/dashboard/projects/${id}/storage`);
+  }
+
+  async function restore(formData: FormData) {
+    'use server';
+    const { id } = await params;
+    const fileId = String(formData.get('fileId') ?? '');
+    const res = await apiFetch(`/v1/projects/${id}/files/${fileId}/restore`, { method: 'POST' });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(body?.message || `restore failed: ${res.status}`);
     }
     revalidatePath(`/dashboard/projects/${id}/storage`);
   }
@@ -167,11 +185,67 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
             )}
           </section>
 
+          {deleted.length > 0 ? (
+            <section className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+                  recently deleted ({deleted.length})
+                </h3>
+              </div>
+              <p className="font-mono text-xs text-[var(--color-text-muted)]">
+                deleted files can be restored within your plan&apos;s recovery window (7 / 30 / 90
+                days).
+              </p>
+              <ul className="flex flex-col gap-2">
+                {deleted.map((f) => (
+                  <li
+                    key={f.id}
+                    className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-mono text-sm text-[var(--color-text)]">
+                        {f.name}
+                      </p>
+                      <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
+                        {formatBytes(Number(f.sizeBytes))}
+                        {f.deletedAt ? ` · deleted ${timeAgo(f.deletedAt)}` : null}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <form action={restore}>
+                        <input type="hidden" name="fileId" value={f.id} />
+                        <button
+                          type="submit"
+                          className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
+                        >
+                          restore
+                        </button>
+                      </form>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           <StorageKeysPanel projectId={id} initial={storageKeys} />
         </>
       )}
     </div>
   );
+}
+
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'recently';
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function formatBytes(n: number): string {

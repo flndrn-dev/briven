@@ -10,6 +10,7 @@ import { Section } from '../_components/section';
 import { StatCard } from '../_components/stat-card';
 import { EnforcementForm } from './enforcement-form';
 import { ProjectLimitForm } from './project-limit-form';
+import { RecoverFileForm } from './recover-file-form';
 import { TierCapsForm, type Tier, type TierCap } from './tier-caps-form';
 
 interface ProjectStorageUsage {
@@ -345,6 +346,18 @@ export default async function AdminStoragePage() {
             </table>
           </div>
         )}
+
+        <div className="mt-6 flex flex-col gap-3 border-t border-[var(--color-border-subtle)] pt-6">
+          <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
+            recover a deleted file (on request)
+          </h3>
+          <p className="max-w-prose font-mono text-[10px] text-[var(--color-text-muted)]">
+            un-delete a single soft-deleted file within its recovery window — the support path when
+            a customer emails asking to restore file X. paste the project id and file id from their
+            message.
+          </p>
+          <RecoverFileForm apiOrigin={apiOrigin} />
+        </div>
       </Section>
     </div>
   );
