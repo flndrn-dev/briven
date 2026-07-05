@@ -143,7 +143,9 @@ async function runUpdate(
   const rows = await runInProjectDatabase(projectId, async (tx) => {
     await tx.unsafe('SET dolt_transaction_commit = 1');
     return tx.unsafe(
-      `UPDATE "${table}" SET ${setSql} WHERE ${whereSql} RETURNING 1`,
+      // RETURNING * (real columns), NOT `RETURNING 1` — DoltGres rejects a bare
+      // integer literal in RETURNING and throws, which silently failed writes.
+      `UPDATE "${table}" SET ${setSql} WHERE ${whereSql} RETURNING *`,
       params,
     );
   });
@@ -167,7 +169,7 @@ async function runDelete(
     .join(' AND ');
   const rows = await runInProjectDatabase(projectId, async (tx) => {
     await tx.unsafe('SET dolt_transaction_commit = 1');
-    return tx.unsafe(`DELETE FROM "${table}" WHERE ${whereSql} RETURNING 1`, params);
+    return tx.unsafe(`DELETE FROM "${table}" WHERE ${whereSql} RETURNING *`, params);
   });
   return rows.length;
 }
