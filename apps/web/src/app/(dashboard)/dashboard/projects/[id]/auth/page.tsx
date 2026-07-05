@@ -9,6 +9,7 @@ interface AuthConfig {
     magicLink: { enabled: boolean; expiryMinutes: number };
     emailOtp: { enabled: boolean; codeLength: number; expiryMinutes: number };
     passkey: { enabled: boolean };
+    konnos: { enabled: boolean; clientId: string | null };
     google: { enabled: boolean; clientId: string | null };
     github: { enabled: boolean; clientId: string | null };
     discord: { enabled: boolean; clientId: string | null };
@@ -114,6 +115,7 @@ export default async function AuthOverviewPage({
             ['magic link', state.config.providers.magicLink.enabled],
             ['email otp', state.config.providers.emailOtp.enabled],
             ['passkey', state.config.providers.passkey.enabled],
+            ['konnos', state.config.providers.konnos.enabled],
             ['google', state.config.providers.google.enabled],
             ['github', state.config.providers.github.enabled],
             ['discord', state.config.providers.discord.enabled],
