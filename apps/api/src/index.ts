@@ -53,6 +53,7 @@ import { usageRouter } from './routes/usage.js';
 import { incidentsRouter } from './routes/incidents.js';
 import { marketingEventsPublicRouter } from './routes/marketing-events.js';
 import { mcpServerRouter } from './routes/mcp-server.js';
+import { mediaRouter } from './routes/media.js';
 import { contactPublicRouter } from './routes/contact.js';
 import {
   migrationRequestsPublicRouter,
@@ -142,6 +143,12 @@ app.use('/v1/projects/:id/*', blockIfProjectSuspended());
 // logo stays genuinely public (a hosted login page loads it via <img>).
 // See routes/branding-public.ts for why it can't live in authServiceRouter.
 app.route('/', brandingPublicRouter);
+
+// Public media delivery (M3) — serve files marked public from a clean
+// `/media/:projectId/:fileId` path with per-tenant CORS. Mounted here (root
+// level, before the project-auth guards) so it's genuinely public; it lives
+// outside `/v1/projects` so the suspend/auth middleware never touches it.
+app.route('/', mediaRouter);
 
 app.route('/', rootRouter);
 app.route('/', healthRouter);

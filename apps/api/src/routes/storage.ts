@@ -11,9 +11,11 @@ import {
   isStorageConfigured,
   listDeletedFiles,
   listFiles,
+  listPublicFileIds,
   presignDownload,
   presignUpload,
   restoreFile,
+  setFilePublic,
 } from '../services/storage.js';
 import type { AppEnv } from '../types/app-env.js';
 
@@ -128,6 +130,43 @@ storageRouter.get('/v1/projects/:id/files/deleted', async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'viewer');
   return c.json({ files: await listDeletedFiles(project.id) });
+});
+
+storageRouter.get('/v1/projects/:id/files/public-ids', async (c) => {
+  if (!isStorageConfigured()) return notConfigured(c);
+  const user = c.get('user')!;
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'viewer');
+  return c.json({ ids: await listPublicFileIds(project.id) });
+});
+
+storageRouter.post('/v1/projects/:id/files/:fileId/public', async (c) => {
+  if (!isStorageConfigured()) return notConfigured(c);
+  const user = c.get('user')!;
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'developer');
+  const fileId = c.req.param('fileId');
+
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body.public !== 'boolean') {
+    return c.json({ code: 'validation_failed', message: 'body must be { public: boolean }' }, 400);
+  }
+
+  try {
+    const result = await setFilePublic(fileId, project.id, body.public);
+    await audit({
+      actorId: user.id,
+      projectId: project.id,
+      action: 'storage.file.public',
+      ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { fileId, public: body.public },
+    });
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
 });
 
 storageRouter.post('/v1/projects/:id/files/:fileId/restore', async (c) => {

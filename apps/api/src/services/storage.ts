@@ -130,6 +130,124 @@ async function bucketForFile(
   }
 }
 
+// Public-serving flag (M3). Like `bucket`, the `is_public` column on project_files
+// is managed by raw SQL (NOT in the drizzle schema) so it can never break existing
+// selects. Everything here fails safe to "not public".
+let publicColState: 'unknown' | 'ready' | 'unavailable' = 'unknown';
+
+async function ensureFilePublicColumn(db: ReturnType<typeof getDb>): Promise<boolean> {
+  if (publicColState !== 'unknown') return publicColState === 'ready';
+  try {
+    const res = (await db.execute(
+      drizzleSql.raw(
+        "select 1 as present from information_schema.columns where table_name = 'project_files' and column_name = 'is_public' limit 1",
+      ),
+    )) as unknown;
+    const rows = Array.isArray(res) ? res : ((res as { rows?: unknown[] })?.rows ?? []);
+    if (rows.length === 0) {
+      await db.execute(
+        drizzleSql.raw('alter table project_files add column is_public boolean default false'),
+      );
+    }
+    publicColState = 'ready';
+    return true;
+  } catch (err) {
+    log.warn('storage_public_column_unavailable', { err: String(err).slice(0, 200) });
+    publicColState = 'unavailable';
+    return false;
+  }
+}
+
+/**
+ * Mark a file public (or private) for `/media` serving. Verifies the file exists
+ * (via getFile, which throws NotFoundError if missing/deleted), then flips the raw
+ * is_public flag. Throws ValidationError if the public column can't be provisioned.
+ */
+export async function setFilePublic(
+  fileId: string,
+  projectId: string,
+  isPublic: boolean,
+): Promise<{ fileId: string; public: boolean }> {
+  const db = getDb();
+  await getFile(fileId, projectId); // throws NotFoundError if missing/deleted
+  const ready = await ensureFilePublicColumn(db);
+  if (!ready) {
+    throw new ValidationError('public serving is temporarily unavailable');
+  }
+  await db.execute(
+    drizzleSql`update project_files set is_public = ${isPublic} where id = ${fileId} and project_id = ${projectId}`,
+  );
+  return { fileId, public: isPublic };
+}
+
+/** IDs of a project's currently-public, live files. Fail-safe → [] on any error. */
+export async function listPublicFileIds(projectId: string): Promise<string[]> {
+  if (publicColState === 'unavailable') return [];
+  try {
+    const db = getDb();
+    const res = (await db.execute(
+      drizzleSql`select id from project_files where project_id = ${projectId} and is_public = true and deleted_at is null`,
+    )) as unknown;
+    const rows = Array.isArray(res) ? res : ((res as { rows?: unknown[] })?.rows ?? []);
+    return rows
+      .map((r) => (r as { id?: unknown }).id)
+      .filter((id): id is string => typeof id === 'string');
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Open a public object's bytes for the /media route. Returns null (not throws) when
+ * the file isn't public / doesn't exist / storage is unreachable — the route turns
+ * that into a plain 404. Presigns an INTERNAL GET and streams the body straight
+ * through, so the object store credentials never leave the server.
+ */
+export async function openPublicObject(
+  projectId: string,
+  fileId: string,
+): Promise<{
+  body: ReadableStream<Uint8Array>;
+  contentType: string;
+  contentLength: string | null;
+} | null> {
+  if (publicColState === 'unavailable') return null;
+  const db = getDb();
+  let rows: unknown[];
+  try {
+    const res = (await db.execute(
+      drizzleSql`select object_key, content_type, bucket from project_files where id = ${fileId} and project_id = ${projectId} and is_public = true and deleted_at is null limit 1`,
+    )) as unknown;
+    rows = Array.isArray(res) ? res : ((res as { rows?: unknown[] })?.rows ?? []);
+  } catch {
+    return null;
+  }
+  const row = rows[0] as
+    | { object_key?: unknown; content_type?: unknown; bucket?: unknown }
+    | undefined;
+  if (!row || typeof row.object_key !== 'string') return null;
+
+  const cfg = requireStorageEnv();
+  const bucket = (typeof row.bucket === 'string' && row.bucket) || cfg.bucket;
+  const url = presignS3Url({
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket,
+    key: row.object_key,
+    method: 'GET',
+    accessKey: cfg.accessKey,
+    secretKey: cfg.secretKey,
+    expiresIn: 120,
+  });
+  const res = await fetch(url);
+  if (!res.ok || !res.body) return null;
+  return {
+    body: res.body,
+    contentType: (typeof row.content_type === 'string' ? row.content_type : null) ?? 'application/octet-stream',
+    contentLength: res.headers.get('content-length'),
+  };
+}
+
 /**
  * Probe at boot — returns null silently if storage isn't configured, so
  * the rest of the API stays up. Callers (the routes) translate this into
