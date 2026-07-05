@@ -504,6 +504,110 @@ export async function insertRow(input: InsertRowInput): Promise<InsertRowResult>
   return { inserted: rows[0] ?? null };
 }
 
+export interface InsertRowsInput {
+  readonly projectId: string;
+  readonly tableName: string;
+  /**
+   * The rows to insert. Every row must share the SAME set of columns (a
+   * uniform column set is required to build one multi-row INSERT), and
+   * every key is validated against the actual schema.
+   */
+  readonly rows: ReadonlyArray<Record<string, unknown>>;
+}
+
+export interface InsertRowsResult {
+  readonly inserted: number;
+  readonly rows: Array<Record<string, unknown>>;
+}
+
+/** Cap on rows per bulk insert — keeps one statement's parameter count sane. */
+const MAX_BULK_INSERT_ROWS = 500;
+
+/**
+ * Insert MANY rows in a single parameterised multi-row INSERT, returning the
+ * rows as the database stored them (with defaults filled in). This exists so a
+ * client can migrate a whole table in ONE request instead of one-request-per-row
+ * (which trips the per-minute mutate rate limit).
+ *
+ * Modelled on `insertRow`:
+ *  - validates that every key across the rows is a real column on the table
+ *  - requires all rows to share the SAME column set (uniform, so a single
+ *    `VALUES (...),(...)` statement can be built)
+ *  - builds a parameterised INSERT — the only things interpolated are the
+ *    verified table/column identifiers; every value is parameter-bound in
+ *    row-major order
+ *  - runs inside one `runInProjectDatabase` transaction with the same
+ *    `SET dolt_transaction_commit = 1` first statement as insertRow
+ */
+export async function insertRows(input: InsertRowsInput): Promise<InsertRowsResult> {
+  if (input.rows.length === 0) {
+    throw new ValidationError('bulk insert requires at least one row', {});
+  }
+  if (input.rows.length > MAX_BULK_INSERT_ROWS) {
+    throw new ValidationError(
+      `bulk insert too large — max ${MAX_BULK_INSERT_ROWS} rows per request; split into batches of ${MAX_BULK_INSERT_ROWS}`,
+      { max: MAX_BULK_INSERT_ROWS, received: input.rows.length },
+    );
+  }
+
+  await assertTableExists(input.projectId, input.tableName);
+  const cols = await getTableColumns(input.projectId, input.tableName);
+  const colNames = new Set(cols.map((c) => c.name));
+
+  // The first row defines the column set; every other row must match it
+  // exactly so one multi-row INSERT covers them all.
+  const keys = Object.keys(input.rows[0]!);
+  if (keys.length === 0) {
+    throw new ValidationError('bulk insert requires at least one column', {});
+  }
+  for (const k of keys) {
+    if (!COLUMN_NAME_RE.test(k)) {
+      throw new ValidationError('invalid column name', { column: k });
+    }
+    if (!colNames.has(k)) {
+      throw new ValidationError('column not found on table', {
+        table: input.tableName,
+        column: k,
+      });
+    }
+  }
+
+  const keySet = new Set(keys);
+  for (let i = 0; i < input.rows.length; i++) {
+    const rowKeys = Object.keys(input.rows[i]!);
+    if (
+      rowKeys.length !== keys.length ||
+      !rowKeys.every((k) => keySet.has(k))
+    ) {
+      throw new ValidationError(
+        `row ${i} has a different column set — every row must share the same columns for a bulk insert`,
+        { rowIndex: i, expected: keys, received: rowKeys },
+      );
+    }
+  }
+
+  const cols_sql = keys.map((k) => `"${k}"`).join(', ');
+  // Values are laid out row-major: row 0 gets $1..$K, row 1 gets $K+1..$2K, etc.
+  const valuesSql = input.rows
+    .map((_, r) => `(${keys.map((_, k) => `$${r * keys.length + k + 1}`).join(', ')})`)
+    .join(', ');
+  const params: never[] = [];
+  for (const row of input.rows) {
+    for (const k of keys) {
+      params.push(row[k] as never);
+    }
+  }
+
+  const rows = (await runInProjectDatabase(input.projectId, async (tx) => {
+    await tx.unsafe('SET dolt_transaction_commit = 1');
+    return tx.unsafe(
+      `INSERT INTO "${input.tableName}" (${cols_sql}) VALUES ${valuesSql} RETURNING *`,
+      params,
+    );
+  })) as Array<Record<string, unknown>>;
+  return { inserted: input.rows.length, rows };
+}
+
 export interface DeleteRowInput {
   readonly projectId: string;
   readonly tableName: string;

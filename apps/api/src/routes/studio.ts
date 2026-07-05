@@ -19,6 +19,7 @@ import {
   getTableColumns,
   getTableRows,
   insertRow,
+  insertRows,
   listIndexes,
   listProjectTables,
   listRelationships,
@@ -360,9 +361,14 @@ studioRouter.patch(
 );
 
 /**
- * Insert a new row. Body: `{ values: { col: value, ... } }`. Returns the
- * inserted row including any DB-side defaults (server-generated ulids,
- * timestamps, etc.).
+ * Insert one OR many rows. Returns the inserted row(s) including any DB-side
+ * defaults (server-generated ulids, timestamps, etc.).
+ *
+ *  - Single row (backward compatible): `{ values: { col: value, ... } }` →
+ *    returns the one inserted row (201).
+ *  - Bulk (one request, one rate-limit count): `{ values: [ {..}, {..}, ... ] }`
+ *    → returns `{ inserted, rows }` (201). Sidesteps the per-minute mutate cap
+ *    so a whole table can be migrated in a handful of requests.
  */
 studioRouter.post(
   '/v1/projects/:id/studio/tables/:table/rows',
@@ -375,16 +381,46 @@ studioRouter.post(
       return c.json({ code: 'validation_failed', message: 'missing path params' }, 400);
     }
     const body = (await c.req.json().catch(() => null)) as {
-      values?: Record<string, unknown>;
+      values?: Record<string, unknown> | Array<Record<string, unknown>>;
     } | null;
+    const user = c.get('user');
+
+    // Bulk path: `values` is an array of row objects → one multi-row INSERT.
+    if (body && Array.isArray(body.values)) {
+      const { inserted, rows } = await insertRows({
+        projectId,
+        tableName,
+        rows: body.values,
+      });
+      await audit({
+        actorId: user?.id ?? null,
+        projectId,
+        action: 'studio.row.insert',
+        ipHash: hashIp(c.req.raw.headers.get('cf-connecting-ip') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: {
+          table: tableName,
+          rowsInserted: inserted,
+          bulk: true,
+        },
+      });
+      return c.json({ inserted, rows }, 201);
+    }
+
+    // Single-row path (unchanged): `values` is a plain column→value object.
+    // (Arrays already took the bulk branch above; this guard also narrows the
+    // union so `body.values` is a plain object below.)
     if (!body || !body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {
       return c.json(
-        { code: 'validation_failed', message: 'expected { values: { col: value, ... } }' },
+        {
+          code: 'validation_failed',
+          message:
+            'expected { values: { col: value, ... } } or { values: [ { col: value, ... }, ... ] }',
+        },
         400,
       );
     }
     const result = await insertRow({ projectId, tableName, values: body.values });
-    const user = c.get('user');
     await audit({
       actorId: user?.id ?? null,
       projectId,
