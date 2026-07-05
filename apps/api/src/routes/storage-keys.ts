@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { env } from '../env.js';
+import { log } from '../lib/logger.js';
 import { requireAuth } from '../middleware/session.js';
 import { assertProjectRole } from '../services/access.js';
 import { audit, hashIp } from '../services/audit.js';
@@ -59,12 +60,21 @@ storageKeysRouter.post('/v1/projects/:id/storage-keys', async (c) => {
     );
   }
 
-  const created = await createStorageKey({
-    projectId: project.id,
-    name: parsed.data.name,
-    createdBy: user.id,
-    publicEndpoint: env.BRIVEN_MINIO_PUBLIC_ENDPOINT ?? env.BRIVEN_MINIO_ENDPOINT ?? '',
-  });
+  let created;
+  try {
+    created = await createStorageKey({
+      projectId: project.id,
+      name: parsed.data.name,
+      createdBy: user.id,
+      publicEndpoint: env.BRIVEN_MINIO_PUBLIC_ENDPOINT ?? env.BRIVEN_MINIO_ENDPOINT ?? '',
+    });
+  } catch (err) {
+    // Surface the REAL reason (mc/MinIO error) instead of a generic 500, so the
+    // operator sees "connection refused" / "Access Denied" / etc. directly.
+    const message = err instanceof Error ? err.message : String(err);
+    log.error('storage_key_mint_failed', { projectId: project.id, error: message });
+    return c.json({ code: 'mint_failed', message: `could not mint key — ${message}`.slice(0, 600) }, 502);
+  }
   await audit({
     actorId: user.id,
     projectId: project.id,
