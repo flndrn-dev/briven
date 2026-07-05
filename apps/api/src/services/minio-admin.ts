@@ -189,7 +189,7 @@ export async function createScopedKey(input: { bucket: string; name: string }): 
       '--secret-key',
       secretKey,
       '--name',
-      input.name.slice(0, 64),
+      input.name.slice(0, 32), // MinIO hard limit: service-account name <= 32 chars
       '--policy',
       policyPath,
     ]);

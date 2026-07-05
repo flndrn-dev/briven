@@ -116,7 +116,10 @@ export async function createStorageKey(input: {
   await ensureBucket(bucket);
   const { accessKey, secretKey } = await createScopedKey({
     bucket,
-    name: `${input.projectId}:${input.name}`,
+    // MinIO caps the service-account NAME at 32 chars — pass only the customer's
+    // key label (createScopedKey hard-caps it too). The project is already tied
+    // to the key via its dedicated bucket + inline policy.
+    name: input.name,
   });
   const suffix = secretKey.slice(-4);
   const row = {
