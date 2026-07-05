@@ -9,9 +9,11 @@ import { audit, hashIp } from '../services/audit.js';
 import {
   deleteFile,
   isStorageConfigured,
+  listDeletedFiles,
   listFiles,
   presignDownload,
   presignUpload,
+  restoreFile,
 } from '../services/storage.js';
 import type { AppEnv } from '../types/app-env.js';
 
@@ -119,4 +121,35 @@ storageRouter.delete('/v1/projects/:id/files/:fileId', async (c) => {
     metadata: { fileId, name: file.name },
   });
   return c.json({ ok: true });
+});
+
+storageRouter.get('/v1/projects/:id/files/deleted', async (c) => {
+  if (!isStorageConfigured()) return notConfigured(c);
+  const user = c.get('user')!;
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'viewer');
+  return c.json({ files: await listDeletedFiles(project.id) });
+});
+
+storageRouter.post('/v1/projects/:id/files/:fileId/restore', async (c) => {
+  if (!isStorageConfigured()) return notConfigured(c);
+  const user = c.get('user')!;
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'developer');
+  const fileId = c.req.param('fileId');
+  try {
+    const result = await restoreFile(fileId, project.id);
+    await audit({
+      actorId: user.id,
+      projectId: project.id,
+      action: 'storage.file.restore',
+      ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { fileId, status: result.status },
+    });
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
 });

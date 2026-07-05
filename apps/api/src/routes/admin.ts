@@ -62,6 +62,7 @@ import {
   setProjectStorageLimit,
   updateTierStorageCap,
 } from '../services/storage-admin.js';
+import { restoreFile } from '../services/storage.js';
 import { listSuppressions, suppress, unsuppress } from '../services/suppressions.js';
 import { incidentSeverity, ticketStatuses } from '../db/schema.js';
 import {
@@ -222,6 +223,23 @@ adminRouter.patch('/v1/admin/storage/projects/:id', async (c) => {
     metadata: { ...body.data },
   });
   return c.json({ ok: true });
+});
+
+/** Recover a soft-deleted file on the customer's behalf (support request). */
+adminRouter.post('/v1/admin/storage/projects/:id/files/:fileId/restore', async (c) => {
+  const projectId = c.req.param('id');
+  const fileId = c.req.param('fileId');
+  const user = c.get('user');
+  const result = await restoreFile(fileId, projectId);
+  await audit({
+    actorId: user?.id ?? null,
+    projectId,
+    action: 'admin.storage.file.restore',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { fileId, status: result.status },
+  });
+  return c.json(result);
 });
 
 /**

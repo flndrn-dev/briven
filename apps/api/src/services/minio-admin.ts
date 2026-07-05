@@ -203,6 +203,42 @@ export async function createScopedKey(input: { bucket: string; name: string }): 
   return { accessKey, secretKey };
 }
 
+export type RestoreResult = 'restored' | 'nothing-to-restore' | 'expired' | 'error';
+
+/**
+ * "Undelete" an object in a versioned bucket by removing its latest delete
+ * marker, exposing the prior (non-current) version as current again.
+ * - 'restored'            — delete marker removed, prior version live again
+ * - 'nothing-to-restore'  — object isn't delete-marked (already live / absent)
+ * - 'expired'             — only a delete marker survives; the data version was
+ *                           already reclaimed by the recovery lifecycle
+ * - 'error'               — the mc call failed
+ */
+export async function restoreObject(bucket: string, key: string): Promise<RestoreResult> {
+  const r = await runMc(['ls', '--versions', `${ALIAS}/${bucket}/${key}`]);
+  if (r.code !== 0) return 'error';
+  let deleteMarkerId: string | null = null;
+  let hasDataVersion = false;
+  for (const line of r.stdout.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const o = JSON.parse(t) as { versionId?: string; isDeleteMarker?: boolean; isLatest?: boolean };
+      if (o.isDeleteMarker) {
+        if (o.isLatest && o.versionId) deleteMarkerId = o.versionId;
+      } else if (o.versionId) {
+        hasDataVersion = true;
+      }
+    } catch {
+      // skip non-JSON lines
+    }
+  }
+  if (!deleteMarkerId) return 'nothing-to-restore';
+  if (!hasDataVersion) return 'expired';
+  const rm = await runMc(['rm', '--version-id', deleteMarkerId, `${ALIAS}/${bucket}/${key}`]);
+  return rm.code === 0 ? 'restored' : 'error';
+}
+
 /** Delete a scoped key (idempotent — a missing key is a no-op). */
 export async function removeScopedKey(accessKey: string): Promise<void> {
   const r = await runMc(['admin', 'user', 'svcacct', 'rm', ALIAS, accessKey]);

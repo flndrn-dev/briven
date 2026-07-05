@@ -1,5 +1,5 @@
 import { newId, NotFoundError, ValidationError } from '@briven/shared';
-import { and, asc, eq, isNull, sql as drizzleSql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNotNull, isNull, sql as drizzleSql } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { projectFiles, type ProjectFile } from '../db/schema.js';
@@ -10,7 +10,9 @@ import {
   bucketNameFor,
   ensureBucket,
   isMinioAdminConfigured,
+  restoreObject,
   setRecoveryLifecycle,
+  type RestoreResult,
 } from './minio-admin.js';
 import { getProjectTier, TIERS, TierLimitExceeded } from './tiers.js';
 
@@ -359,6 +361,72 @@ export async function deleteFile(fileId: string, projectId: string): Promise<Pro
     throw new Error(`minio delete failed: ${res.status} ${body.slice(0, 200)}`);
   }
   return { ...file, deletedAt: new Date() };
+}
+
+/** Soft-deleted files still inside the tier recovery window (newest first). */
+export async function listDeletedFiles(projectId: string): Promise<ProjectFile[]> {
+  const db = getDb();
+  const tier = (await getProjectTier(projectId)) ?? 'free';
+  const windowDays = TIERS[tier].storageRecoveryDays;
+  const cutoff = new Date(Date.now() - windowDays * 86_400_000);
+  return db
+    .select()
+    .from(projectFiles)
+    .where(
+      and(
+        eq(projectFiles.projectId, projectId),
+        isNotNull(projectFiles.deletedAt),
+        gte(projectFiles.deletedAt, cutoff),
+      ),
+    )
+    .orderBy(desc(projectFiles.deletedAt));
+}
+
+/** Restore a soft-deleted file within its recovery window (undo delete). */
+export async function restoreFile(
+  fileId: string,
+  projectId: string,
+): Promise<{ file: ProjectFile; status: RestoreResult }> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(projectFiles)
+    .where(
+      and(
+        eq(projectFiles.id, fileId),
+        eq(projectFiles.projectId, projectId),
+        isNotNull(projectFiles.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new NotFoundError('deleted file', fileId);
+
+  const tier = (await getProjectTier(projectId)) ?? 'free';
+  const windowDays = TIERS[tier].storageRecoveryDays;
+  const deletedAtMs = row.deletedAt ? new Date(row.deletedAt).getTime() : 0;
+  if (deletedAtMs < Date.now() - windowDays * 86_400_000) {
+    throw new ValidationError(
+      `recovery window of ${windowDays} days has passed — the kept copy has expired and can't be restored`,
+    );
+  }
+
+  const cfg = requireStorageEnv();
+  const bucket = await bucketForFile(db, fileId, projectId, cfg.bucket);
+  let status: RestoreResult = 'nothing-to-restore';
+  if (isMinioAdminConfigured()) {
+    status = await restoreObject(bucket, row.objectKey);
+    if (status === 'expired') {
+      throw new ValidationError('the kept copy has already expired — cannot recover this file');
+    }
+    if (status === 'error') {
+      throw new Error('failed to restore the object in storage');
+    }
+  }
+  await db
+    .update(projectFiles)
+    .set({ deletedAt: null, updatedAt: new Date() })
+    .where(eq(projectFiles.id, fileId));
+  return { file: { ...row, deletedAt: null }, status };
 }
 
 // Re-export for callers that want raw access (rare).
