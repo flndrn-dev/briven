@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson, ApiError } from '../../../../../../lib/api';
+import { CopyLink } from './copy-link';
 import { StorageKeysPanel } from './storage-keys-panel';
 import { UploadButton } from './upload-button';
 
@@ -33,6 +34,9 @@ interface StorageKeyRow {
 
 export const dynamic = 'force-dynamic';
 
+// Public files are served from the media edge, not the api or minio origin.
+const MEDIA_BASE = 'https://media.briven.tech';
+
 // Surfaced from the api/lib/env helper on the server. The browser also
 // needs an origin for direct PUT uploads — we pass it via prop so the
 // client component doesn't read process.env at runtime.
@@ -46,10 +50,15 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
   let files: ProjectFile[] = [];
   let deleted: ProjectFile[] = [];
   let storageKeys: StorageKeyRow[] = [];
+  let publicIds = new Set<string>();
   let notConfigured = false;
   try {
     const result = await apiJson<FilesResult>(`/v1/projects/${id}/files`);
     files = result.files;
+    const pub = await apiJson<{ ids: string[] }>(
+      `/v1/projects/${id}/files/public-ids`,
+    ).catch(() => ({ ids: [] as string[] }));
+    publicIds = new Set(pub.ids);
     const deletedResult = await apiJson<FilesResult>(
       `/v1/projects/${id}/files/deleted`,
     ).catch(() => ({ files: [] as ProjectFile[] }));
@@ -88,6 +97,23 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { message?: string } | null;
       throw new Error(body?.message || `restore failed: ${res.status}`);
+    }
+    revalidatePath(`/dashboard/projects/${id}/storage`);
+  }
+
+  async function togglePublic(formData: FormData) {
+    'use server';
+    const { id } = await params;
+    const fileId = String(formData.get('fileId') ?? '');
+    const next = formData.get('next') === 'true';
+    const res = await apiFetch(`/v1/projects/${id}/files/${fileId}/public`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ public: next }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(body?.message || `toggle public failed: ${res.status}`);
     }
     revalidatePath(`/dashboard/projects/${id}/storage`);
   }
@@ -139,6 +165,9 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
                 </p>
               ) : null}
             </div>
+            <p className="font-mono text-xs text-[var(--color-text-muted)]">
+              public files are served from media.briven.tech and embeddable on your allowed domains.
+            </p>
             {files.length === 0 ? (
               <p className="rounded-md border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center font-mono text-sm text-[var(--color-text-muted)]">
                 no files yet.
@@ -148,37 +177,61 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
                 {files.map((f) => (
                   <li
                     key={f.id}
-                    className="flex flex-col gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-mono text-sm text-[var(--color-text)]">
-                        {f.name}
-                      </p>
-                      <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
-                        {f.contentType} · {formatBytes(Number(f.sizeBytes))} ·{' '}
-                        {new Date(f.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
-                      </p>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-mono text-sm text-[var(--color-text)]">
+                          {f.name}
+                        </p>
+                        <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">
+                          {f.contentType} · {formatBytes(Number(f.sizeBytes))} ·{' '}
+                          {new Date(f.createdAt).toISOString().slice(0, 16).replace('T', ' ')} utc
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <form action={togglePublic}>
+                          <input type="hidden" name="fileId" value={f.id} />
+                          <input type="hidden" name="next" value={String(!publicIds.has(f.id))} />
+                          <button
+                            type="submit"
+                            className={
+                              publicIds.has(f.id)
+                                ? 'rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1.5 font-mono text-xs text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]'
+                                : 'rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]'
+                            }
+                          >
+                            {publicIds.has(f.id) ? 'make private' : 'make public'}
+                          </button>
+                        </form>
+                        <form action={download}>
+                          <input type="hidden" name="fileId" value={f.id} />
+                          <button
+                            type="submit"
+                            className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
+                          >
+                            download
+                          </button>
+                        </form>
+                        <form action={remove}>
+                          <input type="hidden" name="fileId" value={f.id} />
+                          <button
+                            type="submit"
+                            className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-error)] hover:text-[var(--color-error)]"
+                          >
+                            delete
+                          </button>
+                        </form>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <form action={download}>
-                        <input type="hidden" name="fileId" value={f.id} />
-                        <button
-                          type="submit"
-                          className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]"
-                        >
-                          download
-                        </button>
-                      </form>
-                      <form action={remove}>
-                        <input type="hidden" name="fileId" value={f.id} />
-                        <button
-                          type="submit"
-                          className="rounded-md border border-[var(--color-border-subtle)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-error)] hover:text-[var(--color-error)]"
-                        >
-                          delete
-                        </button>
-                      </form>
-                    </div>
+                    {publicIds.has(f.id) ? (
+                      <div className="flex items-center gap-2">
+                        <code className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--color-text-muted)]">
+                          {`${MEDIA_BASE}/media/${id}/${f.id}`}
+                        </code>
+                        <CopyLink url={`${MEDIA_BASE}/media/${id}/${f.id}`} />
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
