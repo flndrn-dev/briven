@@ -5,6 +5,7 @@ import { ValidationError } from '@briven/shared';
 
 import { requireAuth } from '../middleware/session.js';
 import { assertProjectRole } from '../services/access.js';
+import { isImageTransformConfigured, signedTransformUrl } from '../services/image-transform.js';
 import { audit, hashIp } from '../services/audit.js';
 import {
   deleteFile,
@@ -185,6 +186,43 @@ storageRouter.post('/v1/projects/:id/files/:fileId/restore', async (c) => {
       metadata: { fileId, status: result.status },
     });
     return c.json(result);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    throw err;
+  }
+});
+
+// M4 — signed imgproxy URL for on-the-fly resizing of a PUBLIC file. Stateless
+// URL signing (no storage/DB touch), so this doesn't gate on isStorageConfigured;
+// it gates on the imgproxy env instead. When imgproxy isn't wired we return 503
+// not_configured (fail-safe) exactly like storage does.
+storageRouter.get('/v1/projects/:id/files/:fileId/transform-url', async (c) => {
+  if (!isImageTransformConfigured()) {
+    return c.json(
+      { code: 'not_configured', message: 'image transforms are not enabled' },
+      503,
+    );
+  }
+  const user = c.get('user')!;
+  const { project } = await assertProjectRole(c.req.param('id'), user.id, 'viewer');
+  const fileId = c.req.param('fileId');
+
+  const parseDim = (raw: string | undefined): number | undefined => {
+    if (raw == null) return undefined;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const width = parseDim(c.req.query('w'));
+  const height = parseDim(c.req.query('h'));
+  const rawResize = c.req.query('resize');
+  const resize =
+    rawResize === 'fit' || rawResize === 'fill' || rawResize === 'auto' ? rawResize : undefined;
+
+  try {
+    const url = signedTransformUrl(project.id, fileId, { width, height, resize });
+    return c.json({ url });
   } catch (err) {
     if (err instanceof ValidationError) {
       return c.json({ code: 'validation_failed', message: err.message }, 400);

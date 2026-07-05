@@ -120,6 +120,16 @@ const envSchema = z.object({
   BRIVEN_MINIO_BUCKET: z.string().optional(),
   BRIVEN_MINIO_REGION: z.string().optional(),
 
+  // imgproxy — on-the-fly image transforms (M4). Signed URLs let the browser
+  // request a resized variant of a PUBLIC file; imgproxy fetches the source
+  // from the /media host, resizes, and returns it. All three must be set for
+  // the feature to be available — when any is unset the transform endpoint
+  // returns 503 not_configured (fail-safe; the imgproxy container is wired at
+  // deploy). _KEY / _SALT are hex, per imgproxy's URL-signing scheme.
+  BRIVEN_IMGPROXY_ENDPOINT: z.string().url().optional(),
+  BRIVEN_IMGPROXY_KEY: z.string().optional(),
+  BRIVEN_IMGPROXY_SALT: z.string().optional(),
+
   // Dokploy — infra provisioning (Phase 2+).
   BRIVEN_DOKPLOY_API_URL: z.string().url().optional(),
   BRIVEN_DOKPLOY_API_TOKEN: z.string().optional(),
