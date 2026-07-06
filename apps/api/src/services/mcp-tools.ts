@@ -619,31 +619,31 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         description:
           'Share one of YOUR files (or a whole path prefix) with another project. ' +
           'That project can then download exactly the granted resource — nothing ' +
-          'else. `resource` is a file id (is_prefix=false) or a path prefix ' +
-          '(is_prefix=true). (Write scope.)',
+          'else. `resource` is a file id (isPrefix=false) or a path prefix ' +
+          '(isPrefix=true). (Write scope.)',
         inputSchema: {
-          grantee_project_id: z.string().describe('The project you are sharing with'),
-          resource: z.string().describe('A file id, or a path prefix when is_prefix is true'),
-          is_prefix: z
+          granteeProjectId: z.string().describe('The project you are sharing with'),
+          resource: z.string().describe('A file id, or a path prefix when isPrefix is true'),
+          isPrefix: z
             .boolean()
             .optional()
             .describe('true = resource is a path prefix; false (default) = exact file id'),
         },
         annotations: { readOnlyHint: false },
       },
-      async ({ grantee_project_id, resource, is_prefix }) => {
+      async ({ granteeProjectId, resource, isPrefix }) => {
         const grant = await createGrant({
           granterProjectId: ctx.projectId,
-          granteeProjectId: grantee_project_id,
+          granteeProjectId,
           resource,
-          isPrefix: is_prefix ?? false,
+          isPrefix: isPrefix ?? false,
           createdBy: ctx.keyId,
         });
         await auditCall('storage.grant.create', {
           granterProjectId: ctx.projectId,
-          granteeProjectId: grantee_project_id,
+          granteeProjectId,
           resource,
-          isPrefix: is_prefix ?? false,
+          isPrefix: isPrefix ?? false,
           grantId: grant.id,
         });
         return jsonResult({ grant });
@@ -658,11 +658,11 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         description:
           'Revoke a cross-project sharing grant YOUR project created, by its grant ' +
           'id. Only the granter can revoke. (Write scope.)',
-        inputSchema: { grant_id: z.string().describe('The grant id to revoke') },
+        inputSchema: { grantId: z.string().describe('The grant id to revoke') },
         annotations: { readOnlyHint: false },
       },
-      async ({ grant_id }) => {
-        const grant = await revokeGrant(ctx.projectId, grant_id);
+      async ({ grantId }) => {
+        const grant = await revokeGrant(ctx.projectId, grantId);
         await auditCall('storage.grant.revoke', {
           granterProjectId: ctx.projectId,
           granteeProjectId: grant.granteeProjectId,
@@ -685,12 +685,12 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         description:
           'Mint a tokenized public download link for one of YOUR files. Anyone with ' +
           'the returned `url` can download that one file — no login — until it ' +
-          'expires or you revoke it. `expires_in_seconds` is clamped to [60s, 30 ' +
+          'expires or you revoke it. `expiresInSeconds` is clamped to [60s, 30 ' +
           'days] and defaults to 24h. Works even if the file is not marked public. ' +
           '(Write scope.)',
         inputSchema: {
-          file_id: z.string().describe('The id of your file to share'),
-          expires_in_seconds: z
+          fileId: z.string().describe('The id of your file to share'),
+          expiresInSeconds: z
             .number()
             .int()
             .optional()
@@ -698,16 +698,16 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         },
         annotations: { readOnlyHint: false },
       },
-      async ({ file_id, expires_in_seconds }) => {
+      async ({ fileId, expiresInSeconds }) => {
         const link = await createShareLink({
           projectId: ctx.projectId,
-          fileId: file_id,
-          expiresInSeconds: expires_in_seconds ?? null,
+          fileId,
+          expiresInSeconds: expiresInSeconds ?? null,
           createdBy: ctx.keyId,
         });
         // Audit the create — file id + expiry only. NEVER log the token.
         await auditCall('storage.link.create', {
-          fileId: file_id,
+          fileId,
           linkId: link.id,
           expiresAt: link.expiresAt,
         });
@@ -728,11 +728,11 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         description:
           'Revoke a public share-link YOUR project minted, by its link id. The link ' +
           'stops working immediately. Only the owner can revoke. (Write scope.)',
-        inputSchema: { link_id: z.string().describe('The share-link id to revoke') },
+        inputSchema: { linkId: z.string().describe('The share-link id to revoke') },
         annotations: { readOnlyHint: false },
       },
-      async ({ link_id }) => {
-        const link = await revokeShareLink(ctx.projectId, link_id);
+      async ({ linkId }) => {
+        const link = await revokeShareLink(ctx.projectId, linkId);
         // Audit the revoke — file id + expiry only. NEVER log the token.
         await auditCall('storage.link.revoke', {
           fileId: link.fileId,
