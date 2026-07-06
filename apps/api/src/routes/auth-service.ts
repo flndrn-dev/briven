@@ -953,21 +953,41 @@ authServiceRouter.delete(
 
 /**
  * Tenant resolver. The customer's SDK passes the tenant id via the
- * `x-briven-project-id` header on every request. The hosted-pages
+ * `x-briven-project-id` header on every request; the hosted-pages
  * deployment resolves the tenant from the subdomain at the edge and
  * sets the same header before forwarding to the api.
  *
- * Missing / malformed header → 400 with a stable error code so the SDK
+ * Fallback: browser-navigation endpoints (magic-link verify, email
+ * verification, OAuth callback) arrive as a plain link click that can't
+ * carry that header, so we also accept a `briven_project_id` query param
+ * (stamped into the link by tagTenantUrl()). Header wins when both exist.
+ *
+ * Missing / malformed on both → 400 with a stable error code so the SDK
  * can surface a clear message; the SDK init logs `projectId required`
  * when this fires.
  */
-function resolveTenant(c: { req: { header: (k: string) => string | undefined } }): string | null {
-  const id = c.req.header('x-briven-project-id');
-  if (!id) return null;
-  // Same identifier regex as projects.ts — defensive guard so a malformed
-  // header can't reach `schemaNameFor()` and produce a bogus schema name.
-  if (!/^p_[a-zA-Z0-9_]{6,64}$/.test(id)) return null;
-  return id;
+function resolveTenant(c: {
+  req: { header: (k: string) => string | undefined; url: string };
+}): string | null {
+  // Same identifier regex as projects.ts — a malformed id must never reach
+  // schemaNameFor() and produce a bogus schema name.
+  const VALID = /^p_[a-zA-Z0-9_]{6,64}$/;
+  // 1. Header — how the SDK (and the hosted-pages edge) pass the tenant on
+  //    every programmatic request.
+  const header = c.req.header('x-briven-project-id');
+  if (header && VALID.test(header)) return header;
+  // 2. Query-param fallback — browser-navigation endpoints (magic-link verify,
+  //    email verification, OAuth callback) are reached by a plain link click,
+  //    which cannot carry a custom header. The tenant id is stamped into the
+  //    link by tagTenantUrl() (auth-tenant-pool.ts). `p_…` is a public
+  //    identifier; the one-time token in the same URL stays the real credential.
+  try {
+    const q = new URL(c.req.url).searchParams.get('briven_project_id');
+    if (q && VALID.test(q)) return q;
+  } catch {
+    /* malformed request URL — fall through to unresolved */
+  }
+  return null;
 }
 
 /**
@@ -986,7 +1006,8 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     return c.json(
       {
         code: 'tenant_unresolved',
-        message: 'missing or malformed x-briven-project-id header',
+        message:
+          'missing or malformed tenant id (x-briven-project-id header or briven_project_id query param)',
       },
       400,
     );

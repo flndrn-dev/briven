@@ -126,6 +126,28 @@ export function resetPasswordUrl(projectId: string, token: string): string {
 type TenantAuthPlugin = { id: string } & Record<string, unknown>;
 
 /**
+ * Tag a Better-Auth-generated action URL with the tenant id so a plain browser
+ * navigation (an email-link click) can still resolve the tenant. Better Auth
+ * builds these links from `baseURL` (api.briven.tech) with no per-tenant marker,
+ * and a link click — unlike the SDK — cannot attach the `x-briven-project-id`
+ * header that the `/v1/auth-tenant/*` bridge normally reads. So we stamp
+ * `briven_project_id` into the query string; `resolveTenant` (auth-service.ts)
+ * reads it as the header's fallback. The id (`p_…`) is a PUBLIC identifier, never
+ * a secret — the one-time token in the same link stays the actual credential —
+ * so it is safe to place in a URL.
+ */
+export function tagTenantUrl(url: string, projectId: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set('briven_project_id', projectId);
+    return u.toString();
+  } catch {
+    // Not an absolute URL (should never happen for a Better Auth link) — leave it.
+    return url;
+  }
+}
+
+/**
  * Build the per-tenant Better Auth plugins array from the project's stored
  * auth config. ONLY the passwordless methods the customer has toggled on are
  * loaded — so `POST /v1/auth-tenant/sign-in/magic-link` (and the OTP / passkey
@@ -147,7 +169,9 @@ export function buildTenantAuthPlugins(
       magicLink({
         expiresIn: p.magicLink.expiryMinutes * 60,
         sendMagicLink: async ({ email, url }) => {
-          await sendBrivenAuthMagicLink(projectId, email, url);
+          // Tag the click-through link with the tenant id — a browser click
+          // can't send the x-briven-project-id header the bridge reads.
+          await sendBrivenAuthMagicLink(projectId, email, tagTenantUrl(url, projectId));
         },
       }) as unknown as TenantAuthPlugin,
     );
