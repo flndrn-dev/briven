@@ -1170,6 +1170,46 @@ export const projectStorageGrants = pgTable(
   }),
 );
 
+/* ─── project_storage_share_links (M5 — tokenized public share-links) ─
+ * The public-link half of M5. A file OWNER mints a signed public link — a URL
+ * carrying a cryptographically-random token that ANYONE can open for a LIMITED
+ * TIME, with NO project/auth needed — and can revoke it at will. Unlike a grant
+ * (project→project), this exposes ONE file to the open internet, so it is
+ * strict-deny by construction: `resolveShareLink(token)` returns the file ONLY
+ * when a row matches the exact token AND revoked_at IS NULL AND expires_at > now.
+ * The token is the only bearer credential; it is NEVER written to the audit log.
+ * A link works even for a file that is NOT marked public — that is the point of
+ * a link — but ONLY via a valid, unexpired, unrevoked token.
+ */
+export const projectStorageShareLinks = pgTable(
+  'project_storage_share_links',
+  {
+    id: id(),
+    // The project that OWNS the file being shared. FK + cascade: deleting the
+    // project sweeps its links (the link then can never resolve).
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // The owned file this link exposes (an exact file id — never a prefix).
+    fileId: text('file_id').notNull(),
+    // The bearer credential: a URL-safe, ≥32-byte random token. UNIQUE so a token
+    // collision can never let one link resolve another link's file.
+    token: text('token').notNull(),
+    // Hard expiry — NOT NULL. Enforcement requires expires_at > now().
+    expiresAt: ts('expires_at').notNull(),
+    createdBy: text('created_by'),
+    createdAt: createdAt(),
+    // Null = active. Set (by the owner) = revoked; enforcement treats it as gone.
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => ({
+    // The token is the lookup key for public resolution — unique + indexed.
+    tokenIdx: uniqueIndex('project_storage_share_links_token_idx').on(t.token),
+    // Owner-scoped list / revoke walk this index.
+    projectIdx: index('project_storage_share_links_project_idx').on(t.projectId),
+  }),
+);
+
 /* ─── type exports ────────────────────────────────────────────────── */
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -1195,6 +1235,8 @@ export type ProjectFile = typeof projectFiles.$inferSelect;
 export type NewProjectFile = typeof projectFiles.$inferInsert;
 export type ProjectStorageGrant = typeof projectStorageGrants.$inferSelect;
 export type NewProjectStorageGrant = typeof projectStorageGrants.$inferInsert;
+export type ProjectStorageShareLink = typeof projectStorageShareLinks.$inferSelect;
+export type NewProjectStorageShareLink = typeof projectStorageShareLinks.$inferInsert;
 export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
 export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;

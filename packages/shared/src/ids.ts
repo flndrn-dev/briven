@@ -48,6 +48,7 @@ export type IdPrefix =
   | 'ao' // allowed app origin (per-project login domain for CORS + auth trust)
   | 'sk' // storage key (per-project scoped MinIO service-account key)
   | 'sg' // storage grant (cross-project sharing grant — granter→grantee resource)
+  | 'sl' // storage share-link (tokenized public download link — time-limited, revocable)
   | 'tsec'; // tenant secret (per-project encrypted credential, e.g. provider keys)
 
 export function newId(prefix: IdPrefix): string {

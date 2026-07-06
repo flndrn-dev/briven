@@ -249,6 +249,62 @@ export async function openPublicObject(
 }
 
 /**
+ * Open an OWNED object's bytes for the tokenized share-link route. Unlike
+ * `openPublicObject`, this does NOT require `is_public` — a share-link is its own
+ * authorization (the caller has already resolved a valid, unexpired, unrevoked
+ * token to this exact `projectId` + `fileId`). It only requires the file exists,
+ * belongs to the project, and is not soft-deleted. Returns null (not throws) on
+ * any miss / storage-unreachable so the route turns that into a plain 404.
+ * Presigns an INTERNAL GET and streams the body straight through, so the object
+ * store credentials never leave the server.
+ */
+export async function openOwnedObject(
+  projectId: string,
+  fileId: string,
+): Promise<{
+  body: ReadableStream<Uint8Array>;
+  contentType: string;
+  contentLength: string | null;
+} | null> {
+  const db = getDb();
+  let rows: unknown[];
+  try {
+    const res = (await db.execute(
+      drizzleSql`select object_key, content_type, bucket from project_files where id = ${fileId} and project_id = ${projectId} and deleted_at is null limit 1`,
+    )) as unknown;
+    rows = Array.isArray(res) ? res : ((res as { rows?: unknown[] })?.rows ?? []);
+  } catch {
+    return null;
+  }
+  const row = rows[0] as
+    | { object_key?: unknown; content_type?: unknown; bucket?: unknown }
+    | undefined;
+  if (!row || typeof row.object_key !== 'string') return null;
+
+  const cfg = requireStorageEnv();
+  const bucket = (typeof row.bucket === 'string' && row.bucket) || cfg.bucket;
+  const url = presignS3Url({
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket,
+    key: row.object_key,
+    method: 'GET',
+    accessKey: cfg.accessKey,
+    secretKey: cfg.secretKey,
+    expiresIn: 120,
+  });
+  const res = await fetch(url);
+  if (!res.ok || !res.body) return null;
+  return {
+    body: res.body,
+    contentType:
+      (typeof row.content_type === 'string' ? row.content_type : null) ??
+      'application/octet-stream',
+    contentLength: res.headers.get('content-length'),
+  };
+}
+
+/**
  * Probe at boot — returns null silently if storage isn't configured, so
  * the rest of the API stays up. Callers (the routes) translate this into
  * a 503 / "not configured" error response.

@@ -21,6 +21,11 @@ import {
   revokeGrant,
 } from './storage-grants.js';
 import {
+  createShareLink,
+  listShareLinks,
+  revokeShareLink,
+} from './storage-share-links.js';
+import {
   STUDIO_COLUMN_TYPES,
   createTable,
   getTableColumns,
@@ -495,6 +500,27 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
     },
   );
 
+  /* ── public share-links (M5): list the links YOUR project has minted ──
+   * A read — available to every key scope. Returns each link's id, file, url,
+   * expiry, and revoked state so the owner can manage them. */
+
+  server.registerTool(
+    'storage_list_links',
+    {
+      title: 'List public share-links',
+      description:
+        'List the tokenized public share-links YOUR project has minted: id, file ' +
+        'id, url, expiry, created/revoked times. Anyone with an active link URL can ' +
+        'download that one file until it expires or you revoke it.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      await auditCall('storage_list_links', {});
+      const links = await listShareLinks(ctx.projectId);
+      return jsonResult({ links });
+    },
+  );
+
   /* ── cross-project READ (M5): mint a download URL for a SHARED file ───
    * The ONLY sanctioned cross-project read. Gated by isGranted(caller, granter,
    * fileId) — strict-deny returns a clear `forbidden` error otherwise. This is a
@@ -647,6 +673,76 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
       },
     );
 
+    /* ── public share-links (M5): mint a tokenized public link ──────────
+     * Exposes ONE of YOUR files to anyone with the link URL, for a limited time
+     * (clamped: min 60s, default 24h, max 30 days). The link works even if the
+     * file isn't marked public. Audit records the file id + expiry — NEVER the
+     * token. (Write scope.) */
+    server.registerTool(
+      'storage_create_link',
+      {
+        title: 'Create a public share-link',
+        description:
+          'Mint a tokenized public download link for one of YOUR files. Anyone with ' +
+          'the returned `url` can download that one file — no login — until it ' +
+          'expires or you revoke it. `expires_in_seconds` is clamped to [60s, 30 ' +
+          'days] and defaults to 24h. Works even if the file is not marked public. ' +
+          '(Write scope.)',
+        inputSchema: {
+          file_id: z.string().describe('The id of your file to share'),
+          expires_in_seconds: z
+            .number()
+            .int()
+            .optional()
+            .describe('Link lifetime in seconds (clamped 60..2592000; default 86400)'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ file_id, expires_in_seconds }) => {
+        const link = await createShareLink({
+          projectId: ctx.projectId,
+          fileId: file_id,
+          expiresInSeconds: expires_in_seconds ?? null,
+          createdBy: ctx.keyId,
+        });
+        // Audit the create — file id + expiry only. NEVER log the token.
+        await auditCall('storage.link.create', {
+          fileId: file_id,
+          linkId: link.id,
+          expiresAt: link.expiresAt,
+        });
+        return jsonResult({
+          id: link.id,
+          url: link.url,
+          token: link.token,
+          expiresAt: link.expiresAt,
+        });
+      },
+    );
+
+    /* ── public share-links (M5): revoke a link (only the owner) ─────── */
+    server.registerTool(
+      'storage_revoke_link',
+      {
+        title: 'Revoke a public share-link',
+        description:
+          'Revoke a public share-link YOUR project minted, by its link id. The link ' +
+          'stops working immediately. Only the owner can revoke. (Write scope.)',
+        inputSchema: { link_id: z.string().describe('The share-link id to revoke') },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ link_id }) => {
+        const link = await revokeShareLink(ctx.projectId, link_id);
+        // Audit the revoke — file id + expiry only. NEVER log the token.
+        await auditCall('storage.link.revoke', {
+          fileId: link.fileId,
+          linkId: link.id,
+          expiresAt: link.expiresAt,
+        });
+        return jsonResult({ id: link.id, revoked: true });
+      },
+    );
+
 
     server.registerTool(
       'create_table',
@@ -784,6 +880,8 @@ export const READ_TOOLS = [
   // cross-project sharing reads (M5)
   'storage_list_grants',
   'storage_shared_download_url',
+  // public share-link reads (M5)
+  'storage_list_links',
 ] as const;
 export const WRITE_TOOLS = [
   // data-plane writes
@@ -796,4 +894,7 @@ export const WRITE_TOOLS = [
   'storage_revoke_key',
   'storage_grant',
   'storage_revoke_grant',
+  // public share-link writes (M5 — read-write / admin only)
+  'storage_create_link',
+  'storage_revoke_link',
 ] as const;
