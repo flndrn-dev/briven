@@ -61,9 +61,11 @@ import {
 import { fetchRealtimeStats } from '../services/realtime-stats.js';
 import { listUsageEvents, retrySkippedUsageEvents } from '../services/usage-admin.js';
 import {
+  getProjectEnforcement,
   getTierStorageCaps,
   listObjectStorageUsage,
   listStorageUsage,
+  setProjectEnforcement,
   setProjectStorageLimit,
   updateTierStorageCap,
 } from '../services/storage-admin.js';
@@ -253,6 +255,34 @@ adminRouter.patch('/v1/admin/storage/projects/:id', async (c) => {
     metadata: { ...body.data },
   });
   return c.json({ ok: true });
+});
+
+/**
+ * Flip a single project's storage enforcement mode (flag ⇄ block). 'flag'
+ * (default) only surfaces over-limit; 'block' refuses new rows/tables/uploads
+ * once the project is over its effective cap. Body matches the admin web form
+ * (enforcement-form.tsx): { enforcement: 'flag' | 'block' }. Audited old→new.
+ */
+const enforcementBody = z.object({ enforcement: z.enum(['flag', 'block']) });
+
+adminRouter.patch('/v1/admin/storage/projects/:id/enforcement', async (c) => {
+  const projectId = c.req.param('id');
+  const body = enforcementBody.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) {
+    throw new ValidationError("expected { enforcement: 'flag' | 'block' }");
+  }
+  const user = c.get('user');
+  const from = await getProjectEnforcement(projectId);
+  await setProjectEnforcement(projectId, body.data.enforcement, user?.id ?? null);
+  await audit({
+    actorId: user?.id ?? null,
+    projectId,
+    action: 'admin.storage.enforcement.update',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { from, to: body.data.enforcement },
+  });
+  return c.json({ enforcement: body.data.enforcement });
 });
 
 /** Recover a soft-deleted file on the customer's behalf (support request). */

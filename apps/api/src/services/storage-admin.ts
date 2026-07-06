@@ -5,8 +5,14 @@ import { getDb } from '../db/client.js';
 import { runInProjectDatabase } from '../db/data-plane.js';
 import { projectFiles, projects, storageKeys, tierStorageCaps, type ProjectTier } from '../db/schema.js';
 import { log } from '../lib/logger.js';
-import { listProjectsForUser } from './projects.js';
 import { TIERS } from './tiers.js';
+// NOTE: `listProjectsForUser` (from ./projects.js) is imported LAZILY inside
+// listMyStorageUsage — NOT statically here. projects.js pulls the full
+// data-plane surface (dropProjectDatabase/provisionProjectDatabase), which the
+// enforcement unit test stubs out with a minimal mock that only exposes
+// runInProjectDatabase. A static import would make loading this module fail
+// under that mock; a dynamic import keeps the module load clean while the
+// runtime behaviour is identical.
 
 /**
  * Storage admin (sprint plan Sprint 4).
@@ -172,6 +178,8 @@ export interface ProjectStorageUsage {
   readonly maxTables: number;
   /** True when the per-project override is set (vs inheriting the tier cap). */
   readonly hasOverride: boolean;
+  /** Enforcement mode: 'flag' (measure-only) or 'block' (refuse over-cap writes). */
+  readonly enforcement: EnforcementMode;
   readonly overRows: boolean;
   readonly overTables: boolean;
   readonly overLimit: boolean;
@@ -193,6 +201,7 @@ export async function listStorageUsage(): Promise<readonly ProjectStorageUsage[]
       tier: projects.tier,
       storageMaxRows: projects.storageMaxRows,
       storageMaxTables: projects.storageMaxTables,
+      storageEnforcementMode: projects.storageEnforcementMode,
     })
     .from(projects)
     .where(isNull(projects.deletedAt));
@@ -214,6 +223,7 @@ export async function listStorageUsage(): Promise<readonly ProjectStorageUsage[]
         maxRows,
         maxTables,
         hasOverride: p.storageMaxRows != null || p.storageMaxTables != null,
+        enforcement: p.storageEnforcementMode === 'block' ? 'block' : 'flag',
         ...flags,
       };
     }),
@@ -323,6 +333,7 @@ export interface MyStorageUsage {
 export async function listMyStorageUsage(
   userId: string,
 ): Promise<readonly MyStorageUsage[]> {
+  const { listProjectsForUser } = await import('./projects.js');
   const mine = await listProjectsForUser(userId);
   if (mine.length === 0) return [];
   const ids = mine.map((p) => p.id);
@@ -366,4 +377,185 @@ export async function listMyStorageUsage(
       over: usedBytes > capBytes,
     };
   });
+}
+
+/* ── Enforcement ("flag" → "block") — Sprint 4 Phase 4 ───────────────────── */
+
+/**
+ * Per-project enforcement mode.
+ *  - 'flag'  (default, safe): measure-only. Over-limit is surfaced in the admin
+ *            dashboard but NEVER blocks a customer write.
+ *  - 'block' (opt-in): once the project is over its effective cap, a new row /
+ *            table / byte write is refused. An admin flips a single project in.
+ * The enforcement lever fails OPEN throughout: any lookup that can't run is
+ * treated as "don't block".
+ */
+export type EnforcementMode = 'flag' | 'block';
+
+/**
+ * In-memory cache of the enforcement mode per project. This is read on the hot
+ * write path (every studio INSERT / CREATE TABLE / upload), so a fresh control-
+ * DB round-trip per write would be wasteful — modes change rarely (an admin
+ * toggle). setProjectEnforcement invalidates the entry so a flip takes effect
+ * immediately; _resetEnforcementCache clears it wholesale (test hook).
+ */
+const enforcementCache = new Map<string, EnforcementMode>();
+
+/** Test hook — clears the whole enforcement-mode cache. */
+export function _resetEnforcementCache(): void {
+  enforcementCache.clear();
+}
+
+/**
+ * The project's enforcement mode, cached in-memory. Defaults to 'flag' for an
+ * unknown/absent project (fail-open). Reads the projects row's mode; a second
+ * call for the same id is served from cache (no re-query).
+ */
+export async function getProjectEnforcement(projectId: string): Promise<EnforcementMode> {
+  const cached = enforcementCache.get(projectId);
+  if (cached !== undefined) return cached;
+
+  const db = getDb();
+  const rows = await db
+    .select({ mode: projects.storageEnforcementMode })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const mode: EnforcementMode = rows[0]?.mode === 'block' ? 'block' : 'flag';
+  enforcementCache.set(projectId, mode);
+  return mode;
+}
+
+/**
+ * Set a project's enforcement mode. Rejects an invalid mode with a
+ * ValidationError, writes the column, and invalidates the cache entry so the
+ * next read re-queries.
+ */
+export async function setProjectEnforcement(
+  projectId: string,
+  mode: EnforcementMode,
+  _actorId: string | null,
+): Promise<void> {
+  if (mode !== 'flag' && mode !== 'block') {
+    throw new ValidationError("enforcement mode must be 'flag' or 'block'", { field: 'mode', value: mode });
+  }
+  const db = getDb();
+  await db
+    .update(projects)
+    .set({ storageEnforcementMode: mode, updatedAt: new Date() })
+    .where(eq(projects.id, projectId));
+  // Invalidate so the next getProjectEnforcement re-reads the new value.
+  enforcementCache.delete(projectId);
+}
+
+/**
+ * Resolve a project's effective row/table caps: per-project override ?? tier
+ * cap. Returns null when the project row can't be found — the caller treats
+ * that as fail-open (never block a write we can't reason about).
+ */
+async function resolveEffectiveCaps(
+  projectId: string,
+): Promise<{ maxRows: number; maxTables: number } | null> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      tier: projects.tier,
+      storageMaxRows: projects.storageMaxRows,
+      storageMaxTables: projects.storageMaxTables,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const p = rows[0];
+  if (!p) return null; // fail-open — unknown project
+  const caps = await getTierStorageCaps();
+  const tierCap = caps[p.tier as ProjectTier] ?? { maxRows: Infinity, maxTables: Infinity };
+  return {
+    maxRows: p.storageMaxRows ?? tierCap.maxRows,
+    maxTables: p.storageMaxTables ?? tierCap.maxTables,
+  };
+}
+
+/**
+ * Guard a row / table write against the project's storage cap.
+ *
+ * 'flag' mode is a pure no-op — it never throws and never counts rows (so the
+ * project DB is never touched on the hot path when enforcement is off). In
+ * 'block' mode it resolves the effective cap (override ?? tier), reads the
+ * current counts, and throws a ValidationError if adding `adding` more would
+ * exceed the cap (strictly greater than). Fails OPEN — no throw, no count — if
+ * the project can't be resolved even in block mode.
+ *
+ * @param adding how many rows/tables this write adds (default 1; the bulk
+ *   insert path passes the batch length).
+ */
+export async function assertWithinStorageLimit(
+  projectId: string,
+  kind: 'row' | 'table',
+  adding = 1,
+): Promise<void> {
+  if ((await getProjectEnforcement(projectId)) !== 'block') return; // flag → no-op
+
+  const caps = await resolveEffectiveCaps(projectId);
+  if (!caps) return; // fail-open — unknown project
+
+  const { rowCount, tableCount } = await getProjectRowCount(projectId);
+  if (kind === 'row') {
+    if (rowCount + adding > caps.maxRows) {
+      throw new ValidationError(
+        `storage limit reached: adding ${adding} row(s) would exceed the ${caps.maxRows}-row cap (currently ${rowCount})`,
+        { field: 'rows', current: rowCount, adding, cap: caps.maxRows },
+      );
+    }
+  } else {
+    if (tableCount + adding > caps.maxTables) {
+      throw new ValidationError(
+        `storage limit reached: adding ${adding} table(s) would exceed the ${caps.maxTables}-table cap (currently ${tableCount})`,
+        { field: 'tables', current: tableCount, adding, cap: caps.maxTables },
+      );
+    }
+  }
+}
+
+/**
+ * Guard an S3/object upload against the project's tier BYTE cap. 'flag' → no-op.
+ * 'block' → throw a ValidationError when current object bytes + additionalBytes
+ * exceeds the tier byte cap (TIERS[tier].storageBytes — the SAME cap
+ * listObjectStorageUsage flags against). Fails OPEN if it can't resolve.
+ *
+ * Reuses the current-bytes computation from listObjectStorageUsage: SUM of
+ * non-deleted project_files.size_bytes for the one project.
+ */
+export async function assertWithinByteLimit(
+  projectId: string,
+  additionalBytes: number,
+): Promise<void> {
+  if ((await getProjectEnforcement(projectId)) !== 'block') return; // flag → no-op
+
+  const db = getDb();
+  const rows = await db
+    .select({ tier: projects.tier })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const p = rows[0];
+  if (!p) return; // fail-open — unknown project
+  const capBytes = TIERS[p.tier as ProjectTier]?.storageBytes;
+  if (capBytes == null) return; // fail-open — no cap resolvable
+
+  // Same grouped SUM listObjectStorageUsage uses, scoped to this one project.
+  const byteRows = await db
+    .select({
+      usedBytes: sql<number>`coalesce(sum(cast(${projectFiles.sizeBytes} as bigint)), 0)::bigint`,
+    })
+    .from(projectFiles)
+    .where(and(isNull(projectFiles.deletedAt), eq(projectFiles.projectId, projectId)));
+  const usedBytes = Number(byteRows[0]?.usedBytes) || 0;
+
+  if (usedBytes + additionalBytes > capBytes) {
+    throw new ValidationError(
+      `storage limit reached: this ${additionalBytes}-byte upload would exceed the project's ${capBytes}-byte cap (currently ${usedBytes})`,
+      { field: 'bytes', current: usedBytes, adding: additionalBytes, cap: capBytes },
+    );
+  }
 }

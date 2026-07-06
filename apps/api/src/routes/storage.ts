@@ -18,6 +18,7 @@ import {
   restoreFile,
   setFilePublic,
 } from '../services/storage.js';
+import { assertWithinByteLimit } from '../services/storage-admin.js';
 import type { AppEnv } from '../types/app-env.js';
 
 export const storageRouter = new Hono<AppEnv>();
@@ -64,6 +65,11 @@ storageRouter.post('/v1/projects/:id/files/upload-url', async (c) => {
   }
 
   try {
+    // Storage enforcement: block-mode projects over their byte cap are refused
+    // BEFORE we hand out a presigned URL (the size is already known here).
+    // flag-mode is a no-op; a lookup miss fails open. A ValidationError surfaces
+    // as a 413 over-limit below.
+    await assertWithinByteLimit(project.id, parsed.data.sizeBytes);
     const result = await presignUpload({
       projectId: project.id,
       name: parsed.data.name,
@@ -90,6 +96,12 @@ storageRouter.post('/v1/projects/:id/files/upload-url', async (c) => {
     );
   } catch (err) {
     if (err instanceof ValidationError) {
+      // The storage-enforcement byte guard tags its context with field:'bytes';
+      // surface that as a 413 over-limit. Other validation failures (presign
+      // input) stay 400.
+      if (err.context?.field === 'bytes') {
+        return c.json({ code: 'storage_limit_reached', message: err.message }, 413);
+      }
       return c.json({ code: 'validation_failed', message: err.message }, 400);
     }
     throw err;

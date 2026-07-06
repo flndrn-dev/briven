@@ -52,6 +52,8 @@ import {
 import { autoSnapshotFrequency, type AutoSnapshotFrequency } from '../db/schema.js';
 import { applyPlan, planDatabase } from '../services/assistant.js';
 import { assistantConfigured } from '../services/ollama.js';
+import { assertWithinStorageLimit } from '../services/storage-admin.js';
+import { ValidationError } from '@briven/shared';
 
 /**
  * Shape-validate the `primaryKey` array a client sent. Returns the typed
@@ -455,6 +457,17 @@ studioRouter.post(
 
     // Bulk path: `values` is an array of row objects → one multi-row INSERT.
     if (body && Array.isArray(body.values)) {
+      // Storage enforcement: block-mode projects that are (or would go) over
+      // their row cap are refused; flag-mode is a no-op. Batch size is passed
+      // so the whole insert is weighed at once. Fails open on any lookup miss.
+      try {
+        await assertWithinStorageLimit(projectId, 'row', body.values.length);
+      } catch (err) {
+        if (err instanceof ValidationError) {
+          return c.json({ code: 'storage_limit_reached', message: err.message }, 413);
+        }
+        throw err;
+      }
       const { inserted, rows } = await insertRows({
         projectId,
         tableName,
@@ -487,6 +500,15 @@ studioRouter.post(
         },
         400,
       );
+    }
+    // Storage enforcement (block-mode only; flag-mode no-op, fails open).
+    try {
+      await assertWithinStorageLimit(projectId, 'row');
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'storage_limit_reached', message: err.message }, 413);
+      }
+      throw err;
     }
     const result = await insertRow({ projectId, tableName, values: body.values });
     await audit({
@@ -573,6 +595,15 @@ studioRouter.post(
         );
       }
       cols.push(spec);
+    }
+    // Storage enforcement (block-mode only; flag-mode no-op, fails open).
+    try {
+      await assertWithinStorageLimit(projectId, 'table');
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'storage_limit_reached', message: err.message }, 413);
+      }
+      throw err;
     }
     const result = await createTable({ projectId, tableName: body.tableName, columns: cols });
     const user = c.get('user');
