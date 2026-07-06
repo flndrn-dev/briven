@@ -49,7 +49,7 @@ export default async function AuthBrandingPage({
           how your sign-in pages + auth emails look to your end-users. logo,
           primary accent color, sender name, and the verified sender domain
           for outbound mail. unset domain falls back to{' '}
-          <code>noreply@auth.briven.tech</code> so first-day customers can
+          <code>noreply@briven.tech</code> so first-day customers can
           send while DNS propagates.
         </p>
       </header>

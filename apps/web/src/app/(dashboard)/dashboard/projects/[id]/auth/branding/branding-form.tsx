@@ -149,7 +149,7 @@ export function BrandingForm({ projectId, initial }: Props) {
         <p className="mt-2 font-mono text-[11px] text-[var(--color-text-subtle)]">
           verify your domain via the separate mittera DNS wizard (SPF + DKIM
           + return-path). until verified, mail still sends from{' '}
-          <code>noreply@auth.briven.tech</code> regardless of this field.
+          <code>noreply@briven.tech</code> regardless of this field.
         </p>
       </Card>
 
@@ -215,7 +215,7 @@ function FromPreview({
   senderName: string;
   senderDomain: string | null;
 }) {
-  const domain = senderDomain ?? 'auth.briven.tech';
+  const domain = senderDomain ?? 'briven.tech';
   const needsQuote = /[\s",;:<>@()\\[\]]/.test(senderName);
   const display = needsQuote ? `"${senderName}"` : senderName;
   return (
