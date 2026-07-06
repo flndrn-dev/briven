@@ -328,6 +328,17 @@ services:
       BRIVEN_MINIO_SECRET_KEY: ${BRIVEN_MINIO_ROOT_PASSWORD}
       BRIVEN_MINIO_BUCKET: ${BRIVEN_MINIO_BUCKET:-briven}
       BRIVEN_MINIO_REGION: ${BRIVEN_MINIO_REGION:-us-east-1}
+      # imgproxy — on-the-fly image transforms (M4). The api mints SIGNED
+      # imgproxy URLs (services/image-transform.ts). ENDPOINT is the
+      # media host + the /_t path prefix (imgproxy sits BEHIND media.<domain>
+      # under PathPrefix(/_t), no new subdomain). image-transform.ts signs the
+      # path WITHOUT the prefix (/rs:.../g:sm/<b64 source>) and imgproxy strips
+      # /_t before verifying — the signed portions match. KEY/SALT are the same
+      # hex secrets the imgproxy container gets; set all three in the Dokploy
+      # env to turn transforms on (unset => endpoint returns 503, fail-safe).
+      BRIVEN_IMGPROXY_ENDPOINT: https://media.${BRIVEN_DOMAIN}/_t
+      BRIVEN_IMGPROXY_KEY: ${BRIVEN_IMGPROXY_KEY:-}
+      BRIVEN_IMGPROXY_SALT: ${BRIVEN_IMGPROXY_SALT:-}
     healthcheck:
       # /info is documented to never 500 (apps/api/Dockerfile). bun ships in
       # the api image and has a built-in fetch.
@@ -354,6 +365,63 @@ services:
       - 'traefik.http.routers.briven-media.entrypoints=websecure'
       - 'traefik.http.routers.briven-media.tls.certresolver=letsencrypt'
       - 'traefik.http.routers.briven-media.service=briven-api'
+      # media.briven.tech/_t/... -> imgproxy (M4 signed image transforms). Same
+      # host as briven-media, but a HIGHER-priority router so /_t/* is peeled
+      # off to imgproxy while everything else on media.<domain> keeps hitting
+      # the api's public /media/<project>/<file> objects. Traefik picks the
+      # highest-priority matching router; briven-media has no explicit priority
+      # (defaults to its rule length), so we pin briven-imgt above it. imgproxy
+      # is configured with IMGPROXY_PATH_PREFIX=/_t so it strips /_t itself.
+      - 'traefik.http.routers.briven-imgt.rule=Host(`media.${BRIVEN_DOMAIN}`) && PathPrefix(`/_t`)'
+      - 'traefik.http.routers.briven-imgt.priority=100'
+      - 'traefik.http.routers.briven-imgt.entrypoints=websecure'
+      - 'traefik.http.routers.briven-imgt.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-imgt.service=briven-imgproxy'
+
+  # imgproxy — on-the-fly image transforms (M4). Sits BEHIND media.<domain>
+  # under the /_t path prefix (no new public subdomain, per the media-host
+  # rule). The api mints signed URLs; imgproxy fetches the source from the
+  # PUBLIC media host, resizes, and returns it. SSRF is locked to the media
+  # host via IMGPROXY_ALLOWED_SOURCES. No host port — only Traefik (on the
+  # dokploy-network) can reach port 8080.
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    restart: unless-stopped
+    logging: *briven-logging
+    environment:
+      # Signing — MUST equal the api's BRIVEN_IMGPROXY_KEY/SALT (same hex
+      # secrets, set in the Dokploy env). imgproxy strips IMGPROXY_PATH_PREFIX
+      # (/_t) from the request path, then verifies the HMAC over the remaining
+      # /rs:.../g:sm/<b64 source> — exactly what image-transform.ts signed.
+      IMGPROXY_KEY: ${BRIVEN_IMGPROXY_KEY:-}
+      IMGPROXY_SALT: ${BRIVEN_IMGPROXY_SALT:-}
+      IMGPROXY_PATH_PREFIX: /_t
+      # SSRF guard: imgproxy may ONLY fetch sources from the public media host.
+      IMGPROXY_ALLOWED_SOURCES: https://media.${BRIVEN_DOMAIN}/
+      # Sane limits — resize-bomb / oversized-source guards. Format auto-nego:
+      # serve WebP to browsers that send Accept: image/webp.
+      IMGPROXY_MAX_SRC_RESOLUTION: '50'
+      IMGPROXY_ENABLE_WEBP_DETECTION: 'true'
+      # Bind on 8080 (default) — Traefik reaches it over dokploy-network only.
+      IMGPROXY_BIND: ':8080'
+    healthcheck:
+      # imgproxy ships an /health endpoint that never 500s when the process
+      # is up. imgproxy has no shell/curl, so use its built-in health probe.
+      test: ['CMD', 'imgproxy', 'health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - dokploy-network
+    labels:
+      - 'briven_logs=true'
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
+      # Traefik must know which container port to load-balance to. No router
+      # is declared on this service itself — the media-host /_t router above
+      # (on the api service labels) points here via service=briven-imgproxy.
+      - 'traefik.http.services.briven-imgproxy.loadbalancer.server.port=8080'
 
   runtime:
     build:
