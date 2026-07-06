@@ -5,6 +5,7 @@ import { runInProjectDatabase } from '../db/data-plane.js';
 import type { McpKeyScope } from '../db/schema.js';
 import { env } from '../env.js';
 import { audit } from './audit.js';
+import { signedTransformUrl, isImageTransformConfigured } from './image-transform.js';
 import {
   deleteFile,
   listFiles,
@@ -12,7 +13,13 @@ import {
   presignUpload,
   setFilePublic,
 } from './storage.js';
-import { createStorageKey } from './storage-keys.js';
+import { createStorageKey, listStorageKeys, revokeStorageKey } from './storage-keys.js';
+import {
+  createGrant,
+  isGranted,
+  listGrants,
+  revokeGrant,
+} from './storage-grants.js';
 import {
   STUDIO_COLUMN_TYPES,
   createTable,
@@ -422,9 +429,225 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
     },
   );
 
+  /* ── storage: list the project's minted S3 keys (read) ─────────────── */
+
+  server.registerTool(
+    'storage_list_keys',
+    {
+      title: 'List storage keys',
+      description:
+        'List the bucket-scoped S3 access keys minted for your project (id, name, ' +
+        'access key id, bucket, enabled, timestamps). Secrets are never shown.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      await auditCall('storage_list_keys', {});
+      const keys = await listStorageKeys(ctx.projectId);
+      return jsonResult({ keys });
+    },
+  );
+
+  /* ── storage: transform URL for a PUBLIC image (read, stateless) ────── */
+
+  server.registerTool(
+    'storage_transform_url',
+    {
+      title: 'Get an image transform URL',
+      description:
+        'Build a signed on-the-fly image-resize URL for a PUBLIC file in your ' +
+        'project. Returns a `url`; requires image transforms to be enabled on the api.',
+      inputSchema: {
+        fileId: z.string().describe('File id in your project (must be public to serve)'),
+        width: z.number().int().optional().describe('Target width in px (optional)'),
+        height: z.number().int().optional().describe('Target height in px (optional)'),
+        resize: z
+          .enum(['fit', 'fill', 'auto'])
+          .optional()
+          .describe("Resize mode (default 'fit')"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ fileId, width, height, resize }) => {
+      await auditCall('storage_transform_url', { fileId });
+      if (!isImageTransformConfigured()) {
+        throw new Error('image transforms are not enabled on this api');
+      }
+      const url = signedTransformUrl(ctx.projectId, fileId, { width, height, resize });
+      return jsonResult({ url });
+    },
+  );
+
+  /* ── cross-project sharing (M5): list grants the caller has CREATED ─── */
+
+  server.registerTool(
+    'storage_list_grants',
+    {
+      title: 'List storage grants',
+      description:
+        'List the cross-project sharing grants YOUR project has created (as the ' +
+        'granter): grantee project, resource, prefix flag, created/revoked times.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      await auditCall('storage_list_grants', {});
+      const grants = await listGrants(ctx.projectId);
+      return jsonResult({ grants });
+    },
+  );
+
+  /* ── cross-project READ (M5): mint a download URL for a SHARED file ───
+   * The ONLY sanctioned cross-project read. Gated by isGranted(caller, granter,
+   * fileId) — strict-deny returns a clear `forbidden` error otherwise. This is a
+   * read, so it is available to every key scope. */
+
+  server.registerTool(
+    'storage_shared_download_url',
+    {
+      title: 'Download a file shared with you',
+      description:
+        'Get a presigned download URL for a file that ANOTHER project has granted ' +
+        'to you. Provide the granter project id + the file id. If no active grant ' +
+        'covers that file, returns a `forbidden` error — you cannot read anything ' +
+        'that was not explicitly shared.',
+      inputSchema: {
+        granterProjectId: z.string().describe('The project that owns + shared the file'),
+        fileId: z.string().describe('The shared file id (owned by the granter project)'),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ granterProjectId, fileId }) => {
+      const allowed = await isGranted(ctx.projectId, granterProjectId, fileId);
+      await auditCall('storage.grant.access', {
+        granteeProjectId: ctx.projectId,
+        granterProjectId,
+        resource: fileId,
+        allowed,
+      });
+      if (!allowed) {
+        throw new Error('forbidden: no active grant covers that file for your project');
+      }
+      // Resolve the URL against the GRANTER's project (the owner of the bytes).
+      const result = await presignDownload(fileId, granterProjectId);
+      return jsonResult({
+        downloadUrl: result.downloadUrl,
+        expiresInSec: result.expiresInSec,
+      });
+    },
+  );
+
   /* ── write tools — ONLY registered for read-write / admin keys ──────── */
 
   if (ctx.scope === 'read-write' || ctx.scope === 'admin') {
+    /* ── storage: issue an S3 key (spec-named alias of storage_mint_key) ─ */
+    server.registerTool(
+      'storage_issue_key',
+      {
+        title: 'Issue an S3 storage key',
+        description:
+          'Issue a bucket-scoped S3 access key for your project storage, usable in ' +
+          'any S3 tool. The secret is shown only once — save it now. (Write scope.)',
+        inputSchema: { name: z.string().describe('A label for this key') },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ name }) => {
+        await auditCall('storage_issue_key', { name });
+        const result = await createStorageKey({
+          projectId: ctx.projectId,
+          name,
+          createdBy: null,
+          publicEndpoint: env.BRIVEN_MINIO_PUBLIC_ENDPOINT ?? '',
+        });
+        return jsonResult({
+          accessKey: result.accessKey,
+          secretKey: result.secretKey,
+          endpoint: result.endpoint,
+          bucket: result.bucket,
+          note: 'the secret is shown only once',
+        });
+      },
+    );
+
+    /* ── storage: revoke one of the project's S3 keys ─────────────────── */
+    server.registerTool(
+      'storage_revoke_key',
+      {
+        title: 'Revoke a storage key',
+        description:
+          'Revoke (disable + remove) one of your project S3 keys by its key id. ' +
+          '(Write scope.)',
+        inputSchema: { keyId: z.string().describe('The storage key id to revoke') },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ keyId }) => {
+        await auditCall('storage_revoke_key', { keyId });
+        await revokeStorageKey(ctx.projectId, keyId);
+        return jsonResult({ revoked: true, keyId });
+      },
+    );
+
+    /* ── cross-project sharing (M5): create a grant (caller = GRANTER) ── */
+    server.registerTool(
+      'storage_grant',
+      {
+        title: 'Grant a file / prefix to another project',
+        description:
+          'Share one of YOUR files (or a whole path prefix) with another project. ' +
+          'That project can then download exactly the granted resource — nothing ' +
+          'else. `resource` is a file id (is_prefix=false) or a path prefix ' +
+          '(is_prefix=true). (Write scope.)',
+        inputSchema: {
+          grantee_project_id: z.string().describe('The project you are sharing with'),
+          resource: z.string().describe('A file id, or a path prefix when is_prefix is true'),
+          is_prefix: z
+            .boolean()
+            .optional()
+            .describe('true = resource is a path prefix; false (default) = exact file id'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ grantee_project_id, resource, is_prefix }) => {
+        const grant = await createGrant({
+          granterProjectId: ctx.projectId,
+          granteeProjectId: grantee_project_id,
+          resource,
+          isPrefix: is_prefix ?? false,
+          createdBy: ctx.keyId,
+        });
+        await auditCall('storage.grant.create', {
+          granterProjectId: ctx.projectId,
+          granteeProjectId: grantee_project_id,
+          resource,
+          isPrefix: is_prefix ?? false,
+          grantId: grant.id,
+        });
+        return jsonResult({ grant });
+      },
+    );
+
+    /* ── cross-project sharing (M5): revoke a grant (only the GRANTER) ── */
+    server.registerTool(
+      'storage_revoke_grant',
+      {
+        title: 'Revoke a storage grant',
+        description:
+          'Revoke a cross-project sharing grant YOUR project created, by its grant ' +
+          'id. Only the granter can revoke. (Write scope.)',
+        inputSchema: { grant_id: z.string().describe('The grant id to revoke') },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ grant_id }) => {
+        const grant = await revokeGrant(ctx.projectId, grant_id);
+        await auditCall('storage.grant.revoke', {
+          granterProjectId: ctx.projectId,
+          granteeProjectId: grant.granteeProjectId,
+          resource: grant.resource,
+          grantId: grant.id,
+        });
+        return jsonResult({ grant });
+      },
+    );
+
+
     server.registerTool(
       'create_table',
       {
@@ -535,6 +758,42 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
   return server;
 }
 
-/** The tool names a key of each scope is allowed to see. Exported for tests. */
-export const READ_TOOLS = ['list_tables', 'describe_table', 'query'] as const;
-export const WRITE_TOOLS = ['insert', 'update', 'delete'] as const;
+/**
+ * The tool names a key of each scope is allowed to see. Exported for tests.
+ *
+ * READ_TOOLS are registered for EVERY scope (read, read-write, admin);
+ * WRITE_TOOLS are registered ONLY for read-write / admin. Keep this list in
+ * lock-step with the `server.registerTool(...)` calls above — the mcp-server
+ * test asserts `tools/list` equals exactly these per scope.
+ */
+export const READ_TOOLS = [
+  // data-plane reads
+  'list_tables',
+  'describe_table',
+  'query',
+  // storage reads (available to every scope)
+  'storage_list_files',
+  'storage_usage',
+  'storage_upload_url',
+  'storage_download_url',
+  'storage_delete_file',
+  'storage_make_public',
+  'storage_mint_key',
+  'storage_list_keys',
+  'storage_transform_url',
+  // cross-project sharing reads (M5)
+  'storage_list_grants',
+  'storage_shared_download_url',
+] as const;
+export const WRITE_TOOLS = [
+  // data-plane writes
+  'create_table',
+  'insert',
+  'update',
+  'delete',
+  // storage writes (M5 — read-write / admin only)
+  'storage_issue_key',
+  'storage_revoke_key',
+  'storage_grant',
+  'storage_revoke_grant',
+] as const;

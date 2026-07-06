@@ -1128,6 +1128,48 @@ export const projectFiles = pgTable(
   }),
 );
 
+/* ─── project_storage_grants (M5 — cross-project storage sharing) ─────
+ * A single sanctioned exception to strict cross-project isolation: a GRANTER
+ * project explicitly shares one file (by file id) OR a whole path prefix with a
+ * GRANTEE project. The grantee can then mint a download URL for exactly the
+ * granted resource — nothing else. Strict-deny by construction: access is
+ * allowed ONLY when a matching row exists with `revoked_at IS NULL`. Every
+ * grant / revoke / shared read is audited. Only the granter can revoke.
+ */
+export const projectStorageGrants = pgTable(
+  'project_storage_grants',
+  {
+    id: id(),
+    // The project that OWNS the resource and is doing the sharing. FK + cascade:
+    // deleting the granter project sweeps its grants.
+    granterProjectId: text('granter_project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // The project being granted read access. Plain text (not FK) — a grant may be
+    // pre-created for a grantee and must survive independent of that project row.
+    granteeProjectId: text('grantee_project_id').notNull(),
+    // Either an exact file id (is_prefix = false) or a path prefix string
+    // (is_prefix = true) that covers every file whose object path starts with it.
+    resource: text('resource').notNull(),
+    isPrefix: boolean('is_prefix').notNull().default(false),
+    createdBy: text('created_by'),
+    createdAt: createdAt(),
+    // Null = active. Set (by the granter) = revoked; enforcement ignores it.
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => ({
+    // One live grant per (granter, grantee, resource) triple. Revoke sets
+    // revoked_at rather than deleting, so re-granting the same resource reuses
+    // the row (see storage-grants service) — the unique index stays satisfied.
+    grantUniqueIdx: uniqueIndex('project_storage_grants_unique_idx').on(
+      t.granterProjectId,
+      t.granteeProjectId,
+      t.resource,
+    ),
+    granteeIdx: index('project_storage_grants_grantee_idx').on(t.granteeProjectId),
+  }),
+);
+
 /* ─── type exports ────────────────────────────────────────────────── */
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -1151,6 +1193,8 @@ export type ProjectSchedule = typeof projectSchedules.$inferSelect;
 export type NewProjectSchedule = typeof projectSchedules.$inferInsert;
 export type ProjectFile = typeof projectFiles.$inferSelect;
 export type NewProjectFile = typeof projectFiles.$inferInsert;
+export type ProjectStorageGrant = typeof projectStorageGrants.$inferSelect;
+export type NewProjectStorageGrant = typeof projectStorageGrants.$inferInsert;
 export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
 export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
