@@ -25,6 +25,7 @@ export default function AuthPage() {
           ['create the client', '#client'],
           ['react bindings', '#react'],
           ['sign-in flows', '#flows'],
+          ['email sender domain', '#sender-domain'],
           ['security', '#security'],
         ].map(([label, href]) => (
           <a
@@ -269,8 +270,64 @@ if (result.ok) {
           social login (google / github / discord / microsoft / konnos) needs the project owner
           to set that provider&apos;s client id <em>and</em> secret under <em>Auth → providers</em>
           in the dashboard — until both are set, the provider stays disabled. magic-link and
-          email-OTP delivery need the platform email / SMTP to be configured. with neither
-          configured, only email + password works.
+          email-OTP emails send out of the box from the briven fallback sender — to brand them
+          as your own domain, see{' '}
+          <a className="underline" href="#sender-domain">email sender domain</a>.
+        </section>
+      </section>
+
+      {/* sender domain -------------------------------------------------- */}
+      <section
+        id="sender-domain"
+        className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8"
+      >
+        <h2 className="font-mono text-lg tracking-tight">email sender domain</h2>
+        <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+          every email briven auth sends for you — magic links, OTP codes, email verification,
+          password resets — has a From: address. by default that is{' '}
+          <code>noreply@briven.tech</code>, which works out of the box with zero setup. when you
+          want those emails branded as your own product (say{' '}
+          <code>noreply@yourapp.com</code>), you set a <strong>sender domain</strong>.
+        </p>
+
+        <h3 className="mt-5 font-mono text-sm">how to set it</h3>
+        <ol className="mt-2 list-inside list-decimal font-mono text-sm text-[var(--color-text-muted)] space-y-1">
+          <li>open your project at <a className="underline" href="https://briven.tech">briven.tech</a>.</li>
+          <li>go to <em>Auth → branding</em>.</li>
+          <li>
+            fill in <em>sender name</em> (the display name, e.g. your product name) and{' '}
+            <em>sender domain</em> — your <strong>root domain</strong>, e.g.{' '}
+            <code>yourapp.com</code>. do <strong>not</strong> enter a subdomain like{' '}
+            <code>auth.yourapp.com</code> unless you really send from that subdomain.
+          </li>
+          <li>save. that&apos;s the whole dashboard side.</li>
+        </ol>
+
+        <h3 className="mt-5 font-mono text-sm">verify the domain (2–3 DNS records)</h3>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+          email worldwide runs on one rule: a domain must publicly declare who is allowed to
+          send mail in its name. that declaration lives in your domain&apos;s DNS as SPF and
+          DKIM records. without them, providers like Gmail and Outlook treat mail from your
+          domain as forged — so no platform (briven included) can skip this step. briven hands
+          you the exact records to add at your domain provider; a guided setup wizard is landing
+          in the branding panel.
+        </p>
+
+        <h3 className="mt-5 font-mono text-sm">what happens before you verify</h3>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+          nothing breaks — this is the important part. until your domain is verified, briven
+          automatically keeps sending from the <code>noreply@briven.tech</code> fallback (with
+          your sender name), so your users&apos; sign-in emails always arrive. the moment the
+          domain verifies, sends switch to <code>noreply@yourdomain</code> on their own. you
+          never need to time the switch or fear a broken login flow while DNS propagates.
+        </p>
+
+        <section className="mt-5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
+          <strong className="text-[var(--color-text)]">troubleshooting:</strong> sign-in emails
+          arriving from <code>noreply@briven.tech</code> even though you filled in a sender
+          domain? that means the domain isn&apos;t verified yet — finish adding the DNS records
+          and allow up to an hour for DNS to propagate. emails not arriving at all? check spam
+          first, then <em>Auth → usage</em> for delivery status.
         </section>
       </section>
 

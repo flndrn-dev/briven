@@ -368,6 +368,32 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'reverse-chronological list of every notable change to briven, tagged by feat / fix / security / docs / infra / chore. also available as RSS at /changelog/feed.xml.',
     keywords: ['changelog', 'releases', 'updates', 'history', 'whats new'],
   },
+  {
+    slug: '/auth',
+    title: 'auth · @briven/auth end-user sign-in + email sender domain',
+    summary:
+      'drop-in end-user sign-in for your app: email + password, magic link, email OTP, passkeys, OAuth social. covers install, pk_briven_auth keys, React hooks, the BrivenSignIn panel, and the email sender domain: how sign-in emails send from noreply@briven.tech by default, how to brand them as noreply@yourdomain via Auth → branding (root domain, never an auth. subdomain), the SPF + DKIM DNS records that verify it, and the automatic fallback that keeps sign-in emails working until the domain verifies.',
+    keywords: [
+      'auth',
+      'sign in',
+      'login',
+      'magic link',
+      'otp',
+      'passkey',
+      'oauth',
+      'sender domain',
+      'email domain',
+      'custom domain email',
+      'noreply',
+      'spf',
+      'dkim',
+      'dns records',
+      'email not arriving',
+      'branding',
+      'from address',
+      'fallback sender',
+    ],
+  },
 ];
 
 /**
