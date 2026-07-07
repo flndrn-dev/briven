@@ -6,6 +6,7 @@ import type { McpKeyScope } from '../db/schema.js';
 import { env } from '../env.js';
 import { audit } from './audit.js';
 import { AUTH_BRIDGE_TOOLS, registerAuthBridgeTools } from './mcp-auth-bridge.js';
+import { BRIVEN_ASK_TOOLS, registerBrivenAskTool } from './mcp-briven-ask.js';
 import { signedTransformUrl, isImageTransformConfigured } from './image-transform.js';
 import {
   deleteFile,
@@ -201,7 +202,12 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         'project this key is bound to; you cannot select another project. ' +
         'The auth_* and sender_domain_status tools additionally answer auth / ' +
         'sign-in-email configuration questions with read-only facts plus ' +
-        '"apply in your project" guidance and docs citations.',
+        '"apply in your project" guidance and docs citations. For ANY other ' +
+        'briven question (database, storage, functions, realtime, limits, ' +
+        'migration, hosting), ask briven_ask FIRST — it always answers with ' +
+        'the platform picture, the available primitives, and the part you ' +
+        'build in your own project; unmatched questions are filed for the ' +
+        'platform team, never dead-ended.',
     },
   );
 
@@ -569,6 +575,10 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
 
   registerAuthBridgeTools(server, ctx, auditCall, jsonResult);
 
+  /* ── briven_ask — the general reception desk (every scope) ──────────── */
+
+  registerBrivenAskTool(server, ctx, auditCall, jsonResult);
+
   /* ── write tools — ONLY registered for read-write / admin keys ──────── */
 
   if (ctx.scope === 'read-write' || ctx.scope === 'admin') {
@@ -892,6 +902,8 @@ export const READ_TOOLS = [
   'storage_list_links',
   // auth bridge — read + guidance (mcp-auth-bridge.ts)
   ...AUTH_BRIDGE_TOOLS,
+  // general reception desk (mcp-briven-ask.ts)
+  ...BRIVEN_ASK_TOOLS,
 ] as const;
 export const WRITE_TOOLS = [
   // data-plane writes
