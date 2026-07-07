@@ -1,5 +1,6 @@
 import { env } from '../env.js';
 import { sendTenantEmail } from '../lib/email.js';
+import { log } from '../lib/logger.js';
 import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
 
 /**
@@ -12,8 +13,11 @@ import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
  * sender name, and dispatch via `sendTenantEmail` (lib/email.ts).
  *
  * Sender resolution (per BUILD_PLAN.md §8):
- *   - tenant has verified `senderDomain`  → `"${senderName}" <noreply@${senderDomain}>`
- *   - no verified domain                  → `briven auth <noreply@${BRIVEN_DOMAIN}>`
+ *   - tenant has a `senderDomain`  → `"${senderName}" <noreply@${senderDomain}>`
+ *   - no custom domain             → `briven auth <noreply@${BRIVEN_DOMAIN}>`
+ *   - custom domain REJECTED at send time (provider hasn't verified it)
+ *     → retry once from the fallback sender. A half-configured domain must
+ *     never break a tenant's login flow (konnos magic-link 500, 2026-07-07).
  *
  * The fallback domain MUST be a sender verified with the email provider
  * (mittera.eu / SMTP). It tracks `BRIVEN_DOMAIN` (briven.tech) — the SAME
@@ -190,13 +194,24 @@ export function renderNewDeviceLogin(
 // ─── tenant-aware sender ────────────────────────────────────────────────
 
 /**
- * Build the From: header for a tenant. Verified domain → tenant-branded
- * sender. No verified domain → briven-fallback so first-day customers
+ * Build the From: header for a tenant. Custom domain → tenant-branded
+ * sender. No custom domain → briven-fallback so first-day customers
  * can still send while their DNS propagates.
  */
 export function resolveFromAddress(config: AuthConfig): string {
-  const senderName = config.branding.senderName;
-  const domain = config.branding.senderDomain ?? FALLBACK_DOMAIN;
+  return formatFrom(config.branding.senderName, config.branding.senderDomain ?? FALLBACK_DOMAIN);
+}
+
+/**
+ * The From: header a tenant send retries with when the custom
+ * `senderDomain` is rejected by the email provider (not yet verified
+ * there). Keeps the tenant's display name, swaps only the domain.
+ */
+export function resolveFallbackFromAddress(config: AuthConfig): string {
+  return formatFrom(config.branding.senderName, FALLBACK_DOMAIN);
+}
+
+function formatFrom(senderName: string, domain: string): string {
   // Quote the display name when it contains characters that would
   // otherwise break the RFC 5322 mailbox grammar (spaces, ".", etc).
   const needsQuote = /[\s",;:<>@()\\[\]]/.test(senderName);
@@ -215,14 +230,30 @@ interface TenantSendArgs {
 async function sendForTenant(label: string, args: TenantSendArgs): Promise<void> {
   const config = await getAuthConfig(args.projectId);
   const from = resolveFromAddress(config);
-  await sendTenantEmail(label, {
-    from,
+  const payload = {
     projectId: args.projectId,
     to: args.to,
     subject: args.subject,
     html: args.html,
     text: args.text,
-  });
+  };
+  try {
+    await sendTenantEmail(label, { from, ...payload });
+  } catch (err) {
+    // A custom senderDomain that the email provider hasn't verified is
+    // rejected at send time. That must NEVER break the tenant's login
+    // flow (it 500'd konnos magic-link, 2026-07-07) — retry once from
+    // the always-verified briven fallback sender instead.
+    const fallbackFrom = resolveFallbackFromAddress(config);
+    if (from === fallbackFrom) throw err; // already on the fallback — a real outage, surface it
+    log.warn('tenant_sender_domain_rejected_falling_back', {
+      label,
+      projectId: args.projectId,
+      senderDomain: config.branding.senderDomain,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    await sendTenantEmail(label, { from: fallbackFrom, ...payload });
+  }
 }
 
 // ─── Better Auth callback shape ─────────────────────────────────────────

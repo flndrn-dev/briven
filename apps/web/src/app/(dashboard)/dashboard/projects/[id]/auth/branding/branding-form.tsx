@@ -148,9 +148,11 @@ export function BrandingForm({ projectId, initial }: Props) {
         ) : null}
         <p className="mt-2 font-mono text-[11px] text-[var(--color-text-subtle)]">
           verify this domain by adding the DNS records briven provides
-          (SPF + DKIM) — guided setup lands in this panel soon. once set,
-          auth emails send as <code>noreply@yourdomain</code>; an
-          unverified domain will fail delivery, so verify first.
+          (SPF + DKIM) — guided setup lands in this panel soon. once
+          verified, auth emails send as <code>noreply@yourdomain</code>;
+          until then they keep sending from the{' '}
+          <code>noreply@briven.tech</code> fallback, so sign-in never
+          breaks.
         </p>
       </Card>
 

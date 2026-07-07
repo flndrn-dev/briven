@@ -7,6 +7,7 @@ import {
   renderNewDeviceLogin,
   renderOtpCode,
   renderPasswordReset,
+  resolveFallbackFromAddress,
   resolveFromAddress,
   type RenderContext,
 } from './auth-mailer.js';
@@ -45,10 +46,41 @@ describe('auth-mailer — pure helpers (BUILD_PLAN.md §8)', () => {
     expect(resolveFromAddress(config)).toBe('acme <noreply@mail.acme.com>');
   });
 
-  test('resolveFromAddress falls back to auth.briven.tech without verified domain', () => {
-    expect(resolveFromAddress(DEFAULT_AUTH_CONFIG)).toBe(
-      '"briven auth" <noreply@auth.briven.tech>',
-    );
+  test('resolveFromAddress falls back to the briven domain (never auth.*) without a custom domain', () => {
+    const from = resolveFromAddress(DEFAULT_AUTH_CONFIG);
+    // Env-dependent domain (BRIVEN_DOMAIN ?? briven.tech) — assert the shape
+    // and the hard rule: the fallback is NEVER an auth. subdomain.
+    expect(from).toMatch(/^"briven auth" <noreply@[a-z0-9.-]+>$/);
+    expect(from).not.toContain('noreply@auth.');
+  });
+
+  // ─── resolveFallbackFromAddress ──────────────────────────────────────
+
+  test('resolveFallbackFromAddress ignores the custom senderDomain', () => {
+    const cfg: AuthConfig = {
+      ...DEFAULT_AUTH_CONFIG,
+      branding: {
+        ...DEFAULT_AUTH_CONFIG.branding,
+        senderName: 'acme',
+        senderDomain: 'mail.acme.com',
+      },
+    };
+    const from = resolveFallbackFromAddress(cfg);
+    expect(from).not.toContain('mail.acme.com');
+    expect(from).toMatch(/^acme <noreply@[a-z0-9.-]+>$/);
+    expect(from).not.toContain('noreply@auth.');
+  });
+
+  test('resolveFallbackFromAddress keeps display-name quoting rules', () => {
+    const cfg: AuthConfig = {
+      ...DEFAULT_AUTH_CONFIG,
+      branding: {
+        ...DEFAULT_AUTH_CONFIG.branding,
+        senderName: 'acme auth',
+        senderDomain: 'mail.acme.com',
+      },
+    };
+    expect(resolveFallbackFromAddress(cfg)).toMatch(/^"acme auth" <noreply@/);
   });
 
   test('resolveFromAddress quotes display names with whitespace or specials', () => {
