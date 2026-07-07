@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { ProfileBillingForm } from '../../../../../../components/profile-billing-form';
 import { apiFetch, apiJson } from '../../../../../../lib/api';
 import { requireUser } from '../../../../../../lib/session';
+import { DatabaseControls } from './database-controls';
 import { DeleteProjectButton } from './delete-project-button';
 import { ProjectGeneralForm } from './project-general-form';
 
@@ -124,6 +125,20 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
           vatLocked={Boolean(user.vatVerifiedAt && user.vatId)}
           save={saveProfile}
         />
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-[var(--color-text)]">Database</h3>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          Health of this project&apos;s database, plus recovery controls.
+        </p>
+        <div className="mt-4">
+          <DatabaseControls
+            projectId={id}
+            projectName={project.name}
+            apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+          />
+        </div>
       </section>
 
       <section>

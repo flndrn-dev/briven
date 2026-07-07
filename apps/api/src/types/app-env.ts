@@ -1,3 +1,4 @@
+import type { MemberRole } from '../db/schema.js';
 import type { Session, User } from '../middleware/session.js';
 
 /**
@@ -16,10 +17,12 @@ export type AppEnv = {
 /**
  * Hono `Variables` for routers gated by `requireProjectAuth()`, which sets
  * `apiKeyId` when the request is authenticated via a project-scoped API
- * key (`brk_…`) instead of a session.
+ * key (`brk_…`) instead of a session, and `projectRole` — the caller's
+ * effective `MemberRole` on the project — for both auth branches.
  */
 export type ProjectAppEnv = {
   Variables: AppEnv['Variables'] & {
     apiKeyId: string | null;
+    projectRole: MemberRole | null;
   };
 };
