@@ -130,7 +130,7 @@ export function BrandingForm({ projectId, initial }: Props) {
 
       <Card
         title="sender domain"
-        description="mittera-verified domain for outbound auth emails. leave empty to use the briven fallback."
+        description="your domain for outbound auth emails, e.g. yourapp.com. leave empty to use the briven fallback (noreply@briven.tech)."
       >
         <input
           type="text"
@@ -147,9 +147,10 @@ export function BrandingForm({ projectId, initial }: Props) {
           </p>
         ) : null}
         <p className="mt-2 font-mono text-[11px] text-[var(--color-text-subtle)]">
-          verify your domain via the separate mittera DNS wizard (SPF + DKIM
-          + return-path). until verified, mail still sends from{' '}
-          <code>noreply@briven.tech</code> regardless of this field.
+          verify this domain by adding the DNS records briven provides
+          (SPF + DKIM) — guided setup lands in this panel soon. once set,
+          auth emails send as <code>noreply@yourdomain</code>; an
+          unverified domain will fail delivery, so verify first.
         </p>
       </Card>
 

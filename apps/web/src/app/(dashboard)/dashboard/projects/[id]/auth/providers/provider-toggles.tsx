@@ -135,6 +135,10 @@ export function ProviderToggles({ projectId, initial, initialSecrets }: Props) {
           value={providers.magicLink.expiryMinutes}
           onChange={(n) => update('magicLink', { expiryMinutes: n })}
         />
+        <p className="mt-2 font-mono text-[11px] text-[var(--color-text-subtle)]">
+          emails send from the sender name + domain configured in auth
+          &rarr; branding.
+        </p>
       </ProviderCard>
 
       <ProviderCard
@@ -157,6 +161,10 @@ export function ProviderToggles({ projectId, initial, initialSecrets }: Props) {
           value={providers.emailOtp.expiryMinutes}
           onChange={(n) => update('emailOtp', { expiryMinutes: n })}
         />
+        <p className="mt-2 font-mono text-[11px] text-[var(--color-text-subtle)]">
+          emails send from the sender name + domain configured in auth
+          &rarr; branding.
+        </p>
       </ProviderCard>
 
       <ProviderCard

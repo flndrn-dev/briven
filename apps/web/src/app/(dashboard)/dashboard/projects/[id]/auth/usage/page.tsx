@@ -60,7 +60,7 @@ export default async function AuthUsagePage({
           monthly active users — distinct end-user accounts with at least one
           session in the trailing 30 days. soft cap for v1: surfaced here, fed
           to polar overage billing once the meter goes live. deliverability +
-          bounce panel lands alongside the mittera sender-domain wizard.
+          bounce panel lands alongside the sender-domain verification flow.
         </p>
       </header>
 
@@ -105,13 +105,12 @@ export default async function AuthUsagePage({
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
         <h3 className="font-mono text-sm text-[var(--color-text)]">deliverability</h3>
         <p className="mt-2">
-          sent / delivered / bounced / complaint stats come from mittera once the
-          sender-domain wizard is wired into the branding panel. lands alongside
+          sent / delivered / bounced / complaint stats arrive once sender-domain
+          verification is wired into the branding panel. lands alongside
           BUILD_PLAN.md §8 deliverability work.
         </p>
         <p className="mt-2 text-[11px] text-[var(--color-text-subtle)]">
-          today: no data — the per-tenant mittera sender domain isn&apos;t verified
-          yet.
+          today: no data — the per-tenant sender domain isn&apos;t verified yet.
         </p>
       </div>
     </section>
