@@ -88,16 +88,27 @@ services:
   # DoltGres = Postgres-wire, git-for-data. Each customer project is its own
   # DATABASE here, created by the api over the `pg` driver. The default
   # superuser/database is `postgres`/`postgres` (DOLTGRES_* envs override the
-  # password). Data dir is /var/lib/doltgresql (per the image docs).
+  # password).
+  #
+  # IMAGE IS PINNED BY DIGEST, ON PURPOSE (2026-07-07 maintenance window):
+  # `:latest` let a deploy silently swap the database engine under live data
+  # (prime suspect in the 2026-07-07 auth.db outage). To upgrade the engine,
+  # change the digest here deliberately, in its own reviewed deploy.
+  #
+  # DATA DIR IS /var/lib/doltgres — NO "ql". The mount below once pointed at
+  # /var/lib/doltgresql (typo), so all real data lived in an anonymous volume
+  # that a container recreation would orphan. Fixed 2026-07-07 (data migrated
+  # into the named volume during the maintenance window). Never change this
+  # path without checking `config.yaml` inside the volume.
   doltgres:
-    image: dolthub/doltgresql:latest
+    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
     restart: unless-stopped
     logging: *briven-logging
     environment:
       DOLTGRES_USER: postgres
       DOLTGRES_PASSWORD: ${BRIVEN_DOLTGRES_PASSWORD}
     volumes:
-      - doltgres_data:/var/lib/doltgresql
+      - doltgres_data:/var/lib/doltgres
       # Dolt-native backups land here (written by the server itself); the
       # dolt-backup service triggers them. See that service for details.
       - doltgres_backups:/backups
@@ -139,7 +150,9 @@ services:
   # briven-backup.sh). Folding an `mc mirror /backups -> minio` step into this
   # service needs an image carrying both psql and mc; tracked as a follow-up.
   dolt-backup:
-    image: dolthub/doltgresql:latest
+    # Pinned to the SAME digest as the doltgres service (2026-07-07 window) —
+    # the sidecar's psql must always match the server's engine version.
+    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
     restart: unless-stopped
     logging: *briven-logging
     depends_on:
@@ -153,6 +166,10 @@ services:
       BRIVEN_BACKUP_INTERVAL_SECONDS: ${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}
     volumes:
       - doltgres_backups:/backups
+      # Read-only view of the server's data dir, ONLY so auth.db (the engine's
+      # users/grants file — corrupted once on 2026-07-07, nothing backed it up)
+      # can be snapshotted alongside the dolt backups below.
+      - doltgres_data:/doltgres-data:ro
     entrypoint: ['/bin/sh', '-c']
     command:
       - |
@@ -174,6 +191,21 @@ services:
               echo "[dolt-backup $$ts] WARN backup failed for $$db"
             fi
           done
+          # auth.db snapshot — tiny file, changes only on role/grant edits.
+          # Keep the newest 14 copies (2 weeks at the daily default interval).
+          if [ -f /doltgres-data/auth.db ]; then
+            mkdir -p /backups/auth-db
+            if cp /doltgres-data/auth.db "/backups/auth-db/auth.db.$$ts"; then
+              echo "[dolt-backup $$ts] ok auth.db snapshot"
+              ls -1t /backups/auth-db | tail -n +15 | while read -r old; do
+                rm -f "/backups/auth-db/$$old"
+              done
+            else
+              echo "[dolt-backup $$ts] WARN auth.db snapshot failed"
+            fi
+          else
+            echo "[dolt-backup $$ts] WARN auth.db not found in data dir"
+          fi
           echo "[dolt-backup $$ts] run complete; sleeping"
           sleep "$${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}"
         done
