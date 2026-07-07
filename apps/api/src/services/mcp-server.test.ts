@@ -9,7 +9,7 @@ import {
   verifyMcpKey,
   type McpVerifyDeps,
 } from './mcp-access.js';
-import { assertReadOnlyQuery, buildMcpServer, READ_TOOLS, WRITE_TOOLS } from './mcp-tools.js';
+import { ADMIN_TOOLS, assertReadOnlyQuery, buildMcpServer, READ_TOOLS, WRITE_TOOLS } from './mcp-tools.js';
 
 /* ── fixtures ─────────────────────────────────────────────────────────── */
 
@@ -159,23 +159,25 @@ async function listToolsForScope(scope: McpKeyScope) {
 }
 
 describe('buildMcpServer — tools/list by scope', () => {
-  test('read key sees ONLY the read tools, no write tools', async () => {
+  test('read key sees ONLY the read tools, no write/admin tools', async () => {
     const tools = await listToolsForScope('read');
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...READ_TOOLS].sort());
     for (const w of WRITE_TOOLS) expect(names).not.toContain(w);
+    for (const a of ADMIN_TOOLS) expect(names).not.toContain(a);
   });
 
-  test('read-write key sees read + write tools', async () => {
+  test('read-write key sees read + write tools, no admin tools', async () => {
     const tools = await listToolsForScope('read-write');
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...READ_TOOLS, ...WRITE_TOOLS].sort());
+    for (const a of ADMIN_TOOLS) expect(names).not.toContain(a);
   });
 
-  test('admin key sees read + write tools', async () => {
+  test('admin key sees read + write + admin tools', async () => {
     const tools = await listToolsForScope('admin');
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual([...READ_TOOLS, ...WRITE_TOOLS].sort());
+    expect(names).toEqual([...READ_TOOLS, ...WRITE_TOOLS, ...ADMIN_TOOLS].sort());
   });
 
   test('THE ISOLATION CONTRACT: no tool exposes a projectId argument', async () => {

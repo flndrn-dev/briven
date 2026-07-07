@@ -130,20 +130,23 @@ export async function getAdminRevenue(): Promise<AdminRevenue> {
     currency: 'EUR',
     mrr: isPaymentConnected() ? mrrValue : null,
     planMix,
+    // Null-tolerant mapping throughout: the LIVE table can predate the
+    // schema's notNull constraints (migrations don't run on deploy), and one
+    // legacy null must degrade to a placeholder — never crash the cockpit.
     activeSubscriptions: activeSubs.map((s) => ({
       orgId: s.orgId,
       orgName: orgNameById.get(s.orgId) ?? null,
-      tier: s.tier,
-      status: s.status,
+      tier: s.tier ?? 'free',
+      status: s.status ?? 'active',
       since: s.since ? s.since.toISOString() : null,
       currentPeriodEnd: s.currentPeriodEnd ? s.currentPeriodEnd.toISOString() : null,
     })),
     meteredUsage: usageRows.map((u) => ({
-      metric: u.metric,
-      period: u.periodStart.toISOString(),
+      metric: u.metric ?? 'unknown',
+      period: u.periodStart ? u.periodStart.toISOString() : '',
       quantity: Number(u.value) || 0,
-      unit: unitFor(u.metric),
-      pushStatus: u.pushStatus,
+      unit: unitFor(u.metric ?? ''),
+      pushStatus: u.pushStatus ?? 'pending',
     })),
     monthlyTimeline: await monthlyUsageTimeline(),
     note: NOTE,
@@ -200,9 +203,21 @@ async function monthlyUsageTimeline(): Promise<
     storage_rows: number | string;
   }>;
 
-  return rows.map((r) => ({
-    month: (r.month instanceof Date ? r.month : new Date(r.month)).toISOString().slice(0, 7),
-    invocations: Number(r.invocations) || 0,
-    storageRows: Number(r.storage_rows) || 0,
-  }));
+  // Some drivers return the result rows directly, others wrap them in
+  // `{ rows }` — accept both, and drop any bucket whose month won't parse
+  // rather than letting toISOString() throw the whole endpoint down.
+  const list = Array.isArray(rows)
+    ? rows
+    : ((rows as unknown as { rows?: typeof rows }).rows ?? []);
+  return list.flatMap((r) => {
+    const d = r.month instanceof Date ? r.month : new Date(r.month);
+    if (Number.isNaN(d.getTime())) return [];
+    return [
+      {
+        month: d.toISOString().slice(0, 7),
+        invocations: Number(r.invocations) || 0,
+        storageRows: Number(r.storage_rows) || 0,
+      },
+    ];
+  });
 }

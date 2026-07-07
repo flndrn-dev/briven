@@ -7,6 +7,14 @@ import { env } from '../env.js';
 import { audit } from './audit.js';
 import { AUTH_BRIDGE_TOOLS, registerAuthBridgeTools } from './mcp-auth-bridge.js';
 import { BRIVEN_ASK_TOOLS, registerBrivenAskTool } from './mcp-briven-ask.js';
+import {
+  DB_LIFECYCLE_ADMIN_TOOLS,
+  DB_LIFECYCLE_READ_TOOLS,
+  DB_LIFECYCLE_WRITE_TOOLS,
+  registerDbLifecycleAdminTools,
+  registerDbLifecycleReadTools,
+  registerDbLifecycleWriteTools,
+} from './mcp-db-lifecycle.js';
 import { signedTransformUrl, isImageTransformConfigured } from './image-transform.js';
 import {
   deleteFile,
@@ -579,6 +587,10 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
 
   registerBrivenAskTool(server, ctx, auditCall, jsonResult);
 
+  /* ── database lifecycle — reads for every scope ──────────────────────── */
+
+  registerDbLifecycleReadTools(server, ctx, auditCall, jsonResult);
+
   /* ── write tools — ONLY registered for read-write / admin keys ──────── */
 
   if (ctx.scope === 'read-write' || ctx.scope === 'admin') {
@@ -867,6 +879,16 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
         return jsonResult({ affected });
       },
     );
+
+    /* ── database lifecycle — restart + recover (write scope) ──────────── */
+
+    registerDbLifecycleWriteTools(server, ctx, auditCall, jsonResult);
+  }
+
+  /* ── admin-only — the destructive lifecycle tail ─────────────────────── */
+
+  if (ctx.scope === 'admin') {
+    registerDbLifecycleAdminTools(server, ctx, auditCall, jsonResult);
   }
 
   return server;
@@ -904,6 +926,8 @@ export const READ_TOOLS = [
   ...AUTH_BRIDGE_TOOLS,
   // general reception desk (mcp-briven-ask.ts)
   ...BRIVEN_ASK_TOOLS,
+  // database lifecycle reads (mcp-db-lifecycle.ts)
+  ...DB_LIFECYCLE_READ_TOOLS,
 ] as const;
 export const WRITE_TOOLS = [
   // data-plane writes
@@ -919,4 +943,8 @@ export const WRITE_TOOLS = [
   // public share-link writes (M5 — read-write / admin only)
   'storage_create_link',
   'storage_revoke_link',
+  // database lifecycle writes (mcp-db-lifecycle.ts)
+  ...DB_LIFECYCLE_WRITE_TOOLS,
 ] as const;
+/** Registered ONLY for admin-scope keys — the destructive lifecycle tail. */
+export const ADMIN_TOOLS = [...DB_LIFECYCLE_ADMIN_TOOLS] as const;

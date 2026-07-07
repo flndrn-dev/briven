@@ -50,6 +50,7 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'DSL or the studio, and read/write through the SDK, HTTP API, or this MCP.',
     whatOurToolsGiveYou: [
       'MCP: list_tables, describe_table, query (read); create_table, insert, update, delete (write scope).',
+      'MCP lifecycle: db_health + db_recovery_points (read); db_restart + db_recover (write scope); db_reprovision (admin keys) — for "database not responding" start with db_health, then db_restart.',
       'SDK: typed queries + mutations from @briven/client and the framework packages.',
       'versioning: undo/snapshots per the docs /undo page (dolt_log, DOLT_RESET, branches).',
     ],

@@ -92,13 +92,18 @@ const REVENUE_FALLBACK: Revenue = {
 export default async function AdminRevenuePage() {
   const data = await apiJson<Revenue>('/v1/admin/revenue').catch(() => REVENUE_FALLBACK);
 
-  const invocationSeries: AreaChartPoint[] = data.monthlyTimeline.map((m) => ({
+  // Drop unparseable months instead of feeding NaN coordinates to the chart —
+  // one odd bucket must never take the whole view down.
+  const timeline = (data.monthlyTimeline ?? []).filter((m) =>
+    Number.isFinite(monthToMs(m.month)),
+  );
+  const invocationSeries: AreaChartPoint[] = timeline.map((m) => ({
     x: monthToMs(m.month),
-    y: m.invocations,
+    y: Number(m.invocations) || 0,
   }));
-  const storageSeries: AreaChartPoint[] = data.monthlyTimeline.map((m) => ({
+  const storageSeries: AreaChartPoint[] = timeline.map((m) => ({
     x: monthToMs(m.month),
-    y: m.storageRows,
+    y: Number(m.storageRows) || 0,
   }));
 
   return (
@@ -257,9 +262,9 @@ function TimelineChartCard({
   );
 }
 
-/** Push status → pill tone. Tolerant of free-form status strings. */
-function pushTone(status: string): string {
-  const s = status.toLowerCase();
+/** Push status → pill tone. Tolerant of free-form (or missing) status strings. */
+function pushTone(status: string | null | undefined): string {
+  const s = String(status ?? '').toLowerCase();
   if (/push|sent|ok|synced/.test(s)) {
     return 'text-[var(--color-success)] border-[var(--color-success)]';
   }
@@ -293,7 +298,7 @@ function MeteredUsageTable({ rows }: { rows: Revenue['meteredUsage'] }) {
               <td className="px-6 py-4 text-[var(--color-text)]">{r.metric}</td>
               <td className="px-6 py-4 text-[var(--color-text-muted)]">{r.period}</td>
               <td className="whitespace-nowrap px-6 py-4 text-[var(--color-text)]">
-                {r.quantity.toLocaleString()}{' '}
+                {(Number(r.quantity) || 0).toLocaleString()}{' '}
                 <span className="text-[var(--color-text-subtle)]">{r.unit}</span>
               </td>
               <td className="px-6 py-4">
@@ -302,7 +307,7 @@ function MeteredUsageTable({ rows }: { rows: Revenue['meteredUsage'] }) {
                     r.pushStatus,
                   )}`}
                 >
-                  {r.pushStatus.replace(/_/g, ' ')}
+                  {String(r.pushStatus ?? 'pending').replace(/_/g, ' ')}
                 </span>
               </td>
             </tr>
@@ -320,16 +325,17 @@ const SUB_STATUS_TONE: Record<string, string> = {
   canceled: 'text-[var(--color-text-subtle)] border-[var(--color-border-subtle)]',
 };
 
-/** Tolerant status badge — status is a free string per the contract. */
-function SubStatusBadge({ status }: { status: string }) {
+/** Tolerant status badge — status is a free string per the contract (may be missing). */
+function SubStatusBadge({ status }: { status: string | null | undefined }) {
+  const label = String(status ?? 'unknown');
   const tone =
-    SUB_STATUS_TONE[status.toLowerCase()] ??
+    SUB_STATUS_TONE[label.toLowerCase()] ??
     'text-[var(--color-text-subtle)] border-[var(--color-border-subtle)]';
   return (
     <span
       className={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider ${tone}`}
     >
-      {status.replace(/_/g, ' ')}
+      {label.replace(/_/g, ' ')}
     </span>
   );
 }

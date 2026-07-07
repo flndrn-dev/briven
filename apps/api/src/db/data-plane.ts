@@ -326,6 +326,82 @@ export async function runInProjectDatabase<T>(
 }
 
 /**
+ * Evict ONE project's cached pool — the per-project "database restart".
+ * Closes every pooled connection (in-flight queries finish; idle ones drop)
+ * and removes the cache entry so the very next query opens a FRESH pool with
+ * a fresh auth handshake. This clears the stuck-connection / stale-auth class
+ * of incidents without touching any data. Returns false when no pool was
+ * cached (nothing to restart — also fine).
+ */
+export async function evictProjectPool(projectId: string): Promise<boolean> {
+  const dbName = dbNameFor(projectId);
+  const pool = _projPools.get(dbName);
+  if (!pool) return false;
+  _projPools.delete(dbName);
+  try {
+    await pool.end();
+  } catch (err) {
+    // The pool is already out of the cache — a noisy close must not fail the
+    // restart; the old pool is unreachable either way.
+    log.warn('project_db_pool_close_failed', {
+      projectId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+  log.info('project_db_pool_evicted', { projectId, dbName });
+  return true;
+}
+
+export interface ProjectDbHealth {
+  reachable: boolean;
+  latencyMs: number | null;
+  tableCount: number | null;
+  /** Dolt HEAD commit hash — proves the versioning engine answers too. */
+  headCommit: string | null;
+  error: string | null;
+}
+
+/**
+ * Cheap per-project database health probe: fresh query through the normal
+ * pool path — counts user tables and reads the Dolt HEAD hash. Fail-soft:
+ * never throws, reports the failure in `error` instead.
+ */
+export async function checkProjectDbHealth(projectId: string): Promise<ProjectDbHealth> {
+  const started = Date.now();
+  try {
+    const rows = await runInProjectDatabase(projectId, (tx) =>
+      tx.unsafe(
+        `SELECT
+           (SELECT count(*)::int
+              FROM information_schema.tables
+             WHERE table_schema = 'public'
+               AND table_type = 'BASE TABLE'
+               AND left(table_name, 8) <> '_briven_') AS table_count,
+           DOLT_HASHOF('HEAD') AS head`,
+      ),
+    );
+    const row = (rows as Array<{ table_count: number; head: unknown }>)[0];
+    // DOLT_HASHOF comes back brace-wrapped on some DoltGres builds — strip.
+    const head = row ? String(row.head).replace(/[{}]/g, '') : null;
+    return {
+      reachable: true,
+      latencyMs: Date.now() - started,
+      tableCount: row ? Number(row.table_count) : null,
+      headCommit: head,
+      error: null,
+    };
+  } catch (err) {
+    return {
+      reachable: false,
+      latencyMs: Date.now() - started,
+      tableCount: null,
+      headCommit: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
  * Close every cached per-project database pool. Called on shutdown alongside
  * `closeDataPlane`.
  */

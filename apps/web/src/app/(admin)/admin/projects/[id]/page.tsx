@@ -1,3 +1,4 @@
+import { DatabaseIcon } from '@/components/ui/database';
 import { FoldersIcon } from '@/components/ui/folders';
 import { LayoutGridIcon } from '@/components/ui/layout-grid';
 import { ShieldCheckIcon } from '@/components/ui/shield-check';
@@ -7,6 +8,8 @@ import { apiJson } from '@/lib/api';
 import { toValidDate } from '@/lib/utils';
 
 import { ProjectActions } from '../project-actions';
+
+import { DatabaseControls } from './database-controls';
 
 import { EmptyState } from '../../_components/empty-state';
 import { Section } from '../../_components/section';
@@ -138,6 +141,14 @@ export default async function AdminProjectDetailPage({
             <Field label="created" value={dashDate(project.createdAt)} />
           </dl>
         </div>
+      </Section>
+
+      {/* ── database ─────────────────────────────────────────────────── */}
+      <Section title="database" icon={<DatabaseIcon size={16} />}>
+        <DatabaseControls
+          project={{ id: project.id, name: project.name, slug: project.slug }}
+          apiOrigin={process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? ''}
+        />
       </Section>
     </div>
   );

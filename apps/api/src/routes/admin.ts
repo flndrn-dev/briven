@@ -86,6 +86,13 @@ import {
   type UpdateTicketInput,
 } from '../services/support-tickets.js';
 import { NotFoundError, ValidationError } from '@briven/shared';
+import {
+  checkProjectDbHealth,
+  dropProjectDatabase,
+  evictProjectPool,
+  provisionProjectDatabase,
+} from '../db/data-plane.js';
+import { createSnapshot, listSnapshots, restoreSnapshot } from '../services/snapshots.js';
 
 const userActionSchema = z.object({ userId: z.string().min(1) });
 
@@ -754,6 +761,127 @@ adminRouter.post('/v1/admin/projects/set-mine-tier', async (c) => {
     metadata: { tier: parsed.data.tier, count: changedProjectIds.length },
   });
   return c.json({ updated: changedProjectIds.length });
+});
+
+/* ─── admin: per-project database controls ──────────────────────────── */
+
+/**
+ * Per-project database health probe — reachability, latency, user-table
+ * count, and the Dolt HEAD commit. Fail-soft in the service (never throws;
+ * failures land in health.error), so this route always answers 200 for a
+ * project that exists. Contract with the admin project-detail database card.
+ */
+adminRouter.get('/v1/admin/projects/:id/database/health', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProjectForAdmin(projectId);
+  if (!project) return c.json({ code: 'not_found' }, 404);
+  return c.json({ health: await checkProjectDbHealth(projectId) });
+});
+
+/** List a project's snapshots (Dolt tags), newest first. */
+adminRouter.get('/v1/admin/projects/:id/database/snapshots', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProjectForAdmin(projectId);
+  if (!project) return c.json({ code: 'not_found' }, 404);
+  return c.json({ snapshots: await listSnapshots(projectId) });
+});
+
+/**
+ * Restart a project's database connections: evict the cached pool so the
+ * very next query opens a fresh one with a fresh auth handshake. Clears the
+ * stuck-connection / stale-auth class of incidents without touching any
+ * data. Returns the post-restart health so the UI can confirm in one trip.
+ */
+adminRouter.post('/v1/admin/projects/:id/database/restart', async (c) => {
+  const actor = c.get('user')!;
+  const projectId = c.req.param('id');
+  const project = await getProjectForAdmin(projectId);
+  if (!project) return c.json({ code: 'not_found' }, 404);
+  await evictProjectPool(projectId);
+  const health = await checkProjectDbHealth(projectId);
+  await audit({
+    actorId: actor.id,
+    projectId,
+    action: 'admin.project.database.restart',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { reachable: health.reachable },
+  });
+  return c.json({ restarted: true, health });
+});
+
+const databaseRecoverBody = z.object({ snapshotId: z.string().min(1) });
+
+/**
+ * Recover a project's database to a snapshot. Always takes a fresh manual
+ * safety snapshot FIRST (so the recover itself is reversible), then hard-
+ * resets to the target snapshot and evicts the pool so no connection keeps
+ * serving pre-recover state. Audited with both snapshot ids.
+ */
+adminRouter.post('/v1/admin/projects/:id/database/recover', async (c) => {
+  const actor = c.get('user')!;
+  const projectId = c.req.param('id');
+  const parsed = databaseRecoverBody.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const project = await getProjectForAdmin(projectId);
+  if (!project) return c.json({ code: 'not_found' }, 404);
+  const pre = await createSnapshot(projectId, `pre-recover ${parsed.data.snapshotId}`, {
+    auto: false,
+  });
+  const { restored } = await restoreSnapshot(projectId, parsed.data.snapshotId);
+  await evictProjectPool(projectId);
+  await audit({
+    actorId: actor.id,
+    projectId,
+    action: 'admin.project.database.recover',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { snapshotId: parsed.data.snapshotId, preRecoverySnapshotId: pre.id },
+  });
+  return c.json({
+    recovered: true,
+    preRecoverySnapshotId: pre.id,
+    tablesAfterRecover: restored,
+  });
+});
+
+const databaseReprovisionBody = z.object({ confirmName: z.string().min(1) });
+
+/**
+ * Nuke-and-rebuild a project's database: drop it (data AND snapshots gone
+ * permanently) and provision a fresh empty one. Guarded by a typed
+ * confirmation — the body's confirmName must exactly match the project's
+ * slug or name, otherwise 400 confirm_mismatch and nothing is touched.
+ */
+adminRouter.post('/v1/admin/projects/:id/database/reprovision', async (c) => {
+  const actor = c.get('user')!;
+  const projectId = c.req.param('id');
+  const parsed = databaseReprovisionBody.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+  }
+  const project = await getProjectForAdmin(projectId);
+  if (!project) return c.json({ code: 'not_found' }, 404);
+  if (parsed.data.confirmName !== project.slug && parsed.data.confirmName !== project.name) {
+    return c.json(
+      { code: 'confirm_mismatch', message: 'confirmation does not match the project slug or name' },
+      400,
+    );
+  }
+  await evictProjectPool(projectId);
+  await dropProjectDatabase(projectId);
+  await provisionProjectDatabase(projectId);
+  await audit({
+    actorId: actor.id,
+    projectId,
+    action: 'admin.project.database.reprovision',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { slug: project.slug },
+  });
+  return c.json({ reprovisioned: true, health: await checkProjectDbHealth(projectId) });
 });
 
 /**
