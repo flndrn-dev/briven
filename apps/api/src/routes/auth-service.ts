@@ -991,6 +991,121 @@ function resolveTenant(c: {
 }
 
 /**
+ * Callback/redirect normalization for the tenant-auth bridge.
+ *
+ * WHY this exists (proven-by-trace bug):
+ *   1. The @briven/auth SDK POSTs `{ email, redirectTo }` to endpoints like
+ *      /v1/auth-tenant/sign-in/magic-link — but Better Auth only reads
+ *      `body.callbackURL`, so `redirectTo` is silently ignored. After the
+ *      user clicks the email link, Better Auth redirects to its default "/",
+ *      resolved against its baseURL (api.briven.tech) instead of the tenant
+ *      app. We seed `callbackURL` from `redirectTo` here so the intent the
+ *      SDK expressed actually reaches Better Auth.
+ *   2. A RELATIVE callbackURL ("/dashboard") also resolves against
+ *      api.briven.tech, not the calling app. The SDK's fetch always carries
+ *      an Origin header, so we absolutize relative paths against it
+ *      (Origin "https://code.konnos.org" + "/dashboard" →
+ *      "https://code.konnos.org/dashboard").
+ *
+ * Security boundary: we do NOT validate the resulting absolute URL here.
+ * Better Auth's trustedOrigins originCheck still validates every absolute
+ * callbackURL against the project's registered app domains downstream —
+ * that check is the security boundary, and this function must neither
+ * bypass nor duplicate it. Protocol-relative "//evil.com" is left alone
+ * (it is not a same-app relative path), and a malformed/missing Origin
+ * means we forward the body untouched. Never throws.
+ */
+const TENANT_CALLBACK_FIELDS = ['callbackURL', 'newUserCallbackURL', 'errorCallbackURL'] as const;
+
+export function normalizeTenantCallbacks(
+  body: Record<string, unknown>,
+  origin: string | null,
+): Record<string, unknown> {
+  try {
+    const out: Record<string, unknown> = { ...body };
+
+    // Bridge the SDK's vocabulary: seed callbackURL (and only callbackURL)
+    // from redirectTo when the caller didn't set callbackURL explicitly.
+    if (out.callbackURL === undefined && typeof out.redirectTo === 'string') {
+      out.callbackURL = out.redirectTo;
+    }
+
+    // Absolutize relative paths against the calling app's Origin. Only a
+    // valid http(s) origin qualifies; otherwise leave everything untouched.
+    let originUrl: URL | null = null;
+    if (origin) {
+      try {
+        const parsed = new URL(origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          originUrl = parsed;
+        }
+      } catch {
+        /* malformed Origin header — do not rewrite anything */
+      }
+    }
+    if (originUrl) {
+      for (const field of TENANT_CALLBACK_FIELDS) {
+        const value = out[field];
+        // "/path" is app-relative; "//host" is protocol-relative (a foreign
+        // host, not a path) and must be left for originCheck to reject.
+        if (typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')) {
+          out[field] = new URL(value, originUrl).toString();
+        }
+      }
+    }
+    return out;
+  } catch {
+    // Normalization must never break an auth request.
+    return body;
+  }
+}
+
+/**
+ * Rewrites the incoming bridge Request when (and only when) it is a JSON
+ * POST to an endpoint that accepts a callbackURL (sign-in/*, sign-up,
+ * forget-password, send-verification-email). Everything else — and any
+ * body that fails to parse — is forwarded byte-for-byte untouched so a
+ * weird payload can never break auth.
+ */
+async function rewriteTenantCallbackRequest(raw: Request): Promise<Request> {
+  try {
+    if (raw.method !== 'POST') return raw;
+    const path = new URL(raw.url).pathname;
+    const eligible =
+      path.includes('/sign-in/') ||
+      path.includes('/sign-up') ||
+      path.includes('/forget-password') ||
+      path.includes('/send-verification-email');
+    if (!eligible) return raw;
+    const contentType = raw.headers.get('content-type') ?? '';
+    if (!contentType.toLowerCase().includes('application/json')) return raw;
+
+    // Clone before reading so the original stream stays consumable if we
+    // bail out (parse failure, non-object body).
+    const parsed: unknown = await raw.clone().json();
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return raw;
+
+    const normalized = normalizeTenantCallbacks(
+      parsed as Record<string, unknown>,
+      raw.headers.get('origin'),
+    );
+
+    // Preserve method, url, and headers — but drop content-length so the
+    // runtime recomputes it for the (possibly longer) mutated body.
+    const headers = new Headers(raw.headers);
+    headers.delete('content-length');
+    return new Request(raw.url, {
+      method: raw.method,
+      headers,
+      body: JSON.stringify(normalized),
+    });
+  } catch {
+    // Any failure → forward the original request exactly as today.
+    return raw;
+  }
+}
+
+/**
  * Catch-all bridge. Better Auth ships its own `handler(request)` method
  * that routes every endpoint Better Auth registered (sign-in, sign-up,
  * OAuth callback, magic-link consume, session, etc). We pull the per-
@@ -1029,8 +1144,12 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     // `c.req.raw` is the underlying Fetch API Request — Better Auth's
     // handler expects exactly that shape. The Response that comes back
     // already carries Set-Cookie headers, status, body — no rewriting.
+    // rewriteTenantCallbackRequest() only touches JSON POSTs to the
+    // callback-carrying endpoints (see its doc comment); everything else
+    // passes through as the untouched raw Request.
+    const request = await rewriteTenantCallbackRequest(c.req.raw);
     return await runWithRequestContext({ ip, projectId }, () =>
-      instance.betterAuth.handler(c.req.raw),
+      instance.betterAuth.handler(request),
     );
   } catch (err) {
     log.error('briven_auth_tenant_bridge_failed', {
