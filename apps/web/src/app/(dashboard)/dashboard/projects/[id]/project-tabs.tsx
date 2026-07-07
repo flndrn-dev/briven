@@ -86,13 +86,25 @@ export function ProjectTabs({
             ? 'Hide developer tools — show the simple view'
             : 'Show developer tools (SQL editor, functions, api keys, webhooks…)'
         }
-        className={`shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 font-mono text-xs transition ${
+        className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 font-mono text-xs transition ${
           developerMode
-            ? 'bg-[var(--color-primary-subtle)] text-[var(--color-text)]'
-            : 'text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]'
+            ? 'bg-[var(--color-primary)] text-white'
+            : 'text-[color-mix(in_srgb,var(--color-primary)_60%,transparent)] hover:text-[var(--color-primary)]'
         }`}
       >
-        {developerMode ? '◆ developer mode' : '◇ developer mode'}
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="size-3.5"
+        >
+          <path d="M7 17 17 7M7 7h10v10" />
+        </svg>
+        developer mode
       </button>
     </div>
   );
