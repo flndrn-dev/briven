@@ -4,7 +4,7 @@
  * Called once per project, the first time a customer clicks **Enable Auth**
  * in the dashboard. Emits a single transactional batch of statements that:
  *   1. ensures the `citext` extension exists in the project's schema
- *   2. creates the five `_briven_auth_*` tables
+ *   2. creates the six `_briven_auth_*` tables
  *   3. creates the supporting indexes
  *
  * Shape matches BUILD_PLAN.md §3 exactly. Drizzle model definitions live
@@ -23,6 +23,29 @@
  * provisioning route is idempotent by design (BUILD_PLAN.md §4 admin
  * endpoint `POST /v1/projects/:id/auth/enable`).
  */
+
+/**
+ * DDL for `_briven_auth_jwks` — Better Auth's jwt-plugin key store (model
+ * `jwks`: id, publicKey, privateKey, createdAt, expiresAt). The private key
+ * is encrypted at rest by Better Auth with the instance secret before it is
+ * written, so the column holds ciphertext JSON, never a raw key.
+ *
+ * Exported separately (not just inside `renderAuthProvisioningSql`) because
+ * the jwks table postdates many live projects: `auth-tenant-pool.ts` re-runs
+ * this single idempotent statement on tenant-instance boot so existing
+ * projects self-heal without a re-provisioning step. New tables via
+ * `CREATE TABLE IF NOT EXISTS` are safe on DoltGres (ALTER ADD COLUMN
+ * IF NOT EXISTS is not — never retrofit columns onto existing tables).
+ */
+export const AUTH_JWKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS "_briven_auth_jwks" (
+   id           text        PRIMARY KEY,
+   public_key   text        NOT NULL,
+   private_key  text        NOT NULL,
+   created_at   timestamptz NOT NULL DEFAULT now(),
+   expires_at   timestamptz
+ )`
+  .replace(/\s+/g, ' ')
+  .trim();
 
 /**
  * Emit the full DDL batch for a project's auth tables. Caller wraps it in
@@ -119,6 +142,10 @@ export function renderAuthProvisioningSql(): string[] {
        ON "_briven_auth_audit_log" (user_id, occurred_at DESC)`,
     `CREATE INDEX IF NOT EXISTS "_briven_auth_audit_action_occurred_idx"
        ON "_briven_auth_audit_log" (action, occurred_at DESC)`,
+
+    // _briven_auth_jwks — jwt-plugin signing keys (shared constant above so
+    // the tenant-pool boot ensure and this batch never drift).
+    AUTH_JWKS_TABLE_SQL,
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -134,5 +161,6 @@ export const AUTH_TABLES = [
   '_briven_auth_accounts',
   '_briven_auth_verification_tokens',
   '_briven_auth_audit_log',
+  '_briven_auth_jwks',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

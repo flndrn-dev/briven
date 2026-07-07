@@ -140,6 +140,23 @@ export const authVerificationTokens = pgTable(
 );
 
 /**
+ * JWT signing keys — Better Auth's jwt-plugin `jwks` model. One row per
+ * generated key pair; the plugin creates the first row lazily on the first
+ * `/token` or `/jwks` request. `privateKey` holds the private JWK encrypted
+ * by Better Auth with the instance secret (ciphertext JSON, never a raw
+ * key); `publicKey` is the public JWK served on `GET /v1/auth-tenant/jwks`.
+ * Field names mirror the plugin's schema exactly: publicKey, privateKey,
+ * createdAt (required), expiresAt (optional, key rotation).
+ */
+export const authJwks = pgTable('_briven_auth_jwks', {
+  id: id(),
+  publicKey: text('public_key').notNull(),
+  privateKey: text('private_key').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  expiresAt: ts('expires_at'),
+});
+
+/**
  * Append-only audit log of authentication events within this tenant. Briven's
  * own table (Better Auth has no audit model), unchanged by the S2.1b rebuild.
  * `metadata` never includes raw IPs or full emails — CLAUDE.md §5.1.
@@ -170,6 +187,8 @@ export const authSchema = {
   session: authSessions,
   account: authAccounts,
   verification: authVerificationTokens,
+  // jwt-plugin key store (model name `jwks` is what the plugin looks up).
+  jwks: authJwks,
   // briven-specific extra — Better Auth doesn't ship an audit-log model.
   auditLog: authAuditLog,
 } as const;
@@ -178,6 +197,7 @@ export type AuthUser = typeof authUsers.$inferSelect;
 export type AuthSession = typeof authSessions.$inferSelect;
 export type AuthAccount = typeof authAccounts.$inferSelect;
 export type AuthVerificationToken = typeof authVerificationTokens.$inferSelect;
+export type AuthJwk = typeof authJwks.$inferSelect;
 export type AuthAuditLogEntry = typeof authAuditLog.$inferSelect;
 
 /** Audit-action vocabulary. Open union — services can emit any string, but the

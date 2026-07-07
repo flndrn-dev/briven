@@ -26,6 +26,7 @@ export default function AuthPage() {
           ['react bindings', '#react'],
           ['sign-in flows', '#flows'],
           ['email sender domain', '#sender-domain'],
+          ['verify users with tokens', '#verify-tokens'],
           ['security', '#security'],
         ].map(([label, href]) => (
           <a
@@ -328,6 +329,73 @@ if (result.ok) {
           domain? that means the domain isn&apos;t verified yet — finish adding the DNS records
           and allow up to an hour for DNS to propagate. emails not arriving at all? check spam
           first, then <em>Auth → usage</em> for delivery status.
+        </section>
+      </section>
+
+      {/* verify tokens -------------------------------------------------- */}
+      <section
+        id="verify-tokens"
+        className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8"
+      >
+        <h2 className="font-mono text-lg tracking-tight">verify users with tokens (JWT + JWKS)</h2>
+        <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+          <code>getSession()</code> asks the briven auth service every time. when your setup has
+          its own backend — or several apps sharing one sign-in — you often just need a fast
+          local answer to &quot;is this user signed in?&quot; without a network round-trip per
+          request. for that, briven auth issues <strong>verifiable tokens</strong>: short-lived
+          signed JWTs your own code can check against the project&apos;s public keys.
+        </p>
+
+        <h3 className="mt-5 font-mono text-sm">the two endpoints</h3>
+        <ul className="mt-2 list-inside list-disc font-mono text-sm text-[var(--color-text-muted)] space-y-2">
+          <li>
+            <code>GET /v1/auth-tenant/token</code> — requires a signed-in session (the browser
+            cookie). returns <code>{`{ token: "<JWT>" }`}</code>, a short-lived signed JWT for
+            the current user.
+          </li>
+          <li>
+            <code>GET /v1/auth-tenant/jwks</code> — public, no auth. returns the project&apos;s
+            JSON Web Key Set, so your code can verify JWTs locally without calling briven.
+          </li>
+        </ul>
+        <p className="mt-3 font-mono text-xs text-[var(--color-text-subtle)]">
+          both live under <code>https://api.briven.tech</code> and carry your{' '}
+          <code>x-briven-project-id</code> header like every auth request.
+        </p>
+
+        <h3 className="mt-5 font-mono text-sm">verify a token</h3>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+          any standard JWT library that understands remote JWKS works — shown here with{' '}
+          <code>jose</code>:
+        </p>
+        <Snippet>{`// in the signed-in browser: mint a token, hand it to your backend
+const res = await fetch('https://api.briven.tech/v1/auth-tenant/token', {
+  headers: {
+    'x-briven-project-id': 'p_01HZ...',
+    authorization: 'Bearer pk_briven_auth_...', // the browser-safe key
+  },
+  credentials: 'include', // sends the session cookie
+});
+const { token } = await res.json();
+
+// on YOUR server: verify locally — no call to briven per request
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+const jwks = createRemoteJWKSet(
+  new URL('https://api.briven.tech/v1/auth-tenant/jwks'),
+  { headers: { 'x-briven-project-id': 'p_01HZ...' } },
+);
+
+const { payload } = await jwtVerify(token, jwks);
+// payload.sub is the signed-in user's id`}</Snippet>
+
+        <section className="mt-5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
+          <strong className="text-[var(--color-text)]">keys and rotation:</strong> signing keys
+          are <em>per-project</em> — a token from one project never verifies in another. key
+          rotation is handled through the JWKS endpoint: when briven rotates a key, the new one
+          appears in the key set, so refetch the JWKS whenever verification hits an unknown key
+          id (libraries like <code>jose</code> do this for you). tokens are short-lived by
+          design — refetch <code>/token</code> on expiry rather than storing one long-term.
         </section>
       </section>
 

@@ -21,7 +21,7 @@ describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
     expect(stmts[0]).toContain('CREATE TABLE IF NOT EXISTS "_briven_auth_users"');
   });
 
-  test('emits all five _briven_auth_* tables with IF NOT EXISTS', () => {
+  test('emits all six _briven_auth_* tables with IF NOT EXISTS', () => {
     for (const table of AUTH_TABLES) {
       const hasCreateTable = stmts.some((s) =>
         s.startsWith(`CREATE TABLE IF NOT EXISTS "${table}"`),
@@ -115,8 +115,21 @@ describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
     expect(audit!).toContain(`jsonb NOT NULL DEFAULT '{}'::jsonb`);
   });
 
+  test('jwks table matches the jwt plugin model (public/private key, created/expires)', () => {
+    const jwks = stmts.find((s) =>
+      s.startsWith('CREATE TABLE IF NOT EXISTS "_briven_auth_jwks"'),
+    );
+    expect(jwks).toBeDefined();
+    expect(jwks!).toContain('public_key text NOT NULL');
+    expect(jwks!).toContain('private_key text NOT NULL');
+    expect(jwks!).toContain('created_at timestamptz NOT NULL DEFAULT now()');
+    // expiresAt is optional in the plugin schema (only set with key rotation).
+    expect(jwks!).toContain('expires_at timestamptz');
+    expect(jwks!).not.toContain('expires_at timestamptz NOT NULL');
+  });
+
   test('AUTH_TABLES is exhaustive and matches the emitted CREATE TABLEs', () => {
-    expect(AUTH_TABLES.length).toBe(5);
+    expect(AUTH_TABLES.length).toBe(6);
     const createdTables = stmts
       .filter((s) => s.startsWith('CREATE TABLE'))
       .map((s) => s.match(/"(_briven_auth_[a-z_]+)"/)?.[1]);

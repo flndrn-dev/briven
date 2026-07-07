@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { emailOTP, genericOAuth, magicLink } from 'better-auth/plugins';
+import { emailOTP, genericOAuth, jwt, magicLink } from 'better-auth/plugins';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 
@@ -18,6 +18,7 @@ import {
   sendBrivenAuthOtp,
   sendBrivenAuthPasswordReset,
 } from './auth-mailer.js';
+import { AUTH_JWKS_TABLE_SQL } from './auth-provisioning.js';
 import { brivenOwnOrigins, originsForProject } from './auth-origin-allowlist.js';
 import { publishEvent, type AuthEventType } from './outbound-webhooks.js';
 import { getTenantSecret } from './tenant-secrets.js';
@@ -201,6 +202,32 @@ export function buildTenantAuthPlugins(
   }
 
   return plugins;
+}
+
+/**
+ * Compose the FINAL per-tenant plugins array: unconditional core plugins
+ * first, then the config-gated ones. The jwt plugin is core — every project
+ * gets `GET /v1/auth-tenant/token` (session → signed JWT) and
+ * `GET /v1/auth-tenant/jwks` (public keys) with NO toggle, so backend
+ * services can verify briven auth sessions statelessly. Options stay at the
+ * plugin defaults on purpose: EdDSA/Ed25519 keys, 15-minute expiry, issuer +
+ * audience = the auth baseURL origin, and the stored private key encrypted
+ * with the instance secret (each tenant derives its own).
+ *
+ * Split out from `createAuthInstance` (which needs a live DB) so the
+ * unconditional-core contract is unit-testable alongside the config gate.
+ */
+export function assembleTenantPlugins(
+  passwordlessPlugins: TenantAuthPlugin[],
+  genericOAuthConfigs: ReturnType<typeof buildGenericOAuthConfigs>,
+): TenantAuthPlugin[] {
+  return [
+    jwt() as unknown as TenantAuthPlugin,
+    ...passwordlessPlugins,
+    ...(genericOAuthConfigs.length > 0
+      ? [genericOAuth({ config: genericOAuthConfigs as never }) as unknown as TenantAuthPlugin]
+      : []),
+  ];
 }
 
 // ─── lifecycle event → webhook dispatch ──────────────────────────────────
@@ -505,12 +532,23 @@ async function createAuthInstance(projectId: string) {
   const socialProviders = await resolveSocialProviders(projectId, config);
   const oauthSecrets = await resolveOAuthSecrets(projectId, config);
   const genericOAuthConfigs = buildGenericOAuthConfigs(config, oauthSecrets);
-  const plugins = [
-    ...passwordlessPlugins,
-    ...(genericOAuthConfigs.length > 0
-      ? [genericOAuth({ config: genericOAuthConfigs as never })]
-      : []),
-  ];
+  const plugins = assembleTenantPlugins(passwordlessPlugins, genericOAuthConfigs);
+
+  // Self-heal the jwt plugin's key table on projects provisioned BEFORE the
+  // jwks table joined the DDL batch (provisioning only runs when a customer
+  // clicks Enable Auth, so live tenants never re-run it). Idempotent
+  // `CREATE TABLE IF NOT EXISTS`, once per instance boot — without this,
+  // `GET /v1/auth-tenant/token` would 500 on every pre-existing project.
+  // Failure is logged but NOT fatal: the rest of auth (sign-in/session)
+  // works without the table; only the jwt endpoints would error.
+  try {
+    await pgPool.query(AUTH_JWKS_TABLE_SQL);
+  } catch (err) {
+    log.warn('briven_auth_jwks_ensure_failed', {
+      projectId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const instance = betterAuth({
     appName: `briven-auth-${projectId}`,
@@ -528,6 +566,8 @@ async function createAuthInstance(projectId: string) {
         session: authSchema.session,
         account: authSchema.account,
         verification: authSchema.verification,
+        // jwt-plugin key store — the plugin looks the model up as `jwks`.
+        jwks: authSchema.jwks,
       },
     }),
     emailAndPassword: {

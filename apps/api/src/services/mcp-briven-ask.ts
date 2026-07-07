@@ -132,16 +132,23 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
     keywords: [
       'auth', 'login', 'signin', 'signup', 'magic', 'otp', 'passkey', 'oauth',
       'session', 'sender', 'email', 'domain', 'user', 'users', 'password',
+      'jwt', 'jwks', 'token', 'verify',
     ],
     howBrivenWorksHere:
       'managed multi-tenant end-user auth (@briven/auth): email+password, magic link, ' +
-      'OTP, passkeys, OAuth social — all per-project, configured in the dashboard.',
+      'OTP, passkeys, OAuth social — all per-project, configured in the dashboard. ' +
+      'sessions live in a cookie (get-session checks them), and every project also ' +
+      'exposes a token endpoint (short-lived signed JWT for the current user) plus a ' +
+      'public JWKS endpoint, so your app can verify "is this user signed in?" locally ' +
+      'without calling briven on every request.',
     whatOurToolsGiveYou: [
       'dedicated MCP tools on THIS connection: auth_config_get, sender_domain_status, auth_docs_ask — ask those for anything auth; they return live state + apply-steps.',
+      'for JWT/JWKS local verification specifics, ask auth_docs_ask "verify session locally with tokens" — it returns both endpoints and the apply-steps.',
     ],
     whatYouBuildInYourProject: [
       'your sign-in UI (or the prebuilt <BrivenSignIn/>) wired with the browser-safe pk_briven_auth_ key.',
       'register every origin you serve from under dashboard auth → app domains.',
+      'multi-app or own-backend setups: fetch GET /v1/auth-tenant/token from the signed-in browser and verify it on your server against GET /v1/auth-tenant/jwks with a standard JWT library, instead of a get-session round-trip per request.',
     ],
     docs: `${DOCS_BASE}/auth`,
   },
@@ -280,7 +287,7 @@ export const DOCS_INDEX: readonly { slug: string; title: string }[] = [
   { slug: '/realtime', title: 'realtime — reactive queries' },
   { slug: '/sdks', title: 'sdk reference' },
   { slug: '/api', title: 'http api reference' },
-  { slug: '/auth', title: 'auth + email sender domain' },
+  { slug: '/auth', title: 'auth + email sender domain + verifiable tokens (jwt/jwks)' },
   { slug: '/cli', title: 'cli reference' },
   { slug: '/undo', title: 'undo + snapshots' },
   { slug: '/vector-search', title: 'vector search' },

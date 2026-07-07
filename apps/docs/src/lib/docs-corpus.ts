@@ -370,9 +370,9 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
   },
   {
     slug: '/auth',
-    title: 'auth · @briven/auth end-user sign-in + email sender domain',
+    title: 'auth · @briven/auth end-user sign-in + email sender domain + verifiable tokens (jwt + jwks)',
     summary:
-      'drop-in end-user sign-in for your app: email + password, magic link, email OTP, passkeys, OAuth social. covers install, pk_briven_auth keys, React hooks, the BrivenSignIn panel, and the email sender domain: how sign-in emails send from noreply@briven.tech by default, how to brand them as noreply@yourdomain via Auth → branding (root domain, never an auth. subdomain), the SPF + DKIM DNS records that verify it, and the automatic fallback that keeps sign-in emails working until the domain verifies.',
+      'drop-in end-user sign-in for your app: email + password, magic link, email OTP, passkeys, OAuth social. covers install, pk_briven_auth keys, React hooks, the BrivenSignIn panel, and the email sender domain: how sign-in emails send from noreply@briven.tech by default, how to brand them as noreply@yourdomain via Auth → branding (root domain, never an auth. subdomain), the SPF + DKIM DNS records that verify it, and the automatic fallback that keeps sign-in emails working until the domain verifies. also covers verifiable tokens: GET /v1/auth-tenant/token returns a short-lived signed JWT for the signed-in user, GET /v1/auth-tenant/jwks returns the project JSON Web Key Set, so your app verifies sessions locally with any standard JWT library instead of a get-session round-trip — keys are per-project and rotation lands via the JWKS endpoint.',
     keywords: [
       'auth',
       'sign in',
@@ -392,6 +392,14 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'branding',
       'from address',
       'fallback sender',
+      'jwt',
+      'jwks',
+      'token',
+      'verifiable token',
+      'verify session locally',
+      'token endpoint',
+      'json web key set',
+      'key rotation',
     ],
   },
 ];

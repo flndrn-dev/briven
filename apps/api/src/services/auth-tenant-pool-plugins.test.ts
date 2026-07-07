@@ -10,6 +10,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  assembleTenantPlugins,
   buildAuthDatabaseHooks,
   buildGenericOAuthConfigs,
   buildTenantAuthPlugins,
@@ -89,6 +90,39 @@ describe('buildTenantAuthPlugins — config-gated plugin loading', () => {
     const ids = buildTenantAuthPlugins(PROJECT_ID, config).map((p) => p.id);
     expect(ids).toContain('magic-link');
     expect(ids).toContain('email-otp');
+  });
+});
+
+describe('assembleTenantPlugins — unconditional core plugins', () => {
+  test('the jwt plugin is always present, even with everything toggled off', () => {
+    const ids = assembleTenantPlugins([], []).map((p) => p.id);
+    expect(ids).toContain('jwt');
+  });
+
+  test('jwt rides along with the default config (no toggles enabled)', () => {
+    const passwordless = buildTenantAuthPlugins(PROJECT_ID, DEFAULT_AUTH_CONFIG);
+    const ids = assembleTenantPlugins(passwordless, []).map((p) => p.id);
+    expect(ids).toContain('jwt');
+    expect(ids).not.toContain('magic-link');
+    expect(ids).not.toContain('email-otp');
+  });
+
+  test('jwt comes first, then the config-gated plugins in order', () => {
+    const config = configWith({ magicLink: { enabled: true, expiryMinutes: 15 } });
+    const passwordless = buildTenantAuthPlugins(PROJECT_ID, config);
+    const ids = assembleTenantPlugins(passwordless, []).map((p) => p.id);
+    expect(ids[0]).toBe('jwt');
+    expect(ids).toContain('magic-link');
+  });
+
+  test('generic-oauth still only registers when configs exist', () => {
+    const withNone = assembleTenantPlugins([], []).map((p) => p.id);
+    expect(withNone).not.toContain('generic-oauth');
+
+    const config = configWith({ konnos: { enabled: true, clientId: 'k-cid' } });
+    const oauthConfigs = buildGenericOAuthConfigs(config, { konnos: 'k-secret', oidc: {} });
+    const withKonnos = assembleTenantPlugins([], oauthConfigs).map((p) => p.id);
+    expect(withKonnos).toContain('generic-oauth');
   });
 });
 

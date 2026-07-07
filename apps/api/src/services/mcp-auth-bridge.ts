@@ -37,6 +37,7 @@ const DOCS = {
   keys: 'https://docs.briven.tech/auth#keys',
   flows: 'https://docs.briven.tech/auth#flows',
   security: 'https://docs.briven.tech/auth#security',
+  verifyTokens: 'https://docs.briven.tech/auth#verify-tokens',
 } as const;
 
 /* ── auth_config_get ─────────────────────────────────────────────────── */
@@ -251,6 +252,24 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
       'provider changes are dashboard-only by design; this MCP cannot toggle them. ask the project owner.',
     ],
     docs: DOCS.auth,
+  },
+  {
+    id: 'verify-tokens-jwt-jwks',
+    topic: 'verify a session locally with tokens (JWT + JWKS)',
+    keywords: ['jwt', 'jwks', 'token', 'tokens', 'verify', 'verifiable', 'verification', 'locally', 'stateless', 'bearer'],
+    answer:
+      'every project\'s auth surface exposes two endpoints for local session verification: ' +
+      'GET /v1/auth-tenant/token (requires the signed-in session cookie; returns { token }, ' +
+      'a short-lived signed JWT for the current user) and GET /v1/auth-tenant/jwks (public, ' +
+      'no auth; returns the project\'s JSON Web Key Set). your app verifies the JWT against ' +
+      'the JWKS with any standard JWT library — no get-session round-trip per request. ' +
+      'signing keys are per-project; rotation is handled through the JWKS endpoint.',
+    applyInYourProject: [
+      'from the signed-in browser, fetch https://api.briven.tech/v1/auth-tenant/token with credentials:include plus your x-briven-project-id header, and pass the returned token to your own backend (e.g. as an authorization: Bearer header).',
+      'on your server, verify the token against https://api.briven.tech/v1/auth-tenant/jwks (same x-briven-project-id header) using a standard JWT library with remote-JWKS support — cache the key set, and refetch it when verification hits an unknown key id (that is how key rotation lands).',
+      'tokens are short-lived by design: refetch /token when verification reports expiry instead of storing one long-term, and keep get-session for the moments you need the full session object.',
+    ],
+    docs: DOCS.verifyTokens,
   },
   {
     id: 'sessions-cookies',
