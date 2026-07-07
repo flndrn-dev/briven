@@ -5,6 +5,7 @@ import { runInProjectDatabase } from '../db/data-plane.js';
 import type { McpKeyScope } from '../db/schema.js';
 import { env } from '../env.js';
 import { audit } from './audit.js';
+import { AUTH_BRIDGE_TOOLS, registerAuthBridgeTools } from './mcp-auth-bridge.js';
 import { signedTransformUrl, isImageTransformConfigured } from './image-transform.js';
 import {
   deleteFile,
@@ -197,7 +198,10 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
     {
       instructions:
         'Briven data-plane access. Every tool operates ONLY on the single ' +
-        'project this key is bound to; you cannot select another project.',
+        'project this key is bound to; you cannot select another project. ' +
+        'The auth_* and sender_domain_status tools additionally answer auth / ' +
+        'sign-in-email configuration questions with read-only facts plus ' +
+        '"apply in your project" guidance and docs citations.',
     },
   );
 
@@ -561,6 +565,10 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
     },
   );
 
+  /* ── auth bridge — read + guidance tools (every scope) ──────────────── */
+
+  registerAuthBridgeTools(server, ctx, auditCall, jsonResult);
+
   /* ── write tools — ONLY registered for read-write / admin keys ──────── */
 
   if (ctx.scope === 'read-write' || ctx.scope === 'admin') {
@@ -882,6 +890,8 @@ export const READ_TOOLS = [
   'storage_shared_download_url',
   // public share-link reads (M5)
   'storage_list_links',
+  // auth bridge — read + guidance (mcp-auth-bridge.ts)
+  ...AUTH_BRIDGE_TOOLS,
 ] as const;
 export const WRITE_TOOLS = [
   // data-plane writes
