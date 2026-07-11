@@ -30,7 +30,23 @@ export const mcpServerRouter = new Hono();
 
 const BEARER_RE = /^Bearer\s+(.+)$/i;
 
-mcpServerRouter.all('/mcp', async (c) => {
+// Streamable HTTP clients open a GET /mcp to listen for server->client SSE
+// messages, and may send DELETE /mcp to end a session. This server is STATELESS
+// (`sessionIdGenerator: undefined`) and answers every POST inline as JSON, so it
+// offers no server->client stream and holds no session to terminate. Per the MCP
+// Streamable HTTP spec the correct answer is an immediate 405 Method Not Allowed.
+// Previously these fell through the `.all` handler into the transport, where the
+// GET path hung ~10s and then 500'd — which stalled the client's connection until
+// it timed out and got benched. Answering 405 instantly keeps the door responsive.
+mcpServerRouter.on(['GET', 'DELETE'], '/mcp', (c) =>
+  c.json(
+    { jsonrpc: '2.0', error: { code: -32000, message: 'Method Not Allowed' }, id: null },
+    405,
+    { Allow: 'POST' },
+  ),
+);
+
+mcpServerRouter.post('/mcp', async (c) => {
   // 1. Extract the presented key from the Authorization header.
   const authz = c.req.header('authorization') ?? '';
   const presented = BEARER_RE.exec(authz)?.[1]?.trim() ?? null;

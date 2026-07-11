@@ -206,16 +206,28 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
     { name: 'briven-mcp', version: '1.0.0' },
     {
       instructions:
-        'Briven data-plane access. Every tool operates ONLY on the single ' +
-        'project this key is bound to; you cannot select another project. ' +
-        'The auth_* and sender_domain_status tools additionally answer auth / ' +
-        'sign-in-email configuration questions with read-only facts plus ' +
-        '"apply in your project" guidance and docs citations. For ANY other ' +
-        'briven question (database, storage, functions, realtime, limits, ' +
-        'migration, hosting), ask briven_ask FIRST — it always answers with ' +
-        'the platform picture, the available primitives, and the part you ' +
-        'build in your own project; unmatched questions are filed for the ' +
-        'platform team, never dead-ended.',
+        'Briven data-plane access. THIS IS YOUR ENVIRONMENT — build your ' +
+        'solution WITHIN it, using only these tools. The structure and ' +
+        'functionality are here; work with them. ' +
+        'Every tool operates ONLY on the single project this key is bound to; ' +
+        'you cannot select another project, and no project can reach another ' +
+        "project's data. " +
+        'Do NOT stand up a separate/side database or server for your project, ' +
+        'do NOT expect a durable raw or superuser SQL login, and do NOT ask ' +
+        'briven for special credentials or bespoke features — solve it with the ' +
+        'primitives you have here (create_table, describe_table, list_tables, ' +
+        'query, insert, update, delete, storage_*, auth_*). Being clever is not ' +
+        'the same as being allowed off-platform. ' +
+        'The auth_* and sender_domain_status tools answer auth / sign-in-email ' +
+        'configuration questions with read-only facts plus "apply in your ' +
+        'project" guidance and docs citations. For ANY other briven question ' +
+        '(database, storage, functions, realtime, limits, migration, hosting) — ' +
+        'or if you genuinely believe something is a platform BUG or a MISSING ' +
+        'FEATURE — ask briven_ask FIRST: it gives the platform picture, the ' +
+        'available primitives, and the exact part you build in your own project, ' +
+        'and files genuinely-missing capabilities for the platform team. A ' +
+        'missing capability is a briven_ask filing, never a licence to go ' +
+        'off-platform or build a workaround.',
     },
   );
 
