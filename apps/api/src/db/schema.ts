@@ -580,6 +580,44 @@ export const auditLogs = pgTable(
   }),
 );
 
+/* ─── mcp_known_answers (briven_ask self-growing knowledge base) ─────── */
+// A platform-WIDE (not per-project) cache of answers the `briven_ask` desk
+// has produced for questions no hand-curated guide matched. When briven's
+// grounded answer-writer composes a fresh answer (only from briven's own
+// docs/guides — never invented), it is stored here keyed by a normalised
+// topic key, so the NEXT agent anywhere gets the same answer instantly
+// instead of re-deriving it or wandering off-platform. A briven session can
+// seed rows (`source = 'seed'`); the writer adds `source = 'auto'`. Read by
+// every project through its own key — the key only gates access; the
+// knowledge itself is shared, exactly like the hand-curated guides.
+export const knownAnswerSource = ['seed', 'auto'] as const;
+
+export const mcpKnownAnswers = pgTable(
+  'mcp_known_answers',
+  {
+    id: id(),
+    // Normalised, de-duplicated, sorted content words of the question — the
+    // stable cache key so paraphrases of the same question collapse to one row.
+    // Uniqueness is enforced by the unique index below (used by ON CONFLICT).
+    topicKey: text('topic_key').notNull(),
+    // A representative raw question (truncated) so a human can review what agents ask.
+    question: text('question').notNull(),
+    // The three-part answer object { howBrivenWorksHere, whatOurToolsGiveYou[],
+    // whatYouBuildInYourProject[], docs } — same shape as a curated guide.
+    answer: jsonb('answer').notNull(),
+    source: text('source', { enum: knownAnswerSource }).notNull(),
+    // Which model composed an `auto` answer (null for `seed`), for provenance.
+    model: text('model'),
+    // How many times this cached answer has been served — surfaces the hottest walls.
+    hitCount: integer('hit_count').default(0).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    topicKeyIdx: uniqueIndex('mcp_known_answers_topic_key_idx').on(t.topicKey),
+  }),
+);
+
 /* ─── email_suppressions ──────────────────────────────────────────── */
 // Recipients we won't send to. Populated from mittera webhook events
 // (email.bounced+permanent, email.complained, email.suppressed) and
@@ -1220,6 +1258,8 @@ export type NewApiKey = typeof apiKeys.$inferInsert;
 export type Deployment = typeof deployments.$inferSelect;
 export type NewDeployment = typeof deployments.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type KnownAnswer = typeof mcpKnownAnswers.$inferSelect;
+export type NewKnownAnswer = typeof mcpKnownAnswers.$inferInsert;
 export type FunctionLog = typeof functionLogs.$inferSelect;
 export type NewFunctionLog = typeof functionLogs.$inferInsert;
 export type NewAuditLog = typeof auditLogs.$inferInsert;

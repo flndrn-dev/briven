@@ -1,5 +1,16 @@
+import { newId } from '@briven/shared';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
+
+import { getDb } from '../db/client.js';
+import { mcpKnownAnswers } from '../db/schema.js';
+import { log } from '../lib/logger.js';
+import {
+  validateStoredAnswer,
+  writeGroundedAnswer,
+  type GroundedAnswer,
+} from './mcp-answer-writer.js';
 
 /**
  * `briven_ask` — the general MCP reception desk (Build 3, owner-approved
@@ -60,6 +71,36 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'some postgres corners differ on the git-for-data engine (e.g. prepared statements, pg_index introspection) — if a query errors oddly, ask this tool with the exact error.',
     ],
     docs: `${DOCS_BASE}/schema`,
+  },
+  {
+    id: 'app-data-access',
+    area: 'reading & writing your data from a running app (any language / stack)',
+    keywords: [
+      'python', 'ruby', 'go', 'golang', 'rust', 'java', 'php', 'csharp', 'dotnet',
+      'node', 'client', 'sdk', 'driver', 'connection', 'connect', 'dsn', 'psql',
+      'libpq', 'orm', 'runtime', 'app', 'application', 'stack', 'language',
+      'fetch', 'request', 'curl', 'read', 'write', 'crud', 'data',
+    ],
+    howBrivenWorksHere:
+      'your running app never opens a raw sql connection to briven, and there is NO ' +
+      '"run any sql with my key" http endpoint — that is deliberate: the same ' +
+      'mediation that keeps every project sealed in its own database. instead an app ' +
+      'reads/writes by calling small server FUNCTIONS that run next to the data, while ' +
+      'agents and tooling use this MCP\'s data tools. this is identical for every ' +
+      'language — the javascript sdk is a convenience wrapper over plain http, not a ' +
+      'requirement.',
+    whatOurToolsGiveYou: [
+      'from ANY language (python, go, ruby, rust, java, …): POST https://api.briven.tech/v1/projects/<projectId>/functions/<functionName> with header "authorization: bearer <brk_ server key>" and a json body — that single http call IS the runtime data path, no sdk required.',
+      'the brk_ key must be minted at role developer or higher to invoke functions; a lower-scope key returns 403.',
+      'to define or inspect tables while building: this MCP — create_table, describe_table, query, insert, update, delete.',
+      'javascript / typescript apps can use @briven/client (invoke + realtime subscribe) instead of hand-writing the fetch.',
+    ],
+    whatYouBuildInYourProject: [
+      'write one small function per operation (e.g. saveRun, listRuns) that does the ctx.db work, deploy it with the cli, then call it over http from your app.',
+      'there is no first-party sdk for python / go / etc yet — call the http endpoint directly (a one-line request in any http library). a missing convenience wrapper is NOT a reason to stand up a side database or ask for a raw sql login.',
+      'keep the brk_ key in server-side env only, never in client / browser code.',
+    ],
+    docs: `${DOCS_BASE}/functions`,
   },
   {
     id: 'storage',
@@ -325,6 +366,126 @@ export function matchBrivenGuides(question: string, limit = 2): BrivenAreaGuide[
     .map((s) => s.g);
 }
 
+/* ── self-growing knowledge base (cache + grounding) ─────────────────── */
+
+// Common English filler stripped so paraphrases of the same wall collapse to
+// one cache key. Kept small on purpose — over-stripping would merge distinct
+// questions.
+const TOPIC_STOPWORDS = new Set([
+  'the', 'a', 'an', 'how', 'do', 'does', 'did', 'can', 'could', 'should', 'would',
+  'is', 'are', 'was', 'to', 'from', 'with', 'in', 'on', 'of', 'for', 'and', 'or',
+  'my', 'me', 'i', 'you', 'your', 'it', 'this', 'that', 'these', 'those', 'using',
+  'use', 'when', 'what', 'where', 'why', 'get', 'need', 'want', 'please', 'help',
+  'briven', 'project',
+]);
+
+/**
+ * Normalise a question into a stable topic key: de-duplicated, filler-stripped,
+ * sorted content words. "How do I read my tables from a Python app?" and
+ * "reading tables in python app" collapse to the same key. Exported for tests.
+ */
+export function topicKey(question: string): string {
+  const content = Array.from(
+    new Set(tokenise(question).filter((t) => !TOPIC_STOPWORDS.has(t))),
+  ).sort();
+  if (content.length > 0) return content.join('-').slice(0, 200);
+  // Degenerate case (question was all filler): fall back to raw sorted tokens.
+  const all = Array.from(new Set(tokenise(question))).sort();
+  if (all.length > 0) return all.join('-').slice(0, 200);
+  // Last resort (no multi-char word tokens at all, e.g. "I a b"): compact the
+  // raw alphanumerics so we still get a deterministic key. Returns '' only for
+  // a question with no letters/digits whatsoever — callers must treat an empty
+  // key as "do not cache" (an empty key would collide across unrelated inputs).
+  return question
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 200);
+}
+
+// The ONLY knowledge the grounded writer may draw on: briven's own curated
+// guides + docs index. Built once (module-lifetime) — the guides are static.
+let _grounding: string | null = null;
+function buildGrounding(): string {
+  if (_grounding) return _grounding;
+  const guideText = BRIVEN_AREA_GUIDES.map(
+    (g) =>
+      `AREA: ${g.area}\nHOW BRIVEN WORKS HERE: ${g.howBrivenWorksHere}\n` +
+      `WHAT OUR TOOLS GIVE YOU:\n- ${g.whatOurToolsGiveYou.join('\n- ')}\n` +
+      `WHAT YOU BUILD IN YOUR PROJECT:\n- ${g.whatYouBuildInYourProject.join('\n- ')}\n` +
+      `DOCS: ${g.docs}`,
+  ).join('\n\n');
+  const docsText =
+    'DOCS INDEX:\n' + DOCS_INDEX.map((d) => `- ${d.title}: ${DOCS_BASE}${d.slug}`).join('\n');
+  _grounding = `${guideText}\n\n${docsText}`;
+  return _grounding;
+}
+
+/**
+ * Serve a previously-remembered answer for this topic key, bumping its
+ * hit-count. Fail-soft: any DB error returns null so the desk stays up and
+ * simply falls through to the writer / filed path.
+ */
+async function serveCachedAnswer(
+  key: string,
+): Promise<{ answer: GroundedAnswer; source: string } | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(mcpKnownAnswers)
+    .where(eq(mcpKnownAnswers.topicKey, key))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  // Validate the STORED shape too — a hand-seeded or drifted row must never be
+  // served blank. If it fails the same substance guard the writer output must
+  // pass, treat it as a miss so the desk falls through to the writer/filed path.
+  const answer = validateStoredAnswer(row.answer);
+  if (!answer) return null;
+  await db
+    .update(mcpKnownAnswers)
+    .set({ hitCount: sql`${mcpKnownAnswers.hitCount} + 1`, updatedAt: new Date() })
+    .where(eq(mcpKnownAnswers.id, row.id));
+  return { answer, source: row.source };
+}
+
+/**
+ * Defensive scrub of the representative question before it lands in the shared
+ * (admin-readable) cache table: strip anything that looks like a briven key or
+ * a long opaque token, so a careless question can't park a secret here.
+ */
+export function redactSecrets(text: string): string {
+  return text
+    .replace(/\b(pk_[a-z]+_|brk_|mck_|sk_)[A-Za-z0-9._-]{6,}/gi, '$1[redacted]')
+    .replace(/\bbearer\s+[A-Za-z0-9._-]{6,}/gi, 'bearer [redacted]')
+    .replace(/\b[A-Za-z0-9._-]{40,}\b/g, '[redacted]');
+}
+
+/**
+ * Remember a freshly-composed answer so the next agent gets it instantly.
+ * `onConflictDoNothing` on the unique topic key makes concurrent writers safe.
+ */
+async function storeAnswer(
+  key: string,
+  question: string,
+  answer: GroundedAnswer,
+  model: string,
+): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(mcpKnownAnswers)
+    .values({
+      id: newId('kans'),
+      topicKey: key,
+      question: redactSecrets(question).slice(0, 300),
+      answer,
+      source: 'auto',
+      model,
+      hitCount: 1,
+    })
+    .onConflictDoNothing({ target: mcpKnownAnswers.topicKey });
+}
+
 /* ── registration ────────────────────────────────────────────────────── */
 
 export function registerBrivenAskTool(
@@ -347,7 +508,10 @@ export function registerBrivenAskTool(
       inputSchema: {
         question: z.string().min(3).max(600).describe('Your question in plain words'),
       },
-      annotations: { readOnlyHint: true },
+      // Not strictly read-only: an unmatched question may memoise a grounded
+      // answer into the platform-wide known-answers cache (never any project's
+      // own data). Honest hint so hosts that gate on it aren't misled.
+      annotations: { readOnlyHint: false },
     },
     async ({ question }) => {
       const guides = matchBrivenGuides(question);
@@ -362,6 +526,64 @@ export function registerBrivenAskTool(
       });
 
       if (filedForReview) {
+        // Self-growing desk: before the honest "filed" reply, (1) serve a
+        // previously-remembered answer for this same wall, else (2) compose one
+        // grounded ONLY in briven's own docs and remember it. Both steps are
+        // fail-soft + dormant-safe — a DB error or the model engine being off
+        // just falls through to the unchanged filed response below, so the desk
+        // never hangs or errors. The cache write touches briven's control-plane
+        // only (never the caller's project data), so this stays read-only from
+        // the agent's perspective.
+        // Only use the shared cache with a stable, non-empty key. An empty key
+        // (a question with no letters or digits at all) would collide across
+        // unrelated inputs, so such questions skip caching entirely.
+        const key = topicKey(question);
+
+        if (key) {
+          const cached = await serveCachedAnswer(key).catch((err) => {
+            log.warn('briven_ask_cache_read_failed', {
+              message: err instanceof Error ? err.message : String(err),
+            });
+            return null;
+          });
+          if (cached) {
+            return jsonResult({
+              answered: true,
+              filedForReview: false,
+              source: cached.source,
+              guides: [cached.answer],
+              note:
+                "served from briven's known-answers desk (a question resolved earlier). " +
+                'for live project state use the data/storage/auth tools on this same connection.',
+            });
+          }
+        }
+
+        const written = await writeGroundedAnswer({
+          question,
+          grounding: buildGrounding(),
+        }).catch(() => ({ grounded: false as const }));
+        if (written.grounded) {
+          if (key) {
+            await storeAnswer(key, question, written.answer, written.model).catch((err) => {
+              log.warn('briven_ask_cache_write_failed', {
+                message: err instanceof Error ? err.message : String(err),
+              });
+            });
+          }
+          return jsonResult({
+            answered: true,
+            filedForReview: false,
+            source: 'auto',
+            guides: [written.answer],
+            note:
+              "composed from briven's own docs for a question no curated guide matched, " +
+              'and remembered for the next agent. build within these tools — never a side ' +
+              'database, a raw sql login, or a special-feature request; a genuine gap is ' +
+              'filed via this desk.',
+          });
+        }
+
         return jsonResult({
           answered: false,
           filedForReview: true,
