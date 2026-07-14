@@ -5,6 +5,7 @@ on:
     branches:
       - briven-doltgres-readiness-s0-s1
       - main
+  workflow_dispatch: {}
 
 jobs:
   deploy:
