@@ -62,7 +62,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     name: input.name,
     orgId: input.orgId,
     region: input.region ?? 'eu-west-1',
-    tier: 'free',
+    tier,
     // Field name kept for API/schema stability; value is now the per-project
     // DoltGres database name (database-per-project), not a schema name.
     dataSchemaName: dbNameFor(projectId),
