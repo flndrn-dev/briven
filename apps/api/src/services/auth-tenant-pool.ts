@@ -180,6 +180,18 @@ export function rewriteToHostedUrl(
 }
 
 /**
+ * Strip the "auth." prefix from a custom auth subdomain to get the parent
+ * domain for cookie scoping. auth.murphus.eu → murphus.eu.
+ * Returns null if the domain does not start with "auth.".
+ */
+function parentDomainFromAuthSubdomain(domain: string): string | undefined {
+  if (domain.toLowerCase().startsWith('auth.')) {
+    return domain.slice(5);
+  }
+  return undefined;
+}
+
+/**
  * Build the per-tenant Better Auth plugins array from the project's stored
  * auth config. ONLY the passwordless methods the customer has toggled on are
  * loaded — so `POST /v1/auth-tenant/sign-in/magic-link` (and the OTP / passkey
@@ -650,6 +662,12 @@ async function createAuthInstance(projectId: string) {
         // without Secure over http://localhost).
         sameSite: env.BRIVEN_ENV === 'production' ? 'none' : 'lax',
         httpOnly: true,
+        // When a custom auth subdomain is configured (auth.murphus.eu), set the
+        // cookie domain to the parent domain (murphus.eu) so the customer's
+        // app on the root domain can read the session cookie.
+        ...(config.customAuthDomain
+          ? { domain: parentDomainFromAuthSubdomain(config.customAuthDomain) }
+          : {}),
       },
       // Privacy (CLAUDE.md §5.1): never persist raw end-user IPs. The
       // session.ip_address column exists for Better-Auth compatibility but
