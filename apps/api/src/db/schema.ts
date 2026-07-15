@@ -298,6 +298,8 @@ export const projects = pgTable(
       .$type<'flag' | 'block'>()
       .notNull()
       .default('flag'),
+    /** Customer-owned auth subdomain (e.g. auth.murphus.eu). Cached here for fast lookup. */
+    authDomain: text('auth_domain'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

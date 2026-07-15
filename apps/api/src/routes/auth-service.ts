@@ -34,7 +34,7 @@ import {
 } from '../services/auth-branding-logo.js';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
-import { users } from '../db/schema.js';
+import { users, projects } from '../db/schema.js';
 import { isSuperadminEmail } from '../lib/superadmin.js';
 import {
   AppDomainLimitExceeded,
@@ -110,6 +110,31 @@ authServiceRouter.get('/v1/auth-service/ready', (c) => {
     },
     ready ? 200 : 503,
   );
+});
+
+/**
+ * Resolve a custom auth domain (e.g. auth.murphus.eu) to a project id.
+ * Public and unauthenticated — called by the web-app edge proxy before
+ * any auth context exists. Cached aggressively by the caller.
+ */
+authServiceRouter.get('/v1/auth-service/resolve-domain', async (c) => {
+  const domain = c.req.query('domain');
+  if (!domain) {
+    return c.json({ code: 'validation_failed', message: 'missing domain query param' }, 400);
+  }
+
+  const db = getDb();
+  const [row] = await db
+    .select({ id: projects.id, authDomain: projects.authDomain })
+    .from(projects)
+    .where(eq(projects.authDomain, domain))
+    .limit(1);
+
+  if (!row) {
+    return c.json({ code: 'not_found', message: 'no project found for this auth domain' }, 404);
+  }
+
+  return c.json({ projectId: row.id, authDomain: row.authDomain });
 });
 
 // ─── admin (dashboard-driven) ───────────────────────────────────────────
@@ -413,6 +438,18 @@ authServiceRouter.patch(
         message: err instanceof Error ? err.message : String(err),
       });
       return c.json({ code: 'config_update_failed' }, 500);
+    }
+
+    // Sync customAuthDomain to the control-plane projects table so the
+    // edge proxy can resolve auth.murphus.eu → projectId without querying
+    // every tenant database.
+    const domainPatch = (body as Record<string, unknown>)?.customAuthDomain;
+    if (domainPatch !== undefined) {
+      const db = getDb();
+      await db
+        .update(projects)
+        .set({ authDomain: typeof domainPatch === 'string' ? domainPatch : null })
+        .where(eq(projects.id, projectId));
     }
 
     // Drop the cached instance so the very next sign-in / session call

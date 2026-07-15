@@ -16,6 +16,34 @@ const API_ORIGIN = process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
 const MAINTENANCE_TTL_MS = 30_000;
 let maintenanceCache: { value: boolean; fetchedAt: number } | null = null;
 
+const AUTH_DOMAIN_TTL_MS = 60_000;
+const authDomainCache = new Map<string, { projectId: string | null; fetchedAt: number }>();
+
+async function resolveAuthDomain(host: string): Promise<string | null> {
+  const cached = authDomainCache.get(host);
+  if (cached && Date.now() - cached.fetchedAt < AUTH_DOMAIN_TTL_MS) {
+    return cached.projectId;
+  }
+  if (!API_ORIGIN) return null;
+  try {
+    const res = await fetch(`${API_ORIGIN}/v1/auth-service/resolve-domain?domain=${encodeURIComponent(host)}`, {
+      cache: 'no-store',
+      headers: { accept: 'application/json' },
+    });
+    if (!res.ok) {
+      authDomainCache.set(host, { projectId: null, fetchedAt: Date.now() });
+      return null;
+    }
+    const body = (await res.json()) as { projectId?: string };
+    const projectId = body.projectId ?? null;
+    authDomainCache.set(host, { projectId, fetchedAt: Date.now() });
+    return projectId;
+  } catch {
+    authDomainCache.set(host, { projectId: null, fetchedAt: Date.now() });
+    return null;
+  }
+}
+
 /**
  * Is the platform in maintenance right now? Cached for ~30s to keep the
  * per-request cost near zero. On any fetch failure we FAIL OPEN (return
@@ -93,6 +121,17 @@ export default async function proxy(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Custom auth domain: auth.murphus.eu → resolve via API, then serve hosted pages.
+  const isCustomAuthHost = host.startsWith('auth.');
+  if (isCustomAuthHost && !isAuthHost) {
+    const projectId = await resolveAuthDomain(host);
+    if (projectId) {
+      const url = nextUrl.clone();
+      url.pathname = `/auth/${projectId}${nextUrl.pathname === '/' ? '/sign-in' : nextUrl.pathname}`;
+      return NextResponse.rewrite(url);
+    }
+  }
+
   if (nextUrl.pathname.startsWith('/dashboard')) {
     const hasSession =
       req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);
@@ -111,7 +150,7 @@ export default async function proxy(req: NextRequest): Promise<NextResponse> {
   // don't need to re-exclude them here.
   const path = nextUrl.pathname;
   const maintenanceExempt =
-    isAdminHost || isAuthHost || path === '/signin' || path.startsWith('/maintenance');
+    isAdminHost || isAuthHost || isCustomAuthHost || path === '/signin' || path.startsWith('/maintenance');
   if (!maintenanceExempt && (await isMaintenanceActive())) {
     return NextResponse.rewrite(new URL('/maintenance', req.url));
   }
