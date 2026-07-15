@@ -74,11 +74,23 @@ export default async function proxy(req: NextRequest): Promise<NextResponse> {
 
   const host = (req.headers.get('host') ?? '').split(':')[0] ?? '';
   const isAdminHost = host.startsWith('admin.');
+  const isAuthHost = host.endsWith('.auth.briven.tech');
 
   if (isAdminHost && !nextUrl.pathname.startsWith('/admin')) {
     const url = nextUrl.clone();
     url.pathname = `/admin${nextUrl.pathname === '/' ? '' : nextUrl.pathname}`;
     return NextResponse.rewrite(url);
+  }
+
+  // Auth subdomain: <projectId>.auth.briven.tech/<flow> → serve hosted auth pages.
+  if (isAuthHost) {
+    const projectId = host.replace(/\.auth\.briven\.tech$/, '');
+    // Valid project ids start with p_ and contain alphanumeric chars.
+    if (/^p_[a-zA-Z0-9_]+$/.test(projectId)) {
+      const url = nextUrl.clone();
+      url.pathname = `/auth/${projectId}${nextUrl.pathname === '/' ? '/sign-in' : nextUrl.pathname}`;
+      return NextResponse.rewrite(url);
+    }
   }
 
   if (nextUrl.pathname.startsWith('/dashboard')) {
@@ -99,7 +111,7 @@ export default async function proxy(req: NextRequest): Promise<NextResponse> {
   // don't need to re-exclude them here.
   const path = nextUrl.pathname;
   const maintenanceExempt =
-    isAdminHost || path === '/signin' || path.startsWith('/maintenance');
+    isAdminHost || isAuthHost || path === '/signin' || path.startsWith('/maintenance');
   if (!maintenanceExempt && (await isMaintenanceActive())) {
     return NextResponse.rewrite(new URL('/maintenance', req.url));
   }
