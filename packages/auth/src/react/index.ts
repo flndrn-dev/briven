@@ -160,6 +160,12 @@ export interface BrivenSignInProps {
   onSuccess?: (result: { userId: string }) => void;
   /** Optional className applied to the root container. */
   className?: string;
+  /**
+   * 'direct' (default) — make cross-origin API calls from the component.
+   * 'hosted' — redirect to Briven's hosted auth pages. Eliminates CORS
+   * and origin-allowlist issues; recommended for production.
+   */
+  mode?: 'direct' | 'hosted';
 }
 
 const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
@@ -183,6 +189,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
   const providers = props.providers ?? DEFAULT_PROVIDERS;
   const showEmailPassword = props.showEmailPassword ?? true;
   const showMagicLink = props.showMagicLink ?? true;
+  const mode = props.mode ?? 'direct';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -191,9 +198,23 @@ export function BrivenSignIn(props: BrivenSignInProps) {
   const [error, setError] = useState<string | null>(null);
   const [magicSent, setMagicSent] = useState(false);
 
+  const redirectToHosted = useCallback(
+    (flow: 'sign-in' | 'magic-link') => {
+      const url = auth.hostedPageURL(flow, props.redirectTo);
+      if (typeof window !== 'undefined') {
+        window.location.assign(url);
+      }
+    },
+    [auth, props.redirectTo],
+  );
+
   const handlePassword = useCallback(
     async (e: FormEvent<HTMLFormElement>): Promise<void> => {
       e.preventDefault();
+      if (mode === 'hosted') {
+        redirectToHosted('sign-in');
+        return;
+      }
       setPending('password');
       setError(null);
       const result: SignInResult = await auth.signIn.email({ email, password });
@@ -204,12 +225,16 @@ export function BrivenSignIn(props: BrivenSignInProps) {
       }
       setPending(null);
     },
-    [auth, email, password, props],
+    [auth, email, mode, password, props, redirectToHosted],
   );
 
   const handleMagic = useCallback(
     async (e: FormEvent<HTMLFormElement>): Promise<void> => {
       e.preventDefault();
+      if (mode === 'hosted') {
+        redirectToHosted('magic-link');
+        return;
+      }
       setPending('magic');
       setError(null);
       const result = await auth.signIn.magicLink({
@@ -223,7 +248,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
       }
       setPending(null);
     },
-    [auth, magicEmail, props.redirectTo],
+    [auth, magicEmail, mode, props.redirectTo, redirectToHosted],
   );
 
   const handleOAuth = useCallback(
