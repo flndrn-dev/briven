@@ -5,6 +5,7 @@ usage:   briven <command> [options]
 
 commands:
   init              scaffold briven/ folder and briven.json (--template=todo-app|chat|blank)
+  auth              manage Briven Auth (scaffold middleware, configure providers)
   login             store an api key for a project
   logout            forget stored credentials
   whoami            verify stored credentials against the server
