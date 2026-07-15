@@ -263,15 +263,18 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'mau', 'cap', 'overage', 'price', 'cost',
     ],
     howBrivenWorksHere:
-      'projects run on tiers with caps (storage bytes, MAU for auth, rate limits on ' +
-      'hot paths). usage is surfaced in the dashboard; overage billing is metered.',
+      'projects run on tiers with caps (functions per project, storage bytes, MAU for auth, ' +
+      'rate limits on hot paths). function counts are enforced at deploy time; storage and ' +
+      'MAU are surfaced in the dashboard; overage billing is metered.',
     whatOurToolsGiveYou: [
       'MCP storage_usage for live storage numbers; dashboard auth → usage for MAU + email delivery.',
       'bulk write paths (insert with a values array) exist specifically to stay under per-minute rate limits.',
+      'deploy-time function cap: free=20, pro=200, team=2000 functions per project.',
     ],
     whatYouBuildInYourProject: [
       'batch your writes; back off on 429s with retry-after.',
       'if a legitimate workload keeps hitting a cap, that is an owner conversation (tier change), not a workaround.',
+      'a deploy that returns 402 tier_limit_exceeded is a function-count cap — verify the project tier in the dashboard, not a bug.',
     ],
     docs: `${DOCS_BASE}/status`,
   },

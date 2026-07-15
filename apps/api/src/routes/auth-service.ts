@@ -1148,9 +1148,10 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     // callback-carrying endpoints (see its doc comment); everything else
     // passes through as the untouched raw Request.
     const request = await rewriteTenantCallbackRequest(c.req.raw);
-    return await runWithRequestContext({ ip, projectId }, () =>
+    const response = await runWithRequestContext({ ip, projectId }, () =>
       instance.betterAuth.handler(request),
     );
+    return await withActionableOriginError(response, projectId);
   } catch (err) {
     log.error('briven_auth_tenant_bridge_failed', {
       projectId,
@@ -1160,3 +1161,54 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     return c.json({ code: 'auth_internal_error' }, 500);
   }
 });
+
+/**
+ * Turn Better Auth's raw `INVALID_ORIGIN` into an actionable error that
+ * tells the developer exactly what to configure. We only inspect JSON error
+ * responses; success responses and non-JSON bodies pass through untouched.
+ */
+async function withActionableOriginError(
+  response: Response,
+  projectId: string,
+): Promise<Response> {
+  // Only intercept 4xx JSON errors. Better Auth uses 400 for INVALID_ORIGIN.
+  if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+    return response;
+  }
+  if (response.status < 400 || response.status >= 500) {
+    return response;
+  }
+
+  let body: unknown;
+  try {
+    body = await response.clone().json();
+  } catch {
+    return response;
+  }
+
+  const isInvalidOrigin =
+    body &&
+    typeof body === 'object' &&
+    ('INVALID_ORIGIN' === (body as { code?: string }).code ||
+      'INVALID_ORIGIN' === (body as { error?: { code?: string } }).error?.code ||
+      ((body as { message?: string }).message?.toUpperCase().includes('INVALID_ORIGIN') ??
+        false));
+
+  if (!isInvalidOrigin) return response;
+
+  const actionable = {
+    code: 'INVALID_ORIGIN',
+    message: `This app origin is not allowed for project ${projectId}. Add it in the Briven dashboard → Auth → Allowed Domains, or via POST /v1/projects/${projectId}/auth/allowed-domains.`,
+    docs: 'https://docs.briven.tech/auth/allowed-domains',
+  };
+
+  const jsonBody = JSON.stringify(actionable);
+  const headers = new Headers(response.headers);
+  headers.set('content-length', String(Buffer.byteLength(jsonBody)));
+
+  return new Response(jsonBody, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}

@@ -624,7 +624,14 @@ async function createAuthInstance(projectId: string) {
         disableIpTracking: true,
       },
     },
-    trustedOrigins: [env.BRIVEN_API_ORIGIN, ...brivenOwnOrigins(), ...projectOrigins],
+    trustedOrigins: [
+      env.BRIVEN_API_ORIGIN,
+      ...brivenOwnOrigins(),
+      ...projectOrigins,
+      ...(env.BRIVEN_ENV !== 'production'
+        ? (['http://localhost:*', 'https://localhost:*', 'http://127.0.0.1:*', 'https://127.0.0.1:*'] as const)
+        : []),
+    ],
   });
 
   return {
