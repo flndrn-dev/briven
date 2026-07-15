@@ -135,6 +135,16 @@ export interface BrivenAuthClient {
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
   getUser(): Promise<User | null>;
+  /**
+   * Build a hosted auth page URL for the given flow.
+   * The customer's app redirects the browser to this URL so auth happens
+   * same-origin on Briven's hosted pages, eliminating cross-origin/CORS
+   * issues on localhost and custom domains.
+   *
+   * @param flow - which hosted page to open
+   * @param callbackURL - where to send the user after successful auth
+   */
+  hostedPageURL(flow: 'sign-in' | 'sign-up' | 'magic-link' | 'otp', callbackURL?: string): string;
 }
 
 const DEFAULT_API_ORIGIN = 'https://api.briven.tech';
@@ -315,6 +325,14 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       } catch {
         return null;
       }
+    },
+    hostedPageURL(flow, callbackURL) {
+      const u = new URL(`https://${opts.projectId}.auth.briven.tech`);
+      u.pathname = `/${flow}`;
+      if (callbackURL) {
+        u.searchParams.set('callbackURL', callbackURL);
+      }
+      return u.toString();
     },
   };
 }

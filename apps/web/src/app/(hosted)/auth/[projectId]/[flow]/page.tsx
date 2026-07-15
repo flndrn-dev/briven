@@ -23,10 +23,15 @@ export async function generateMetadata({
 
 export default async function HostedFlowPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string; flow: string }>;
+  searchParams: Promise<{ callbackURL?: string }>;
 }) {
   const { projectId, flow } = await params;
   if (!isFormFlow(flow)) notFound();
-  return <HostedFlow projectId={projectId} flow={flow} />;
+  const { callbackURL } = await searchParams;
+  // Default to the hosted account page when no callback is provided.
+  const redirectTo = callbackURL || `/auth/${projectId}/account`;
+  return <HostedFlow projectId={projectId} flow={flow} callbackURL={redirectTo} />;
 }

@@ -9,6 +9,8 @@ type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp';
 interface Props {
   projectId: string;
   flow: FormFlow;
+  /** Where to send the user after successful authentication. */
+  callbackURL: string;
 }
 
 const OAUTH_PROVIDERS: ReadonlyArray<'google' | 'github' | 'discord' | 'microsoft'> = [
@@ -45,7 +47,7 @@ interface ErrorBody {
  * with the CNAME orchestration runbook (BUILD_PLAN.md "Decisions
  * locked" Q7); the form contract here doesn't change.
  */
-export function HostedFlow({ projectId, flow }: Props) {
+export function HostedFlow({ projectId, flow, callbackURL }: Props) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -83,7 +85,7 @@ export function HostedFlow({ projectId, flow }: Props) {
     e.preventDefault();
     try {
       await post('/sign-in/email', { email, password });
-      router.push(`/auth/${projectId}/account`);
+      router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'sign-in failed');
     }
@@ -93,7 +95,7 @@ export function HostedFlow({ projectId, flow }: Props) {
     e.preventDefault();
     try {
       await post('/sign-up/email', { email, password, name: name || undefined });
-      router.push(`/auth/${projectId}/account`);
+      router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'sign-up failed');
     }
@@ -123,7 +125,7 @@ export function HostedFlow({ projectId, flow }: Props) {
     e.preventDefault();
     try {
       await post('/sign-in/email-otp/verify', { email, otp });
-      router.push(`/auth/${projectId}/account`);
+      router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'otp verify failed');
     }
@@ -132,7 +134,7 @@ export function HostedFlow({ projectId, flow }: Props) {
   function oauthHref(provider: string): string {
     const params = new URLSearchParams({
       provider,
-      callbackURL: `/auth/${projectId}/account`,
+      callbackURL,
       projectId,
     });
     return `/api/v1/auth-tenant/sign-in/social?${params.toString()}`;
