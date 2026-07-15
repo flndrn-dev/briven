@@ -146,6 +146,49 @@ export function renderAuthProvisioningSql(): string[] {
     // _briven_auth_jwks — jwt-plugin signing keys (shared constant above so
     // the tenant-pool boot ensure and this batch never drift).
     AUTH_JWKS_TABLE_SQL,
+
+    // ─── Organizations (Phase 2 — Clerk-competitor) ─────────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_orgs" (
+       id          text        PRIMARY KEY,
+       name        text        NOT NULL,
+       slug        text        NOT NULL,
+       logo        text,
+       metadata    jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_orgs_slug_uniq"
+       ON "_briven_auth_orgs" (slug)`,
+
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_org_members" (
+       id            text        PRIMARY KEY,
+       org_id        text        NOT NULL REFERENCES "_briven_auth_orgs"(id) ON DELETE CASCADE,
+       user_id       text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       role          text        NOT NULL DEFAULT 'member',
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_org_members_pair_uniq"
+       ON "_briven_auth_org_members" (org_id, user_id)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_org_members_user_idx"
+       ON "_briven_auth_org_members" (user_id)`,
+
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_org_invites" (
+       id          text        PRIMARY KEY,
+       org_id      text        NOT NULL REFERENCES "_briven_auth_orgs"(id) ON DELETE CASCADE,
+       email       text        NOT NULL,
+       role        text        NOT NULL DEFAULT 'member',
+       token       text        NOT NULL,
+       expires_at  timestamptz NOT NULL,
+       invited_by  text        REFERENCES "_briven_auth_users"(id) ON DELETE SET NULL,
+       accepted_at timestamptz,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_org_invites_token_uniq"
+       ON "_briven_auth_org_invites" (token)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_org_invites_org_idx"
+       ON "_briven_auth_org_invites" (org_id)`,
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -162,5 +205,8 @@ export const AUTH_TABLES = [
   '_briven_auth_verification_tokens',
   '_briven_auth_audit_log',
   '_briven_auth_jwks',
+  '_briven_auth_orgs',
+  '_briven_auth_org_members',
+  '_briven_auth_org_invites',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

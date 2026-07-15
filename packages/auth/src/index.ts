@@ -155,6 +155,39 @@ export interface UpdateUserInput {
   image?: string;
 }
 
+// ─── Organizations (Phase 2) ──────────────────────────────────────────────
+
+export interface Org {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly logo: string | null;
+  readonly metadata: Record<string, unknown>;
+  readonly createdAt: string;
+}
+
+export interface OrgMember {
+  readonly id: string;
+  readonly orgId: string;
+  readonly userId: string;
+  readonly role: 'owner' | 'admin' | 'member';
+  readonly createdAt: string;
+}
+
+export interface OrgInvite {
+  readonly id: string;
+  readonly orgId: string;
+  readonly email: string;
+  readonly role: 'owner' | 'admin' | 'member';
+  readonly token: string;
+  readonly expiresAt: string;
+  readonly invitedBy: string | null;
+  readonly acceptedAt: string | null;
+  readonly createdAt: string;
+}
+
+export type OrgResult<T> = { ok: true; data: T } | { ok: false; code: SignInErrorCode; message: string };
+
 export interface BrivenAuthClient {
   readonly projectId: string;
   readonly authUrl: string;
@@ -180,6 +213,22 @@ export interface BrivenAuthClient {
     update(input: UpdateUserInput): Promise<{ ok: true; user: User } | { ok: false; code: SignInErrorCode; message: string }>;
     changePassword(input: ChangePasswordInput): Promise<SimpleResult>;
     delete(): Promise<SimpleResult>;
+  };
+  readonly organization: {
+    create(input: { name: string; slug: string; logo?: string }): Promise<OrgResult<Org>>;
+    list(): Promise<OrgResult<Org[]>>;
+    get(orgId: string): Promise<OrgResult<Org>>;
+    update(orgId: string, input: { name?: string; slug?: string; logo?: string | null }): Promise<OrgResult<Org>>;
+    delete(orgId: string): Promise<SimpleResult>;
+    listMembers(orgId: string): Promise<OrgResult<OrgMember[]>>;
+    addMember(orgId: string, input: { userId: string; role?: 'admin' | 'member' }): Promise<OrgResult<OrgMember>>;
+    updateMemberRole(orgId: string, userId: string, role: 'admin' | 'member'): Promise<OrgResult<OrgMember>>;
+    removeMember(orgId: string, userId: string): Promise<SimpleResult>;
+    listInvites(orgId: string): Promise<OrgResult<OrgInvite[]>>;
+    createInvite(orgId: string, input: { email: string; role?: 'admin' | 'member' }): Promise<OrgResult<OrgInvite>>;
+    revokeInvite(orgId: string, inviteId: string): Promise<SimpleResult>;
+    acceptInvite(token: string): Promise<OrgResult<{ orgId: string }>>;
+    getInvite(token: string): Promise<OrgResult<OrgInvite>>;
   };
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
@@ -426,6 +475,175 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
         try {
           const body = await post<unknown>('/delete-user', {});
           return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
+    organization: {
+      async create(input) {
+        try {
+          const body = await post<unknown>('/orgs', input as unknown as Record<string, unknown>);
+          if (body && typeof body === 'object') {
+            const b = body as { org?: Org; error?: { code?: string; message?: string } };
+            if (b.org) return { ok: true, data: b.org };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'create failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'create failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async list() {
+        try {
+          const body = await get<unknown>('/orgs');
+          if (body && typeof body === 'object') {
+            const b = body as { orgs?: Org[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.orgs)) return { ok: true, data: b.orgs };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async get(orgId) {
+        try {
+          const body = await get<unknown>(`/orgs/${orgId}`);
+          if (body && typeof body === 'object') {
+            const b = body as { org?: Org; error?: { code?: string; message?: string } };
+            if (b.org) return { ok: true, data: b.org };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'get failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'get failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async update(orgId, input) {
+        try {
+          const body = await patch<unknown>(`/orgs/${orgId}`, input as unknown as Record<string, unknown>);
+          if (body && typeof body === 'object') {
+            const b = body as { org?: Org; error?: { code?: string; message?: string } };
+            if (b.org) return { ok: true, data: b.org };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'update failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'update failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async delete(orgId) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/delete`, {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async listMembers(orgId) {
+        try {
+          const body = await get<unknown>(`/orgs/${orgId}/members`);
+          if (body && typeof body === 'object') {
+            const b = body as { members?: OrgMember[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.members)) return { ok: true, data: b.members };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async addMember(orgId, input) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/members`, input as unknown as Record<string, unknown>);
+          if (body && typeof body === 'object') {
+            const b = body as { member?: OrgMember; error?: { code?: string; message?: string } };
+            if (b.member) return { ok: true, data: b.member };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'add failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'add failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async updateMemberRole(orgId, userId, role) {
+        try {
+          const body = await patch<unknown>(`/orgs/${orgId}/members/${userId}`, { role });
+          if (body && typeof body === 'object') {
+            const b = body as { member?: OrgMember; error?: { code?: string; message?: string } };
+            if (b.member) return { ok: true, data: b.member };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'update failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'update failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async removeMember(orgId, userId) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/members/${userId}/delete`, {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async listInvites(orgId) {
+        try {
+          const body = await get<unknown>(`/orgs/${orgId}/invites`);
+          if (body && typeof body === 'object') {
+            const b = body as { invites?: OrgInvite[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.invites)) return { ok: true, data: b.invites };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async createInvite(orgId, input) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/invites`, input as unknown as Record<string, unknown>);
+          if (body && typeof body === 'object') {
+            const b = body as { invite?: OrgInvite; error?: { code?: string; message?: string } };
+            if (b.invite) return { ok: true, data: b.invite };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'create failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'create failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async revokeInvite(orgId, inviteId) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/invites/${inviteId}/delete`, {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async acceptInvite(token) {
+        try {
+          const body = await post<unknown>('/invites/accept', { token });
+          if (body && typeof body === 'object') {
+            const b = body as { orgId?: string; error?: { code?: string; message?: string } };
+            if (b.orgId) return { ok: true, data: { orgId: b.orgId } };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'accept failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'accept failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async getInvite(token) {
+        try {
+          const body = await get<unknown>(`/invites/${token}`);
+          if (body && typeof body === 'object') {
+            const b = body as { invite?: OrgInvite; error?: { code?: string; message?: string } };
+            if (b.invite) return { ok: true, data: b.invite };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'get failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'get failed' };
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }

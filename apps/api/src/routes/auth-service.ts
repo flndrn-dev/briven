@@ -51,6 +51,23 @@ import {
 } from '../services/tenant-config-store.js';
 import { hasTenantSecret, setTenantSecret } from '../services/tenant-secrets.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
+import {
+  acceptInvite,
+  addOrgMember,
+  createOrg,
+  createOrgInvite,
+  deleteOrg,
+  getInviteByToken,
+  getOrg,
+  getUserOrgRole,
+  listOrgMembers,
+  listOrgsForUser,
+  listPendingInvites,
+  removeOrgMember,
+  revokeInvite,
+  updateMemberRole,
+  updateOrg,
+} from '../services/auth-orgs.js';
 
 /**
  * briven auth service router (BUILD_PLAN.md §4).
@@ -1141,6 +1158,243 @@ async function rewriteTenantCallbackRequest(raw: Request): Promise<Request> {
     return raw;
   }
 }
+
+// ─── tenant session helper ────────────────────────────────────────────────
+
+/**
+ * Resolve the current user id from the tenant session cookie.
+ * Makes an internal sub-request to the project's Better Auth instance
+ * so the exact same session validation runs (cookie parsing, token
+ * verification, expiry checks).
+ */
+async function getTenantUserId(c: typeof authServiceRouter extends Hono<infer E> ? Parameters<E['Variables']>[0] extends never ? never : any : never, projectId: string): Promise<string | null> {
+  try {
+    const instance = await getAuthInstance(projectId);
+    const url = new URL(c.req.url);
+    const sessionReq = new Request(`${url.origin}/v1/auth-tenant/get-session?briven_project_id=${projectId}`, {
+      method: 'GET',
+      headers: {
+        cookie: c.req.header('cookie') ?? '',
+        'x-briven-project-id': projectId,
+      },
+    });
+    const response = await instance.betterAuth.handler(sessionReq);
+    if (!response.ok) return null;
+    const body = (await response.json()) as { user?: { id?: string } } | null;
+    return body?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── organizations (customer-facing) ─────────────────────────────────────
+
+authServiceRouter.get('/v1/auth-tenant/orgs', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgs = await listOrgsForUser(projectId, userId);
+  return c.json({ orgs });
+});
+
+authServiceRouter.post('/v1/auth-tenant/orgs', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const org = await createOrg(projectId, userId, body as { name: string; slug: string; logo?: string });
+    return c.json({ org });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    log.error('org_create_failed', { projectId, message: err instanceof Error ? err.message : String(err) });
+    return c.json({ code: 'org_create_failed' }, 500);
+  }
+});
+
+authServiceRouter.get('/v1/auth-tenant/orgs/:id', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const org = await getOrg(projectId, c.req.param('id'));
+  if (!org) return c.json({ code: 'not_found' }, 404);
+  return c.json({ org });
+});
+
+authServiceRouter.patch('/v1/auth-tenant/orgs/:id', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (!role || (role !== 'owner' && role !== 'admin')) {
+    return c.json({ code: 'forbidden', message: 'only owner or admin can update org' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const org = await updateOrg(projectId, orgId, body as { name?: string; logo?: string | null; slug?: string });
+    return c.json({ org });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'org_update_failed' }, 500);
+  }
+});
+
+authServiceRouter.delete('/v1/auth-tenant/orgs/:id', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (role !== 'owner') return c.json({ code: 'forbidden', message: 'only owner can delete org' }, 403);
+  await deleteOrg(projectId, orgId);
+  return c.json({ ok: true });
+});
+
+// members
+authServiceRouter.get('/v1/auth-tenant/orgs/:id/members', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const members = await listOrgMembers(projectId, orgId);
+  return c.json({ members });
+});
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/members', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (!role || (role !== 'owner' && role !== 'admin')) {
+    return c.json({ code: 'forbidden', message: 'only owner or admin can add members' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const member = await addOrgMember(projectId, orgId, body.userId, body.role ?? 'member');
+    return c.json({ member });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'member_add_failed' }, 500);
+  }
+});
+
+authServiceRouter.patch('/v1/auth-tenant/orgs/:id/members/:userId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (!role || (role !== 'owner' && role !== 'admin')) {
+    return c.json({ code: 'forbidden', message: 'only owner or admin can update roles' }, 403);
+  }
+  const targetUserId = c.req.param('userId');
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const member = await updateMemberRole(projectId, orgId, targetUserId, body.role);
+    return c.json({ member });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'member_update_failed' }, 500);
+  }
+});
+
+authServiceRouter.delete('/v1/auth-tenant/orgs/:id/members/:userId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (!role || (role !== 'owner' && role !== 'admin')) {
+    return c.json({ code: 'forbidden', message: 'only owner or admin can remove members' }, 403);
+  }
+  await removeOrgMember(projectId, orgId, c.req.param('userId'));
+  return c.json({ ok: true });
+});
+
+// invites
+authServiceRouter.get('/v1/auth-tenant/orgs/:id/invites', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (!role || (role !== 'owner' && role !== 'admin')) {
+    return c.json({ code: 'forbidden', message: 'only owner or admin can view invites' }, 403);
+  }
+  const invites = await listPendingInvites(projectId, orgId);
+  return c.json({ invites });
+});
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/invites', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (!role || (role !== 'owner' && role !== 'admin')) {
+    return c.json({ code: 'forbidden', message: 'only owner or admin can invite' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const invite = await createOrgInvite(projectId, orgId, userId, { email: body.email, role: body.role });
+    return c.json({ invite });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'invite_create_failed' }, 500);
+  }
+});
+
+authServiceRouter.delete('/v1/auth-tenant/orgs/:id/invites/:inviteId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const role = await getUserOrgRole(projectId, orgId, userId);
+  if (!role || (role !== 'owner' && role !== 'admin')) {
+    return c.json({ code: 'forbidden', message: 'only owner or admin can revoke invites' }, 403);
+  }
+  await revokeInvite(projectId, c.req.param('inviteId'));
+  return c.json({ ok: true });
+});
+
+authServiceRouter.get('/v1/auth-tenant/invites/:token', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const invite = await getInviteByToken(projectId, c.req.param('token'));
+  if (!invite) return c.json({ code: 'not_found' }, 404);
+  return c.json({ invite });
+});
+
+authServiceRouter.post('/v1/auth-tenant/invites/accept', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const result = await acceptInvite(projectId, body.token, userId);
+    return c.json({ ok: true, orgId: result.orgId });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'invite_accept_failed' }, 500);
+  }
+});
+
+// ─── Catch-all bridge ─────────────────────────────────────────────────────
 
 /**
  * Catch-all bridge. Better Auth ships its own `handler(request)` method

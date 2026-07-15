@@ -39,6 +39,9 @@ import {
   type BrivenAuthClient,
   type ClientSession,
   type OAuthProvider,
+  type Org,
+  type OrgInvite,
+  type OrgMember,
   type SessionResponse,
   type SignInResult,
   type SimpleResult,
@@ -952,10 +955,300 @@ export function SessionManager(props: SessionManagerProps) {
   );
 }
 
+// ─── OrganizationSwitcher ─────────────────────────────────────────────────
+
+export interface OrganizationSwitcherProps {
+  /** Optional className applied to the root container. */
+  className?: string;
+}
+
+/**
+ * Drop-in organization switcher. Shows a dropdown of the current user's
+ * organizations with a "create organization" button. Renders nothing
+ * while loading or unauthenticated.
+ */
+export function OrganizationSwitcher(props: OrganizationSwitcherProps) {
+  const auth = useBrivenAuth();
+  const [orgs, setOrgs] = useState<Org[]>([]);
+  const [isLoading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await auth.organization.list();
+    if (result.ok) setOrgs(result.data);
+    setLoading(false);
+  }, [auth]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleCreate = useCallback(async (name: string, slug: string) => {
+    const result = await auth.organization.create({ name, slug });
+    if (result.ok) {
+      setShowCreate(false);
+      await load();
+    }
+    return result;
+  }, [auth, load]);
+
+  if (isLoading || orgs.length === 0) {
+    return createElement(
+      'button',
+      {
+        type: 'button',
+        onClick: () => setShowCreate(true),
+        className: props.className ?? 'briven-auth-org-switcher',
+      },
+      'create organization',
+    );
+  }
+
+  return createElement(
+    'div',
+    {
+      className: props.className ?? 'briven-auth-org-switcher',
+      'data-briven-auth': 'org-switcher',
+    },
+    createElement(
+      'button',
+      {
+        type: 'button',
+        onClick: () => setOpen((v) => !v),
+        className: 'briven-auth-org-switcher-trigger',
+      },
+      'switch organization',
+    ),
+    open
+      ? createElement(
+          'div',
+          { className: 'briven-auth-org-switcher-dropdown' },
+          orgs.map((org) =>
+            createElement(
+              'div',
+              { key: org.id, className: 'briven-auth-org-switcher-item' },
+              org.name,
+            ),
+          ),
+          createElement(
+            'button',
+            {
+              type: 'button',
+              onClick: () => setShowCreate(true),
+              className: 'briven-auth-org-switcher-create',
+            },
+            '+ create organization',
+          ),
+        )
+      : null,
+    showCreate
+      ? createElement(CreateOrganization, {
+          key: 'create',
+          onCreate: handleCreate,
+          onCancel: () => setShowCreate(false),
+        })
+      : null,
+  );
+}
+
+// ─── CreateOrganization ───────────────────────────────────────────────────
+
+export interface CreateOrganizationProps {
+  onCreate(name: string, slug: string): Promise<unknown>;
+  onCancel(): void;
+}
+
+export function CreateOrganization(props: CreateOrganizationProps) {
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setPending(true);
+      setError(null);
+      const result = await props.onCreate(name, slug);
+      if (result && typeof result === 'object' && 'ok' in result && !result.ok) {
+        setError((result as { message?: string }).message ?? 'create failed');
+      }
+      setPending(false);
+    },
+    [name, props, slug],
+  );
+
+  return createElement(
+    'div',
+    { className: 'briven-auth-create-org' },
+    createElement('h3', { className: 'briven-auth-heading' }, 'create organization'),
+    createElement(
+      'form',
+      { className: 'briven-auth-form', onSubmit: handleSubmit },
+      createElement('input', {
+        type: 'text',
+        required: true,
+        placeholder: 'organization name',
+        value: name,
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value),
+        className: 'briven-auth-input',
+      }),
+      createElement('input', {
+        type: 'text',
+        required: true,
+        placeholder: 'slug (lowercase-hyphens)',
+        value: slug,
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSlug(e.target.value),
+        pattern: '[a-z0-9-]{1,64}',
+        className: 'briven-auth-input',
+      }),
+      createElement(
+        'button',
+        { type: 'submit', disabled: pending, className: 'briven-auth-submit' },
+        pending ? 'creating…' : 'create',
+      ),
+    ),
+    error ? createElement('p', { className: 'briven-auth-error', role: 'alert' }, error) : null,
+    createElement(
+      'button',
+      { type: 'button', onClick: props.onCancel, className: 'briven-auth-cancel' },
+      'cancel',
+    ),
+  );
+}
+
+// ─── OrganizationProfile ──────────────────────────────────────────────────
+
+export interface OrganizationProfileProps {
+  orgId: string;
+  className?: string;
+}
+
+export function OrganizationProfile(props: OrganizationProfileProps) {
+  const auth = useBrivenAuth();
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [invites, setInvites] = useState<OrgInvite[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [isLoading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [mResult, iResult] = await Promise.all([
+      auth.organization.listMembers(props.orgId),
+      auth.organization.listInvites(props.orgId),
+    ]);
+    if (mResult.ok) setMembers(mResult.data);
+    if (iResult.ok) setInvites(iResult.data);
+    setLoading(false);
+  }, [auth, props.orgId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleInvite = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setError(null);
+      const result = await auth.organization.createInvite(props.orgId, { email: inviteEmail });
+      if (result.ok) {
+        setInviteEmail('');
+        await load();
+      } else {
+        setError(result.message);
+      }
+    },
+    [auth, inviteEmail, load, props.orgId],
+  );
+
+  const handleRemove = useCallback(
+    async (userId: string) => {
+      const result = await auth.organization.removeMember(props.orgId, userId);
+      if (result.ok) await load();
+      else setError(result.message);
+    },
+    [auth, load, props.orgId],
+  );
+
+  return createElement(
+    'div',
+    {
+      className: props.className ?? 'briven-auth-org-profile',
+      'data-briven-auth': 'org-profile',
+    },
+    createElement('h3', { className: 'briven-auth-heading' }, 'members'),
+    isLoading
+      ? createElement('p', { className: 'briven-auth-message' }, 'loading…')
+      : createElement(
+          'ul',
+          { className: 'briven-auth-member-list' },
+          members.map((m) =>
+            createElement(
+              'li',
+              { key: m.id, className: 'briven-auth-member-item' },
+              createElement('span', { className: 'briven-auth-member-role' }, m.role),
+              createElement('span', { className: 'briven-auth-member-id' }, m.userId),
+              m.role !== 'owner'
+                ? createElement(
+                    'button',
+                    {
+                      type: 'button',
+                      onClick: () => handleRemove(m.userId),
+                      className: 'briven-auth-member-remove',
+                    },
+                    'remove',
+                  )
+                : null,
+            ),
+          ),
+        ),
+    createElement('h3', { className: 'briven-auth-heading' }, 'invites'),
+    createElement(
+      'form',
+      { className: 'briven-auth-form', onSubmit: handleInvite },
+      createElement('input', {
+        type: 'email',
+        required: true,
+        placeholder: 'email to invite',
+        value: inviteEmail,
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => setInviteEmail(e.target.value),
+        className: 'briven-auth-input',
+      }),
+      createElement(
+        'button',
+        { type: 'submit', className: 'briven-auth-submit' },
+        'send invite',
+      ),
+    ),
+    invites.length > 0
+      ? createElement(
+          'ul',
+          { className: 'briven-auth-invite-list' },
+          invites.map((i) =>
+            createElement(
+              'li',
+              { key: i.id, className: 'briven-auth-invite-item' },
+              i.email,
+              ' · ',
+              i.role,
+            ),
+          ),
+        )
+      : null,
+    error ? createElement('p', { className: 'briven-auth-error', role: 'alert' }, error) : null,
+  );
+}
+
 export type {
   BrivenAuthClient,
   ClientSession,
   OAuthProvider,
+  Org,
+  OrgInvite,
+  OrgMember,
   SessionResponse,
   SignInResult,
   SimpleResult,

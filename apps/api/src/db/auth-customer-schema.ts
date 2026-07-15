@@ -182,6 +182,69 @@ export const authAuditLog = pgTable(
  * Better Auth model-name mapping. The engine ships with singular model names;
  * we map them onto our prefixed tables when instantiating per-tenant.
  */
+/**
+ * Organizations — customer-facing multi-tenant teams (Phase 2).
+ * These are NOT Better Auth models; they are briven-specific extensions
+ * that customer apps use for org/team management.
+ */
+export const authOrgs = pgTable(
+  '_briven_auth_orgs',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    logo: text('logo'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    slugUniq: uniqueIndex('_briven_auth_orgs_slug_uniq').on(t.slug),
+  }),
+);
+
+export const authOrgMembers = pgTable(
+  '_briven_auth_org_members',
+  {
+    id: id(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => authOrgs.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('member'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    pairUniq: uniqueIndex('_briven_auth_org_members_pair_uniq').on(t.orgId, t.userId),
+    userIdx: index('_briven_auth_org_members_user_idx').on(t.userId),
+  }),
+);
+
+export const authOrgInvites = pgTable(
+  '_briven_auth_org_invites',
+  {
+    id: id(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => authOrgs.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: text('role').notNull().default('member'),
+    token: text('token').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    invitedBy: text('invited_by').references(() => authUsers.id, { onDelete: 'set null' }),
+    acceptedAt: ts('accepted_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenUniq: uniqueIndex('_briven_auth_org_invites_token_uniq').on(t.token),
+    orgIdx: index('_briven_auth_org_invites_org_idx').on(t.orgId),
+  }),
+);
+
 export const authSchema = {
   user: authUsers,
   session: authSessions,
@@ -191,6 +254,10 @@ export const authSchema = {
   jwks: authJwks,
   // briven-specific extra — Better Auth doesn't ship an audit-log model.
   auditLog: authAuditLog,
+  // Organization tables (Phase 2 — not consumed by Better Auth directly).
+  org: authOrgs,
+  orgMember: authOrgMembers,
+  orgInvite: authOrgInvites,
 } as const;
 
 export type AuthUser = typeof authUsers.$inferSelect;
@@ -199,6 +266,9 @@ export type AuthAccount = typeof authAccounts.$inferSelect;
 export type AuthVerificationToken = typeof authVerificationTokens.$inferSelect;
 export type AuthJwk = typeof authJwks.$inferSelect;
 export type AuthAuditLogEntry = typeof authAuditLog.$inferSelect;
+export type AuthOrg = typeof authOrgs.$inferSelect;
+export type AuthOrgMember = typeof authOrgMembers.$inferSelect;
+export type AuthOrgInvite = typeof authOrgInvites.$inferSelect;
 
 /** Audit-action vocabulary. Open union — services can emit any string, but the
  *  listed values are guaranteed to be handled by the admin dashboard's filter
