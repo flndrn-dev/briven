@@ -159,6 +159,27 @@ export function tagTenantUrl(url: string, projectId: string): string {
 }
 
 /**
+ * Rewrite a Better-Auth-generated URL from the API origin to the project's
+ * hosted auth base URL. This makes magic-link verify links, email-verification
+ * links, and OAuth callbacks land on the customer's auth subdomain
+ * (e.g. auth.murphus.eu) instead of api.briven.tech.
+ */
+export function rewriteToHostedUrl(
+  url: string,
+  projectId: string,
+  config?: { customAuthDomain?: string | null },
+): string {
+  try {
+    const original = new URL(url);
+    const base = new URL(hostedAuthBaseUrl(projectId, config));
+    const rewritten = new URL(original.pathname + original.search, base);
+    return rewritten.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Build the per-tenant Better Auth plugins array from the project's stored
  * auth config. ONLY the passwordless methods the customer has toggled on are
  * loaded — so `POST /v1/auth-tenant/sign-in/magic-link` (and the OTP / passkey
@@ -182,7 +203,9 @@ export function buildTenantAuthPlugins(
         sendMagicLink: async ({ email, url }) => {
           // Tag the click-through link with the tenant id — a browser click
           // can't send the x-briven-project-id header the bridge reads.
-          await sendBrivenAuthMagicLink(projectId, email, tagTenantUrl(url, projectId));
+          // Also rewrite to the project's custom auth domain when configured.
+          const hostedUrl = rewriteToHostedUrl(url, projectId, config);
+          await sendBrivenAuthMagicLink(projectId, email, tagTenantUrl(hostedUrl, projectId));
         },
       }) as unknown as TenantAuthPlugin,
     );
@@ -603,7 +626,8 @@ async function createAuthInstance(projectId: string) {
       sendOnSignUp: env.BRIVEN_ENV === 'production',
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
-        await sendBrivenAuthEmailVerification(projectId, user.email, url);
+        const hostedUrl = rewriteToHostedUrl(url, projectId, config);
+        await sendBrivenAuthEmailVerification(projectId, user.email, hostedUrl);
       },
     },
     socialProviders,
