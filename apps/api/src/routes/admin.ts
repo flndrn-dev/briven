@@ -31,6 +31,7 @@ import {
 } from '../services/admin.js';
 import { invalidateTierCache } from '../services/tiers.js';
 import { audit, hashIp, listAuditByActionPrefix } from '../services/audit.js';
+import { createImpersonationSession } from '../services/auth-impersonate.js';
 import { listDeploys } from '../services/deploy-history.js';
 import { getHealthSummary } from '../services/platform-health.js';
 import { getAdminOverview } from '../services/admin-overview.js';
@@ -555,6 +556,32 @@ adminRouter.post('/v1/admin/users/force-sign-out', async (c) => {
     metadata: { userId: parsed.userId, sessions: n },
   });
   return c.json({ userId: parsed.userId, sessions: n });
+});
+
+/**
+ * Admin impersonation — create a short-lived session for a target user
+ * in a customer project's tenant. Returns a session token the admin
+ * dashboard can set as a cookie to act on the user's behalf.
+ * Requires superadmin + recent MFA step-up.
+ */
+adminRouter.post('/v1/admin/projects/:projectId/auth/impersonate', async (c) => {
+  const actor = c.get('user')!;
+  const projectId = c.req.param('projectId');
+  const body = await c.req.json().catch(() => ({}));
+  const targetUserId = (body as Record<string, unknown>).userId;
+  if (!projectId || typeof targetUserId !== 'string') {
+    return c.json({ code: 'validation_failed', message: 'missing projectId or userId' }, 400);
+  }
+  const { sessionToken, expiresAt } = await createImpersonationSession(projectId, targetUserId);
+  await audit({
+    actorId: actor.id,
+    projectId,
+    action: 'admin.auth.impersonate',
+    ipHash: ipHash(c),
+    userAgent: c.req.header('user-agent') ?? null,
+    metadata: { targetUserId },
+  });
+  return c.json({ sessionToken, expiresAt: expiresAt.toISOString() });
 });
 
 adminRouter.post('/v1/admin/users/grant-admin', async (c) => {

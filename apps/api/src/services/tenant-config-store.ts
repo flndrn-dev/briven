@@ -109,6 +109,13 @@ const authConfigSchema = z.object({
     /** Issuer name shown in the authenticator app (defaults to project name). */
     issuer: z.string().max(64).nullable(),
   }),
+  /**
+   * Custom JWT claims added to every token issued by the jwt plugin.
+   * Keys are claim names; values are static strings. For dynamic claims
+   * (e.g. org_role), the customer should use a webhook + their own
+   * signing layer; this surface is for simple static claims only.
+   */
+  jwtClaims: z.record(z.string().min(1).max(64), z.string().max(256)).default({}),
   branding: z.object({
     /** Customer-uploaded logo URL. Null means use the briven default mark. */
     logoUrl: z.string().url().nullable(),
@@ -195,6 +202,7 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     konnos: { enabled: false, clientId: null },
   },
   twoFactor: { enabled: false, issuer: null },
+  jwtClaims: {},
   branding: {
     logoUrl: null,
     primaryColor: '#00e87a',

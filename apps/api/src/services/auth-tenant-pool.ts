@@ -273,9 +273,17 @@ export function buildTenantAuthPlugins(
 export function assembleTenantPlugins(
   passwordlessPlugins: TenantAuthPlugin[],
   genericOAuthConfigs: ReturnType<typeof buildGenericOAuthConfigs>,
+  config: AuthConfig,
 ): TenantAuthPlugin[] {
+  const jwtClaims = config.jwtClaims ?? {};
   return [
-    jwt() as unknown as TenantAuthPlugin,
+    jwt({
+      jwt: {
+        definePayload: (_session) => ({
+          ...jwtClaims,
+        }),
+      },
+    }) as unknown as TenantAuthPlugin,
     ...passwordlessPlugins,
     ...(genericOAuthConfigs.length > 0
       ? [genericOAuth({ config: genericOAuthConfigs as never }) as unknown as TenantAuthPlugin]
@@ -598,7 +606,7 @@ async function createAuthInstance(projectId: string) {
   const socialProviders = await resolveSocialProviders(projectId, config);
   const oauthSecrets = await resolveOAuthSecrets(projectId, config);
   const genericOAuthConfigs = buildGenericOAuthConfigs(config, oauthSecrets);
-  const plugins = assembleTenantPlugins(passwordlessPlugins, genericOAuthConfigs);
+  const plugins = assembleTenantPlugins(passwordlessPlugins, genericOAuthConfigs, config);
 
   // Self-heal the jwt plugin's key table on projects provisioned BEFORE the
   // jwks table joined the DDL batch (provisioning only runs when a customer

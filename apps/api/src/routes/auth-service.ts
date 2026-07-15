@@ -11,7 +11,7 @@ import { audit, hashIp } from '../services/audit.js';
 import { renderAuthProvisioningSql } from '../services/auth-provisioning.js';
 import { getAuthInstance, invalidateAuthInstance } from '../services/auth-tenant-pool.js';
 import { listAuditEntries } from '../services/auth-audit.js';
-import { getAuthMauStats } from '../services/auth-mau.js';
+import { getAuthAnalyticsOverview, getAuthMauStats, getProviderBreakdown } from '../services/auth-mau.js';
 import {
   importAuthUsers,
   parseImportCsv,
@@ -863,6 +863,38 @@ authServiceRouter.get(
     }
     const stats = await getAuthMauStats(projectId);
     return c.json(stats);
+  },
+);
+
+/**
+ * Auth analytics overview — DAU, new signups, total users, active sessions.
+ */
+authServiceRouter.get(
+  '/v1/projects/:id/auth/analytics/overview',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const overview = await getAuthAnalyticsOverview(projectId);
+    return c.json(overview);
+  },
+);
+
+/**
+ * Auth provider breakdown — how users sign in (email, OAuth, passkey, etc).
+ */
+authServiceRouter.get(
+  '/v1/projects/:id/auth/analytics/providers',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const breakdown = await getProviderBreakdown(projectId);
+    return c.json(breakdown);
   },
 );
 
