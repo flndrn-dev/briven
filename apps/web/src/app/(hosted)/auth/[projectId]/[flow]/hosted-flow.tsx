@@ -4,20 +4,30 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp';
+type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp' | 'new-password';
 
 interface Props {
   projectId: string;
   flow: FormFlow;
   /** Where to send the user after successful authentication. */
   callbackURL: string;
+  /** Password-reset token (only for new-password flow). */
+  token?: string;
 }
 
-const OAUTH_PROVIDERS: ReadonlyArray<'google' | 'github' | 'discord' | 'microsoft'> = [
+const OAUTH_PROVIDERS: ReadonlyArray<string> = [
   'google',
   'github',
   'discord',
   'microsoft',
+  'apple',
+  'twitter',
+  'linkedin',
+  'gitlab',
+  'bitbucket',
+  'dropbox',
+  'facebook',
+  'spotify',
 ];
 
 const TITLES: Record<FormFlow, string> = {
@@ -25,6 +35,7 @@ const TITLES: Record<FormFlow, string> = {
   'sign-up': 'create account',
   'magic-link': 'sign in with magic link',
   otp: 'sign in with one-time code',
+  'new-password': 'choose a new password',
 };
 
 const SUB_TITLES: Record<FormFlow, string> = {
@@ -32,6 +43,7 @@ const SUB_TITLES: Record<FormFlow, string> = {
   'sign-up': 'no account yet',
   'magic-link': "we'll email you a one-shot sign-in link",
   otp: "we'll email you a 6-digit code",
+  'new-password': 'enter your new password below',
 };
 
 interface ErrorBody {
@@ -47,16 +59,18 @@ interface ErrorBody {
  * with the CNAME orchestration runbook (BUILD_PLAN.md "Decisions
  * locked" Q7); the form contract here doesn't change.
  */
-export function HostedFlow({ projectId, flow, callbackURL }: Props) {
+export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [magicSent, setMagicSent] = useState(false);
   const [otpRequested, setOtpRequested] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   async function post(path: string, body: Record<string, unknown>): Promise<unknown> {
     setPending(true);
@@ -128,6 +142,20 @@ export function HostedFlow({ projectId, flow, callbackURL }: Props) {
       router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'otp verify failed');
+    }
+  }
+
+  async function handleNewPassword(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!token) {
+      setError('missing reset token');
+      return;
+    }
+    try {
+      await post('/reset-password', { token, newPassword });
+      setResetDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'password reset failed');
     }
   }
 
@@ -214,28 +242,57 @@ export function HostedFlow({ projectId, flow, callbackURL }: Props) {
         )
       ) : null}
 
+      {flow === 'new-password' ? (
+        resetDone ? (
+          <div className="flex flex-col gap-3">
+            <p className="font-mono text-xs text-[var(--color-text-muted)]">
+              password updated. you can now sign in with your new password.
+            </p>
+            <Link
+              href={`/auth/${projectId}/sign-in`}
+              className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-center font-mono text-xs font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)]"
+            >
+              sign in
+            </Link>
+          </div>
+        ) : (
+          <form className="flex flex-col gap-3" onSubmit={handleNewPassword}>
+            <Field
+              label="new password"
+              type="password"
+              value={newPassword}
+              onChange={setNewPassword}
+              autoComplete="new-password"
+            />
+            <Submit pending={pending} idle="reset password" busy="resetting…" />
+          </form>
+        )
+      ) : null}
+
       {error ? (
         <p className="font-mono text-xs text-[var(--color-error)]" role="alert">
           {error}
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-4">
-        <p className="text-center font-mono text-[11px] text-[var(--color-text-subtle)]">
-          or continue with
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {OAUTH_PROVIDERS.map((p) => (
-            <a
-              key={p}
-              href={oauthHref(p)}
-              className="rounded-md border border-[var(--color-border)] px-3 py-2 text-center font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-            >
-              {p}
-            </a>
-          ))}
+      {flow !== 'new-password' ? (
+        <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-4">
+          <p className="text-center font-mono text-[11px] text-[var(--color-text-subtle)]">
+            or continue with
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {OAUTH_PROVIDERS.map((p) => (
+              <a
+                key={p}
+                href={oauthHref(p)}
+                className="rounded-md border border-[var(--color-border)] px-3 py-2 text-center font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+              >
+                {p}
+              </a>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <nav className="flex flex-wrap justify-center gap-3 font-mono text-[11px]">
         {flow !== 'sign-in' ? (

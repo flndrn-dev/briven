@@ -26,7 +26,19 @@
  * `credentials: 'include'` so the browser stores it).
  */
 
-export type OAuthProvider = 'google' | 'github' | 'discord' | 'microsoft';
+export type OAuthProvider =
+  | 'google'
+  | 'github'
+  | 'discord'
+  | 'microsoft'
+  | 'apple'
+  | 'twitter'
+  | 'linkedin'
+  | 'gitlab'
+  | 'bitbucket'
+  | 'dropbox'
+  | 'facebook'
+  | 'spotify';
 
 export interface CreateBrivenAuthOptions {
   /** briven project id (`p_<ulid>`). Required. */
@@ -65,6 +77,15 @@ export interface Session {
   readonly expiresAt: string;
 }
 
+export interface ClientSession {
+  readonly id: string;
+  readonly userId: string;
+  readonly expiresAt: string;
+  readonly createdAt: string;
+  readonly userAgent: string | null;
+  readonly ipAddress: string | null;
+}
+
 export type SignInErrorCode =
   | 'invalid_credentials'
   | 'email_taken'
@@ -79,11 +100,13 @@ export type SignInResult =
   | { ok: true; userId: string; sessionExpiresAt: string }
   | { ok: false; code: SignInErrorCode; message: string };
 
-export type MagicLinkResult =
+export type SimpleResult =
   | { ok: true }
   | { ok: false; code: SignInErrorCode; message: string };
 
-export type OtpRequestResult = MagicLinkResult;
+export type MagicLinkResult = SimpleResult;
+export type OtpRequestResult = SimpleResult;
+export type PasswordResetResult = SimpleResult;
 
 export type SessionResponse =
   | { authenticated: true; userId: string; expiresAt: string }
@@ -117,6 +140,21 @@ export interface SocialInput {
   redirectTo?: string;
 }
 
+export interface PasswordResetInput {
+  token: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UpdateUserInput {
+  name?: string;
+  image?: string;
+}
+
 export interface BrivenAuthClient {
   readonly projectId: string;
   readonly authUrl: string;
@@ -132,6 +170,17 @@ export interface BrivenAuthClient {
   readonly signUp: {
     email(input: SignUpEmailInput): Promise<SignInResult>;
   };
+  sendPasswordReset(email: string): Promise<PasswordResetResult>;
+  resetPassword(input: PasswordResetInput): Promise<PasswordResetResult>;
+  readonly sessions: {
+    list(): Promise<{ ok: true; sessions: ClientSession[] } | { ok: false; code: SignInErrorCode; message: string }>;
+    revoke(sessionId: string): Promise<SimpleResult>;
+  };
+  readonly user: {
+    update(input: UpdateUserInput): Promise<{ ok: true; user: User } | { ok: false; code: SignInErrorCode; message: string }>;
+    changePassword(input: ChangePasswordInput): Promise<SimpleResult>;
+    delete(): Promise<SimpleResult>;
+  };
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
   getUser(): Promise<User | null>;
@@ -144,7 +193,10 @@ export interface BrivenAuthClient {
    * @param flow - which hosted page to open
    * @param callbackURL - where to send the user after successful auth
    */
-  hostedPageURL(flow: 'sign-in' | 'sign-up' | 'magic-link' | 'otp', callbackURL?: string): string;
+  hostedPageURL(
+    flow: 'sign-in' | 'sign-up' | 'magic-link' | 'otp' | 'new-password' | 'profile',
+    callbackURL?: string,
+  ): string;
 }
 
 const DEFAULT_API_ORIGIN = 'https://api.briven.tech';
@@ -187,10 +239,21 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     return (await res.json()) as T;
   }
 
+  async function patch<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: {
+        'content-type': 'application/json',
+        'x-briven-project-id': opts.projectId,
+        authorization: `Bearer ${opts.publicKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    return (await res.json()) as T;
+  }
+
   function asSignInResult(body: unknown): SignInResult {
-    // Better Auth's success shape is `{ user, token, ... }`. Normalise to
-    // briven's documented response — we never expose Better Auth shapes
-    // to the customer's app code.
     if (body && typeof body === 'object') {
       const b = body as {
         user?: { id?: string };
@@ -215,6 +278,24 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     return { ok: false, code: 'unknown', message: 'sign-in failed' };
   }
 
+  function asSimpleResult(body: unknown): SimpleResult {
+    if (body && typeof body === 'object') {
+      const b = body as {
+        status?: boolean;
+        error?: { code?: string; message?: string };
+        code?: string;
+        message?: string;
+      };
+      if (b.status === true) {
+        return { ok: true };
+      }
+      const code = (b.error?.code ?? b.code ?? 'unknown') as SignInErrorCode;
+      const message = b.error?.message ?? b.message ?? 'request failed';
+      return { ok: false, code: knownCode(code), message };
+    }
+    return { ok: false, code: 'unknown', message: 'request failed' };
+  }
+
   return {
     projectId: opts.projectId,
     authUrl,
@@ -222,10 +303,7 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     signIn: {
       async email(input) {
         try {
-          const body = await post<unknown>(
-            '/sign-in/email',
-            input as unknown as Record<string, unknown>,
-          );
+          const body = await post<unknown>('/sign-in/email', input as unknown as Record<string, unknown>);
           return asSignInResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
@@ -233,10 +311,7 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async magicLink(input) {
         try {
-          await post<unknown>(
-            '/sign-in/magic-link',
-            input as unknown as Record<string, unknown>,
-          );
+          await post<unknown>('/sign-in/magic-link', input as unknown as Record<string, unknown>);
           return { ok: true };
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
@@ -244,10 +319,7 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async otpRequest(input) {
         try {
-          await post<unknown>(
-            '/sign-in/email-otp/send-verification-otp',
-            input as unknown as Record<string, unknown>,
-          );
+          await post<unknown>('/sign-in/email-otp/send-verification-otp', input as unknown as Record<string, unknown>);
           return { ok: true };
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
@@ -255,10 +327,7 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async otpVerify(input) {
         try {
-          const body = await post<unknown>(
-            '/sign-in/email-otp/verify',
-            input as unknown as Record<string, unknown>,
-          );
+          const body = await post<unknown>('/sign-in/email-otp/verify', input as unknown as Record<string, unknown>);
           return asSignInResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
@@ -275,11 +344,88 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     signUp: {
       async email(input) {
         try {
-          const body = await post<unknown>(
-            '/sign-up/email',
-            input as unknown as Record<string, unknown>,
-          );
+          const body = await post<unknown>('/sign-up/email', input as unknown as Record<string, unknown>);
           return asSignInResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
+    async sendPasswordReset(email) {
+      try {
+        const body = await post<unknown>('/request-password-reset', { email });
+        return asSimpleResult(body);
+      } catch {
+        return { ok: false, code: 'network_error', message: 'network error' };
+      }
+    },
+    async resetPassword(input) {
+      try {
+        const body = await post<unknown>('/reset-password', input as unknown as Record<string, unknown>);
+        return asSimpleResult(body);
+      } catch {
+        return { ok: false, code: 'network_error', message: 'network error' };
+      }
+    },
+    sessions: {
+      async list() {
+        try {
+          const body = await get<unknown>('/list-sessions');
+          if (body && typeof body === 'object') {
+            const b = body as { sessions?: ClientSession[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.sessions)) {
+              return { ok: true, sessions: b.sessions };
+            }
+            return {
+              ok: false,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'failed to list sessions',
+            };
+          }
+          return { ok: false, code: 'unknown', message: 'failed to list sessions' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async revoke(sessionId) {
+        try {
+          const body = await post<unknown>('/revoke-session', { sessionId });
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
+    user: {
+      async update(input) {
+        try {
+          const body = await patch<unknown>('/update-user', input as unknown as Record<string, unknown>);
+          if (body && typeof body === 'object') {
+            const b = body as { user?: User; error?: { code?: string; message?: string } };
+            if (b.user) return { ok: true, user: b.user };
+            return {
+              ok: false,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'update failed',
+            };
+          }
+          return { ok: false, code: 'unknown', message: 'update failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async changePassword(input) {
+        try {
+          const body = await post<unknown>('/change-password', input as unknown as Record<string, unknown>);
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async delete() {
+        try {
+          const body = await post<unknown>('/delete-user', {});
+          return asSimpleResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }

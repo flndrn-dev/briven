@@ -90,6 +90,14 @@ const authConfigSchema = z.object({
     github: oauthProviderConfig,
     discord: oauthProviderConfig,
     microsoft: oauthProviderConfig,
+    apple: oauthProviderConfig,
+    twitter: oauthProviderConfig,
+    linkedin: oauthProviderConfig,
+    gitlab: oauthProviderConfig,
+    bitbucket: oauthProviderConfig,
+    dropbox: oauthProviderConfig,
+    facebook: oauthProviderConfig,
+    spotify: oauthProviderConfig,
     // Generic OIDC/OAuth provider (Forgejo at code.konnos.org). Same
     // {enabled, clientId} shape as the built-in social providers — the
     // public client id is non-secret; the secret rides the encrypted
@@ -171,6 +179,14 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     github: { enabled: false, clientId: null },
     discord: { enabled: false, clientId: null },
     microsoft: { enabled: false, clientId: null },
+    apple: { enabled: false, clientId: null },
+    twitter: { enabled: false, clientId: null },
+    linkedin: { enabled: false, clientId: null },
+    gitlab: { enabled: false, clientId: null },
+    bitbucket: { enabled: false, clientId: null },
+    dropbox: { enabled: false, clientId: null },
+    facebook: { enabled: false, clientId: null },
+    spotify: { enabled: false, clientId: null },
     konnos: { enabled: false, clientId: null },
   },
   branding: {
@@ -343,6 +359,14 @@ export const SOCIAL_PROVIDER_KEYS = [
   'github',
   'discord',
   'microsoft',
+  'apple',
+  'twitter',
+  'linkedin',
+  'gitlab',
+  'bitbucket',
+  'dropbox',
+  'facebook',
+  'spotify',
 ] as const;
 
 /** One social provider key — the `<key>` half of `<key>_client_secret`. */

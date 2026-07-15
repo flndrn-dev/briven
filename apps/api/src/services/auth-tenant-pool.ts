@@ -513,7 +513,20 @@ async function resolveSocialProviders(
 ): Promise<Record<string, { clientId: string; clientSecret: string }>> {
   // Probe presence first (never decrypts) so the shared gate decides which
   // providers are live, then decrypt only the survivors.
-  const builtins = ['google', 'github', 'discord', 'microsoft'] as const;
+  const builtins = [
+    'google',
+    'github',
+    'discord',
+    'microsoft',
+    'apple',
+    'twitter',
+    'linkedin',
+    'gitlab',
+    'bitbucket',
+    'dropbox',
+    'facebook',
+    'spotify',
+  ] as const;
   const present = await Promise.all(
     builtins.map((k) => getTenantSecret(projectId, 'auth', `${k}_client_secret`)),
   );

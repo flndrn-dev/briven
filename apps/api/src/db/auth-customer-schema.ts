@@ -224,6 +224,19 @@ export const AUTH_VERIFICATION_TYPES = [
 ] as const;
 export type AuthVerificationType = (typeof AUTH_VERIFICATION_TYPES)[number];
 
-/** OAuth provider ids known to briven auth v1. Apple intentionally omitted. */
-export const AUTH_OAUTH_PROVIDERS = ['google', 'github', 'discord', 'microsoft'] as const;
+/** OAuth provider ids known to briven auth. */
+export const AUTH_OAUTH_PROVIDERS = [
+  'google',
+  'github',
+  'discord',
+  'microsoft',
+  'apple',
+  'twitter',
+  'linkedin',
+  'gitlab',
+  'bitbucket',
+  'dropbox',
+  'facebook',
+  'spotify',
+] as const;
 export type AuthOAuthProvider = (typeof AUTH_OAUTH_PROVIDERS)[number];

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { HostedFlow } from './hosted-flow';
 
-const FORM_FLOWS = ['sign-in', 'sign-up', 'magic-link', 'otp'] as const;
+const FORM_FLOWS = ['sign-in', 'sign-up', 'magic-link', 'otp', 'new-password'] as const;
 type FormFlow = (typeof FORM_FLOWS)[number];
 
 function isFormFlow(value: string): value is FormFlow {
@@ -26,12 +26,12 @@ export default async function HostedFlowPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string; flow: string }>;
-  searchParams: Promise<{ callbackURL?: string }>;
+  searchParams: Promise<{ callbackURL?: string; token?: string }>;
 }) {
   const { projectId, flow } = await params;
   if (!isFormFlow(flow)) notFound();
-  const { callbackURL } = await searchParams;
+  const { callbackURL, token } = await searchParams;
   // Default to the hosted account page when no callback is provided.
   const redirectTo = callbackURL || `/auth/${projectId}/account`;
-  return <HostedFlow projectId={projectId} flow={flow} callbackURL={redirectTo} />;
+  return <HostedFlow projectId={projectId} flow={flow} callbackURL={redirectTo} token={token} />;
 }
