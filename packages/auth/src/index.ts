@@ -188,6 +188,12 @@ export interface OrgInvite {
 
 export type OrgResult<T> = { ok: true; data: T } | { ok: false; code: SignInErrorCode; message: string };
 
+export interface Passkey {
+  readonly id: string;
+  readonly name?: string;
+  readonly userId: string;
+}
+
 export interface BrivenAuthClient {
   readonly projectId: string;
   readonly authUrl: string;
@@ -229,6 +235,17 @@ export interface BrivenAuthClient {
     revokeInvite(orgId: string, inviteId: string): Promise<SimpleResult>;
     acceptInvite(token: string): Promise<OrgResult<{ orgId: string }>>;
     getInvite(token: string): Promise<OrgResult<OrgInvite>>;
+  };
+  readonly twoFactor: {
+    enable(password?: string): Promise<SimpleResult>;
+    verify(code: string): Promise<SignInResult>;
+    disable(password?: string): Promise<SimpleResult>;
+    generateBackupCodes(): Promise<{ ok: true; codes: string[] } | { ok: false; code: SignInErrorCode; message: string }>;
+  };
+  readonly passkey: {
+    register(): Promise<SimpleResult>;
+    list(): Promise<{ ok: true; passkeys: Passkey[] } | { ok: false; code: SignInErrorCode; message: string }>;
+    signIn(): Promise<SignInResult>;
   };
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
@@ -644,6 +661,76 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
             return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'get failed' };
           }
           return { ok: false, code: 'unknown', message: 'get failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
+    twoFactor: {
+      async enable(password) {
+        try {
+          const body = await post<unknown>('/two-factor/enable', password ? { password } : {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async verify(code) {
+        try {
+          const body = await post<unknown>('/two-factor/verify', { code });
+          return asSignInResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async disable(password) {
+        try {
+          const body = await post<unknown>('/two-factor/disable', password ? { password } : {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async generateBackupCodes() {
+        try {
+          const body = await post<unknown>('/two-factor/generate-backup-codes', {});
+          if (body && typeof body === 'object') {
+            const b = body as { backupCodes?: string[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.backupCodes)) return { ok: true, codes: b.backupCodes };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'generate failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'generate failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
+    passkey: {
+      async register() {
+        try {
+          const body = await post<unknown>('/passkey/register', {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async list() {
+        try {
+          const body = await get<unknown>('/passkey/list-passkeys');
+          if (body && typeof body === 'object') {
+            const b = body as { passkeys?: Passkey[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.passkeys)) return { ok: true, passkeys: b.passkeys };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async signIn() {
+        try {
+          const body = await post<unknown>('/passkey/authenticate', {});
+          return asSignInResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }

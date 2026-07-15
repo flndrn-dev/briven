@@ -104,6 +104,11 @@ const authConfigSchema = z.object({
     // tenant-secret-store like the others.
     konnos: oauthProviderConfig,
   }),
+  twoFactor: z.object({
+    enabled: z.boolean(),
+    /** Issuer name shown in the authenticator app (defaults to project name). */
+    issuer: z.string().max(64).nullable(),
+  }),
   branding: z.object({
     /** Customer-uploaded logo URL. Null means use the briven default mark. */
     logoUrl: z.string().url().nullable(),
@@ -189,6 +194,7 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     spotify: { enabled: false, clientId: null },
     konnos: { enabled: false, clientId: null },
   },
+  twoFactor: { enabled: false, issuer: null },
   branding: {
     logoUrl: null,
     primaryColor: '#00e87a',

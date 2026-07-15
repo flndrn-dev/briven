@@ -42,6 +42,7 @@ import {
   type Org,
   type OrgInvite,
   type OrgMember,
+  type Passkey,
   type SessionResponse,
   type SignInResult,
   type SimpleResult,
@@ -1242,6 +1243,134 @@ export function OrganizationProfile(props: OrganizationProfileProps) {
   );
 }
 
+// ─── TwoFactorSetup ───────────────────────────────────────────────────────
+
+export interface TwoFactorSetupProps {
+  className?: string;
+  onEnabled?: () => void;
+}
+
+export function TwoFactorSetup(props: TwoFactorSetupProps) {
+  const auth = useBrivenAuth();
+  const [step, setStep] = useState<'idle' | 'enabling' | 'verify'>('idle');
+  const [code, setCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleEnable = useCallback(async () => {
+    setStep('enabling');
+    setError(null);
+    const result = await auth.twoFactor.enable();
+    if (result.ok) {
+      setStep('verify');
+    } else {
+      setError(result.message);
+      setStep('idle');
+    }
+  }, [auth]);
+
+  const handleVerify = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setError(null);
+      const result = await auth.twoFactor.verify(code);
+      if (result.ok) {
+        const codes = await auth.twoFactor.generateBackupCodes();
+        if (codes.ok) setBackupCodes(codes.codes);
+        props.onEnabled?.();
+      } else {
+        setError(result.message);
+      }
+    },
+    [auth, code, props],
+  );
+
+  return createElement(
+    'div',
+    { className: props.className ?? 'briven-auth-2fa-setup' },
+    step === 'idle'
+      ? createElement(
+          'button',
+          { type: 'button', onClick: handleEnable, className: 'briven-auth-submit' },
+          'enable two-factor',
+        )
+      : null,
+    step === 'verify'
+      ? createElement(
+          'form',
+          { onSubmit: handleVerify, className: 'briven-auth-form' },
+          createElement('p', { className: 'briven-auth-message' }, 'enter the 6-digit code from your authenticator app'),
+          createElement('input', {
+            type: 'text',
+            required: true,
+            placeholder: '6-digit code',
+            value: code,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCode(e.target.value),
+            pattern: '\\d{6}',
+            maxLength: 6,
+            className: 'briven-auth-input',
+          }),
+          createElement('button', { type: 'submit', className: 'briven-auth-submit' }, 'verify'),
+        )
+      : null,
+    backupCodes.length > 0
+      ? createElement(
+          'div',
+          { className: 'briven-auth-backup-codes' },
+          createElement('p', { className: 'briven-auth-message' }, 'save these backup codes:'),
+          createElement(
+            'ul',
+            {},
+            backupCodes.map((c) => createElement('li', { key: c, className: 'briven-auth-code' }, c)),
+          ),
+        )
+      : null,
+    error ? createElement('p', { className: 'briven-auth-error', role: 'alert' }, error) : null,
+  );
+}
+
+// ─── PasskeyButton ────────────────────────────────────────────────────────
+
+export interface PasskeyButtonProps {
+  className?: string;
+  mode?: 'register' | 'sign-in';
+}
+
+export function PasskeyButton(props: PasskeyButtonProps) {
+  const auth = useBrivenAuth();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleClick = useCallback(async () => {
+    setPending(true);
+    setError(null);
+    if (props.mode === 'register') {
+      const result = await auth.passkey.register();
+      if (!result.ok) setError(result.message);
+    } else {
+      const result = await auth.passkey.signIn();
+      if (!result.ok) setError(result.message);
+    }
+    setPending(false);
+  }, [auth, props.mode]);
+
+  return createElement(
+    'div',
+    { className: props.className ?? 'briven-auth-passkey' },
+    createElement(
+      'button',
+      {
+        type: 'button',
+        onClick: handleClick,
+        disabled: pending,
+        className: 'briven-auth-passkey-button',
+      },
+      props.mode === 'register' ? 'register passkey' : 'sign in with passkey',
+    ),
+    error ? createElement('p', { className: 'briven-auth-error', role: 'alert' }, error) : null,
+  );
+}
+
 export type {
   BrivenAuthClient,
   ClientSession,
@@ -1249,6 +1378,7 @@ export type {
   Org,
   OrgInvite,
   OrgMember,
+  Passkey,
   SessionResponse,
   SignInResult,
   SimpleResult,

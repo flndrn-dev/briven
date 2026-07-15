@@ -60,13 +60,14 @@ export function renderAuthProvisioningSql(): string[] {
     // `text` column + a UNIQUE index on `lower(email)` (verified on DoltGres).
     // `email_verified` is BOOLEAN — what Better Auth reads/writes.
     `CREATE TABLE IF NOT EXISTS "_briven_auth_users" (
-       id              text        PRIMARY KEY,
-       name            text,
-       email           text        NOT NULL,
-       email_verified  boolean     NOT NULL DEFAULT false,
-       image           text,
-       created_at      timestamptz NOT NULL DEFAULT now(),
-       updated_at      timestamptz NOT NULL DEFAULT now()
+       id                text        PRIMARY KEY,
+       name              text,
+       email             text        NOT NULL,
+       email_verified    boolean     NOT NULL DEFAULT false,
+       image             text,
+       two_factor_enabled boolean    NOT NULL DEFAULT false,
+       created_at        timestamptz NOT NULL DEFAULT now(),
+       updated_at        timestamptz NOT NULL DEFAULT now()
      )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_users_email_uniq"
        ON "_briven_auth_users" (lower(email))`,
@@ -189,6 +190,33 @@ export function renderAuthProvisioningSql(): string[] {
        ON "_briven_auth_org_invites" (token)`,
     `CREATE INDEX IF NOT EXISTS "_briven_auth_org_invites_org_idx"
        ON "_briven_auth_org_invites" (org_id)`,
+
+    // ─── Two-Factor (Phase 3) ───────────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_two_factors" (
+       id            text        PRIMARY KEY,
+       secret        text        NOT NULL,
+       backup_codes  text        NOT NULL,
+       user_id       text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       verified      boolean     NOT NULL DEFAULT true,
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_two_factors_user_idx"
+       ON "_briven_auth_two_factors" (user_id)`,
+
+    // ─── Passkeys (Phase 3) ─────────────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_passkeys" (
+       id            text        PRIMARY KEY,
+       name          text,
+       public_key    text        NOT NULL,
+       user_id       text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       credential_id text        NOT NULL,
+       counter       bigint      NOT NULL DEFAULT 0,
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_passkeys_user_idx"
+       ON "_briven_auth_passkeys" (user_id)`,
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -208,5 +236,7 @@ export const AUTH_TABLES = [
   '_briven_auth_orgs',
   '_briven_auth_org_members',
   '_briven_auth_org_invites',
+  '_briven_auth_two_factors',
+  '_briven_auth_passkeys',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

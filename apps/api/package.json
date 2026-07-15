@@ -23,6 +23,7 @@
     "@briven/shared": "workspace:*",
     "@hono/mcp": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@better-auth/passkey": "^1.6.9",
     "better-auth": "^1.6.9",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.14",

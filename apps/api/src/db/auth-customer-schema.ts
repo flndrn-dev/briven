@@ -47,6 +47,7 @@ export const authUsers = pgTable(
     email: text('email').notNull(),
     emailVerified: boolean('email_verified').notNull().default(false),
     image: text('image'),
+    twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
@@ -245,6 +246,51 @@ export const authOrgInvites = pgTable(
   }),
 );
 
+/**
+ * Two-factor authentication — TOTP secrets + backup codes.
+ * Better Auth twoFactor plugin model (model name `twoFactor`).
+ */
+export const authTwoFactors = pgTable(
+  '_briven_auth_two_factors',
+  {
+    id: id(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    verified: boolean('verified').notNull().default(true),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('_briven_auth_two_factors_user_idx').on(t.userId),
+  }),
+);
+
+/**
+ * WebAuthn passkeys — FIDO2 credentials.
+ * Better Auth passkey plugin model (model name `passkey`).
+ */
+export const authPasskeys = pgTable(
+  '_briven_auth_passkeys',
+  {
+    id: id(),
+    name: text('name'),
+    publicKey: text('public_key').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    credentialID: text('credential_id').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('_briven_auth_passkeys_user_idx').on(t.userId),
+  }),
+);
+
 export const authSchema = {
   user: authUsers,
   session: authSessions,
@@ -258,6 +304,9 @@ export const authSchema = {
   org: authOrgs,
   orgMember: authOrgMembers,
   orgInvite: authOrgInvites,
+  // Phase 3 — MFA + Passkeys.
+  twoFactor: authTwoFactors,
+  passkey: authPasskeys,
 } as const;
 
 export type AuthUser = typeof authUsers.$inferSelect;
@@ -269,6 +318,8 @@ export type AuthAuditLogEntry = typeof authAuditLog.$inferSelect;
 export type AuthOrg = typeof authOrgs.$inferSelect;
 export type AuthOrgMember = typeof authOrgMembers.$inferSelect;
 export type AuthOrgInvite = typeof authOrgInvites.$inferSelect;
+export type AuthTwoFactor = typeof authTwoFactors.$inferSelect;
+export type AuthPasskey = typeof authPasskeys.$inferSelect;
 
 /** Audit-action vocabulary. Open union — services can emit any string, but the
  *  listed values are guaranteed to be handled by the admin dashboard's filter

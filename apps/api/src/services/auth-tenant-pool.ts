@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { emailOTP, genericOAuth, jwt, magicLink } from 'better-auth/plugins';
+import { emailOTP, genericOAuth, jwt, magicLink, twoFactor } from 'better-auth/plugins';
+import { passkey } from '@better-auth/passkey';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 
@@ -236,14 +237,21 @@ export function buildTenantAuthPlugins(
   }
 
   if (p.passkey.enabled) {
-    // TODO(passkey): the real WebAuthn plugin moved to the standalone
-    // `@better-auth/passkey` package in better-auth 1.4 and is NOT a dependency
-    // here, so we can't register its routes without adding + installing it
-    // (out of scope for this fix — magic-link is the priority). We still surface
-    // a plugin with the canonical `passkey` id so the enabled-provider signal +
-    // config contract stay honest; the actual /passkey/* endpoints only light up
-    // once `@better-auth/passkey` is added and swapped in below.
-    plugins.push({ id: 'passkey' });
+    plugins.push(
+      passkey({
+        rpID: env.BRIVEN_ENV === 'production' ? 'briven.tech' : 'localhost',
+        rpName: 'Briven Auth',
+        origin: env.BRIVEN_API_ORIGIN,
+      }) as unknown as TenantAuthPlugin,
+    );
+  }
+
+  if (config.twoFactor.enabled) {
+    plugins.push(
+      twoFactor({
+        issuer: config.twoFactor.issuer ?? 'Briven Auth',
+      }) as unknown as TenantAuthPlugin,
+    );
   }
 
   return plugins;
@@ -626,6 +634,9 @@ async function createAuthInstance(projectId: string) {
         verification: authSchema.verification,
         // jwt-plugin key store — the plugin looks the model up as `jwks`.
         jwks: authSchema.jwks,
+        // Phase 3 — MFA + Passkeys.
+        twoFactor: authSchema.twoFactor,
+        passkey: authSchema.passkey,
       },
     }),
     emailAndPassword: {
