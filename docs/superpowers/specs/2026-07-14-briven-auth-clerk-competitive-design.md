@@ -90,9 +90,11 @@ export const config = {
 
 This is the exact pattern Murphus and other projects already use. The difference from Clerk is that Clerk's middleware is generated/installed by the CLI and its origins are auto-allowed. Briven must do the same: **document the file, provide a CLI command to generate it, and auto-allow common dev origins so the proxy works immediately.**
 
-### High-level flow
+### High-level flow (covers all sign-in methods)
 
-1. Customer app calls `auth.signIn.magicLink({ email, redirectTo: '/dashboard' })`.
+The same pattern applies to **email+password, magic link, email OTP, and social OAuth**:
+
+1. Customer app calls `auth.signIn.magicLink({ email, redirectTo: '/dashboard' })` or `auth.signIn.social({ provider: 'google', redirectTo: '/dashboard' })`.
 2. The SDK builds a URL like:
    ```
    https://auth.murphus.eu/magic-link?callbackURL=https://murphus.eu/dashboard&projectId=p_xxx
@@ -101,9 +103,10 @@ This is the exact pattern Murphus and other projects already use. The difference
    ```
    https://p_xxx.auth.briven.tech/magic-link?callbackURL=http://localhost:3001/dashboard
    ```
-3. The user enters their email on the Briven-hosted page. The page is **same-origin** with the auth API, so `originCheck` passes without any customer configuration.
-4. The magic link is sent. The link points back to the same hosted auth subdomain.
-5. After verification, the hosted page sets the session cookie and redirects to `https://murphus.eu/dashboard`.
+3. For **OAuth**, the hosted page redirects to the provider (Google, GitHub, etc.) with its own callback set to the hosted subdomain. The provider callback lands back on the hosted page, which then redirects to the customer's app.
+4. The user enters their email on the Briven-hosted page (password, magic link, or OTP). The page is **same-origin** with the auth API, so `originCheck` passes without any customer configuration.
+5. The magic link is sent. The link points back to the same hosted auth subdomain.
+6. After verification, the hosted page sets the session cookie and redirects to `https://murphus.eu/dashboard`.
 
 ### Architectural changes
 
@@ -152,7 +155,7 @@ Update `@briven/auth` so that the default behavior is to redirect to the hosted 
 - `signIn.email()` → redirect to hosted sign-in page with `callbackURL`.
 - `signIn.magicLink()` → redirect to hosted magic-link page.
 - `signIn.otpRequest()` → redirect to hosted OTP page.
-- `signIn.social()` → redirect to hosted OAuth page (or keep the API call but use the hosted page as callback).
+- `signIn.social()` → redirect to hosted OAuth page. The hosted page initiates the OAuth handshake using a callback on the hosted subdomain, then redirects back to the customer's app. This prevents the customer's `localhost:3001/api/auth/callback/google` from being rejected as an untrusted origin.
 - Keep the direct API calls available via an opt-in flag for advanced users who want to build fully custom UI and have already configured origins.
 
 The SDK should also auto-register / warn about missing allowed domains by calling a new lightweight endpoint before redirecting.
