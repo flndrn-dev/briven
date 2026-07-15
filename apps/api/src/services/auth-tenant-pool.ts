@@ -97,7 +97,13 @@ function authSecret(): string {
  * developer clicks stay on localhost. Kept as a single source of truth so
  * `resetPasswordUrl` (below) and the hosted-pages deploy agree on the shape.
  */
-export function hostedAuthBaseUrl(projectId: string): string {
+export function hostedAuthBaseUrl(
+  projectId: string,
+  config?: { customAuthDomain?: string | null },
+): string {
+  if (config?.customAuthDomain) {
+    return `https://${config.customAuthDomain}`;
+  }
   if (env.BRIVEN_ENV === 'production') {
     return `https://${projectId}.auth.briven.tech`;
   }
@@ -110,8 +116,12 @@ export function hostedAuthBaseUrl(projectId: string): string {
  *   <hostedAuthBaseUrl>/auth/<projectId>/new-password?token=<token>
  * The token is URL-encoded so reserved characters survive the query string.
  */
-export function resetPasswordUrl(projectId: string, token: string): string {
-  return `${hostedAuthBaseUrl(projectId)}/auth/${projectId}/new-password?token=${encodeURIComponent(token)}`;
+export function resetPasswordUrl(
+  projectId: string,
+  token: string,
+  config?: { customAuthDomain?: string | null },
+): string {
+  return `${hostedAuthBaseUrl(projectId, config)}/auth/${projectId}/new-password?token=${encodeURIComponent(token)}`;
 }
 
 // ─── config-driven plugin loading ────────────────────────────────────────
@@ -585,7 +595,7 @@ async function createAuthInstance(projectId: string) {
         await sendBrivenAuthPasswordReset(
           projectId,
           user.email,
-          resetPasswordUrl(projectId, token),
+          resetPasswordUrl(projectId, token, config),
         );
       },
     },

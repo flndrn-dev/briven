@@ -130,6 +130,14 @@ const authConfigSchema = z.object({
    * existed still parse — `getAuthConfig` callers treat a missing array as `[]`.
    */
   customOidc: z.array(customOidcProviderConfig).optional(),
+  /** Customer-owned auth subdomain (e.g. auth.murphus.eu). Null means use the default hosted pages. */
+  customAuthDomain: z
+    .string()
+    .regex(
+      /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i,
+      'customAuthDomain must be a valid DNS domain',
+    )
+    .nullable(),
 });
 
 export type AuthConfig = z.infer<typeof authConfigSchema>;
@@ -172,6 +180,7 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     senderName: 'briven auth',
   },
   customOidc: [],
+  customAuthDomain: null,
 }) as AuthConfig;
 
 // ─── pure helpers (unit-testable without postgres) ───────────────────────
