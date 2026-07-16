@@ -94,6 +94,9 @@ jobs:
   audit:
     name: security audit
     runs-on: ubuntu-latest
+    # pnpm audit uses the retired npm audit endpoint (410 Gone).
+    # Re-enable once pnpm supports the new bulk advisory endpoint.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6

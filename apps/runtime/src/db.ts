@@ -68,7 +68,7 @@ export function dbNameFor(projectId: string): string {
  * directly (mirrors postgres.js's `tx.unsafe`, which is what this replaced).
  */
 export interface ProjectTx {
-  unsafe(text: string, params?: readonly unknown[]): Promise<any[]>;
+  unsafe(text: string, params?: readonly unknown[]): Promise<unknown[]>;
 }
 
 /**

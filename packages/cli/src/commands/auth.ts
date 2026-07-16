@@ -96,5 +96,5 @@ async function runScaffold(): Promise<number> {
 }
 
 function link(url: string): void {
-  step(\`  docs: \${url}\`);
+  step(`  docs: ${url}`);
 }
