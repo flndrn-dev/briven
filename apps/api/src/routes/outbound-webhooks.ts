@@ -12,6 +12,7 @@ import {
   KNOWN_EVENT_TYPES,
   listOutboundDeliveries,
   listSubscribers,
+  replayDelivery,
   rotateSubscriberSecret,
   updateSubscriber,
 } from '../services/outbound-webhooks.js';
@@ -31,6 +32,7 @@ const createSchema = z.object({
   targetUrl: URL_SCHEMA,
   eventTypes: EVENT_TYPES_SCHEMA.optional(),
   enabled: z.boolean().optional(),
+  allowedIps: z.string().max(500).optional(),
 });
 
 const updateSchema = z.object({
@@ -38,6 +40,7 @@ const updateSchema = z.object({
   targetUrl: URL_SCHEMA.optional(),
   eventTypes: EVENT_TYPES_SCHEMA.optional(),
   enabled: z.boolean().optional(),
+  allowedIps: z.string().max(500).optional(),
 });
 
 const DELIVERY_STATUS_VALUES = ['pending', 'ok', 'failed', 'cancelled'] as const;
@@ -66,6 +69,7 @@ outboundWebhooksRouter.post('/v1/projects/:id/outbound-webhooks', async (c) => {
       targetUrl: parsed.data.targetUrl,
       eventTypes: parsed.data.eventTypes,
       enabled: parsed.data.enabled,
+      allowedIps: parsed.data.allowedIps,
       createdBy: user.id,
     });
     await audit({
@@ -175,5 +179,24 @@ outboundWebhooksRouter.get(
       status,
     });
     return c.json({ deliveries });
+  },
+);
+
+outboundWebhooksRouter.post(
+  '/v1/projects/:id/outbound-webhooks/:subscriberId/deliveries/:deliveryId/replay',
+  async (c) => {
+    const user = c.get('user')!;
+    const { project } = await assertProjectRole(c.req.param('id'), user.id, 'admin');
+    const deliveryId = c.req.param('deliveryId');
+    await replayDelivery(deliveryId, project.id);
+    await audit({
+      actorId: user.id,
+      projectId: project.id,
+      action: 'outbound-webhook.replay',
+      ipHash: hashIp(c.req.raw.headers.get('x-forwarded-for')),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { deliveryId },
+    });
+    return c.json({ ok: true });
   },
 );

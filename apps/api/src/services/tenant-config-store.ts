@@ -108,6 +108,8 @@ const authConfigSchema = z.object({
     enabled: z.boolean(),
     /** Issuer name shown in the authenticator app (defaults to project name). */
     issuer: z.string().max(64).nullable(),
+    /** When true, all users MUST enroll MFA (TOTP or passkey) before signing in. */
+    required: z.boolean().default(false),
   }),
   /**
    * Custom JWT claims added to every token issued by the jwt plugin.
@@ -158,6 +160,85 @@ const authConfigSchema = z.object({
       'customAuthDomain must be a valid DNS domain',
     )
     .nullable(),
+  /**
+   * Session management settings (Phase 2 — BUILD_PLAN.md).
+   */
+  session: z
+    .object({
+      /** Maximum session lifetime in days (5 min to 10 years). Default 30. */
+      maxLifetimeDays: z.number().int().min(1).max(3650).default(30),
+      /** Refresh session token if older than this many days. Default 7. */
+      updateAgeDays: z.number().int().min(1).max(365).default(7),
+      /** Invalidate session after this many minutes of inactivity. 0 = disabled. */
+      inactivityTimeoutMinutes: z.number().int().min(0).max(1440).default(0),
+    })
+    .default({ maxLifetimeDays: 30, updateAgeDays: 7, inactivityTimeoutMinutes: 0 }),
+  /**
+   * Security hardening settings (Phase 1 — BUILD_PLAN.md).
+   * Controls sign-up gating, email restrictions, and abuse prevention.
+   */
+  security: z
+    .object({
+      /** Who may sign up: public (anyone), restricted (invite/enterprise only), waitlist (admin approval). */
+      signUpMode: z.enum(['public', 'restricted', 'waitlist']).default('public'),
+      /** Only allow sign-ups from these email domains. Empty = no restriction. */
+      allowedEmailDomains: z.array(z.string().min(1).max(128)).default([]),
+      /** Block sign-ups from these email domains. Checked before allowedEmailDomains. */
+      blockedEmailDomains: z.array(z.string().min(1).max(128)).default([]),
+      /** Reject known disposable email domains. */
+      blockDisposableEmails: z.boolean().default(false),
+      /** Reject email addresses with subaddress tags (+tag, #tag). */
+      blockEmailSubaddresses: z.boolean().default(false),
+      /** Check passwords against Have I Been Pwned breach database on sign-up. */
+      breachDetection: z.object({ enabled: z.boolean() }).default({ enabled: false }),
+      /** Rate limiting configuration for auth endpoints. */
+      rateLimiting: z
+        .object({
+          enabled: z.boolean().default(true),
+          maxAttemptsPerIp: z.number().int().min(1).max(1000).default(100),
+          windowMinutes: z.number().int().min(1).max(1440).default(15),
+        })
+        .default({ enabled: true, maxAttemptsPerIp: 100, windowMinutes: 15 }),
+    })
+    .default({
+      signUpMode: 'public',
+      allowedEmailDomains: [],
+      blockedEmailDomains: [],
+      blockDisposableEmails: false,
+      blockEmailSubaddresses: false,
+      breachDetection: { enabled: false },
+      rateLimiting: { enabled: true, maxAttemptsPerIp: 100, windowMinutes: 15 },
+    }),
+  /**
+   * Cloudflare Turnstile bot protection (Phase 1 — BUILD_PLAN.md).
+   * The site key is public (rendered in frontend); the secret is global env.
+   */
+  turnstile: z
+    .object({
+      enabled: z.boolean().default(false),
+      siteKey: z.string().nullable().default(null),
+    })
+    .default({ enabled: false, siteKey: null }),
+  /**
+   * Log retention settings (Phase 6.3).
+   * Controls how long audit logs and app logs are retained.
+   */
+  retention: z
+    .object({
+      /** Audit log retention in days. 7 | 30 | 90. Default 30. */
+      auditLogDays: z.number().int().min(7).max(90).default(30),
+      /** App log retention in days. 7 | 30 | 90. Default 7. */
+      appLogDays: z.number().int().min(7).max(90).default(7),
+    })
+    .default({ auditLogDays: 30, appLogDays: 7 }),
+  /**
+   * Localization settings (Phase 6.8).
+   * Default locale for hosted pages and email templates.
+   */
+  locale: z
+    .string()
+    .regex(/^[a-z]{2}(-[A-Z]{2})?$/, 'locale must be a valid BCP 47 language tag')
+    .default('en'),
 });
 
 export type AuthConfig = z.infer<typeof authConfigSchema>;
@@ -201,8 +282,9 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
     spotify: { enabled: false, clientId: null },
     konnos: { enabled: false, clientId: null },
   },
-  twoFactor: { enabled: false, issuer: null },
+  twoFactor: { enabled: false, issuer: null, required: false },
   jwtClaims: {},
+  session: { maxLifetimeDays: 30, updateAgeDays: 7, inactivityTimeoutMinutes: 0 },
   branding: {
     logoUrl: null,
     primaryColor: '#00e87a',
@@ -211,6 +293,18 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
   },
   customOidc: [],
   customAuthDomain: null,
+  security: {
+    signUpMode: 'public',
+    allowedEmailDomains: [],
+    blockedEmailDomains: [],
+    blockDisposableEmails: false,
+    blockEmailSubaddresses: false,
+    breachDetection: { enabled: false },
+    rateLimiting: { enabled: true, maxAttemptsPerIp: 100, windowMinutes: 15 },
+  },
+  turnstile: { enabled: false, siteKey: null },
+  retention: { auditLogDays: 30, appLogDays: 7 },
+  locale: 'en',
 }) as AuthConfig;
 
 // ─── pure helpers (unit-testable without postgres) ───────────────────────
@@ -464,6 +558,11 @@ export interface AuthBrandingPublicPayload {
   socialProviders: string[];
   /** Display labels for the enabled custom-OIDC entries (built-ins self-label). */
   customOidc: Array<{ id: string; displayName: string }>;
+  /** Turnstile bot-protection config (public site key only). */
+  turnstile: {
+    enabled: boolean;
+    siteKey: string | null;
+  };
 }
 
 /**
@@ -483,6 +582,10 @@ export function buildAuthBrandingPublicPayload(
     customOidc: (config.customOidc ?? [])
       .filter((o) => enabled.has(o.id))
       .map((o) => ({ id: o.id, displayName: o.displayName })),
+    turnstile: {
+      enabled: config.turnstile.enabled,
+      siteKey: config.turnstile.siteKey,
+    },
   };
 }
 

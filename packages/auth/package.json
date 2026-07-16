@@ -13,6 +13,14 @@
       "types": "./src/react/index.ts",
       "default": "./src/react/index.ts"
     },
+    "./vue": {
+      "types": "./src/vue/index.ts",
+      "default": "./src/vue/index.ts"
+    },
+    "./svelte": {
+      "types": "./src/svelte/index.ts",
+      "default": "./src/svelte/index.ts"
+    },
     "./server": {
       "types": "./src/server/index.ts",
       "default": "./src/server/index.ts"
@@ -33,7 +41,9 @@
   },
   "peerDependencies": {
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "svelte": "^4.0.0 || ^5.0.0",
+    "vue": "^3.5.0"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -41,12 +51,20 @@
     },
     "react-dom": {
       "optional": true
+    },
+    "vue": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
-    "typescript": "^6.0.3"
+    "svelte": "^5.55.4",
+    "typescript": "^6.0.3",
+    "vue": "^3.5.0"
   },
   "publishConfig": {
     "access": "public"

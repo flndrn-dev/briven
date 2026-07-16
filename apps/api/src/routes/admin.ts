@@ -572,7 +572,7 @@ adminRouter.post('/v1/admin/projects/:projectId/auth/impersonate', async (c) => 
   if (!projectId || typeof targetUserId !== 'string') {
     return c.json({ code: 'validation_failed', message: 'missing projectId or userId' }, 400);
   }
-  const { sessionToken, expiresAt } = await createImpersonationSession(projectId, targetUserId);
+  const { sessionToken, expiresAt } = await createImpersonationSession(projectId, targetUserId, actor.id);
   await audit({
     actorId: actor.id,
     projectId,

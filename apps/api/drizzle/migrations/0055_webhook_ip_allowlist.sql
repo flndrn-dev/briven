@@ -1,0 +1,1 @@
+ALTER TABLE "webhook_subscribers" ADD COLUMN "allowed_ips" text DEFAULT '' NOT NULL;

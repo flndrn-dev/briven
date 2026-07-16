@@ -14,6 +14,12 @@ import { log } from '../lib/logger.js';
 import { getRequestContext } from '../lib/request-context.js';
 import { captureSignupGeo } from './signup-geo.js';
 import {
+  checkEmailGate,
+  getUserSecurityState,
+  isUserBlocked,
+} from './auth-security.js';
+import { runInProjectDatabase } from '../db/data-plane.js';
+import {
   sendBrivenAuthEmailVerification,
   sendBrivenAuthMagicLink,
   sendBrivenAuthOtp,
@@ -330,18 +336,56 @@ function isoOrUndefined(v: unknown): string | undefined {
 }
 
 /**
+ * Check whether a user has enrolled any MFA method (TOTP or passkey).
+ * Used by the MFA enforcement gate in session.create.before.
+ */
+async function userHasMfaEnrolled(projectId: string, userId: string): Promise<boolean> {
+  const rows = await runInProjectDatabase<
+    Array<{ totp_count: number; passkey_count: number }>
+  >(projectId, async (tx) =>
+    tx.unsafe(
+      `SELECT
+         (SELECT COUNT(*) FROM "_briven_auth_two_factors" WHERE user_id = $1) AS totp_count,
+         (SELECT COUNT(*) FROM "_briven_auth_passkeys" WHERE user_id = $1) AS passkey_count`,
+      [userId] as never,
+    ) as never,
+  );
+  const row = rows[0];
+  if (!row) return false;
+  return row.totp_count > 0 || row.passkey_count > 0;
+}
+
+/**
  * Better Auth `databaseHooks` that fan lifecycle transitions out to the
  * injected dispatcher as `auth.*` webhook events. Payloads are deliberately
  * minimal — id/email/timestamps only — so no password hash or session token
  * ever rides the webhook (asserted by the test).
+ *
+ * Also enforces security policy: ban checks, MFA enforcement, and
+ * email-gate defense-in-depth on user creation.
  */
 export function buildAuthDatabaseHooks(
   projectId: string,
   dispatch: AuthEventDispatcher,
+  config: AuthConfig,
 ) {
   return {
     user: {
       create: {
+        before: async (user: { email: string }) => {
+          // Defense-in-depth: re-validate email against allowlist/blocklist
+          // even if the bridge already checked it. Catches OAuth sign-ups
+          // where the email arrives from the provider.
+          const gate = checkEmailGate(user.email, {
+            allowedDomains: config.security.allowedEmailDomains,
+            blockedDomains: config.security.blockedEmailDomains,
+            blockDisposable: config.security.blockDisposableEmails,
+            blockSubaddresses: config.security.blockEmailSubaddresses,
+          });
+          if (!gate.allowed) {
+            throw new Error(gate.reason ?? 'sign-up not allowed');
+          }
+        },
         after: async (user: { id: string; email: string; createdAt?: unknown }) => {
           // Control-plane sign-up geo capture (admin-only SEO analytics).
           // Fire-and-forget: captureSignupGeo swallows all its own errors, so
@@ -356,6 +400,19 @@ export function buildAuthDatabaseHooks(
             ip: getRequestContext()?.ip ?? null,
           });
 
+          // Lazily create an empty metadata row for the new user so
+          // getUserMetadata never returns null downstream.
+          void runInProjectDatabase(projectId, async (tx) => {
+            await tx.unsafe(
+              `INSERT INTO "_briven_auth_user_metadata" (id, user_id, public_metadata, private_metadata, created_at, updated_at)
+               VALUES (gen_random_uuid()::text, $1, '{}'::jsonb, '{}'::jsonb, now(), now())
+               ON CONFLICT (user_id) DO NOTHING`,
+              [user.id] as never,
+            );
+          }).catch(() => {
+            // Swallow — metadata seeding must never break sign-up.
+          });
+
           await dispatch(projectId, 'auth.signup', {
             userId: user.id,
             email: user.email,
@@ -366,7 +423,43 @@ export function buildAuthDatabaseHooks(
     },
     session: {
       create: {
+        before: async (session: { userId: string }) => {
+          // Ban / suspension check. If the user is blocked, prevent session
+          // creation so they cannot sign in even with valid credentials.
+          const sec = await getUserSecurityState(projectId, session.userId);
+          const blocked = isUserBlocked(sec);
+          if (blocked.blocked) {
+            throw new Error(blocked.reason ?? 'account access denied');
+          }
+
+          // MFA enforcement. When twoFactor.required is true, every user
+          // must have enrolled TOTP or registered a passkey before they
+          // can create a session. Passkeys count as MFA (possession +
+          // biometric), so passkey users bypass the TOTP challenge.
+          if (config.twoFactor.required) {
+            const hasMfa = await userHasMfaEnrolled(projectId, session.userId);
+            if (!hasMfa) {
+              throw new Error(
+                'multi-factor authentication is required. please enroll a passkey or set up an authenticator app.',
+              );
+            }
+          }
+        },
         after: async (session: { id: string; userId: string; createdAt?: unknown }) => {
+          // Track session activity for inactivity timeout.
+          if (config.session.inactivityTimeoutMinutes > 0) {
+            void runInProjectDatabase(projectId, async (tx) => {
+              await tx.unsafe(
+                `INSERT INTO "_briven_auth_session_activity" (id, session_id, last_active_at, created_at, updated_at)
+                 VALUES (gen_random_uuid()::text, $1, now(), now(), now())
+                 ON CONFLICT (session_id) DO UPDATE SET last_active_at = now(), updated_at = now()`,
+                [session.id] as never,
+              );
+            }).catch(() => {
+              // Swallow — activity tracking must never break sign-in.
+            });
+          }
+
           await dispatch(projectId, 'auth.signin', {
             sessionId: session.id,
             userId: session.userId,
@@ -379,6 +472,18 @@ export function buildAuthDatabaseHooks(
           session: { id: string; userId: string },
           ctx?: { path?: string } | null,
         ) => {
+          // Clean up session activity row when session is deleted.
+          if (config.session.inactivityTimeoutMinutes > 0) {
+            void runInProjectDatabase(projectId, async (tx) => {
+              await tx.unsafe(
+                `DELETE FROM "_briven_auth_session_activity" WHERE session_id = $1`,
+                [session.id] as never,
+              );
+            }).catch(() => {
+              // Swallow.
+            });
+          }
+
           // A user-initiated /sign-out vs an admin/self /revoke-session are
           // distinct events downstream; fall back to sign-out when Better
           // Auth gives no context path.
@@ -676,10 +781,10 @@ async function createAuthInstance(projectId: string) {
     },
     socialProviders,
     plugins,
-    databaseHooks: buildAuthDatabaseHooks(projectId, dispatchAuthEvent) as never,
+    databaseHooks: buildAuthDatabaseHooks(projectId, dispatchAuthEvent, config) as never,
     session: {
-      expiresIn: 60 * 60 * 24 * 30, // 30 days
-      updateAge: 60 * 60 * 24 * 7, // refresh if older than 7 days
+      expiresIn: 60 * 60 * 24 * config.session.maxLifetimeDays,
+      updateAge: 60 * 60 * 24 * config.session.updateAgeDays,
     },
     advanced: {
       cookiePrefix: 'briven-auth',

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 
 import { ValidationError } from '@briven/shared';
 
@@ -7,6 +8,7 @@ import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import { runWithRequestContext } from '../lib/request-context.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
+import { requireAuthTeamAdmin } from '../middleware/auth-team.js';
 import { audit, hashIp } from '../services/audit.js';
 import { renderAuthProvisioningSql } from '../services/auth-provisioning.js';
 import { getAuthInstance, invalidateAuthInstance } from '../services/auth-tenant-pool.js';
@@ -52,6 +54,37 @@ import {
 import { hasTenantSecret, setTenantSecret } from '../services/tenant-secrets.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 import {
+  banUser,
+  checkSignUpGate,
+  listWaitlist,
+  approveWaitlistEntry,
+  rejectWaitlistEntry,
+  suspendUser,
+  unbanUser,
+  unsuspendUser,
+} from '../services/auth-security.js';
+import { checkIpRateLimit, checkEmailRateLimit } from '../services/auth-rate-limit.js';
+import { checkPasswordBreach } from '../services/auth-breach-detection.js';
+import { verifyTurnstileToken } from '../services/auth-turnstile.js';
+import {
+  getUserMetadata,
+  getUserPublicMetadata,
+  setUserMetadata,
+  deleteUserMetadata,
+} from '../services/auth-user-metadata.js';
+import {
+  listUserEmails,
+  addUserEmail,
+  verifyUserEmail,
+  setPrimaryEmail,
+  removeUserEmail,
+} from '../services/auth-user-emails.js';
+import {
+  createSigninToken,
+  exchangeSigninToken,
+  SigninTokenError,
+} from '../services/auth-signin-tokens.js';
+import {
   acceptInvite,
   addOrgMember,
   createOrg,
@@ -59,15 +92,58 @@ import {
   deleteOrg,
   getInviteByToken,
   getOrg,
+  getSessionActiveOrg,
   getUserOrgRole,
+  hasPermission,
+  listOrgDomains,
   listOrgMembers,
+  listOrgRoles,
   listOrgsForUser,
   listPendingInvites,
+  listMembershipRequests,
+  addOrgDomain,
+  createMembershipRequest,
+  createOrgRole,
+  deleteOrgRole,
+  removeOrgDomain,
   removeOrgMember,
+  resolveMembershipRequest,
   revokeInvite,
+  setOrgDomainAutoJoin,
+  setSessionActiveOrg,
   updateMemberRole,
   updateOrg,
+  updateOrgRole,
+  verifyOrgDomain,
 } from '../services/auth-orgs.js';
+import {
+  createSsoConnection,
+  createSsoSession,
+  deleteSsoConnection,
+  findConnectionByDomain,
+  findOrCreateSsoUser,
+  generateSamlAuthnRequest,
+  generateSamlMetadata,
+  getSsoConnection,
+  listSsoConnections,
+  revokeAllSessionsForConnection,
+  updateSsoConnection,
+  validateSamlResponse,
+} from '../services/auth-sso.js';
+import {
+  addAuthTeamMember,
+  findUserByEmail,
+  listAuthTeamMembers,
+  removeAuthTeamMember,
+} from '../services/auth-team-seats.js';
+import {
+  createImpersonationSession,
+  getActiveImpersonation,
+  stopImpersonationSession,
+} from '../services/auth-impersonate.js';
+import { listAppLogs, purgeOldAppLogs, purgeOldAuditLogs } from '../services/auth-app-logs.js';
+import { bulkBanUsers, bulkDeleteUsers, bulkInviteUsers } from '../services/auth-bulk-ops.js';
+import { getComplianceSettings, setComplianceSettings } from '../services/auth-compliance.js';
 
 /**
  * briven auth service router (BUILD_PLAN.md §4).
@@ -188,6 +264,7 @@ authServiceRouter.get('/v1/projects/:id/auth/branding/logo', async (c) => {
 });
 
 authServiceRouter.use('/v1/projects/:id/auth/*', requireProjectAuth());
+authServiceRouter.use('/v1/projects/:id/auth/*', requireAuthTeamAdmin());
 
 /**
  * Upload (or replace) the branding logo. Multipart form-data, field `file`.
@@ -1035,6 +1112,442 @@ authServiceRouter.delete(
   },
 );
 
+// ─── user moderation (ban / suspend) ─────────────────────────────────────
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/ban',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: string; expiresAt?: string };
+    await banUser(projectId, userId, {
+      reason: body.reason,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+    });
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.banned',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId, reason: body.reason },
+    });
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/unban',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    await unbanUser(projectId, userId);
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.unbanned',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId },
+    });
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/suspend',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+    await suspendUser(projectId, userId, { reason: body.reason });
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.suspended',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId, reason: body.reason },
+    });
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/unsuspend',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    await unsuspendUser(projectId, userId);
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.unsuspended',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId },
+    });
+    return c.json({ ok: true });
+  },
+);
+
+// ─── Phase 6.4 — Bulk Operations ──────────────────────────────────────────
+
+const bulkBanSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1).max(100),
+  reason: z.string().max(500).optional(),
+});
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/bulk-ban',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = bulkBanSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+    }
+
+    const result = await bulkBanUsers(projectId, parsed.data.userIds, parsed.data.reason);
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.bulk_banned',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { count: result.succeeded, failed: result.failed },
+    });
+    return c.json(result);
+  },
+);
+
+const bulkDeleteSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1).max(100),
+});
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/bulk-delete',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = bulkDeleteSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+    }
+
+    const result = await bulkDeleteUsers(projectId, parsed.data.userIds);
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.bulk_deleted',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { count: result.succeeded, failed: result.failed },
+    });
+    return c.json(result);
+  },
+);
+
+const bulkInviteSchema = z.object({
+  orgId: z.string().min(1),
+  emails: z.array(z.string().email()).min(1).max(100),
+  role: z.enum(['admin', 'member']).optional(),
+});
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/orgs/bulk-invite',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = bulkInviteSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+    }
+
+    const result = await bulkInviteUsers(projectId, {
+      orgId: parsed.data.orgId,
+      emails: parsed.data.emails,
+      role: parsed.data.role,
+      invitedBy: actor.id,
+    });
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.org.bulk_invited',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { orgId: parsed.data.orgId, count: result.succeeded, failed: result.failed },
+    });
+    return c.json(result);
+  },
+);
+
+// ─── waitlist management ─────────────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/waitlist',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+    }
+    const status = c.req.query('status') ?? undefined;
+    const limitRaw = c.req.query('limit');
+    const limit = limitRaw ? Number(limitRaw) : undefined;
+    const cursor = c.req.query('cursor') ?? null;
+    const result = await listWaitlist(projectId, { status, limit, cursor });
+    return c.json(result);
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/waitlist/:entryId/approve',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const entryId = c.req.param('entryId');
+    if (!projectId || !entryId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :entryId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    await approveWaitlistEntry(projectId, entryId, actor.id);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.waitlist.approved',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { entryId },
+    });
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/waitlist/:entryId/reject',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const entryId = c.req.param('entryId');
+    if (!projectId || !entryId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :entryId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+    await rejectWaitlistEntry(projectId, entryId, { reason: body.reason });
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.waitlist.rejected',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { entryId, reason: body.reason },
+    });
+    return c.json({ ok: true });
+  },
+);
+
+// ─── user metadata (admin) ───────────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/users/:userId/metadata',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const meta = await getUserMetadata(projectId, userId);
+    return c.json({ metadata: meta });
+  },
+);
+
+authServiceRouter.patch(
+  '/v1/projects/:id/auth/users/:userId/metadata',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      publicMetadata?: Record<string, unknown>;
+      privateMetadata?: Record<string, unknown>;
+    };
+    const meta = await setUserMetadata(projectId, userId, {
+      publicMetadata: body.publicMetadata,
+      privateMetadata: body.privateMetadata,
+    });
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.metadata.updated',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId },
+    });
+    return c.json({ metadata: meta });
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/users/:userId/metadata',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    await deleteUserMetadata(projectId, userId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.user.metadata.deleted',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId },
+    });
+    return c.json({ ok: true });
+  },
+);
+
+// ─── user emails (admin) ─────────────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/users/:userId/emails',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const emails = await listUserEmails(projectId, userId);
+    return c.json({ emails });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/emails',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { email?: string };
+    if (!body.email || typeof body.email !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'email required' }, 400);
+    }
+    const email = await addUserEmail(projectId, userId, body.email);
+    return c.json({ email }, 201);
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/emails/:emailId/verify',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    const emailId = c.req.param('emailId');
+    if (!projectId || !userId || !emailId) {
+      return c.json({ code: 'validation_failed', message: 'missing param' }, 400);
+    }
+    await verifyUserEmail(projectId, userId, emailId);
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/emails/:emailId/primary',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    const emailId = c.req.param('emailId');
+    if (!projectId || !userId || !emailId) {
+      return c.json({ code: 'validation_failed', message: 'missing param' }, 400);
+    }
+    await setPrimaryEmail(projectId, userId, emailId);
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/users/:userId/emails/:emailId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    const emailId = c.req.param('emailId');
+    if (!projectId || !userId || !emailId) {
+      return c.json({ code: 'validation_failed', message: 'missing param' }, 400);
+    }
+    await removeUserEmail(projectId, userId, emailId);
+    return c.json({ ok: true });
+  },
+);
+
 // ─── customer-end-user surface (Better Auth handler bridge) ─────────────
 
 /**
@@ -1146,50 +1659,7 @@ export function normalizeTenantCallbacks(
   }
 }
 
-/**
- * Rewrites the incoming bridge Request when (and only when) it is a JSON
- * POST to an endpoint that accepts a callbackURL (sign-in/*, sign-up,
- * forget-password, send-verification-email). Everything else — and any
- * body that fails to parse — is forwarded byte-for-byte untouched so a
- * weird payload can never break auth.
- */
-async function rewriteTenantCallbackRequest(raw: Request): Promise<Request> {
-  try {
-    if (raw.method !== 'POST') return raw;
-    const path = new URL(raw.url).pathname;
-    const eligible =
-      path.includes('/sign-in/') ||
-      path.includes('/sign-up') ||
-      path.includes('/forget-password') ||
-      path.includes('/send-verification-email');
-    if (!eligible) return raw;
-    const contentType = raw.headers.get('content-type') ?? '';
-    if (!contentType.toLowerCase().includes('application/json')) return raw;
 
-    // Clone before reading so the original stream stays consumable if we
-    // bail out (parse failure, non-object body).
-    const parsed: unknown = await raw.clone().json();
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return raw;
-
-    const normalized = normalizeTenantCallbacks(
-      parsed as Record<string, unknown>,
-      raw.headers.get('origin'),
-    );
-
-    // Preserve method, url, and headers — but drop content-length so the
-    // runtime recomputes it for the (possibly longer) mutated body.
-    const headers = new Headers(raw.headers);
-    headers.delete('content-length');
-    return new Request(raw.url, {
-      method: raw.method,
-      headers,
-      body: JSON.stringify(normalized),
-    });
-  } catch {
-    // Any failure → forward the original request exactly as today.
-    return raw;
-  }
-}
 
 // ─── tenant session helper ────────────────────────────────────────────────
 
@@ -1215,6 +1685,38 @@ async function getTenantUserId(c: any, projectId: string): Promise<string | null
     if (!response.ok) return null;
     const body = (await response.json()) as { user?: { id?: string } } | null;
     return body?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+interface TenantSession {
+  userId: string;
+  sessionId: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getTenantSession(c: any, projectId: string): Promise<TenantSession | null> {
+  try {
+    const instance = await getAuthInstance(projectId);
+    const url = new URL(c.req.url);
+    const sessionReq = new Request(`${url.origin}/v1/auth-tenant/get-session?briven_project_id=${projectId}`, {
+      method: 'GET',
+      headers: {
+        cookie: c.req.header('cookie') ?? '',
+        'x-briven-project-id': projectId,
+      },
+    });
+    const response = await instance.betterAuth.handler(sessionReq);
+    if (!response.ok) return null;
+    const body = (await response.json()) as {
+      user?: { id?: string };
+      session?: { id?: string };
+    } | null;
+    const userId = body?.user?.id;
+    const sessionId = body?.session?.id;
+    if (!userId || !sessionId) return null;
+    return { userId, sessionId };
   } catch {
     return null;
   }
@@ -1263,9 +1765,8 @@ authServiceRouter.patch('/v1/auth-tenant/orgs/:id', async (c) => {
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (!role || (role !== 'owner' && role !== 'admin')) {
-    return c.json({ code: 'forbidden', message: 'only owner or admin can update org' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'org:update'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
   }
   const body = await c.req.json().catch(() => ({}));
   try {
@@ -1283,8 +1784,9 @@ authServiceRouter.delete('/v1/auth-tenant/orgs/:id', async (c) => {
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (role !== 'owner') return c.json({ code: 'forbidden', message: 'only owner can delete org' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'org:delete'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
   await deleteOrg(projectId, orgId);
   return c.json({ ok: true });
 });
@@ -1306,9 +1808,8 @@ authServiceRouter.post('/v1/auth-tenant/orgs/:id/members', async (c) => {
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (!role || (role !== 'owner' && role !== 'admin')) {
-    return c.json({ code: 'forbidden', message: 'only owner or admin can add members' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'member:add'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
   }
   const body = await c.req.json().catch(() => ({}));
   try {
@@ -1326,9 +1827,8 @@ authServiceRouter.patch('/v1/auth-tenant/orgs/:id/members/:userId', async (c) =>
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (!role || (role !== 'owner' && role !== 'admin')) {
-    return c.json({ code: 'forbidden', message: 'only owner or admin can update roles' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'member:update_role'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
   }
   const targetUserId = c.req.param('userId');
   const body = await c.req.json().catch(() => ({}));
@@ -1347,9 +1847,8 @@ authServiceRouter.delete('/v1/auth-tenant/orgs/:id/members/:userId', async (c) =
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (!role || (role !== 'owner' && role !== 'admin')) {
-    return c.json({ code: 'forbidden', message: 'only owner or admin can remove members' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'member:remove'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
   }
   await removeOrgMember(projectId, orgId, c.req.param('userId'));
   return c.json({ ok: true });
@@ -1362,9 +1861,8 @@ authServiceRouter.get('/v1/auth-tenant/orgs/:id/invites', async (c) => {
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (!role || (role !== 'owner' && role !== 'admin')) {
-    return c.json({ code: 'forbidden', message: 'only owner or admin can view invites' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'invite:list'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
   }
   const invites = await listPendingInvites(projectId, orgId);
   return c.json({ invites });
@@ -1376,9 +1874,8 @@ authServiceRouter.post('/v1/auth-tenant/orgs/:id/invites', async (c) => {
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (!role || (role !== 'owner' && role !== 'admin')) {
-    return c.json({ code: 'forbidden', message: 'only owner or admin can invite' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'invite:create'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
   }
   const body = await c.req.json().catch(() => ({}));
   try {
@@ -1396,9 +1893,8 @@ authServiceRouter.delete('/v1/auth-tenant/orgs/:id/invites/:inviteId', async (c)
   const userId = await getTenantUserId(c, projectId);
   if (!userId) return c.json({ code: 'unauthenticated' }, 401);
   const orgId = c.req.param('id');
-  const role = await getUserOrgRole(projectId, orgId, userId);
-  if (!role || (role !== 'owner' && role !== 'admin')) {
-    return c.json({ code: 'forbidden', message: 'only owner or admin can revoke invites' }, 403);
+  if (!(await hasPermission(projectId, orgId, userId, 'invite:revoke'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
   }
   await revokeInvite(projectId, c.req.param('inviteId'));
   return c.json({ ok: true });
@@ -1427,7 +1923,838 @@ authServiceRouter.post('/v1/auth-tenant/invites/accept', async (c) => {
   }
 });
 
+// ─── Phase 4 — Custom Roles ───────────────────────────────────────────────
+
+authServiceRouter.get('/v1/auth-tenant/orgs/:id/roles', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const roles = await listOrgRoles(projectId, orgId);
+  return c.json({ roles });
+});
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/roles', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'member:update_role'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const role = await createOrgRole(projectId, orgId, { name: body.name, permissions: body.permissions ?? [] });
+    return c.json({ role });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'role_create_failed' }, 500);
+  }
+});
+
+authServiceRouter.patch('/v1/auth-tenant/orgs/:id/roles/:roleId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'member:update_role'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const role = await updateOrgRole(projectId, orgId, c.req.param('roleId'), {
+      name: body.name,
+      permissions: body.permissions,
+    });
+    return c.json({ role });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'role_update_failed' }, 500);
+  }
+});
+
+authServiceRouter.delete('/v1/auth-tenant/orgs/:id/roles/:roleId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'member:update_role'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  try {
+    await deleteOrgRole(projectId, orgId, c.req.param('roleId'));
+    return c.json({ ok: true });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'role_delete_failed' }, 500);
+  }
+});
+
+// ─── Phase 4 — Domain Verification ────────────────────────────────────────
+
+authServiceRouter.get('/v1/auth-tenant/orgs/:id/domains', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'domain:manage'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  const domains = await listOrgDomains(projectId, orgId);
+  return c.json({ domains });
+});
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/domains', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'domain:manage'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const domain = await addOrgDomain(projectId, orgId, body.domain);
+    return c.json({ domain });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'domain_add_failed' }, 500);
+  }
+});
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/domains/:domainId/verify', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'domain:manage'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  try {
+    const domain = await verifyOrgDomain(projectId, orgId, c.req.param('domainId'));
+    return c.json({ domain });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'domain_verify_failed' }, 500);
+  }
+});
+
+authServiceRouter.patch('/v1/auth-tenant/orgs/:id/domains/:domainId/auto-join', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'domain:manage'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const domain = await setOrgDomainAutoJoin(projectId, orgId, c.req.param('domainId'), Boolean(body.enabled));
+    return c.json({ domain });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'domain_update_failed' }, 500);
+  }
+});
+
+authServiceRouter.delete('/v1/auth-tenant/orgs/:id/domains/:domainId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'domain:manage'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  await removeOrgDomain(projectId, orgId, c.req.param('domainId'));
+  return c.json({ ok: true });
+});
+
+// ─── Phase 4 — Membership Requests ────────────────────────────────────────
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/membership-requests', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const request = await createMembershipRequest(projectId, orgId, userId, body.message);
+    return c.json({ request });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'request_create_failed' }, 500);
+  }
+});
+
+authServiceRouter.get('/v1/auth-tenant/orgs/:id/membership-requests', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'request:approve'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  const status = c.req.query('status') as 'pending' | 'approved' | 'rejected' | undefined;
+  const requests = await listMembershipRequests(projectId, orgId, status);
+  return c.json({ requests });
+});
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/membership-requests/:requestId/resolve', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  if (!(await hasPermission(projectId, orgId, userId, 'request:approve'))) {
+    return c.json({ code: 'forbidden', message: 'insufficient permissions' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const request = await resolveMembershipRequest(projectId, orgId, c.req.param('requestId'), userId, body.decision);
+    return c.json({ request });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'request_resolve_failed' }, 500);
+  }
+});
+
+// ─── Phase 4 — Active Organization ────────────────────────────────────────
+
+authServiceRouter.post('/v1/auth-tenant/orgs/:id/set-active', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const session = await getTenantSession(c, projectId);
+  if (!session) return c.json({ code: 'unauthenticated' }, 401);
+  const orgId = c.req.param('id');
+  // Verify the user is actually a member of this org
+  const role = await getUserOrgRole(projectId, orgId, session.userId);
+  if (!role) return c.json({ code: 'forbidden', message: 'not a member of this org' }, 403);
+  await setSessionActiveOrg(projectId, session.sessionId, orgId);
+  return c.json({ ok: true });
+});
+
+authServiceRouter.get('/v1/auth-tenant/orgs/active', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const session = await getTenantSession(c, projectId);
+  if (!session) return c.json({ code: 'unauthenticated' }, 401);
+  const activeOrgId = await getSessionActiveOrg(projectId, session.sessionId);
+  if (!activeOrgId) return c.json({ activeOrg: null });
+  const org = await getOrg(projectId, activeOrgId);
+  return c.json({ activeOrg: org });
+});
+
+// ─── user metadata (customer-facing) ─────────────────────────────────────
+
+authServiceRouter.get('/v1/auth-tenant/user/metadata', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const meta = await getUserPublicMetadata(projectId, userId);
+  return c.json({ publicMetadata: meta });
+});
+
+authServiceRouter.patch('/v1/auth-tenant/user/metadata', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as {
+    publicMetadata?: Record<string, unknown>;
+  };
+  const meta = await setUserMetadata(
+    projectId,
+    userId,
+    { publicMetadata: body.publicMetadata },
+    { merge: true },
+  );
+  return c.json({ publicMetadata: meta.publicMetadata });
+});
+
+// ─── user emails (customer-facing) ───────────────────────────────────────
+
+authServiceRouter.get('/v1/auth-tenant/user/emails', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const emails = await listUserEmails(projectId, userId);
+  return c.json({ emails });
+});
+
+authServiceRouter.post('/v1/auth-tenant/user/emails', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { email?: string };
+  if (!body.email || typeof body.email !== 'string') {
+    return c.json({ code: 'validation_failed', message: 'email required' }, 400);
+  }
+  try {
+    const email = await addUserEmail(projectId, userId, body.email);
+    return c.json({ email }, 201);
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'email_add_failed' }, 500);
+  }
+});
+
+authServiceRouter.delete('/v1/auth-tenant/user/emails/:emailId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+  await removeUserEmail(projectId, userId, c.req.param('emailId'));
+  return c.json({ ok: true });
+});
+
+// ─── sign-in tokens (customer-facing) ─────────────────────────────────────
+
+authServiceRouter.post('/v1/auth-tenant/sign-in/token', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { token?: string };
+  if (!body.token || typeof body.token !== 'string') {
+    return c.json({ code: 'validation_failed', message: 'token required' }, 400);
+  }
+  try {
+    const result = await exchangeSigninToken(projectId, body.token, {
+      userAgent: c.req.header('user-agent') ?? null,
+    });
+    // Set the session cookie so the client is authenticated on the next request.
+    // Cookie attributes mirror Better Auth's defaults (cookiePrefix: 'briven-auth').
+    const isProd = env.BRIVEN_ENV === 'production';
+    const cookieValue = `${SESSION_COOKIE_NAME}=${encodeURIComponent(result.sessionToken)}; Path=/; HttpOnly; SameSite=${isProd ? 'None' : 'Lax'}${isProd ? '; Secure' : ''}; Max-Age=604800`;
+    c.header('set-cookie', cookieValue);
+    return c.json({ ok: true, expiresAt: result.expiresAt.toISOString() });
+  } catch (err) {
+    if (err instanceof SigninTokenError) {
+      const status = err.code === 'token_already_used' ? 410 : 401;
+      return c.json({ code: err.code, message: err.message }, status);
+    }
+    log.error('briven_auth_signin_token_exchange_failed', {
+      projectId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return c.json({ code: 'token_exchange_failed' }, 500);
+  }
+});
+
+// ─── sign-in tokens (admin) ────────────────────────────────────────────────
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/signin-token',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { ttlMinutes?: number };
+    try {
+      const created = await createSigninToken(projectId, userId, {
+        ttlMinutes: typeof body.ttlMinutes === 'number' ? body.ttlMinutes : undefined,
+      });
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'auth.user.signin_token.created',
+        ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { userId },
+      });
+      return c.json({ token: created.token, expiresAt: created.expiresAt.toISOString() });
+    } catch (err) {
+      log.error('briven_auth_signin_token_create_failed', {
+        projectId,
+        userId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json({ code: 'token_create_failed' }, 500);
+    }
+  },
+);
+
+// ─── Phase 5 — Enterprise SSO (admin) ─────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/sso/connections',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const connections = await listSsoConnections(projectId);
+    return c.json({ connections });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/sso/connections',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    try {
+      const connection = await createSsoConnection(projectId, {
+        name: body.name,
+        providerType: body.providerType,
+        config: body.config ?? {},
+        domains: body.domains,
+        jitEnabled: body.jitEnabled,
+      });
+      return c.json({ connection });
+    } catch (err) {
+      if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+      log.error('sso_connection_create_failed', { projectId, message: err instanceof Error ? err.message : String(err) });
+      return c.json({ code: 'sso_connection_create_failed' }, 500);
+    }
+  },
+);
+
+authServiceRouter.patch(
+  '/v1/projects/:id/auth/sso/connections/:connectionId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    try {
+      const connection = await updateSsoConnection(projectId, c.req.param('connectionId'), {
+        name: body.name,
+        config: body.config,
+        domains: body.domains,
+        jitEnabled: body.jitEnabled,
+      });
+      return c.json({ connection });
+    } catch (err) {
+      if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+      return c.json({ code: 'sso_connection_update_failed' }, 500);
+    }
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/sso/connections/:connectionId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    await deleteSsoConnection(projectId, c.req.param('connectionId'));
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/sso/connections/:connectionId/revoke-sessions',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const count = await revokeAllSessionsForConnection(projectId, c.req.param('connectionId'));
+    return c.json({ revoked: count });
+  },
+);
+
+// ─── Phase 5 — Enterprise SSO (customer-facing) ───────────────────────────
+
+authServiceRouter.get('/v1/auth-tenant/sso/connections', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const connections = await listSsoConnections(projectId);
+  // Strip config from public response — it may contain certs/secrets.
+  return c.json({
+    connections: connections.map((c) => ({
+      id: c.id,
+      name: c.name,
+      providerType: c.providerType,
+      domains: c.domains,
+    })),
+  });
+});
+
+authServiceRouter.get('/v1/auth-tenant/sso/domain/:domain', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const connection = await findConnectionByDomain(projectId, c.req.param('domain'));
+  if (!connection) return c.json({ code: 'not_found' }, 404);
+  return c.json({
+    connection: {
+      id: connection.id,
+      name: connection.name,
+      providerType: connection.providerType,
+      domains: connection.domains,
+    },
+  });
+});
+
+// SAML
+authServiceRouter.get('/v1/auth-tenant/sso/saml/:connectionId/metadata', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  try {
+    const metadata = await generateSamlMetadata(projectId, c.req.param('connectionId'));
+    return c.text(metadata, 200, { 'content-type': 'application/xml' });
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'metadata_generation_failed' }, 500);
+  }
+});
+
+authServiceRouter.get('/v1/auth-tenant/sso/saml/:connectionId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const relayState = c.req.query('redirectTo') ?? '/';
+  try {
+    const { redirectUrl } = await generateSamlAuthnRequest(projectId, c.req.param('connectionId'), relayState);
+    return c.redirect(redirectUrl);
+  } catch (err) {
+    if (err instanceof ValidationError) return c.json({ code: 'validation_failed', message: err.message }, 400);
+    return c.json({ code: 'saml_request_failed' }, 500);
+  }
+});
+
+authServiceRouter.post('/v1/auth-tenant/sso/saml/:connectionId/acs', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+
+  const connectionId = c.req.param('connectionId');
+  const body = await c.req.parseBody();
+  const samlResponse = body.SAMLResponse as string;
+  if (!samlResponse) {
+    return c.json({ code: 'validation_failed', message: 'SAMLResponse is required' }, 400);
+  }
+
+  try {
+    const assertion = await validateSamlResponse(projectId, connectionId, samlResponse);
+    const conn = await getSsoConnection(projectId, connectionId);
+    if (!conn) throw new ValidationError('connection not found');
+
+    // JIT provisioning + session creation.
+    const user = await findOrCreateSsoUser(projectId, assertion.email, assertion.name, conn.jitEnabled);
+    const { sessionToken, expiresAt } = await createSsoSession(projectId, user.id, connectionId, {
+      userAgent: c.req.header('user-agent') ?? null,
+    });
+
+    // Set session cookie.
+    const isProduction = env.BRIVEN_ENV === 'production';
+    const cookieValue = `${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=${isProduction ? 'None' : 'Lax'}${isProduction ? '; Secure' : ''}; Expires=${expiresAt.toUTCString()}`;
+    c.header('set-cookie', cookieValue);
+
+    // Redirect to the app's callback URL (from RelayState) or default.
+    const relayState = (body.RelayState as string) || '/';
+    return c.redirect(relayState);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    log.error('saml_acs_failed', {
+      projectId,
+      connectionId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return c.json({ code: 'saml_acs_failed' }, 500);
+  }
+});
+
 // ─── Catch-all bridge ─────────────────────────────────────────────────────
+
+// ─── session activity helpers ─────────────────────────────────────────────
+
+const SESSION_COOKIE_NAME = 'briven-auth.session_token';
+
+function extractSessionToken(cookieHeader: string | undefined): string | undefined {
+  if (!cookieHeader) return undefined;
+  for (const part of cookieHeader.split(';')) {
+    const [name, value] = part.trim().split('=');
+    if (name === SESSION_COOKIE_NAME && value) {
+      return decodeURIComponent(value);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Check whether a session has exceeded the inactivity timeout.
+ * Returns { active: true } when there is no session cookie, no activity
+ * record, or the session is still within the timeout window.
+ */
+async function checkSessionActivity(
+  projectId: string,
+  cookieHeader: string | undefined,
+  timeoutMinutes: number,
+): Promise<{ active: boolean; reason?: string }> {
+  if (timeoutMinutes <= 0) return { active: true };
+  const token = extractSessionToken(cookieHeader);
+  if (!token) return { active: true };
+
+  try {
+    const rows = await runInProjectDatabase<
+      Array<{ last_active_at: Date | null }>
+    >(projectId, async (tx) =>
+      tx.unsafe(
+        `SELECT a.last_active_at
+         FROM "_briven_auth_session_activity" a
+         JOIN "_briven_auth_sessions" s ON a.session_id = s.id
+         WHERE s.token = $1
+         LIMIT 1`,
+        [token] as never,
+      ) as never,
+    );
+    const row = rows[0];
+    if (!row || !row.last_active_at) return { active: true };
+
+    const inactiveMs = Date.now() - new Date(row.last_active_at).getTime();
+    const timeoutMs = timeoutMinutes * 60 * 1000;
+    if (inactiveMs > timeoutMs) {
+      return { active: false, reason: 'session expired due to inactivity' };
+    }
+    return { active: true };
+  } catch {
+    // Fail-open: if the query errors, allow the request.
+    return { active: true };
+  }
+}
+
+/**
+ * Touch (update) the session activity timestamp. Fire-and-forget — never
+ * blocks the request path.
+ */
+async function touchSessionActivity(
+  projectId: string,
+  cookieHeader: string | undefined,
+): Promise<void> {
+  const token = extractSessionToken(cookieHeader);
+  if (!token) return;
+
+  try {
+    await runInProjectDatabase(projectId, async (tx) => {
+      await tx.unsafe(
+        `UPDATE "_briven_auth_session_activity" a
+         SET last_active_at = now(), updated_at = now()
+         FROM "_briven_auth_sessions" s
+         WHERE a.session_id = s.id AND s.token = $1`,
+        [token] as never,
+      );
+    });
+  } catch {
+    // Swallow — activity tracking must never break requests.
+  }
+}
+
+/**
+ * Security-aware request processing for the tenant-auth bridge.
+ *
+ * For eligible JSON POSTs (sign-in, sign-up, magic-link, OTP, password reset):
+ *   1. Parse the body
+ *   2. Apply rate limiting by email
+ *   3. Verify Turnstile token when enabled
+ *   4. Check email allowlist/blocklist for sign-up
+ *   5. Check waitlist mode for sign-up
+ *   6. Check password breach for sign-up / password reset
+ *   7. Check session inactivity timeout
+ *   8. Normalize callbacks (existing behavior)
+ *
+ * Returns either a Response (when a security check fails) or a modified
+ * Request (when all checks pass) to be forwarded to Better Auth.
+ */
+async function processTenantRequest(
+  raw: Request,
+  projectId: string,
+  config: Awaited<ReturnType<typeof getAuthConfig>>,
+  clientIp: string,
+): Promise<Response | Request> {
+  const path = new URL(raw.url).pathname;
+
+  // ── rate limiting by email (only for JSON POSTs to auth endpoints) ──
+  const isAuthPost =
+    raw.method === 'POST' &&
+    (path.includes('/sign-up') ||
+      path.includes('/sign-in') ||
+      path.includes('/forget-password') ||
+      path.includes('/reset-password') ||
+      path.includes('/send-verification-email'));
+
+  if (isAuthPost && config.security.rateLimiting.enabled) {
+    const ipLimit = checkIpRateLimit(projectId, clientIp, {
+      maxAttempts: config.security.rateLimiting.maxAttemptsPerIp,
+      windowMinutes: config.security.rateLimiting.windowMinutes,
+    });
+    if (!ipLimit.allowed) {
+      return new Response(
+        JSON.stringify({
+          code: 'rate_limited',
+          message: 'too many requests from this IP address',
+          retryAfter: ipLimit.retryAfterSeconds,
+        }),
+        {
+          status: 429,
+          headers: {
+            'content-type': 'application/json',
+            'retry-after': String(ipLimit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+  }
+
+  // Only parse JSON for the specific endpoints we need to inspect.
+  const eligible =
+    raw.method === 'POST' &&
+    (path.includes('/sign-in/') ||
+      path.includes('/sign-up') ||
+      path.includes('/forget-password') ||
+      path.includes('/reset-password') ||
+      path.includes('/send-verification-email'));
+
+  if (!eligible) return raw;
+
+  const contentType = raw.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().includes('application/json')) return raw;
+
+  let parsed: unknown;
+  try {
+    parsed = await raw.clone().json();
+  } catch {
+    return raw;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return raw;
+  const body = parsed as Record<string, unknown>;
+
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : undefined;
+
+  // ── email rate limiting ──
+  if (isAuthPost && email && config.security.rateLimiting.enabled) {
+    const emailLimit = checkEmailRateLimit(projectId, email, {
+      maxAttempts: 5,
+      windowMinutes: 15,
+    });
+    if (!emailLimit.allowed) {
+      return new Response(
+        JSON.stringify({
+          code: 'rate_limited',
+          message: 'too many requests for this email address',
+          retryAfter: emailLimit.retryAfterSeconds,
+        }),
+        {
+          status: 429,
+          headers: {
+            'content-type': 'application/json',
+            'retry-after': String(emailLimit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+  }
+
+  // ── turnstile verification ──
+  if (config.turnstile.enabled && config.turnstile.siteKey) {
+    const turnstileToken =
+      typeof body.turnstileToken === 'string' ? body.turnstileToken : undefined;
+    if (!turnstileToken) {
+      return new Response(
+        JSON.stringify({
+          code: 'turnstile_required',
+          message: 'bot protection verification is required',
+        }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    const turnstile = await verifyTurnstileToken(turnstileToken);
+    if (!turnstile.success) {
+      return new Response(
+        JSON.stringify({
+          code: 'turnstile_failed',
+          message: turnstile.message ?? 'bot protection verification failed',
+        }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      );
+    }
+  }
+
+  // ── sign-up gate (email allowlist / blocklist / waitlist) ──
+  const isSignUp = path.includes('/sign-up');
+  if (isSignUp && email) {
+    const gate = await checkSignUpGate(projectId, email, {
+      signUpMode: config.security.signUpMode,
+      allowedDomains: config.security.allowedEmailDomains,
+      blockedDomains: config.security.blockedEmailDomains,
+      blockDisposable: config.security.blockDisposableEmails,
+      blockSubaddresses: config.security.blockEmailSubaddresses,
+    });
+    if (!gate.allowed) {
+      return new Response(
+        JSON.stringify({
+          code: 'sign_up_not_allowed',
+          message: gate.reason ?? 'sign-up is not allowed',
+        }),
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      );
+    }
+  }
+
+  // ── password breach detection ──
+  const password = typeof body.password === 'string' ? body.password : undefined;
+  const newPassword = typeof body.newPassword === 'string' ? body.newPassword : undefined;
+  const passwordToCheck = password ?? newPassword;
+  if (passwordToCheck && config.security.breachDetection.enabled) {
+    const breach = await checkPasswordBreach(passwordToCheck);
+    if (breach.breached) {
+      return new Response(
+        JSON.stringify({
+          code: 'password_breached',
+          message:
+            'this password has been found in a data breach. please choose a different password.',
+        }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      );
+    }
+  }
+
+  // ── session inactivity timeout ──
+  if (config.session.inactivityTimeoutMinutes > 0) {
+    const activity = await checkSessionActivity(
+      projectId,
+      raw.headers.get('cookie') ?? undefined,
+      config.session.inactivityTimeoutMinutes,
+    );
+    if (!activity.active) {
+      return new Response(
+        JSON.stringify({
+          code: 'session_inactive',
+          message: activity.reason ?? 'session expired due to inactivity',
+        }),
+        { status: 401, headers: { 'content-type': 'application/json' } },
+      );
+    }
+  }
+
+  // ── callback normalization (existing behavior) ──
+  const normalized = normalizeTenantCallbacks(body, raw.headers.get('origin'));
+  const headers = new Headers(raw.headers);
+  headers.delete('content-length');
+  return new Request(raw.url, {
+    method: raw.method,
+    headers,
+    body: JSON.stringify(normalized),
+  });
+}
 
 /**
  * Catch-all bridge. Better Auth ships its own `handler(request)` method
@@ -1463,18 +2790,29 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
     null;
 
+  const clientIp = ip ?? 'unknown';
+
   try {
     const instance = await getAuthInstance(projectId);
-    // `c.req.raw` is the underlying Fetch API Request — Better Auth's
-    // handler expects exactly that shape. The Response that comes back
-    // already carries Set-Cookie headers, status, body — no rewriting.
-    // rewriteTenantCallbackRequest() only touches JSON POSTs to the
-    // callback-carrying endpoints (see its doc comment); everything else
-    // passes through as the untouched raw Request.
-    const request = await rewriteTenantCallbackRequest(c.req.raw);
+    const config = await getAuthConfig(projectId);
+
+    // Security checks + callback rewriting in one pass.
+    const processed = await processTenantRequest(c.req.raw, projectId, config, clientIp);
+    if (processed instanceof Response) {
+      // A security check failed — return the error response directly.
+      return processed;
+    }
+
     const response = await runWithRequestContext({ ip, projectId }, () =>
-      instance.betterAuth.handler(request),
+      instance.betterAuth.handler(processed),
     );
+
+    // Touch session activity on successful responses so idle tracking
+    // stays fresh. Fire-and-forget — never blocks the response.
+    if (config.session.inactivityTimeoutMinutes > 0 && response.status < 400) {
+      void touchSessionActivity(projectId, c.req.header('cookie') ?? undefined);
+    }
+
     return await withActionableOriginError(response, projectId);
   } catch (err) {
     log.error('briven_auth_tenant_bridge_failed', {
@@ -1485,6 +2823,309 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     return c.json({ code: 'auth_internal_error' }, 500);
   }
 });
+
+// ─── Phase 6.1 — Auth Dashboard Team Seats ────────────────────────────────
+
+/**
+ * List auth team members for a project. Owners and auth team admins can read.
+ */
+authServiceRouter.get('/v1/projects/:id/auth/team', async (c) => {
+  const projectId = c.req.param('id');
+  if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+  const members = await listAuthTeamMembers(projectId);
+  return c.json({ members });
+});
+
+const inviteTeamMemberSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['admin', 'viewer']).default('viewer'),
+});
+
+/**
+ * Invite a user to the auth dashboard team by email. Owner-only.
+ * If the user exists they are added immediately; otherwise the caller
+ * should invite them to the project first.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/team',
+  requireProjectRole('owner'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = inviteTeamMemberSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: 'validation_failed', issues: parsed.error.issues }, 400);
+    }
+
+    const target = await findUserByEmail(parsed.data.email);
+    if (!target) {
+      return c.json(
+        { code: 'user_not_found', message: 'no registered user with this email; invite them to the project first' },
+        404,
+      );
+    }
+
+    const added = await addAuthTeamMember({
+      projectId,
+      userId: target.id,
+      role: parsed.data.role,
+      invitedBy: actor.id,
+    });
+
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.team.invite',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { invitedUserId: target.id, role: parsed.data.role },
+    });
+
+    return c.json({ member: added }, 201);
+  },
+);
+
+/**
+ * Remove a user from the auth dashboard team. Owner-only.
+ */
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/team/:userId',
+  requireProjectRole('owner'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    await removeAuthTeamMember(projectId, userId);
+
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.team.remove',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { removedUserId: userId },
+    });
+
+    return c.json({ ok: true });
+  },
+);
+
+// ─── Phase 6.2 — User Impersonation ───────────────────────────────────────
+
+/**
+ * Start impersonating a user. Auth team admins can create a short-lived
+ * session for a target user. Returns a session token the dashboard can set
+ * as a cookie to act on the user's behalf.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/impersonate',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    const targetUserId = body && typeof body === 'object' ? (body as Record<string, unknown>).userId : null;
+    if (typeof targetUserId !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'missing userId' }, 400);
+    }
+
+    const { sessionToken, expiresAt } = await createImpersonationSession(
+      projectId,
+      targetUserId,
+      actor.id,
+    );
+
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.impersonate.start',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { targetUserId },
+    });
+
+    return c.json({ sessionToken, expiresAt: expiresAt.toISOString() });
+  },
+);
+
+/**
+ * Stop impersonating — revokes the impersonation session and records
+ * the stop event in the tenant audit log.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/impersonate/stop',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    const sessionToken = body && typeof body === 'object' ? (body as Record<string, unknown>).sessionToken : null;
+    if (typeof sessionToken !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'missing sessionToken' }, 400);
+    }
+
+    await stopImpersonationSession(projectId, sessionToken, actor.id);
+
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.impersonate.stop',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {},
+    });
+
+    return c.json({ ok: true });
+  },
+);
+
+/**
+ * Check whether the current session is an active impersonation session.
+ * Customer-facing — called by the SDK to show an impersonation banner.
+ */
+authServiceRouter.get('/v1/auth-tenant/impersonation', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+
+  const cookieHeader = c.req.header('cookie') ?? '';
+  const match = cookieHeader.match(/briven_auth_session_token=([^;]+)/);
+  const sessionToken = match?.[1] ?? null;
+  if (!sessionToken) {
+    return c.json({ impersonating: false });
+  }
+
+  const active = await getActiveImpersonation(projectId, sessionToken);
+  if (!active) {
+    return c.json({ impersonating: false });
+  }
+
+  return c.json({
+    impersonating: true,
+    impersonatedBy: active.impersonatedBy,
+    targetUserId: active.targetUserId,
+  });
+});
+
+// ─── Phase 6.3 — Application Logs ─────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/app-logs',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const level = c.req.query('level') as 'error' | 'warn' | 'info' | undefined;
+    const action = c.req.query('action') ?? undefined;
+    const cursor = c.req.query('cursor') ?? null;
+    const limitRaw = c.req.query('limit');
+    const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+
+    const result = await listAppLogs(projectId, {
+      level,
+      action,
+      cursor,
+      limit: Number.isFinite(limit!) ? limit : undefined,
+    });
+    return c.json(result);
+  },
+);
+
+/**
+ * Admin trigger to purge old logs immediately. Normally the janitor
+ * handles this on schedule; this endpoint is for manual cleanup or
+ * testing retention changes.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/app-logs/purge',
+  requireProjectRole('owner'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const config = await getAuthConfig(projectId);
+    const [appResult, auditResult] = await Promise.all([
+      purgeOldAppLogs(projectId, config.retention.appLogDays),
+      purgeOldAuditLogs(projectId, config.retention.auditLogDays),
+    ]);
+
+    return c.json({
+      appLogsDeleted: appResult.deleted,
+      auditLogsDeleted: auditResult.deleted,
+      retention: config.retention,
+    });
+  },
+);
+
+// ─── Phase 6.6 — Compliance Groundwork ────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/compliance',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const settings = await getComplianceSettings(projectId);
+    return c.json({ compliance: settings });
+  },
+);
+
+authServiceRouter.patch(
+  '/v1/projects/:id/auth/compliance',
+  requireProjectRole('owner'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const patch: Partial<{
+      soc2ControlsUrl: string | null;
+      hipaaBaaSignedAt: string | null;
+      hipaaBaaSignedBy: string | null;
+      gdprDpaSignedAt: string | null;
+      gdprDpaSignedBy: string | null;
+      encryptionAtRestEnabled: boolean;
+    }> = {};
+
+    if (body.soc2ControlsUrl !== undefined) patch.soc2ControlsUrl = typeof body.soc2ControlsUrl === 'string' ? body.soc2ControlsUrl : null;
+    if (body.hipaaBaaSignedAt !== undefined) patch.hipaaBaaSignedAt = typeof body.hipaaBaaSignedAt === 'string' ? body.hipaaBaaSignedAt : null;
+    if (body.hipaaBaaSignedBy !== undefined) patch.hipaaBaaSignedBy = typeof body.hipaaBaaSignedBy === 'string' ? body.hipaaBaaSignedBy : null;
+    if (body.gdprDpaSignedAt !== undefined) patch.gdprDpaSignedAt = typeof body.gdprDpaSignedAt === 'string' ? body.gdprDpaSignedAt : null;
+    if (body.gdprDpaSignedBy !== undefined) patch.gdprDpaSignedBy = typeof body.gdprDpaSignedBy === 'string' ? body.gdprDpaSignedBy : null;
+    if (body.encryptionAtRestEnabled !== undefined) patch.encryptionAtRestEnabled = Boolean(body.encryptionAtRestEnabled);
+
+    const settings = await setComplianceSettings(projectId, patch);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.compliance.update',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { fields: Object.keys(patch) },
+    });
+    return c.json({ compliance: settings });
+  },
+);
 
 /**
  * Turn Better Auth's raw `INVALID_ORIGIN` into an actionable error that

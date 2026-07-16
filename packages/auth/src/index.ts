@@ -188,10 +188,85 @@ export interface OrgInvite {
 
 export type OrgResult<T> = { ok: true; data: T } | { ok: false; code: SignInErrorCode; message: string };
 
+// ─── Phase 4 — Organizations & B2B ────────────────────────────────────────
+
+export type OrgPermission =
+  | 'org:update'
+  | 'org:delete'
+  | 'member:add'
+  | 'member:remove'
+  | 'member:update_role'
+  | 'invite:create'
+  | 'invite:revoke'
+  | 'invite:list'
+  | 'domain:manage'
+  | 'request:approve'
+  | 'billing:view'
+  | 'billing:manage';
+
+export interface OrgRole {
+  readonly id: string;
+  readonly orgId: string;
+  readonly name: string;
+  readonly permissions: OrgPermission[];
+  readonly isSystem: boolean;
+  readonly createdAt: string;
+}
+
+export interface OrgDomain {
+  readonly id: string;
+  readonly orgId: string;
+  readonly domain: string;
+  readonly verificationToken: string;
+  readonly verifiedAt: string | null;
+  readonly autoJoinEnabled: boolean;
+  readonly createdAt: string;
+}
+
+export interface MembershipRequest {
+  readonly id: string;
+  readonly orgId: string;
+  readonly userId: string;
+  readonly status: 'pending' | 'approved' | 'rejected';
+  readonly message: string | null;
+  readonly requestedAt: string;
+  readonly resolvedAt: string | null;
+  readonly resolvedBy: string | null;
+  readonly createdAt: string;
+}
+
+// ─── Phase 5 — Enterprise SSO ─────────────────────────────────────────────
+
+export type SsoProviderType = 'saml' | 'oidc';
+
+export interface SsoConnection {
+  readonly id: string;
+  readonly name: string;
+  readonly providerType: SsoProviderType;
+  readonly domains: string[];
+  readonly jitEnabled: boolean;
+  readonly deactivatedAt: string | null;
+  readonly createdAt: string;
+}
+
 export interface Passkey {
   readonly id: string;
   readonly name?: string;
   readonly userId: string;
+}
+
+// ─── Phase 3 — User metadata & emails ─────────────────────────────────────
+
+export interface UserMetadata {
+  readonly publicMetadata: Record<string, unknown>;
+}
+
+export interface UserEmail {
+  readonly id: string;
+  readonly email: string;
+  readonly verified: boolean;
+  readonly primary: boolean;
+  readonly createdAt: string;
 }
 
 export interface BrivenAuthClient {
@@ -205,6 +280,8 @@ export interface BrivenAuthClient {
     otpVerify(input: OtpVerifyInput): Promise<SignInResult>;
     /** Builds the OAuth start URL. Caller redirects the browser to it. */
     social(input: SocialInput): { redirectUrl: string };
+    /** Exchange a single-use sign-in token for a session. */
+    token(token: string): Promise<{ ok: true; expiresAt: string } | { ok: false; code: SignInErrorCode; message: string }>;
   };
   readonly signUp: {
     email(input: SignUpEmailInput): Promise<SignInResult>;
@@ -219,6 +296,28 @@ export interface BrivenAuthClient {
     update(input: UpdateUserInput): Promise<{ ok: true; user: User } | { ok: false; code: SignInErrorCode; message: string }>;
     changePassword(input: ChangePasswordInput): Promise<SimpleResult>;
     delete(): Promise<SimpleResult>;
+    /** Get the current user's public metadata (frontend-safe). */
+    getMetadata(): Promise<
+      | { ok: true; publicMetadata: Record<string, unknown> }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Set (merge) the current user's public metadata. */
+    setMetadata(publicMetadata: Record<string, unknown>): Promise<
+      | { ok: true; publicMetadata: Record<string, unknown> }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** List all additional emails for the current user. */
+    listEmails(): Promise<
+      | { ok: true; emails: UserEmail[] }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Add an additional email address. */
+    addEmail(email: string): Promise<
+      | { ok: true; email: UserEmail }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Remove an additional email address by id. */
+    removeEmail(emailId: string): Promise<SimpleResult>;
   };
   readonly organization: {
     create(input: { name: string; slug: string; logo?: string }): Promise<OrgResult<Org>>;
@@ -235,6 +334,38 @@ export interface BrivenAuthClient {
     revokeInvite(orgId: string, inviteId: string): Promise<SimpleResult>;
     acceptInvite(token: string): Promise<OrgResult<{ orgId: string }>>;
     getInvite(token: string): Promise<OrgResult<OrgInvite>>;
+    // Phase 4 — Custom roles
+    listRoles(orgId: string): Promise<OrgResult<OrgRole[]>>;
+    createRole(orgId: string, input: { name: string; permissions: OrgPermission[] }): Promise<OrgResult<OrgRole>>;
+    updateRole(orgId: string, roleId: string, input: { name?: string; permissions?: OrgPermission[] }): Promise<OrgResult<OrgRole>>;
+    deleteRole(orgId: string, roleId: string): Promise<SimpleResult>;
+    // Phase 4 — Domain verification
+    listDomains(orgId: string): Promise<OrgResult<OrgDomain[]>>;
+    addDomain(orgId: string, domain: string): Promise<OrgResult<OrgDomain>>;
+    verifyDomain(orgId: string, domainId: string): Promise<OrgResult<OrgDomain>>;
+    setDomainAutoJoin(orgId: string, domainId: string, enabled: boolean): Promise<OrgResult<OrgDomain>>;
+    removeDomain(orgId: string, domainId: string): Promise<SimpleResult>;
+    // Phase 4 — Membership requests
+    createMembershipRequest(orgId: string, message?: string): Promise<OrgResult<MembershipRequest>>;
+    listMembershipRequests(orgId: string, status?: 'pending' | 'approved' | 'rejected'): Promise<OrgResult<MembershipRequest[]>>;
+    resolveMembershipRequest(orgId: string, requestId: string, decision: 'approved' | 'rejected'): Promise<OrgResult<MembershipRequest>>;
+    // Phase 4 — Active organization
+    setActive(orgId: string): Promise<SimpleResult>;
+    getActive(): Promise<OrgResult<Org | null>>;
+  };
+  readonly sso: {
+    /** List visible SSO connections (config stripped for security). */
+    listConnections(): Promise<
+      | { ok: true; connections: Array<Pick<SsoConnection, 'id' | 'name' | 'providerType' | 'domains'>> }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Find an SSO connection by email domain. */
+    getConnectionByDomain(domain: string): Promise<
+      | { ok: true; connection: Pick<SsoConnection, 'id' | 'name' | 'providerType' | 'domains'> }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Build the SAML/OIDC start URL. Caller redirects the browser to it. */
+    start(connectionId: string, redirectTo?: string): { redirectUrl: string };
   };
   readonly twoFactor: {
     enable(password?: string): Promise<SimpleResult>;
@@ -247,6 +378,16 @@ export interface BrivenAuthClient {
     list(): Promise<{ ok: true; passkeys: Passkey[] } | { ok: false; code: SignInErrorCode; message: string }>;
     signIn(): Promise<SignInResult>;
   };
+  readonly impersonate: {
+    /** Check if the current session is an impersonation session. */
+    status(): Promise<
+      | { ok: true; impersonating: true; impersonatedBy: string; targetUserId: string }
+      | { ok: true; impersonating: false }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Stop the current impersonation session. */
+    stop(sessionToken: string): Promise<SimpleResult>;
+  };
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
   getUser(): Promise<User | null>;
@@ -258,10 +399,12 @@ export interface BrivenAuthClient {
    *
    * @param flow - which hosted page to open
    * @param callbackURL - where to send the user after successful auth
+   * @param locale - optional BCP 47 locale override (e.g. 'nl', 'fr-FR')
    */
   hostedPageURL(
     flow: 'sign-in' | 'sign-up' | 'magic-link' | 'otp' | 'new-password' | 'profile',
     callbackURL?: string,
+    locale?: string,
   ): string;
 }
 
@@ -406,6 +549,23 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
         u.searchParams.set('projectId', opts.projectId);
         return { redirectUrl: u.toString() };
       },
+      async token(token) {
+        try {
+          const body = await post<unknown>('/sign-in/token', { token });
+          if (body && typeof body === 'object') {
+            const b = body as { ok?: boolean; expiresAt?: string; error?: { code?: string; message?: string }; code?: string; message?: string };
+            if (b.ok === true && b.expiresAt) {
+              return { ok: true as const, expiresAt: b.expiresAt };
+            }
+            const code = (b.error?.code ?? b.code ?? 'unknown') as SignInErrorCode;
+            const message = b.error?.message ?? b.message ?? 'token exchange failed';
+            return { ok: false as const, code: knownCode(code), message };
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'token exchange failed' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
     },
     signUp: {
       async email(input) {
@@ -491,6 +651,98 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       async delete() {
         try {
           const body = await post<unknown>('/delete-user', {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async getMetadata() {
+        try {
+          const body = await get<unknown>('/user/metadata');
+          if (body && typeof body === 'object') {
+            const b = body as { publicMetadata?: Record<string, unknown>; error?: { code?: string; message?: string } };
+            if (b.publicMetadata !== undefined) {
+              return { ok: true as const, publicMetadata: b.publicMetadata };
+            }
+            return {
+              ok: false as const,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'failed to get metadata',
+            };
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'failed to get metadata' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
+      async setMetadata(publicMetadata) {
+        try {
+          const body = await patch<unknown>('/user/metadata', { publicMetadata });
+          if (body && typeof body === 'object') {
+            const b = body as { publicMetadata?: Record<string, unknown>; error?: { code?: string; message?: string } };
+            if (b.publicMetadata !== undefined) {
+              return { ok: true as const, publicMetadata: b.publicMetadata };
+            }
+            return {
+              ok: false as const,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'failed to set metadata',
+            };
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'failed to set metadata' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
+      async listEmails() {
+        try {
+          const body = await get<unknown>('/user/emails');
+          if (body && typeof body === 'object') {
+            const b = body as { emails?: UserEmail[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.emails)) {
+              return { ok: true as const, emails: b.emails };
+            }
+            return {
+              ok: false as const,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'failed to list emails',
+            };
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'failed to list emails' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
+      async addEmail(email) {
+        try {
+          const body = await post<unknown>('/user/emails', { email });
+          if (body && typeof body === 'object') {
+            const b = body as { email?: UserEmail; error?: { code?: string; message?: string } };
+            if (b.email) {
+              return { ok: true as const, email: b.email };
+            }
+            return {
+              ok: false as const,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'failed to add email',
+            };
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'failed to add email' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
+      async removeEmail(emailId) {
+        try {
+          const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}/user/emails/${emailId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: {
+              'x-briven-project-id': opts.projectId,
+              authorization: `Bearer ${opts.publicKey}`,
+            },
+          });
+          const body = (await res.json()) as unknown;
           return asSimpleResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
@@ -665,6 +917,210 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
           return { ok: false, code: 'network_error', message: 'network error' };
         }
       },
+      // Phase 4 — Custom roles
+      async listRoles(orgId) {
+        try {
+          const body = await get<unknown>(`/orgs/${orgId}/roles`);
+          if (body && typeof body === 'object') {
+            const b = body as { roles?: OrgRole[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.roles)) return { ok: true, data: b.roles };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async createRole(orgId, input) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/roles`, input as unknown as Record<string, unknown>);
+          if (body && typeof body === 'object') {
+            const b = body as { role?: OrgRole; error?: { code?: string; message?: string } };
+            if (b.role) return { ok: true, data: b.role };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'create failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'create failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async updateRole(orgId, roleId, input) {
+        try {
+          const body = await patch<unknown>(`/orgs/${orgId}/roles/${roleId}`, input as unknown as Record<string, unknown>);
+          if (body && typeof body === 'object') {
+            const b = body as { role?: OrgRole; error?: { code?: string; message?: string } };
+            if (b.role) return { ok: true, data: b.role };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'update failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'update failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async deleteRole(orgId, roleId) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/roles/${roleId}/delete`, {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      // Phase 4 — Domain verification
+      async listDomains(orgId) {
+        try {
+          const body = await get<unknown>(`/orgs/${orgId}/domains`);
+          if (body && typeof body === 'object') {
+            const b = body as { domains?: OrgDomain[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.domains)) return { ok: true, data: b.domains };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async addDomain(orgId, domain) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/domains`, { domain });
+          if (body && typeof body === 'object') {
+            const b = body as { domain?: OrgDomain; error?: { code?: string; message?: string } };
+            if (b.domain) return { ok: true, data: b.domain };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'add failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'add failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async verifyDomain(orgId, domainId) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/domains/${domainId}/verify`, {});
+          if (body && typeof body === 'object') {
+            const b = body as { domain?: OrgDomain; error?: { code?: string; message?: string } };
+            if (b.domain) return { ok: true, data: b.domain };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'verify failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'verify failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async setDomainAutoJoin(orgId, domainId, enabled) {
+        try {
+          const body = await patch<unknown>(`/orgs/${orgId}/domains/${domainId}/auto-join`, { enabled });
+          if (body && typeof body === 'object') {
+            const b = body as { domain?: OrgDomain; error?: { code?: string; message?: string } };
+            if (b.domain) return { ok: true, data: b.domain };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'update failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'update failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async removeDomain(orgId, domainId) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/domains/${domainId}/delete`, {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      // Phase 4 — Membership requests
+      async createMembershipRequest(orgId, message) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/membership-requests`, message ? { message } : {});
+          if (body && typeof body === 'object') {
+            const b = body as { request?: MembershipRequest; error?: { code?: string; message?: string } };
+            if (b.request) return { ok: true, data: b.request };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'create failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'create failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async listMembershipRequests(orgId, status) {
+        try {
+          const qs = status ? `?status=${status}` : '';
+          const body = await get<unknown>(`/orgs/${orgId}/membership-requests${qs}`);
+          if (body && typeof body === 'object') {
+            const b = body as { requests?: MembershipRequest[]; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.requests)) return { ok: true, data: b.requests };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async resolveMembershipRequest(orgId, requestId, decision) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/membership-requests/${requestId}/resolve`, { decision });
+          if (body && typeof body === 'object') {
+            const b = body as { request?: MembershipRequest; error?: { code?: string; message?: string } };
+            if (b.request) return { ok: true, data: b.request };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'resolve failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'resolve failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      // Phase 4 — Active organization
+      async setActive(orgId) {
+        try {
+          const body = await post<unknown>(`/orgs/${orgId}/set-active`, {});
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async getActive() {
+        try {
+          const body = await get<unknown>('/orgs/active');
+          if (body && typeof body === 'object') {
+            const b = body as { activeOrg?: Org | null; error?: { code?: string; message?: string } };
+            return { ok: true, data: b.activeOrg ?? null };
+          }
+          return { ok: false, code: 'unknown', message: 'get failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
+    sso: {
+      async listConnections() {
+        try {
+          const body = await get<unknown>('/sso/connections');
+          if (body && typeof body === 'object') {
+            const b = body as { connections?: Array<Pick<SsoConnection, 'id' | 'name' | 'providerType' | 'domains'>>; error?: { code?: string; message?: string } };
+            if (Array.isArray(b.connections)) return { ok: true, connections: b.connections };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'list failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async getConnectionByDomain(domain) {
+        try {
+          const body = await get<unknown>(`/sso/domain/${encodeURIComponent(domain)}`);
+          if (body && typeof body === 'object') {
+            const b = body as { connection?: Pick<SsoConnection, 'id' | 'name' | 'providerType' | 'domains'>; error?: { code?: string; message?: string } };
+            if (b.connection) return { ok: true, connection: b.connection };
+            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'get failed' };
+          }
+          return { ok: false, code: 'unknown', message: 'get failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      start(connectionId, redirectTo) {
+        const u = new URL(`${apiOrigin}${BRIDGE_PREFIX}/sso/saml/${connectionId}`);
+        if (redirectTo) u.searchParams.set('redirectTo', redirectTo);
+        return { redirectUrl: u.toString() };
+      },
     },
     twoFactor: {
       async enable(password) {
@@ -736,6 +1192,48 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
         }
       },
     },
+    impersonate: {
+      async status() {
+        try {
+          const body = await get<unknown>('/impersonation');
+          if (body && typeof body === 'object') {
+            const b = body as {
+              impersonating?: boolean;
+              impersonatedBy?: string;
+              targetUserId?: string;
+              error?: { code?: string; message?: string };
+            };
+            if (b.impersonating === true && b.impersonatedBy && b.targetUserId) {
+              return {
+                ok: true as const,
+                impersonating: true as const,
+                impersonatedBy: b.impersonatedBy,
+                targetUserId: b.targetUserId,
+              };
+            }
+            if (b.impersonating === false) {
+              return { ok: true as const, impersonating: false as const };
+            }
+            return {
+              ok: false as const,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'status check failed',
+            };
+          }
+          return { ok: true as const, impersonating: false as const };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
+      async stop(sessionToken) {
+        try {
+          const body = await post<unknown>('/impersonation/stop', { sessionToken });
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
     async signOut() {
       try {
         await post<unknown>('/sign-out', null);
@@ -777,11 +1275,14 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
         return null;
       }
     },
-    hostedPageURL(flow, callbackURL) {
+    hostedPageURL(flow, callbackURL, locale) {
       const u = new URL(`https://${opts.projectId}.auth.briven.tech`);
       u.pathname = `/${flow}`;
       if (callbackURL) {
         u.searchParams.set('callbackURL', callbackURL);
+      }
+      if (locale) {
+        u.searchParams.set('locale', locale);
       }
       return u.toString();
     },

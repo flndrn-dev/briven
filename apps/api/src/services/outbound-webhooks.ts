@@ -61,6 +61,13 @@ export const KNOWN_EVENT_TYPES = [
   'auth.account.linked',
   'auth.account.unlinked',
   'auth.user.deleted',
+  // Phase 1 — security foundation events.
+  'auth.user.banned',
+  'auth.user.unbanned',
+  'auth.user.suspended',
+  'auth.user.unsuspended',
+  'auth.waitlist.approved',
+  'auth.waitlist.rejected',
 ] as const;
 export type KnownEventType = (typeof KNOWN_EVENT_TYPES)[number];
 
@@ -77,6 +84,12 @@ export const AUTH_EVENT_TYPES = [
   'auth.account.linked',
   'auth.account.unlinked',
   'auth.user.deleted',
+  'auth.user.banned',
+  'auth.user.unbanned',
+  'auth.user.suspended',
+  'auth.user.unsuspended',
+  'auth.waitlist.approved',
+  'auth.waitlist.rejected',
 ] as const;
 export type AuthEventType = (typeof AUTH_EVENT_TYPES)[number];
 
@@ -136,6 +149,7 @@ export interface PublicSubscriber {
   targetUrl: string;
   eventTypes: string;
   enabled: boolean;
+  allowedIps: string;
   lastDeliveryAt: Date | null;
   lastDeliveryStatus: WebhookOutboundStatus | null;
   createdAt: Date;
@@ -150,6 +164,7 @@ function redact(row: WebhookSubscriber): PublicSubscriber {
     targetUrl: row.targetUrl,
     eventTypes: row.eventTypes,
     enabled: row.enabled,
+    allowedIps: row.allowedIps,
     lastDeliveryAt: row.lastDeliveryAt,
     lastDeliveryStatus: row.lastDeliveryStatus,
     createdAt: row.createdAt,
@@ -163,6 +178,7 @@ export interface CreateSubscriberInput {
   targetUrl: string;
   eventTypes?: string;
   enabled?: boolean;
+  allowedIps?: string;
   createdBy: string | null;
 }
 
@@ -197,6 +213,20 @@ export async function getSubscriberRaw(
   return row;
 }
 
+const IP_RE = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
+
+function validateAllowedIps(raw: string): void {
+  if (!raw) return;
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  for (const ip of parts) {
+    if (!IP_RE.test(ip)) {
+      throw new ValidationError(
+        `allowed_ips must be comma-separated IPv4 addresses or CIDR blocks (e.g. 1.2.3.4, 10.0.0.0/8). Invalid: ${ip}`,
+      );
+    }
+  }
+}
+
 export async function createSubscriber(
   input: CreateSubscriberInput,
 ): Promise<{ subscriber: PublicSubscriber; plaintextSecret: string }> {
@@ -204,6 +234,7 @@ export async function createSubscriber(
   validateTargetUrl(input.targetUrl);
   const eventTypes = input.eventTypes ?? '*';
   validateEventTypes(eventTypes);
+  if (input.allowedIps) validateAllowedIps(input.allowedIps);
   const plaintextSecret = generateSigningSecret();
   const db = getDb();
   const id = newId('whs');
@@ -218,6 +249,7 @@ export async function createSubscriber(
         eventTypes,
         signingSecretEncrypted: encryptValue(plaintextSecret),
         enabled: input.enabled ?? true,
+        allowedIps: input.allowedIps ?? '',
         createdBy: input.createdBy,
       })
       .returning();
@@ -239,6 +271,7 @@ export interface UpdateSubscriberInput {
   targetUrl?: string;
   eventTypes?: string;
   enabled?: boolean;
+  allowedIps?: string;
 }
 
 export async function updateSubscriber(
@@ -262,6 +295,10 @@ export async function updateSubscriber(
   }
   if (patch.enabled !== undefined && patch.enabled !== existing.enabled) {
     updates.enabled = patch.enabled;
+  }
+  if (patch.allowedIps !== undefined && patch.allowedIps !== existing.allowedIps) {
+    validateAllowedIps(patch.allowedIps);
+    updates.allowedIps = patch.allowedIps;
   }
   const db = getDb();
   const result = await db
@@ -474,6 +511,41 @@ export async function recordDeliveryResult(input: {
       })
       .where(eq(webhookSubscribers.id, subscriberId));
   }
+}
+
+/**
+ * Replay a delivery — reset it to pending with attemptCount=0 so the
+ * dispatcher will retry it on the next tick.
+ */
+export async function replayDelivery(
+  deliveryId: string,
+  projectId: string,
+): Promise<void> {
+  const db = getDb();
+  const delivery = await db
+    .select({ id: webhookOutboundDeliveries.id })
+    .from(webhookOutboundDeliveries)
+    .where(
+      and(
+        eq(webhookOutboundDeliveries.id, deliveryId),
+        eq(webhookOutboundDeliveries.projectId, projectId),
+      ),
+    )
+    .limit(1);
+  if (!delivery[0]) throw new NotFoundError('webhook_delivery', deliveryId);
+
+  await db
+    .update(webhookOutboundDeliveries)
+    .set({
+      status: 'pending',
+      attemptCount: '0',
+      nextAttemptAt: new Date(),
+      lastAttemptAt: null,
+      statusCode: null,
+      durationMs: null,
+      errorMessage: null,
+    })
+    .where(eq(webhookOutboundDeliveries.id, deliveryId));
 }
 
 /** Decrypt a subscriber's stored signing secret. Reveals plaintext. */

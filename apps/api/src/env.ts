@@ -249,6 +249,11 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === 'true' || v === '1'),
+
+  // Cloudflare Turnstile — invisible CAPTCHA replacement for bot protection
+  // on briven auth sign-up / sign-in flows. The site key is per-tenant config;
+  // this secret verifies tokens server-side.
+  BRIVEN_TURNSTILE_SECRET_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -345,6 +345,29 @@ export const projectMembers = pgTable(
   }),
 );
 
+/* ─── project_auth_team_members (Phase 6 — auth dashboard team seats) ─ */
+export const authTeamRole = ['admin', 'viewer'] as const;
+export type AuthTeamRole = (typeof authTeamRole)[number];
+
+export const projectAuthTeamMembers = pgTable(
+  'project_auth_team_members',
+  {
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').$type<AuthTeamRole>().notNull().default('viewer'),
+    invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.projectId, t.userId] }),
+  }),
+);
+
 /* ─── billing / subscriptions ─────────────────────────────────────── */
 export const subscriptionStatus = ['trialing', 'active', 'past_due', 'canceled'] as const;
 export type SubscriptionStatus = (typeof subscriptionStatus)[number];
@@ -1080,6 +1103,8 @@ export const webhookSubscribers = pgTable(
     enabled: boolean('enabled').notNull().default(true),
     lastDeliveryAt: ts('last_delivery_at'),
     lastDeliveryStatus: text('last_delivery_status').$type<WebhookOutboundStatus>(),
+    /** Comma-separated IP allowlist. Empty = no restriction. */
+    allowedIps: text('allowed_ips').notNull().default(''),
     createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

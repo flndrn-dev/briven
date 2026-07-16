@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
@@ -87,6 +88,41 @@ async function fireOne(
     return;
   }
 
+  // IP allowlist check
+  if (subscriber.allowedIps) {
+    const allowed = subscriber.allowedIps.split(',').map((s) => s.trim()).filter(Boolean);
+    if (allowed.length > 0) {
+      let resolved: string;
+      try {
+        const hostname = new URL(subscriber.targetUrl).hostname;
+        resolved = await lookup(hostname).then((r) => r.address);
+      } catch {
+        await recordDeliveryResult({
+          deliveryId: delivery.id,
+          attemptCount: MAX_ATTEMPTS - 1,
+          statusCode: null,
+          durationMs: 0,
+          errorMessage: 'ip_allowlist: dns resolution failed',
+          ok: false,
+          ranAt: now,
+        });
+        return;
+      }
+      if (!allowed.some((a) => ipMatches(resolved, a))) {
+        await recordDeliveryResult({
+          deliveryId: delivery.id,
+          attemptCount: MAX_ATTEMPTS - 1,
+          statusCode: null,
+          durationMs: 0,
+          errorMessage: `ip_allowlist: resolved ${resolved} not in allowlist`,
+          ok: false,
+          ranAt: now,
+        });
+        return;
+      }
+    }
+  }
+
   const secret = decryptSubscriberSecret(subscriber);
   const body = JSON.stringify(delivery.payload);
   const timestamp = String(now.getTime());
@@ -157,5 +193,26 @@ export function stopOutboundWebhookDispatcher(): void {
   }
 }
 
+function ipMatches(ip: string, pattern: string): boolean {
+  if (pattern.includes('/')) {
+    const [base, bits] = pattern.split('/');
+    const mask = parseInt(bits!, 10);
+    const ipNum = ipv4ToNumber(ip);
+    const baseNum = ipv4ToNumber(base!);
+    if (ipNum == null || baseNum == null) return false;
+    const shift = 32 - mask;
+    return (ipNum >> shift) === (baseNum >> shift);
+  }
+  return ip === pattern;
+}
+
+function ipv4ToNumber(ip: string): number | null {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
+    return null;
+  }
+  return (parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!;
+}
+
 // Exported for tests.
-export const _internals = { tick, fireOne };
+export const _internals = { tick, fireOne, ipMatches };

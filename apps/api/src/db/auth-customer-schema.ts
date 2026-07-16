@@ -291,6 +291,410 @@ export const authPasskeys = pgTable(
   }),
 );
 
+/**
+ * User security state — suspensions, bans, and moderation flags.
+ * Auxiliary table (never ALTER the users table per DoltGres constraints).
+ * One row per user; created on first moderation action.
+ */
+export const authUserSecurity = pgTable(
+  '_briven_auth_user_security',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    /** When set, the user cannot sign in or use sessions. */
+    suspendedAt: ts('suspended_at'),
+    suspendedReason: text('suspended_reason'),
+    /** When set, the user is permanently banned. Takes precedence over suspension. */
+    bannedAt: ts('banned_at'),
+    bannedReason: text('banned_reason'),
+    /** Optional ban expiry; null = permanent. */
+    banExpiresAt: ts('ban_expires_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('_briven_auth_user_security_user_idx').on(t.userId),
+  }),
+);
+
+/**
+ * Waitlist — users who requested access when signUpMode = 'waitlist'.
+ * Admins approve/reject via dashboard; approved users receive an email
+ * and can then complete sign-up.
+ */
+export const authWaitlist = pgTable(
+  '_briven_auth_waitlist',
+  {
+    id: id(),
+    email: text('email').notNull(),
+    name: text('name'),
+    /** pending | approved | rejected */
+    status: text('status').notNull().default('pending'),
+    approvedAt: ts('approved_at'),
+    approvedBy: text('approved_by'),
+    rejectedAt: ts('rejected_at'),
+    rejectedReason: text('rejected_reason'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    emailIdx: uniqueIndex('_briven_auth_waitlist_email_idx').on(t.email),
+    statusIdx: index('_briven_auth_waitlist_status_idx').on(t.status),
+  }),
+);
+
+/**
+ * Session activity tracking — for inactivity timeout (Phase 2).
+ * One row per active session. Updated on every authenticated request.
+ * When inactivity timeout is disabled, this table is not written to.
+ */
+export const authSessionActivity = pgTable(
+  '_briven_auth_session_activity',
+  {
+    id: id(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => authSessions.id, { onDelete: 'cascade' }),
+    lastActiveAt: ts('last_active_at').notNull().defaultNow(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    sessionIdx: uniqueIndex('_briven_auth_session_activity_session_idx').on(t.sessionId),
+  }),
+);
+
+
+
+/**
+ * Sign-in tokens — single-use JWTs for programmatic session creation.
+ * Admin/backend creates a token; the client exchanges it for a session.
+ * Once used, the token cannot be reused.
+ */
+export const authSigninTokens = pgTable(
+  '_briven_auth_signin_tokens',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    usedAt: ts('used_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenHashUniq: uniqueIndex('_briven_auth_signin_tokens_hash_uniq').on(t.tokenHash),
+    userIdx: index('_briven_auth_signin_tokens_user_idx').on(t.userId),
+    expiresIdx: index('_briven_auth_signin_tokens_expires_idx').on(t.expiresAt),
+  }),
+);
+
+export type AuthSigninToken = typeof authSigninTokens.$inferSelect;
+
+export type AuthUser = typeof authUsers.$inferSelect;
+export type AuthSession = typeof authSessions.$inferSelect;
+export type AuthAccount = typeof authAccounts.$inferSelect;
+export type AuthVerificationToken = typeof authVerificationTokens.$inferSelect;
+export type AuthJwk = typeof authJwks.$inferSelect;
+export type AuthAuditLogEntry = typeof authAuditLog.$inferSelect;
+export type AuthOrg = typeof authOrgs.$inferSelect;
+export type AuthOrgMember = typeof authOrgMembers.$inferSelect;
+export type AuthOrgInvite = typeof authOrgInvites.$inferSelect;
+export type AuthTwoFactor = typeof authTwoFactors.$inferSelect;
+export type AuthPasskey = typeof authPasskeys.$inferSelect;
+export type AuthUserSecurity = typeof authUserSecurity.$inferSelect;
+export type AuthWaitlist = typeof authWaitlist.$inferSelect;
+export type AuthSessionActivity = typeof authSessionActivity.$inferSelect;
+
+/**
+ * User metadata — public and private JSON blobs (Phase 3).
+ * Public metadata is readable from frontend + backend.
+ * Private metadata is backend-only.
+ * One row per user; created lazily on first write.
+ */
+export const authUserMetadata = pgTable(
+  '_briven_auth_user_metadata',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    publicMetadata: jsonb('public_metadata').notNull().default({}),
+    privateMetadata: jsonb('private_metadata').notNull().default({}),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: uniqueIndex('_briven_auth_user_metadata_user_idx').on(t.userId),
+  }),
+);
+
+/**
+ * Additional email addresses per user (Phase 3).
+ * Users can have multiple verified emails; one is primary.
+ * The `email` column on `_briven_auth_users` remains the primary
+ * sign-in identifier; this table stores extras.
+ */
+export const authUserEmails = pgTable(
+  '_briven_auth_user_emails',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    verified: boolean('verified').notNull().default(false),
+    primary: boolean('primary').notNull().default(false),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userEmailUniq: uniqueIndex('_briven_auth_user_emails_user_email_uniq').on(t.userId, t.email),
+  }),
+);
+
+export type AuthUserMetadata = typeof authUserMetadata.$inferSelect;
+export type AuthUserEmail = typeof authUserEmails.$inferSelect;
+
+/**
+ * Phase 4 — Custom roles & permissions per organization.
+ * Each org can define roles with a JSONB array of permission strings.
+ * Default roles (owner, admin, member) are seeded on org creation.
+ */
+export const authOrgRoles = pgTable(
+  '_briven_auth_org_roles',
+  {
+    id: id(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => authOrgs.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    permissions: jsonb('permissions').notNull().default([]),
+    /** System roles (owner/admin/member) cannot be deleted or renamed. */
+    isSystem: boolean('is_system').notNull().default(false),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    orgNameUniq: uniqueIndex('_briven_auth_org_roles_org_name_uniq').on(t.orgId, t.name),
+  }),
+);
+
+export type AuthOrgRole = typeof authOrgRoles.$inferSelect;
+
+/**
+ * Phase 4 — Verified domains for organizations.
+ * Admins add a domain, receive a DNS TXT challenge, and verify ownership.
+ * When `auto_join_enabled` is true, users whose email domain matches are
+ * automatically added as members on their first sign-in.
+ */
+export const authOrgDomains = pgTable(
+  '_briven_auth_org_domains',
+  {
+    id: id(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => authOrgs.id, { onDelete: 'cascade' }),
+    domain: text('domain').notNull(),
+    verificationToken: text('verification_token').notNull(),
+    verifiedAt: ts('verified_at'),
+    autoJoinEnabled: boolean('auto_join_enabled').notNull().default(false),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    orgDomainUniq: uniqueIndex('_briven_auth_org_domains_org_domain_uniq').on(t.orgId, t.domain),
+  }),
+);
+
+export type AuthOrgDomain = typeof authOrgDomains.$inferSelect;
+
+/**
+ * Phase 4 — Membership requests (request-to-join flow).
+ * Users request to join an org; admins approve or reject.
+ */
+export const authOrgMembershipRequests = pgTable(
+  '_briven_auth_org_membership_requests',
+  {
+    id: id(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => authOrgs.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    /** pending | approved | rejected */
+    status: text('status').notNull().default('pending'),
+    message: text('message'),
+    requestedAt: ts('requested_at').notNull().defaultNow(),
+    resolvedAt: ts('resolved_at'),
+    resolvedBy: text('resolved_by').references(() => authUsers.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    orgUserUniq: uniqueIndex('_briven_auth_org_membership_requests_org_user_uniq').on(t.orgId, t.userId),
+    orgStatusIdx: index('_briven_auth_org_membership_requests_org_status_idx').on(t.orgId, t.status),
+  }),
+);
+
+export type AuthOrgMembershipRequest = typeof authOrgMembershipRequests.$inferSelect;
+
+/**
+ * Phase 4 — Active organization per session.
+ * Tracks which org the user has selected as "active" for each session.
+ * This enables org switching without re-authentication.
+ * Never ALTER the sessions table — auxiliary table per DoltGres rules.
+ */
+export const authSessionOrgs = pgTable(
+  '_briven_auth_session_orgs',
+  {
+    id: id(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => authSessions.id, { onDelete: 'cascade' }),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => authOrgs.id, { onDelete: 'cascade' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    sessionUniq: uniqueIndex('_briven_auth_session_orgs_session_uniq').on(t.sessionId),
+  }),
+);
+
+export type AuthSessionOrg = typeof authSessionOrgs.$inferSelect;
+
+/**
+ * Phase 5 — Enterprise SSO connections (SAML 2.0 + OIDC).
+ * Each connection represents a single enterprise IdP relationship.
+ * `config` is a JSONB blob that holds provider-specific settings:
+ *   - SAML: idpMetadataXml, idpSsoUrl, idpCert, spEntityId, etc.
+ *   - OIDC: issuer, clientId, authorizationUrl, tokenUrl, userinfoUrl, etc.
+ * `domains` restricts which email domains may use this connection.
+ * `jitEnabled` controls whether unknown users are auto-created on first SSO.
+ */
+export const authSsoConnections = pgTable(
+  '_briven_auth_sso_connections',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    providerType: text('provider_type').notNull(), // 'saml' | 'oidc'
+    config: jsonb('config').notNull().default({}),
+    domains: jsonb('domains').notNull().default([]),
+    jitEnabled: boolean('jit_enabled').notNull().default(true),
+    deactivatedAt: ts('deactivated_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    nameIdx: index('_briven_auth_sso_connections_name_idx').on(t.name),
+  }),
+);
+
+export type AuthSsoConnection = typeof authSsoConnections.$inferSelect;
+
+/**
+ * Phase 5 — SSO session tracking.
+ * Links a Better Auth session to the SSO connection that created it.
+ * Enables automatic deprovisioning (revoke all sessions for a connection).
+ * One row per session created via enterprise SSO.
+ */
+export const authSsoSessions = pgTable(
+  '_briven_auth_sso_sessions',
+  {
+    id: id(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => authSessions.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => authSsoConnections.id, { onDelete: 'cascade' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    sessionUniq: uniqueIndex('_briven_auth_sso_sessions_session_uniq').on(t.sessionId),
+    connIdx: index('_briven_auth_sso_sessions_conn_idx').on(t.connectionId),
+  }),
+);
+
+export type AuthSsoSession = typeof authSsoSessions.$inferSelect;
+
+/**
+ * Phase 6.2 — Impersonation session tracking.
+ * Links a session to the admin who created it for support purposes.
+ * Enables audit trails and "stop impersonating" flows.
+ */
+export const authImpersonationSessions = pgTable(
+  '_briven_auth_impersonation_sessions',
+  {
+    id: id(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => authSessions.id, { onDelete: 'cascade' }),
+    impersonatedBy: text('impersonated_by').notNull(),
+    targetUserId: text('target_user_id').notNull(),
+    stoppedAt: ts('stopped_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    sessionUniq: uniqueIndex('_briven_auth_impersonation_sessions_session_uniq').on(t.sessionId),
+  }),
+);
+
+export type AuthImpersonationSession = typeof authImpersonationSessions.$inferSelect;
+
+/**
+ * Phase 6.3 — Application logs.
+ * Structured operational logs for the auth tenant (errors, warnings, info).
+ * Retention is controlled by the tenant's retention config.
+ */
+export const authAppLogs = pgTable(
+  '_briven_auth_app_logs',
+  {
+    id: id(),
+    level: text('level').notNull(), // 'error' | 'warn' | 'info'
+    action: text('action').notNull(),
+    message: text('message').notNull(),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    levelCreatedIdx: index('_briven_auth_app_logs_level_created_idx').on(t.level, t.createdAt),
+    actionCreatedIdx: index('_briven_auth_app_logs_action_created_idx').on(t.action, t.createdAt),
+  }),
+);
+
+export type AuthAppLog = typeof authAppLogs.$inferSelect;
+
+/**
+ * Phase 6.6 — Compliance metadata.
+ * Tracks SOC 2, HIPAA BAA, and GDPR DPA status per tenant.
+ */
+export const authCompliance = pgTable(
+  '_briven_auth_compliance',
+  {
+    id: id(),
+    soc2ControlsUrl: text('soc2_controls_url'),
+    hipaaBaaSignedAt: ts('hipaa_baa_signed_at'),
+    hipaaBaaSignedBy: text('hipaa_baa_signed_by'),
+    gdprDpaSignedAt: ts('gdpr_dpa_signed_at'),
+    gdprDpaSignedBy: text('gdpr_dpa_signed_by'),
+    encryptionAtRestEnabled: boolean('encryption_at_rest_enabled').notNull().default(true),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+);
+
+export type AuthCompliance = typeof authCompliance.$inferSelect;
+
 export const authSchema = {
   user: authUsers,
   session: authSessions,
@@ -307,19 +711,32 @@ export const authSchema = {
   // Phase 3 — MFA + Passkeys.
   twoFactor: authTwoFactors,
   passkey: authPasskeys,
+  // Phase 1 — Security Foundation.
+  userSecurity: authUserSecurity,
+  waitlist: authWaitlist,
+  // Phase 2 — Session activity tracking.
+  sessionActivity: authSessionActivity,
+  // Phase 3 — User metadata.
+  userMetadata: authUserMetadata,
+  // Phase 3 — Multiple emails per user.
+  userEmail: authUserEmails,
+  // Phase 3 — Sign-in tokens.
+  signinToken: authSigninTokens,
+  // Phase 4 — Organizations & B2B.
+  orgRole: authOrgRoles,
+  orgDomain: authOrgDomains,
+  orgMembershipRequest: authOrgMembershipRequests,
+  sessionOrg: authSessionOrgs,
+  // Phase 5 — Enterprise SSO.
+  ssoConnection: authSsoConnections,
+  ssoSession: authSsoSessions,
+  // Phase 6.2 — Impersonation tracking.
+  impersonationSession: authImpersonationSessions,
+  // Phase 6.3 — Application logs.
+  appLog: authAppLogs,
+  // Phase 6.6 — Compliance metadata.
+  compliance: authCompliance,
 } as const;
-
-export type AuthUser = typeof authUsers.$inferSelect;
-export type AuthSession = typeof authSessions.$inferSelect;
-export type AuthAccount = typeof authAccounts.$inferSelect;
-export type AuthVerificationToken = typeof authVerificationTokens.$inferSelect;
-export type AuthJwk = typeof authJwks.$inferSelect;
-export type AuthAuditLogEntry = typeof authAuditLog.$inferSelect;
-export type AuthOrg = typeof authOrgs.$inferSelect;
-export type AuthOrgMember = typeof authOrgMembers.$inferSelect;
-export type AuthOrgInvite = typeof authOrgInvites.$inferSelect;
-export type AuthTwoFactor = typeof authTwoFactors.$inferSelect;
-export type AuthPasskey = typeof authPasskeys.$inferSelect;
 
 /** Audit-action vocabulary. Open union — services can emit any string, but the
  *  listed values are guaranteed to be handled by the admin dashboard's filter

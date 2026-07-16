@@ -217,6 +217,217 @@ export function renderAuthProvisioningSql(): string[] {
      )`,
     `CREATE INDEX IF NOT EXISTS "_briven_auth_passkeys_user_idx"
        ON "_briven_auth_passkeys" (user_id)`,
+
+    // ─── User Security (Phase 1 — suspensions, bans) ────────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_user_security" (
+       id                text        PRIMARY KEY,
+       user_id           text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       suspended_at      timestamptz,
+       suspended_reason  text,
+       banned_at         timestamptz,
+       banned_reason     text,
+       ban_expires_at    timestamptz,
+       created_at        timestamptz NOT NULL DEFAULT now(),
+       updated_at        timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_user_security_user_idx"
+       ON "_briven_auth_user_security" (user_id)`,
+
+    // ─── Waitlist (Phase 1 — waitlist mode) ─────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_waitlist" (
+       id               text        PRIMARY KEY,
+       email            text        NOT NULL,
+       name             text,
+       status           text        NOT NULL DEFAULT 'pending',
+       approved_at      timestamptz,
+       approved_by      text,
+       rejected_at      timestamptz,
+       rejected_reason  text,
+       created_at       timestamptz NOT NULL DEFAULT now(),
+       updated_at       timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_waitlist_email_idx"
+       ON "_briven_auth_waitlist" (email)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_waitlist_status_idx"
+       ON "_briven_auth_waitlist" (status)`,
+
+    // ─── Session Activity (Phase 2 — inactivity timeout) ────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_session_activity" (
+       id             text        PRIMARY KEY,
+       session_id     text        NOT NULL REFERENCES "_briven_auth_sessions"(id) ON DELETE CASCADE,
+       last_active_at timestamptz NOT NULL DEFAULT now(),
+       created_at     timestamptz NOT NULL DEFAULT now(),
+       updated_at     timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_session_activity_session_idx"
+       ON "_briven_auth_session_activity" (session_id)`,
+
+    // ─── User Metadata (Phase 3) ────────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_user_metadata" (
+       id                text        PRIMARY KEY,
+       user_id           text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       public_metadata   jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       private_metadata  jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       created_at        timestamptz NOT NULL DEFAULT now(),
+       updated_at        timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_user_metadata_user_idx"
+       ON "_briven_auth_user_metadata" (user_id)`,
+
+    // ─── User Emails (Phase 3 — multiple emails per user) ───────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_user_emails" (
+       id         text        PRIMARY KEY,
+       user_id    text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       email      text        NOT NULL,
+       verified   boolean     NOT NULL DEFAULT false,
+       primary    boolean     NOT NULL DEFAULT false,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       updated_at timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_user_emails_user_email_uniq"
+       ON "_briven_auth_user_emails" (user_id, email)`,
+
+    // ─── Sign-in Tokens (Phase 3 — single-use programmatic session creation)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_signin_tokens" (
+       id          text        PRIMARY KEY,
+       user_id     text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       token_hash  text        NOT NULL,
+       expires_at  timestamptz NOT NULL,
+       used_at     timestamptz,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_signin_tokens_hash_uniq"
+       ON "_briven_auth_signin_tokens" (token_hash)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_signin_tokens_user_idx"
+       ON "_briven_auth_signin_tokens" (user_id)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_signin_tokens_expires_idx"
+       ON "_briven_auth_signin_tokens" (expires_at)`,
+
+    // ─── Organization Roles (Phase 4 — custom roles & permissions)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_org_roles" (
+       id          text        PRIMARY KEY,
+       org_id      text        NOT NULL REFERENCES "_briven_auth_orgs"(id) ON DELETE CASCADE,
+       name        text        NOT NULL,
+       permissions jsonb       NOT NULL DEFAULT '[]'::jsonb,
+       is_system   boolean     NOT NULL DEFAULT false,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_org_roles_org_name_uniq"
+       ON "_briven_auth_org_roles" (org_id, name)`,
+
+    // ─── Organization Domains (Phase 4 — domain verification + auto-join)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_org_domains" (
+       id                 text        PRIMARY KEY,
+       org_id             text        NOT NULL REFERENCES "_briven_auth_orgs"(id) ON DELETE CASCADE,
+       domain             text        NOT NULL,
+       verification_token text        NOT NULL,
+       verified_at        timestamptz,
+       auto_join_enabled  boolean     NOT NULL DEFAULT false,
+       created_at         timestamptz NOT NULL DEFAULT now(),
+       updated_at         timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_org_domains_org_domain_uniq"
+       ON "_briven_auth_org_domains" (org_id, domain)`,
+
+    // ─── Organization Membership Requests (Phase 4 — request to join)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_org_membership_requests" (
+       id           text        PRIMARY KEY,
+       org_id       text        NOT NULL REFERENCES "_briven_auth_orgs"(id) ON DELETE CASCADE,
+       user_id      text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       status       text        NOT NULL DEFAULT 'pending',
+       message      text,
+       requested_at timestamptz NOT NULL DEFAULT now(),
+       resolved_at  timestamptz,
+       resolved_by  text        REFERENCES "_briven_auth_users"(id) ON DELETE SET NULL,
+       created_at   timestamptz NOT NULL DEFAULT now(),
+       updated_at   timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_org_membership_requests_org_user_uniq"
+       ON "_briven_auth_org_membership_requests" (org_id, user_id)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_org_membership_requests_org_status_idx"
+       ON "_briven_auth_org_membership_requests" (org_id, status)`,
+
+    // ─── Session Active Organization (Phase 4 — org switch without re-auth)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_session_orgs" (
+       id         text        PRIMARY KEY,
+       session_id text        NOT NULL REFERENCES "_briven_auth_sessions"(id) ON DELETE CASCADE,
+       org_id     text        NOT NULL REFERENCES "_briven_auth_orgs"(id) ON DELETE CASCADE,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       updated_at timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_session_orgs_session_uniq"
+       ON "_briven_auth_session_orgs" (session_id)`,
+
+    // ─── Enterprise SSO Connections (Phase 5 — SAML + OIDC)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_sso_connections" (
+       id              text        PRIMARY KEY,
+       name            text        NOT NULL,
+       provider_type   text        NOT NULL,
+       config          jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       domains         jsonb       NOT NULL DEFAULT '[]'::jsonb,
+       jit_enabled     boolean     NOT NULL DEFAULT true,
+       deactivated_at  timestamptz,
+       created_at      timestamptz NOT NULL DEFAULT now(),
+       updated_at      timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_sso_connections_name_idx"
+       ON "_briven_auth_sso_connections" (name)`,
+
+    // ─── SSO Session Tracking (Phase 5 — deprovisioning)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_sso_sessions" (
+       id            text        PRIMARY KEY,
+       session_id    text        NOT NULL REFERENCES "_briven_auth_sessions"(id) ON DELETE CASCADE,
+       connection_id text        NOT NULL REFERENCES "_briven_auth_sso_connections"(id) ON DELETE CASCADE,
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_sso_sessions_session_uniq"
+       ON "_briven_auth_sso_sessions" (session_id)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_sso_sessions_conn_idx"
+       ON "_briven_auth_sso_sessions" (connection_id)`,
+
+    // ─── Impersonation Sessions (Phase 6.2 — support impersonation audit)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_impersonation_sessions" (
+       id               text        PRIMARY KEY,
+       session_id       text        NOT NULL REFERENCES "_briven_auth_sessions"(id) ON DELETE CASCADE,
+       impersonated_by  text        NOT NULL,
+       target_user_id   text        NOT NULL,
+       stopped_at       timestamptz,
+       created_at       timestamptz NOT NULL DEFAULT now(),
+       updated_at       timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_impersonation_sessions_session_uniq"
+       ON "_briven_auth_impersonation_sessions" (session_id)`,
+
+    // ─── Application Logs (Phase 6.3 — structured operational logs)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_app_logs" (
+       id          text        PRIMARY KEY,
+       level       text        NOT NULL,
+       action      text        NOT NULL,
+       message     text        NOT NULL,
+       metadata    jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       created_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_app_logs_level_created_idx"
+       ON "_briven_auth_app_logs" (level, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_app_logs_action_created_idx"
+       ON "_briven_auth_app_logs" (action, created_at DESC)`,
+
+    // ─── Compliance Metadata (Phase 6.6 — SOC 2 / HIPAA / GDPR)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_compliance" (
+       id                        text        PRIMARY KEY,
+       soc2_controls_url         text,
+       hipaa_baa_signed_at       timestamptz,
+       hipaa_baa_signed_by       text,
+       gdpr_dpa_signed_at        timestamptz,
+       gdpr_dpa_signed_by        text,
+       encryption_at_rest_enabled boolean     NOT NULL DEFAULT true,
+       created_at                timestamptz NOT NULL DEFAULT now(),
+       updated_at                timestamptz NOT NULL DEFAULT now()
+     )`,
+
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -238,5 +449,20 @@ export const AUTH_TABLES = [
   '_briven_auth_org_invites',
   '_briven_auth_two_factors',
   '_briven_auth_passkeys',
+  '_briven_auth_user_security',
+  '_briven_auth_waitlist',
+  '_briven_auth_session_activity',
+  '_briven_auth_user_metadata',
+  '_briven_auth_user_emails',
+  '_briven_auth_signin_tokens',
+  '_briven_auth_org_roles',
+  '_briven_auth_org_domains',
+  '_briven_auth_org_membership_requests',
+  '_briven_auth_session_orgs',
+  '_briven_auth_sso_connections',
+  '_briven_auth_sso_sessions',
+  '_briven_auth_impersonation_sessions',
+  '_briven_auth_app_logs',
+  '_briven_auth_compliance',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

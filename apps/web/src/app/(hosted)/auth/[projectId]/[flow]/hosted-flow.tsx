@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp' | 'new-password';
 
@@ -13,6 +13,8 @@ interface Props {
   callbackURL: string;
   /** Password-reset token (only for new-password flow). */
   token?: string;
+  /** Cloudflare Turnstile site key, or null when disabled. */
+  turnstileSiteKey: string | null;
 }
 
 const OAUTH_PROVIDERS: ReadonlyArray<string> = [
@@ -59,7 +61,7 @@ interface ErrorBody {
  * with the CNAME orchestration runbook (BUILD_PLAN.md "Decisions
  * locked" Q7); the form contract here doesn't change.
  */
-export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
+export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteKey }: Props) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -71,11 +73,54 @@ export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
   const [magicSent, setMagicSent] = useState(false);
   const [otpRequested, setOtpRequested] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<HTMLDivElement>(null);
+
+  // Load Cloudflare Turnstile script when a site key is provided.
+  useEffect(() => {
+    if (!turnstileSiteKey || !turnstileRef.current) return;
+    if (document.querySelector('script[data-turnstile-loaded]')) {
+      renderTurnstile();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.defer = true;
+    script.setAttribute('data-turnstile-loaded', 'true');
+    script.onload = () => renderTurnstile();
+    document.body.appendChild(script);
+    return () => {
+      // Cleanup handled by Turnstile internally on re-render.
+    };
+  }, [turnstileSiteKey]);
+
+  function renderTurnstile() {
+    const win = window as unknown as {
+      turnstile?: {
+        render: (
+          el: HTMLElement,
+          opts: {
+            sitekey: string;
+            callback: (token: string) => void;
+            'error-callback'?: () => void;
+          },
+        ) => string;
+      };
+    };
+    if (!win.turnstile || !turnstileRef.current) return;
+    win.turnstile.render(turnstileRef.current, {
+      sitekey: turnstileSiteKey!,
+      callback: (t) => setTurnstileToken(t),
+      'error-callback': () => setTurnstileToken(null),
+    });
+  }
 
   async function post(path: string, body: Record<string, unknown>): Promise<unknown> {
     setPending(true);
     setError(null);
     try {
+      const payload = turnstileToken ? { ...body, turnstileToken } : body;
       const res = await fetch(`/api/v1/auth-tenant${path}`, {
         method: 'POST',
         credentials: 'include',
@@ -83,7 +128,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
           'content-type': 'application/json',
           'x-briven-project-id': projectId,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as ErrorBody;
@@ -187,6 +232,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
             onChange={setPassword}
             autoComplete="current-password"
           />
+          {turnstileSiteKey ? <div ref={turnstileRef} className="min-h-[65px]" /> : null}
           <Submit pending={pending} idle="sign in" busy="signing in…" />
         </form>
       ) : null}
@@ -202,6 +248,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
             onChange={setPassword}
             autoComplete="new-password"
           />
+          {turnstileSiteKey ? <div ref={turnstileRef} className="min-h-[65px]" /> : null}
           <Submit pending={pending} idle="create account" busy="creating…" />
         </form>
       ) : null}
@@ -214,6 +261,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
         ) : (
           <form className="flex flex-col gap-3" onSubmit={handleMagic}>
             <Field label="email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+            {turnstileSiteKey ? <div ref={turnstileRef} className="min-h-[65px]" /> : null}
             <Submit pending={pending} idle="send magic link" busy="sending…" />
           </form>
         )
@@ -237,6 +285,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token }: Props) {
         ) : (
           <form className="flex flex-col gap-3" onSubmit={handleOtpRequest}>
             <Field label="email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+            {turnstileSiteKey ? <div ref={turnstileRef} className="min-h-[65px]" /> : null}
             <Submit pending={pending} idle="send code" busy="sending…" />
           </form>
         )

@@ -38,14 +38,20 @@ import {
 import {
   type BrivenAuthClient,
   type ClientSession,
+  type MembershipRequest,
   type OAuthProvider,
   type Org,
+  type OrgDomain,
   type OrgInvite,
   type OrgMember,
+  type OrgPermission,
+  type OrgRole,
   type Passkey,
   type SessionResponse,
   type SignInResult,
   type SimpleResult,
+  type SsoConnection,
+  type SsoProviderType,
   type User,
 } from '../index.js';
 
@@ -153,17 +159,66 @@ export function useUser(): UseUserResult {
   return { user, isLoading, refresh };
 }
 
+export interface UseActiveOrganizationResult {
+  activeOrg: Org | null;
+  isLoading: boolean;
+  refresh: () => Promise<void>;
+  setActive: (orgId: string) => Promise<void>;
+}
+
+/**
+ * Subscribe to the currently-active organization for this session.
+ * The active org is set via `organization.setActive(orgId)` and persists
+ * per-session, so org switching does not require re-authentication.
+ */
+export function useActiveOrganization(): UseActiveOrganizationResult {
+  const client = useBrivenAuth();
+  const [activeOrg, setActiveOrg] = useState<Org | null>(null);
+  const [isLoading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const result = await client.organization.getActive();
+    if (result.ok) setActiveOrg(result.data);
+    setLoading(false);
+  }, [client]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await client.organization.getActive();
+      if (!cancelled) {
+        setActiveOrg(result.ok ? result.data : null);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  const setActive = useCallback(
+    async (orgId: string) => {
+      const result = await client.organization.setActive(orgId);
+      if (result.ok) await refresh();
+    },
+    [client, refresh],
+  );
+
+  return { activeOrg, isLoading, refresh, setActive };
+}
+
 // ─── Shared helpers ────────────────────────────────────────────────────────
 
-function useRedirectToHosted(auth: BrivenAuthClient, redirectTo?: string) {
+function useRedirectToHosted(auth: BrivenAuthClient, redirectTo?: string, locale?: string) {
   return useCallback(
     (flow: 'sign-in' | 'sign-up' | 'magic-link') => {
-      const url = auth.hostedPageURL(flow, redirectTo);
+      const url = auth.hostedPageURL(flow, redirectTo, locale);
       if (typeof window !== 'undefined') {
         window.location.assign(url);
       }
     },
-    [auth, redirectTo],
+    [auth, redirectTo, locale],
   );
 }
 
@@ -188,6 +243,8 @@ export interface BrivenSignInProps {
    * and origin-allowlist issues; recommended for production.
    */
   mode?: 'direct' | 'hosted';
+  /** BCP 47 locale for hosted-page redirects (e.g. 'nl', 'fr-FR'). */
+  locale?: string;
 }
 
 const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
@@ -224,7 +281,7 @@ export function BrivenSignIn(props: BrivenSignInProps) {
   const [error, setError] = useState<string | null>(null);
   const [magicSent, setMagicSent] = useState(false);
 
-  const redirectToHosted = useRedirectToHosted(auth, props.redirectTo);
+  const redirectToHosted = useRedirectToHosted(auth, props.redirectTo, props.locale);
 
   const handlePassword = useCallback(
     async (e: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -429,6 +486,8 @@ export interface BrivenSignUpProps {
    * and origin-allowlist issues; recommended for production.
    */
   mode?: 'direct' | 'hosted';
+  /** BCP 47 locale for hosted-page redirects (e.g. 'nl', 'fr-FR'). */
+  locale?: string;
 }
 
 /**
@@ -447,7 +506,7 @@ export function BrivenSignUp(props: BrivenSignUpProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const redirectToHosted = useRedirectToHosted(auth, props.redirectTo);
+  const redirectToHosted = useRedirectToHosted(auth, props.redirectTo, props.locale);
 
   const handleSubmit = useCallback(
     async (e: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -964,12 +1023,16 @@ export interface OrganizationSwitcherProps {
 }
 
 /**
- * Drop-in organization switcher. Shows a dropdown of the current user's
- * organizations with a "create organization" button. Renders nothing
- * while loading or unauthenticated.
+ * Drop-in organization switcher. Shows the active organization (if any)
+ * and a dropdown to switch between orgs or create a new one. Renders
+ * nothing while loading or unauthenticated.
+ *
+ * Uses the same `briven-auth-*` CSS class convention as the rest of the
+ * SDK — no Clerk UI cloning.
  */
 export function OrganizationSwitcher(props: OrganizationSwitcherProps) {
   const auth = useBrivenAuth();
+  const { activeOrg, setActive } = useActiveOrganization();
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -995,7 +1058,17 @@ export function OrganizationSwitcher(props: OrganizationSwitcherProps) {
     return result;
   }, [auth, load]);
 
-  if (isLoading || orgs.length === 0) {
+  const handleSwitch = useCallback(
+    async (orgId: string) => {
+      await setActive(orgId);
+      setOpen(false);
+    },
+    [setActive],
+  );
+
+  if (isLoading) return null;
+
+  if (orgs.length === 0) {
     return createElement(
       'button',
       {
@@ -1020,7 +1093,7 @@ export function OrganizationSwitcher(props: OrganizationSwitcherProps) {
         onClick: () => setOpen((v) => !v),
         className: 'briven-auth-org-switcher-trigger',
       },
-      'switch organization',
+      activeOrg?.name ?? 'switch organization',
     ),
     open
       ? createElement(
@@ -1028,8 +1101,16 @@ export function OrganizationSwitcher(props: OrganizationSwitcherProps) {
           { className: 'briven-auth-org-switcher-dropdown' },
           orgs.map((org) =>
             createElement(
-              'div',
-              { key: org.id, className: 'briven-auth-org-switcher-item' },
+              'button',
+              {
+                key: org.id,
+                type: 'button',
+                onClick: () => handleSwitch(org.id),
+                className:
+                  org.id === activeOrg?.id
+                    ? 'briven-auth-org-switcher-item briven-auth-org-switcher-item-active'
+                    : 'briven-auth-org-switcher-item',
+              },
               org.name,
             ),
           ),
@@ -1374,13 +1455,19 @@ export function PasskeyButton(props: PasskeyButtonProps) {
 export type {
   BrivenAuthClient,
   ClientSession,
+  MembershipRequest,
   OAuthProvider,
   Org,
+  OrgDomain,
   OrgInvite,
   OrgMember,
+  OrgPermission,
+  OrgRole,
   Passkey,
   SessionResponse,
   SignInResult,
   SimpleResult,
+  SsoConnection,
+  SsoProviderType,
   User,
 };
