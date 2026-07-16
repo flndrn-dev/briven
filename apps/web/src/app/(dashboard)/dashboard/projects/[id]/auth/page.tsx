@@ -144,7 +144,6 @@ export default async function AuthOverviewPage({
             [
               'logo',
               state.config.branding.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={state.config.branding.logoUrl}
                   alt="logo"

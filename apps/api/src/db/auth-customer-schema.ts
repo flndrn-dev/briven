@@ -27,7 +27,7 @@
  * UNIQUE index on lower(email)); no `CREATE EXTENSION`.
  */
 
-import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // Shared helpers — mirror the conventions in apps/api/src/db/schema.ts.
 const id = () => text('id').primaryKey();

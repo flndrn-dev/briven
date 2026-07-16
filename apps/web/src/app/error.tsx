@@ -23,7 +23,6 @@ export default function Error({
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center gap-6 px-6 py-16 font-mono text-sm">
       <Link href="/" className="flex items-center gap-2" aria-label="briven home">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icon.svg" alt="" width={28} height={28} />
         <span>briven</span>
       </Link>

@@ -1199,7 +1199,8 @@ async function rewriteTenantCallbackRequest(raw: Request): Promise<Request> {
  * so the exact same session validation runs (cookie parsing, token
  * verification, expiry checks).
  */
-async function getTenantUserId(c: typeof authServiceRouter extends Hono<infer E> ? Parameters<E['Variables']>[0] extends never ? never : any : never, projectId: string): Promise<string | null> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getTenantUserId(c: any, projectId: string): Promise<string | null> {
   try {
     const instance = await getAuthInstance(projectId);
     const url = new URL(c.req.url);

@@ -33,7 +33,6 @@ export default function GlobalError({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icon.svg" alt="" width={28} height={28} />
           <span>briven</span>
         </div>

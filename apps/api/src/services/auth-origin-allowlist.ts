@@ -117,10 +117,6 @@ export function normaliseOrigin(raw: string): string | null {
   return `${scheme}://${wild}${host}${port}`;
 }
 
-function hostMatchesWildcardBase(originHost: string, baseHost: string): boolean {
-  return originHost === baseHost || originHost.endsWith(`.${baseHost}`);
-}
-
 /**
  * HOT PATH. Is this incoming Origin header registered by ANY project (or a
  * briven-own origin)? Pure in-memory; never throws, never hits the DB.
@@ -137,10 +133,12 @@ export function isRegisteredOrigin(origin: string | null | undefined): boolean {
     if (!om) return false;
     const originScheme = om[1];
     const originHostPort = om[2];
+    if (!originScheme || !originHostPort) return false;
     for (const w of CACHE.wildcards) {
       const wm = /^(https?):\/\/\*\.([^/]+)$/.exec(w);
       if (!wm) continue;
-      if (wm[1] === originScheme && hostMatchesWildcardBase(originHostPort, wm[2]!)) return true;
+      const wildcardBase = wm[2];
+      if (wildcardBase && wm[1] === originScheme && (originHostPort === wildcardBase || originHostPort.endsWith(`.${wildcardBase}`))) return true;
     }
     return false;
   } catch {

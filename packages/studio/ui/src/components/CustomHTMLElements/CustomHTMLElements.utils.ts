@@ -100,7 +100,8 @@ export const highlightSelectedNavItem = (id: string) => {
 
   // Add active class to the current item
   navMenuItems.forEach((item) => {
-    if (item.href.split('/').at(-1) === id) {
+    const parts = item.href.split('/')
+    if (parts[parts.length - 1] === id) {
       item.classList.add('text-brand')
     }
   })

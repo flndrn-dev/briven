@@ -2,7 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local", "tsconfig.base.json"],
   "globalEnv": ["NODE_ENV", "CI"],
-  "globalPassThroughEnv": ["BRIVEN_*"],
+  "globalPassThroughEnv": ["BRIVEN_*", "SUPABASE_*", "LIVE_SUPABASE_SECRET_KEY"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
