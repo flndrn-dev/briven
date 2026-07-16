@@ -52,7 +52,7 @@
     "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@monaco-editor/react": "^4.6.0",
-    "@next/bundle-analyzer": "16.2.3",
+    "@next/bundle-analyzer": "16.2.10",
     "@number-flow/react": "^0.3.2",
     "@sentry/nextjs": "catalog:",
     "@std/path": "npm:@jsr/std__path@^1.0.8",
