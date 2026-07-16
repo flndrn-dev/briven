@@ -39,7 +39,7 @@ jobs:
         app: [api, runtime, realtime, web, docs]
     steps:
       - name: checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: set up buildx
         uses: docker/setup-buildx-action@v3
