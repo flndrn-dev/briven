@@ -144,6 +144,38 @@ import {
 import { listAppLogs, purgeOldAppLogs, purgeOldAuditLogs } from '../services/auth-app-logs.js';
 import { bulkBanUsers, bulkDeleteUsers, bulkInviteUsers } from '../services/auth-bulk-ops.js';
 import { getComplianceSettings, setComplianceSettings } from '../services/auth-compliance.js';
+import {
+  createJwtTemplate,
+  deleteJwtTemplate,
+  generateJwtToken,
+  getCustomJwks,
+  listJwtTemplates,
+} from '../services/auth-jwt-templates.js';
+import {
+  generateAvatarPresign,
+  getAvatarImage,
+  updateUserAvatar,
+} from '../services/auth-user-avatar.js';
+import {
+  createUsername,
+  deleteUsername,
+  getUsernameByUserId,
+  resolveUsernameToEmail,
+  validateUsername,
+} from '../services/auth-usernames.js';
+import {
+  createTestToken,
+  exchangeTestToken,
+  listTestTokens,
+  revokeTestToken,
+} from '../services/auth-test-tokens.js';
+import {
+  deactivateEmailTemplate,
+  listEmailTemplates,
+  setEmailTemplate,
+  type EmailTemplateName,
+  EMAIL_TEMPLATE_NAMES,
+} from '../services/auth-email-templates.js';
 
 /**
  * briven auth service router (BUILD_PLAN.md §4).
@@ -2221,6 +2253,164 @@ authServiceRouter.delete('/v1/auth-tenant/user/emails/:emailId', async (c) => {
   return c.json({ ok: true });
 });
 
+// ─── user avatar (Phase 7.2 — customer-facing) ────────────────────────────
+
+authServiceRouter.post('/v1/auth-tenant/user/avatar/presign', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+
+  if (!isStorageConfigured()) {
+    return c.json({ code: 'storage_not_configured' }, 503);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { contentType?: string };
+  if (!body.contentType) {
+    return c.json({ code: 'validation_failed', message: 'contentType required' }, 400);
+  }
+
+  try {
+    const result = generateAvatarPresign(projectId, userId, body.contentType);
+    return c.json(result);
+  } catch (err) {
+    return c.json(
+      { code: 'validation_failed', message: err instanceof Error ? err.message : 'invalid content type' },
+      400,
+    );
+  }
+});
+
+authServiceRouter.patch('/v1/auth-tenant/user/avatar', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+
+  const body = (await c.req.json().catch(() => ({}))) as { imageUrl?: string | null };
+  await updateUserAvatar(projectId, userId, body.imageUrl ?? null);
+  return c.json({ ok: true });
+});
+
+authServiceRouter.get('/v1/auth-tenant/user/avatar/serve', async (c) => {
+  const q = new URL(c.req.url).searchParams;
+  const projectId = q.get('p');
+  const userId = q.get('u');
+  const fileId = q.get('f');
+  if (!projectId || !userId || !fileId) {
+    return c.json({ code: 'validation_failed' }, 400);
+  }
+
+  try {
+    const img = await getAvatarImage(projectId, userId, fileId);
+    if (!img) return c.body(null, 404);
+    c.header('content-type', img.contentType);
+    c.header('cache-control', 'public, max-age=86400');
+    return c.body(Buffer.from(img.bytes));
+  } catch {
+    return c.json({ code: 'avatar_fetch_failed' }, 500);
+  }
+});
+
+// ─── username authentication (Phase 7.3 — customer-facing) ────────────────
+
+authServiceRouter.post('/v1/auth-tenant/username/sign-in', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+
+  const body = (await c.req.json().catch(() => ({}))) as { username?: string; password?: string };
+  if (!body.username || !body.password) {
+    return c.json({ code: 'validation_failed', message: 'username and password required' }, 400);
+  }
+
+  const resolved = await resolveUsernameToEmail(projectId, body.username);
+  if (!resolved) {
+    return c.json({ code: 'invalid_credentials' }, 401);
+  }
+
+  const instance = await getAuthInstance(projectId);
+  const signInUrl = new URL(c.req.url);
+  signInUrl.pathname = '/v1/auth-tenant/sign-in/email';
+
+  const signInReq = new Request(signInUrl.toString(), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-briven-project-id': projectId,
+    },
+    body: JSON.stringify({ email: resolved.email, password: body.password }),
+  });
+
+  const response = await instance.betterAuth.handler(signInReq);
+  return await withActionableOriginError(response, projectId);
+});
+
+authServiceRouter.post('/v1/auth-tenant/username', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+
+  const body = (await c.req.json().catch(() => ({}))) as { username?: string };
+  if (!body.username) {
+    return c.json({ code: 'validation_failed', message: 'username required' }, 400);
+  }
+
+  try {
+    validateUsername(body.username);
+    await createUsername(projectId, userId, body.username);
+    return c.json({ ok: true });
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    return c.json({ code: 'username_taken', message: 'username already taken' }, 409);
+  }
+});
+
+authServiceRouter.get('/v1/auth-tenant/username', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+
+  const username = await getUsernameByUserId(projectId, userId);
+  return c.json({ username });
+});
+
+authServiceRouter.delete('/v1/auth-tenant/username', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const userId = await getTenantUserId(c, projectId);
+  if (!userId) return c.json({ code: 'unauthenticated' }, 401);
+
+  await deleteUsername(projectId, userId);
+  return c.json({ ok: true });
+});
+
+// ─── test token exchange (Phase 7.4 — customer-facing) ────────────────────
+
+authServiceRouter.post('/v1/auth-tenant/test-token', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+
+  const body = (await c.req.json().catch(() => ({}))) as { token?: string };
+  if (!body.token || typeof body.token !== 'string') {
+    return c.json({ code: 'validation_failed', message: 'token required' }, 400);
+  }
+
+  const result = await exchangeTestToken(projectId, body.token);
+  if (!result) {
+    return c.json({ code: 'invalid_token' }, 401);
+  }
+
+  const isProd = env.BRIVEN_ENV === 'production';
+  const cookieValue = `${SESSION_COOKIE_NAME}=${encodeURIComponent(result.sessionToken)}; Path=/; HttpOnly; SameSite=${isProd ? 'None' : 'Lax'}${isProd ? '; Secure' : ''}; Max-Age=604800`;
+  c.header('set-cookie', cookieValue);
+
+  return c.json({ ok: true, expiresAt: result.expiresAt.toISOString() });
+});
+
 // ─── sign-in tokens (customer-facing) ─────────────────────────────────────
 
 authServiceRouter.post('/v1/auth-tenant/sign-in/token', async (c) => {
@@ -2251,6 +2441,36 @@ authServiceRouter.post('/v1/auth-tenant/sign-in/token', async (c) => {
     });
     return c.json({ code: 'token_exchange_failed' }, 500);
   }
+});
+
+// ─── JWT token generation (Phase 7.1) ─────────────────────────────────────
+
+authServiceRouter.post('/v1/auth-tenant/jwt/token', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+
+  const body = (await c.req.json().catch(() => ({}))) as { template?: string };
+  const cookieHeader = c.req.header('cookie') ?? '';
+  const match = cookieHeader.match(/briven_auth_session_token=([^;]+)/);
+  const sessionToken = match?.[1] ?? null;
+
+  if (!sessionToken) {
+    return c.json({ code: 'unauthenticated' }, 401);
+  }
+
+  const result = await generateJwtToken(projectId, sessionToken, body.template);
+  if ('error' in result) {
+    return c.json({ code: result.error }, 400);
+  }
+
+  return c.json({ token: result.token, expiresAt: result.expiresAt.toISOString() });
+});
+
+authServiceRouter.get('/v1/auth-tenant/jwt/jwks', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const jwks = await getCustomJwks(projectId);
+  return c.json(jwks);
 });
 
 // ─── sign-in tokens (admin) ────────────────────────────────────────────────
@@ -3124,6 +3344,151 @@ authServiceRouter.patch(
       metadata: { fields: Object.keys(patch) },
     });
     return c.json({ compliance: settings });
+  },
+);
+
+// ─── Phase 7.1 — JWT Templates ────────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/jwt/templates',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const templates = await listJwtTemplates(projectId);
+    return c.json({ templates });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/jwt/templates',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      claims?: Record<string, unknown>;
+    };
+    if (!body.name || typeof body.name !== 'string' || body.name.length < 1 || body.name.length > 64) {
+      return c.json({ code: 'validation_failed', message: 'name must be 1-64 characters' }, 400);
+    }
+    if (!body.claims || typeof body.claims !== 'object') {
+      return c.json({ code: 'validation_failed', message: 'claims must be an object' }, 400);
+    }
+    await createJwtTemplate(projectId, body.name, body.claims);
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/jwt/templates/:name',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const name = c.req.param('name');
+    if (!projectId || !name) return c.json({ code: 'validation_failed' }, 400);
+    await deleteJwtTemplate(projectId, name);
+    return c.json({ ok: true });
+  },
+);
+
+// ─── Phase 7.4 — Testing Tokens ───────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/test-tokens',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const tokens = await listTestTokens(projectId);
+    return c.json({ tokens });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/test-tokens',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const body = (await c.req.json().catch(() => ({}))) as { userId?: string; name?: string };
+    if (!body.userId) {
+      return c.json({ code: 'validation_failed', message: 'userId required' }, 400);
+    }
+    const token = await createTestToken(projectId, body.userId, body.name);
+    return c.json({ token: token.token, expiresAt: token.expiresAt.toISOString() });
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/test-tokens/:tokenId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const tokenId = c.req.param('tokenId');
+    if (!projectId || !tokenId) return c.json({ code: 'validation_failed' }, 400);
+    await revokeTestToken(projectId, tokenId);
+    return c.json({ ok: true });
+  },
+);
+
+// ─── Phase 7.5 — Email Template Customization ─────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/email-templates',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const templates = await listEmailTemplates(projectId);
+    return c.json({ templates });
+  },
+);
+
+authServiceRouter.put(
+  '/v1/projects/:id/auth/email-templates',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      subject?: string;
+      html?: string;
+      text?: string | null;
+    };
+    if (!body.name || !EMAIL_TEMPLATE_NAMES.includes(body.name as EmailTemplateName)) {
+      return c.json({ code: 'validation_failed', message: `name must be one of ${EMAIL_TEMPLATE_NAMES.join(', ')}` }, 400);
+    }
+    if (!body.subject || typeof body.subject !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'subject required' }, 400);
+    }
+    if (!body.html || typeof body.html !== 'string') {
+      return c.json({ code: 'validation_failed', message: 'html required' }, 400);
+    }
+    await setEmailTemplate(projectId, {
+      name: body.name as EmailTemplateName,
+      subject: body.subject,
+      html: body.html,
+      text: body.text,
+    });
+    return c.json({ ok: true });
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/email-templates/:name',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const name = c.req.param('name');
+    if (!projectId || !name) return c.json({ code: 'validation_failed' }, 400);
+    if (!EMAIL_TEMPLATE_NAMES.includes(name as EmailTemplateName)) {
+      return c.json({ code: 'validation_failed', message: `name must be one of ${EMAIL_TEMPLATE_NAMES.join(', ')}` }, 400);
+    }
+    await deactivateEmailTemplate(projectId, name as EmailTemplateName);
+    return c.json({ ok: true });
   },
 );
 

@@ -428,6 +428,68 @@ export function renderAuthProvisioningSql(): string[] {
        updated_at                timestamptz NOT NULL DEFAULT now()
      )`,
 
+    // ─── JWT Templates (Phase 7.1 — named claim sets for custom tokens)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_jwt_templates" (
+       id         text        PRIMARY KEY,
+       name       text        NOT NULL,
+       claims     jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       updated_at timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_jwt_templates_name_uniq"
+       ON "_briven_auth_jwt_templates" (name)`,
+
+    // ─── Custom JWT Signing Keys (Phase 7.1 — independent from Better Auth jwks)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_custom_jwks" (
+       id          text        PRIMARY KEY,
+       public_key  text        NOT NULL,
+       private_key text        NOT NULL,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       expires_at  timestamptz
+     )`,
+
+    // ─── User Usernames (Phase 7.3 — username-based authentication)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_user_usernames" (
+       id         text        PRIMARY KEY,
+       user_id    text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       username   text        NOT NULL,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       updated_at timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_user_usernames_username_uniq"
+       ON "_briven_auth_user_usernames" (username)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_user_usernames_user_idx"
+       ON "_briven_auth_user_usernames" (user_id)`,
+
+    // ─── Testing Tokens (Phase 7.4 — E2E test bypass tokens)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_test_tokens" (
+       id          text        PRIMARY KEY,
+       user_id     text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       token_hash  text        NOT NULL,
+       name        text,
+       expires_at  timestamptz NOT NULL,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_test_tokens_hash_uniq"
+       ON "_briven_auth_test_tokens" (token_hash)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_test_tokens_user_idx"
+       ON "_briven_auth_test_tokens" (user_id)`,
+
+    // ─── Email Templates (Phase 7.5 — per-tenant transactional email overrides)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_email_templates" (
+       id         text        PRIMARY KEY,
+       name       text        NOT NULL,
+       subject    text        NOT NULL,
+       html       text        NOT NULL,
+       text       text,
+       active     boolean     NOT NULL DEFAULT true,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       updated_at timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_email_templates_name_uniq"
+       ON "_briven_auth_email_templates" (name)`,
+
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -464,5 +526,10 @@ export const AUTH_TABLES = [
   '_briven_auth_impersonation_sessions',
   '_briven_auth_app_logs',
   '_briven_auth_compliance',
+  '_briven_auth_jwt_templates',
+  '_briven_auth_custom_jwks',
+  '_briven_auth_user_usernames',
+  '_briven_auth_test_tokens',
+  '_briven_auth_email_templates',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

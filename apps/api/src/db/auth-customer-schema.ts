@@ -695,6 +695,118 @@ export const authCompliance = pgTable(
 
 export type AuthCompliance = typeof authCompliance.$inferSelect;
 
+/**
+ * Phase 7.1 — JWT Templates.
+ * Named claim sets that tenants can define and reference when requesting
+ * a signed JWT. Claims are merged with the default token payload.
+ */
+export const authJwtTemplates = pgTable(
+  '_briven_auth_jwt_templates',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    claims: jsonb('claims').notNull().default({}),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    nameUniq: uniqueIndex('_briven_auth_jwt_templates_name_uniq').on(t.name),
+  }),
+);
+
+export type AuthJwtTemplate = typeof authJwtTemplates.$inferSelect;
+
+/**
+ * Phase 7.3 — User usernames.
+ * Auxiliary table for username-based authentication. Each user can have
+ * at most one username. Uniqueness is per tenant.
+ */
+export const authUserUsernames = pgTable(
+  '_briven_auth_user_usernames',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    username: text('username').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    usernameUniq: uniqueIndex('_briven_auth_user_usernames_username_uniq').on(t.username),
+    userIdx: uniqueIndex('_briven_auth_user_usernames_user_idx').on(t.userId),
+  }),
+);
+
+export type AuthUserUsername = typeof authUserUsernames.$inferSelect;
+
+/**
+ * Phase 7.4 — Testing tokens.
+ * Special tokens for E2E test suites that bypass bot protection,
+ * rate limiting, and MFA requirements. Created via admin API;
+ * exchanged for a real session via customer API.
+ */
+export const authTestTokens = pgTable(
+  '_briven_auth_test_tokens',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    name: text('name'),
+    expiresAt: ts('expires_at').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenHashUniq: uniqueIndex('_briven_auth_test_tokens_hash_uniq').on(t.tokenHash),
+    userIdx: index('_briven_auth_test_tokens_user_idx').on(t.userId),
+  }),
+);
+
+export type AuthTestToken = typeof authTestTokens.$inferSelect;
+
+/**
+ * Phase 7.5 — Email templates.
+ * Per-tenant overrides for transactional emails.
+ * When active, the custom template replaces the default briven template.
+ */
+export const authEmailTemplates = pgTable(
+  '_briven_auth_email_templates',
+  {
+    id: id(),
+    name: text('name').notNull(), // 'verification' | 'magic-link' | 'otp' | 'password-reset'
+    subject: text('subject').notNull(),
+    html: text('html').notNull(),
+    text: text('text'),
+    active: boolean('active').notNull().default(true),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    nameUniq: uniqueIndex('_briven_auth_email_templates_name_uniq').on(t.name),
+  }),
+);
+
+export type AuthEmailTemplate = typeof authEmailTemplates.$inferSelect;
+
+/**
+ * Phase 7.1 — Custom JWT signing keys.
+ * Separate from Better Auth's jwks table so we control the key lifecycle
+ * independently. Private key is a JWK string (JSON); encryption at rest
+ * is handled by DoltGres / the storage layer.
+ */
+export const authCustomJwks = pgTable('_briven_auth_custom_jwks', {
+  id: id(),
+  publicKey: text('public_key').notNull(),
+  privateKey: text('private_key').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  expiresAt: ts('expires_at'),
+});
+
+export type AuthCustomJwk = typeof authCustomJwks.$inferSelect;
+
 export const authSchema = {
   user: authUsers,
   session: authSessions,
@@ -736,6 +848,15 @@ export const authSchema = {
   appLog: authAppLogs,
   // Phase 6.6 — Compliance metadata.
   compliance: authCompliance,
+  // Phase 7.1 — JWT Templates.
+  jwtTemplate: authJwtTemplates,
+  customJwks: authCustomJwks,
+  // Phase 7.3 — User usernames.
+  userUsername: authUserUsernames,
+  // Phase 7.4 — Testing tokens.
+  testToken: authTestTokens,
+  // Phase 7.5 — Email templates.
+  emailTemplate: authEmailTemplates,
 } as const;
 
 /** Audit-action vocabulary. Open union — services can emit any string, but the

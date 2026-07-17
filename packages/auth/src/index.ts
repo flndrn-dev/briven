@@ -282,6 +282,17 @@ export interface BrivenAuthClient {
     social(input: SocialInput): { redirectUrl: string };
     /** Exchange a single-use sign-in token for a session. */
     token(token: string): Promise<{ ok: true; expiresAt: string } | { ok: false; code: SignInErrorCode; message: string }>;
+    /**
+     * Sign in with username + password.
+     * Resolves the username to an email internally, then uses the standard
+     * email/password flow.
+     */
+    username(input: { username: string; password: string }): Promise<SignInResult>;
+    /**
+     * Exchange a testing token for a session.
+     * Bypasses bot protection, rate limiting, and MFA.
+     */
+    testToken(token: string): Promise<{ ok: true; expiresAt: string } | { ok: false; code: SignInErrorCode; message: string }>;
   };
   readonly signUp: {
     email(input: SignUpEmailInput): Promise<SignInResult>;
@@ -318,6 +329,25 @@ export interface BrivenAuthClient {
     >;
     /** Remove an additional email address by id. */
     removeEmail(emailId: string): Promise<SimpleResult>;
+    /**
+     * Get a presigned URL to upload an avatar image directly to S3.
+     * After uploading, call updateAvatar with the returned publicUrl.
+     */
+    getAvatarUploadUrl(contentType: string): Promise<
+      | { ok: true; uploadUrl: string; publicUrl: string }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Update the user's avatar image URL. Pass null to remove. */
+    updateAvatar(imageUrl: string | null): Promise<SimpleResult>;
+    /** Set or change the user's username. */
+    setUsername(username: string): Promise<SimpleResult>;
+    /** Get the user's username, or null if not set. */
+    getUsername(): Promise<
+      | { ok: true; username: string | null }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
+    /** Remove the user's username. */
+    removeUsername(): Promise<SimpleResult>;
   };
   readonly organization: {
     create(input: { name: string; slug: string; logo?: string }): Promise<OrgResult<Org>>;
@@ -387,6 +417,16 @@ export interface BrivenAuthClient {
     >;
     /** Stop the current impersonation session. */
     stop(sessionToken: string): Promise<SimpleResult>;
+  };
+  readonly jwt: {
+    /**
+     * Generate a signed JWT for the current session.
+     * Optionally pass a template name to include custom claims.
+     */
+    getToken(input?: { template?: string }): Promise<
+      | { ok: true; token: string; expiresAt: string }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
   };
   signOut(): Promise<{ ok: boolean }>;
   getSession(): Promise<SessionResponse>;
@@ -566,6 +606,29 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
           return { ok: false as const, code: 'network_error' as const, message: 'network error' };
         }
       },
+      async username(input) {
+        try {
+          const body = await post<unknown>('/username/sign-in', input);
+          return asSignInResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async testToken(token) {
+        try {
+          const body = await post<unknown>('/test-token', { token });
+          if (body && typeof body === 'object') {
+            const b = body as { ok?: boolean; expiresAt?: string; code?: string; message?: string };
+            if (b.ok === true && b.expiresAt) {
+              return { ok: true as const, expiresAt: b.expiresAt };
+            }
+            return { ok: false as const, code: knownCode(b.code ?? 'unknown'), message: b.message ?? 'exchange failed' };
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'exchange failed' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
     },
     signUp: {
       async email(input) {
@@ -735,6 +798,72 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       async removeEmail(emailId) {
         try {
           const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}/user/emails/${emailId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: {
+              'x-briven-project-id': opts.projectId,
+              authorization: `Bearer ${opts.publicKey}`,
+            },
+          });
+          const body = (await res.json()) as unknown;
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async getAvatarUploadUrl(contentType) {
+        try {
+          const body = await post<unknown>('/user/avatar/presign', { contentType });
+          if (body && typeof body === 'object') {
+            const b = body as { uploadUrl?: string; publicUrl?: string; code?: string; message?: string };
+            if (typeof b.uploadUrl === 'string' && typeof b.publicUrl === 'string') {
+              return { ok: true as const, uploadUrl: b.uploadUrl, publicUrl: b.publicUrl };
+            }
+            if (b.code) {
+              return { ok: false as const, code: knownCode(b.code), message: b.message ?? 'presign failed' };
+            }
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'presign failed' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
+      async updateAvatar(imageUrl) {
+        try {
+          const body = await post<unknown>('/user/avatar', { imageUrl });
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async setUsername(username) {
+        try {
+          const body = await post<unknown>('/username', { username });
+          return asSimpleResult(body);
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async getUsername() {
+        try {
+          const body = await get<unknown>('/username');
+          if (body && typeof body === 'object') {
+            const b = body as { username?: string | null; code?: string; message?: string };
+            if ('username' in b) {
+              return { ok: true as const, username: b.username ?? null };
+            }
+            if (b.code) {
+              return { ok: false as const, code: knownCode(b.code), message: b.message ?? 'failed' };
+            }
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'failed' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
+      async removeUsername() {
+        try {
+          const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}/username`, {
             method: 'DELETE',
             credentials: 'include',
             headers: {
@@ -1231,6 +1360,25 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
           return asSimpleResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+    },
+    jwt: {
+      async getToken(input = {}) {
+        try {
+          const body = await post<unknown>('/jwt/token', { template: input.template });
+          if (body && typeof body === 'object') {
+            const b = body as { token?: string; expiresAt?: string; code?: string; message?: string };
+            if (typeof b.token === 'string' && typeof b.expiresAt === 'string') {
+              return { ok: true as const, token: b.token, expiresAt: b.expiresAt };
+            }
+            if (b.code) {
+              return { ok: false as const, code: knownCode(b.code), message: b.message ?? 'token generation failed' };
+            }
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'token generation failed' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
         }
       },
     },

@@ -2,6 +2,7 @@ import { env } from '../env.js';
 import { sendTenantEmail } from '../lib/email.js';
 import { log } from '../lib/logger.js';
 import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
+import { getEmailTemplate, renderTemplate, type EmailTemplateName } from './auth-email-templates.js';
 
 /**
  * briven auth per-tenant email pipeline (BUILD_PLAN.md §8).
@@ -256,6 +257,26 @@ async function sendForTenant(label: string, args: TenantSendArgs): Promise<void>
   }
 }
 
+// ─── custom template helper ─────────────────────────────────────────────
+
+async function maybeUseCustomTemplate(
+  projectId: string,
+  name: EmailTemplateName,
+  vars: Record<string, string>,
+  fallback: () => { subject: string; html: string; text: string },
+): Promise<{ subject: string; html: string; text: string }> {
+  const custom = await getEmailTemplate(projectId, name);
+  if (custom) {
+    const rendered = renderTemplate(custom, vars);
+    return {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text ?? fallback().text,
+    };
+  }
+  return fallback();
+}
+
 // ─── Better Auth callback shape ─────────────────────────────────────────
 
 /**
@@ -273,10 +294,12 @@ export async function sendBrivenAuthMagicLink(
     primaryColor: config.branding.primaryColor,
     senderName: config.branding.senderName,
   };
-  const tpl = renderMagicLink(ctx, {
-    url,
-    expiryMinutes: config.providers.magicLink.expiryMinutes,
-  });
+  const tpl = await maybeUseCustomTemplate(
+    projectId,
+    'magic-link',
+    { url, expiryMinutes: String(config.providers.magicLink.expiryMinutes), appName: ctx.senderName },
+    () => renderMagicLink(ctx, { url, expiryMinutes: config.providers.magicLink.expiryMinutes }),
+  );
   await sendForTenant('briven_auth_magic_link', { projectId, to, ...tpl });
 }
 
@@ -290,10 +313,12 @@ export async function sendBrivenAuthOtp(
     primaryColor: config.branding.primaryColor,
     senderName: config.branding.senderName,
   };
-  const tpl = renderOtpCode(ctx, {
-    code,
-    expiryMinutes: config.providers.emailOtp.expiryMinutes,
-  });
+  const tpl = await maybeUseCustomTemplate(
+    projectId,
+    'otp',
+    { code, expiryMinutes: String(config.providers.emailOtp.expiryMinutes), appName: ctx.senderName },
+    () => renderOtpCode(ctx, { code, expiryMinutes: config.providers.emailOtp.expiryMinutes }),
+  );
   await sendForTenant('briven_auth_otp', { projectId, to, ...tpl });
 }
 
@@ -307,7 +332,12 @@ export async function sendBrivenAuthEmailVerification(
     primaryColor: config.branding.primaryColor,
     senderName: config.branding.senderName,
   };
-  const tpl = renderEmailVerify(ctx, { url });
+  const tpl = await maybeUseCustomTemplate(
+    projectId,
+    'verification',
+    { url, appName: ctx.senderName },
+    () => renderEmailVerify(ctx, { url }),
+  );
   await sendForTenant('briven_auth_email_verify', { projectId, to, ...tpl });
 }
 
@@ -321,7 +351,12 @@ export async function sendBrivenAuthPasswordReset(
     primaryColor: config.branding.primaryColor,
     senderName: config.branding.senderName,
   };
-  const tpl = renderPasswordReset(ctx, { url });
+  const tpl = await maybeUseCustomTemplate(
+    projectId,
+    'password-reset',
+    { url, appName: ctx.senderName },
+    () => renderPasswordReset(ctx, { url }),
+  );
   await sendForTenant('briven_auth_password_reset', { projectId, to, ...tpl });
 }
 
