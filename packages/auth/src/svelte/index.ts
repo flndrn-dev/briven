@@ -71,7 +71,7 @@ export function createSessionStore(client?: BrivenAuthClient): SessionStore {
   };
 
   // Auto-fetch on first subscription
-  let unsub = session.subscribe(() => {});
+  const unsub = session.subscribe(() => {});
   refresh().then(() => unsub());
 
   return { session, isLoading, refresh };
@@ -95,7 +95,7 @@ export function createUserStore(client?: BrivenAuthClient): UserStore {
     isLoading.set(false);
   };
 
-  let unsub = user.subscribe(() => {});
+  const unsub = user.subscribe(() => {});
   refresh().then(() => unsub());
 
   return { user, isLoading, refresh };
@@ -125,7 +125,7 @@ export function createUserMetadataStore(client?: BrivenAuthClient): UserMetadata
     if (result.ok) metadata.set(result.publicMetadata);
   };
 
-  let unsub = metadata.subscribe(() => {});
+  const unsub = metadata.subscribe(() => {});
   refresh().then(() => unsub());
 
   return { metadata, isLoading, refresh, set };
@@ -161,7 +161,7 @@ export function createUserEmailsStore(client?: BrivenAuthClient): UserEmailsStor
     if (result.ok) await refresh();
   };
 
-  let unsub = emails.subscribe(() => {});
+  const unsub = emails.subscribe(() => {});
   refresh().then(() => unsub());
 
   return { emails, isLoading, refresh, add, remove };
@@ -191,7 +191,7 @@ export function createActiveOrganizationStore(client?: BrivenAuthClient): Active
     if (result.ok) await refresh();
   };
 
-  let unsub = activeOrg.subscribe(() => {});
+  const unsub = activeOrg.subscribe(() => {});
   refresh().then(() => unsub());
 
   return { activeOrg, isLoading, refresh, setActive };
@@ -232,7 +232,7 @@ export function createSessionsStore(client?: BrivenAuthClient): SessionsStore {
     }
   };
 
-  let unsub = sessions.subscribe(() => {});
+  const unsub = sessions.subscribe(() => {});
   refresh().then(() => unsub());
 
   return { sessions, isLoading, error, refresh, revoke };
@@ -258,7 +258,7 @@ export function createSsoStore(client?: BrivenAuthClient): SsoStore {
     isLoading.set(false);
   };
 
-  let unsub = connections.subscribe(() => {});
+  const unsub = connections.subscribe(() => {});
   refresh().then(() => unsub());
 
   return { connections, isLoading, refresh };

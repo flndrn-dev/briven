@@ -13,8 +13,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Dokploy deploy
+        env:
+          DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
         run: |
-          curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
-            -H "Authorization: Bearer ${{ secrets.DOKPLOY_API_KEY }}" \
+          set -euo pipefail
+
+          if [ -z "${DOKPLOY_WEBHOOK_URL:-}" ]; then
+            echo "::error::DOKPLOY_WEBHOOK_URL secret is empty or missing."
+            echo "GitHub Actions never reached Dokploy — set the secret at:"
+            echo "  https://github.com/flndrn-dev/briven/settings/secrets/actions"
+            echo "Get the webhook URL from Dokploy → your Briven app → Deployments → Webhook."
+            exit 1
+          fi
+
+          if [ -z "${DOKPLOY_API_KEY:-}" ]; then
+            echo "::error::DOKPLOY_API_KEY secret is empty or missing."
+            echo "Set it at: https://github.com/flndrn-dev/briven/settings/secrets/actions"
+            exit 1
+          fi
+
+          echo "Calling Dokploy webhook…"
+          http_code=$(curl -sS -o /tmp/dokploy-response.txt -w "%{http_code}" \
+            -X POST "${DOKPLOY_WEBHOOK_URL}" \
+            -H "Authorization: Bearer ${DOKPLOY_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"buildType":"manual"}' || echo "Deploy triggered (no response = expected)"
+            -d '{"buildType":"manual"}')
+
+          echo "Dokploy HTTP status: ${http_code}"
+          if [ -s /tmp/dokploy-response.txt ]; then
+            echo "Response body:"
+            cat /tmp/dokploy-response.txt
+            echo
+          fi
+
+          case "${http_code}" in
+            200|201|202|204)
+              echo "Deploy trigger accepted by Dokploy."
+              ;;
+            *)
+              echo "::error::Dokploy rejected the deploy trigger (HTTP ${http_code})."
+              exit 1
+              ;;
+          esac
