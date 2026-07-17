@@ -409,6 +409,12 @@ export interface BrivenAuthClient {
     verify(code: string): Promise<SignInResult>;
     disable(password?: string): Promise<SimpleResult>;
     generateBackupCodes(): Promise<{ ok: true; codes: string[] } | { ok: false; code: SignInErrorCode; message: string }>;
+    /**
+     * Sign in using a single-use backup/recovery code when the TOTP device
+     * is lost. Consumes the code on success. This is the account-recovery
+     * path that prevents permanent lockout.
+     */
+    verifyBackupCode(code: string): Promise<SignInResult>;
   };
   readonly passkey: {
     register(): Promise<SimpleResult>;
@@ -1314,6 +1320,14 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
             return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'generate failed' };
           }
           return { ok: false, code: 'unknown', message: 'generate failed' };
+        } catch {
+          return { ok: false, code: 'network_error', message: 'network error' };
+        }
+      },
+      async verifyBackupCode(code) {
+        try {
+          const body = await post<unknown>('/two-factor/verify-backup-code', { code });
+          return asSignInResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }
