@@ -348,6 +348,13 @@ export interface BrivenAuthClient {
     >;
     /** Remove the user's username. */
     removeUsername(): Promise<SimpleResult>;
+    /**
+     * List all linked OAuth / SSO accounts for the current user.
+     */
+    listAccounts(): Promise<
+      | { ok: true; accounts: Array<{ id: string; providerId: string; accountId: string; createdAt: string }> }
+      | { ok: false; code: SignInErrorCode; message: string }
+    >;
   };
   readonly organization: {
     create(input: { name: string; slug: string; logo?: string }): Promise<OrgResult<Org>>;
@@ -395,7 +402,7 @@ export interface BrivenAuthClient {
       | { ok: false; code: SignInErrorCode; message: string }
     >;
     /** Build the SAML/OIDC start URL. Caller redirects the browser to it. */
-    start(connectionId: string, redirectTo?: string): { redirectUrl: string };
+    start(connectionId: string, redirectTo?: string, providerType?: 'saml' | 'oidc'): { redirectUrl: string };
   };
   readonly twoFactor: {
     enable(password?: string): Promise<SimpleResult>;
@@ -877,6 +884,27 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
           return { ok: false, code: 'network_error', message: 'network error' };
         }
       },
+      async listAccounts() {
+        try {
+          const body = await get<unknown>('/user/accounts');
+          if (body && typeof body === 'object') {
+            const b = body as {
+              accounts?: Array<{ id: string; providerId: string; accountId: string; createdAt: string }>;
+              code?: string;
+              message?: string;
+            };
+            if (Array.isArray(b.accounts)) {
+              return { ok: true as const, accounts: b.accounts };
+            }
+            if (b.code) {
+              return { ok: false as const, code: knownCode(b.code), message: b.message ?? 'failed' };
+            }
+          }
+          return { ok: false as const, code: 'unknown' as const, message: 'failed' };
+        } catch {
+          return { ok: false as const, code: 'network_error' as const, message: 'network error' };
+        }
+      },
     },
     organization: {
       async create(input) {
@@ -1245,8 +1273,9 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
           return { ok: false, code: 'network_error', message: 'network error' };
         }
       },
-      start(connectionId, redirectTo) {
-        const u = new URL(`${apiOrigin}${BRIDGE_PREFIX}/sso/saml/${connectionId}`);
+      start(connectionId, redirectTo, providerType = 'saml') {
+        const path = providerType === 'oidc' ? `/sso/oidc/${connectionId}` : `/sso/saml/${connectionId}`;
+        const u = new URL(`${apiOrigin}${BRIDGE_PREFIX}${path}`);
         if (redirectTo) u.searchParams.set('redirectTo', redirectTo);
         return { redirectUrl: u.toString() };
       },

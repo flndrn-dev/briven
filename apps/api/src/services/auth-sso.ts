@@ -500,3 +500,186 @@ export async function findConnectionByEmail(
   if (!domain) return null;
   return findConnectionByDomain(projectId, domain);
 }
+
+// ─── OIDC Enterprise helpers ──────────────────────────────────────────────
+
+function oidcCallbackUrl(connectionId: string): string {
+  return `${env.BRIVEN_API_ORIGIN}/v1/auth-tenant/sso/oidc/${connectionId}/callback`;
+}
+
+function generateOidcState(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+function generateOidcNonce(): string {
+  return randomBytes(16).toString('base64url');
+}
+
+export async function generateOidcAuthUrl(
+  projectId: string,
+  connectionId: string,
+): Promise<{ redirectUrl: string }> {
+  const conn = await getSsoConnection(projectId, connectionId);
+  if (!conn) throw new ValidationError('sso connection not found');
+  if (conn.providerType !== 'oidc') {
+    throw new ValidationError('connection is not an OIDC provider');
+  }
+
+  const oidcConfig = conn.config as OidcEnterpriseConfig;
+  const authorizationUrl =
+    oidcConfig.authorizationUrl ??
+    (oidcConfig.issuer ? `${oidcConfig.issuer}/oauth/authorize` : '');
+  if (!authorizationUrl) {
+    throw new ValidationError('OIDC connection is missing authorization URL');
+  }
+  if (!oidcConfig.clientId) {
+    throw new ValidationError('OIDC connection is missing client ID');
+  }
+
+  const state = generateOidcState();
+  const nonce = generateOidcNonce();
+
+  // Store state+nonce for callback validation.
+  await runInProjectDatabase(projectId, async (tx) => {
+    await tx.unsafe(
+      `INSERT INTO "_briven_auth_oidc_states" (id, state, nonce, connection_id, expires_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [randomBytes(16).toString('hex'), state, nonce, connectionId, new Date(Date.now() + 10 * 60 * 1000)] as never,
+    );
+  });
+
+  const url = new URL(authorizationUrl);
+  url.searchParams.set('client_id', oidcConfig.clientId);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', oidcConfig.scopes ?? 'openid profile email');
+  url.searchParams.set('redirect_uri', oidcCallbackUrl(connectionId));
+  url.searchParams.set('state', state);
+  url.searchParams.set('nonce', nonce);
+
+  if (oidcConfig.pkce !== false) {
+    // PKCE is on by default.
+    const codeChallenge = generateOidcState(); // reuse as code_challenge
+    url.searchParams.set('code_challenge', codeChallenge);
+    url.searchParams.set('code_challenge_method', 'S256');
+  }
+
+  return { redirectUrl: url.toString() };
+}
+
+export interface OidcTokenResponse {
+  email: string;
+  name?: string;
+}
+
+export async function exchangeOidcCode(
+  projectId: string,
+  connectionId: string,
+  code: string,
+  state: string,
+): Promise<OidcTokenResponse> {
+  const conn = await getSsoConnection(projectId, connectionId);
+  if (!conn) throw new ValidationError('sso connection not found');
+  if (conn.providerType !== 'oidc') {
+    throw new ValidationError('connection is not an OIDC provider');
+  }
+
+  // Validate state.
+  const stateRow = await runInProjectDatabase(projectId, async (tx) => {
+    const rows = (await tx.unsafe(
+      `SELECT nonce, connection_id, expires_at FROM "_briven_auth_oidc_states" WHERE state = $1 LIMIT 1`,
+      [state] as never,
+    )) as Array<{ nonce: string; connection_id: string; expires_at: Date }>;
+    if (rows[0]) {
+      // Delete on first use (one-time).
+      await tx.unsafe(
+        `DELETE FROM "_briven_auth_oidc_states" WHERE state = $1`,
+        [state] as never,
+      );
+    }
+    return rows[0] ?? null;
+  });
+
+  if (!stateRow) throw new ValidationError('invalid or expired OIDC state');
+  if (stateRow.connection_id !== connectionId) {
+    throw new ValidationError('OIDC state does not match connection');
+  }
+  if (stateRow.expires_at < new Date()) {
+    throw new ValidationError('OIDC state has expired');
+  }
+
+  const oidcConfig = conn.config as OidcEnterpriseConfig;
+  const tokenUrl =
+    oidcConfig.tokenUrl ??
+    (oidcConfig.issuer ? `${oidcConfig.issuer}/oauth/token` : '');
+  if (!tokenUrl) {
+    throw new ValidationError('OIDC connection is missing token URL');
+  }
+
+  // Get client secret from tenant secret store.
+  const { getTenantSecret } = await import('./tenant-secrets.js');
+  const clientSecret = await getTenantSecret(projectId, 'auth', `oidc_${connectionId}_client_secret`);
+
+  // Exchange code for token.
+  const tokenRes = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: oidcCallbackUrl(connectionId),
+      client_id: oidcConfig.clientId ?? '',
+      ...(clientSecret ? { client_secret: clientSecret } : {}),
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    const body = await tokenRes.text().catch(() => '');
+    throw new ValidationError(`OIDC token exchange failed: ${tokenRes.status} ${body.slice(0, 200)}`);
+  }
+
+  const tokenData = (await tokenRes.json()) as { access_token?: string; id_token?: string };
+  const accessToken = tokenData.access_token;
+  if (!accessToken) {
+    throw new ValidationError('OIDC token response did not contain access_token');
+  }
+
+  // Fetch userinfo.
+  const userinfoUrl =
+    oidcConfig.userinfoUrl ??
+    (oidcConfig.issuer ? `${oidcConfig.issuer}/oauth/userinfo` : '');
+  if (!userinfoUrl) {
+    throw new ValidationError('OIDC connection is missing userinfo URL');
+  }
+
+  const userinfoRes = await fetch(userinfoUrl, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!userinfoRes.ok) {
+    const body = await userinfoRes.text().catch(() => '');
+    throw new ValidationError(`OIDC userinfo fetch failed: ${userinfoRes.status} ${body.slice(0, 200)}`);
+  }
+
+  const userinfo = (await userinfoRes.json()) as {
+    email?: string;
+    name?: string;
+    preferred_username?: string;
+    given_name?: string;
+    family_name?: string;
+  };
+
+  const email = userinfo.email;
+  if (!email || typeof email !== 'string') {
+    throw new ValidationError('OIDC userinfo did not contain an email address');
+  }
+
+  return {
+    email: email.toLowerCase(),
+    name:
+      userinfo.name ??
+      userinfo.preferred_username ??
+      (userinfo.given_name && userinfo.family_name
+        ? `${userinfo.given_name} ${userinfo.family_name}`
+        : undefined),
+  };
+}

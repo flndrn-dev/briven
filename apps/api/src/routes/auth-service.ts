@@ -120,8 +120,10 @@ import {
   createSsoConnection,
   createSsoSession,
   deleteSsoConnection,
+  exchangeOidcCode,
   findConnectionByDomain,
   findOrCreateSsoUser,
+  generateOidcAuthUrl,
   generateSamlAuthnRequest,
   generateSamlMetadata,
   getSsoConnection,
@@ -130,6 +132,7 @@ import {
   updateSsoConnection,
   validateSamlResponse,
 } from '../services/auth-sso.js';
+import { listUserAccounts } from '../services/auth-account-linking.js';
 import {
   addAuthTeamMember,
   findUserByEmail,
@@ -845,6 +848,22 @@ authServiceRouter.get(
       }
       throw err;
     }
+  },
+);
+
+// ─── Account linking (Gap Fix #4) ─────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/users/:userId/accounts',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const accounts = await listUserAccounts(projectId, userId);
+    return c.json({ accounts });
   },
 );
 
@@ -2693,6 +2712,70 @@ authServiceRouter.post('/v1/auth-tenant/sso/saml/:connectionId/acs', async (c) =
   }
 });
 
+// ─── OIDC Enterprise (Gap Fix #3) ─────────────────────────────────────────
+
+authServiceRouter.get('/v1/auth-tenant/sso/oidc/:connectionId', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const connectionId = c.req.param('connectionId');
+
+  try {
+    const { redirectUrl } = await generateOidcAuthUrl(projectId, connectionId);
+    return c.redirect(redirectUrl);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    log.error('oidc_start_failed', {
+      projectId,
+      connectionId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return c.json({ code: 'oidc_start_failed' }, 500);
+  }
+});
+
+authServiceRouter.get('/v1/auth-tenant/sso/oidc/:connectionId/callback', async (c) => {
+  const projectId = resolveTenant(c);
+  if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
+  const connectionId = c.req.param('connectionId');
+  const code = c.req.query('code');
+  const state = c.req.query('state');
+
+  if (!code || !state) {
+    return c.json({ code: 'validation_failed', message: 'code and state are required' }, 400);
+  }
+
+  try {
+    const userinfo = await exchangeOidcCode(projectId, connectionId, code, state);
+    const conn = await getSsoConnection(projectId, connectionId);
+    if (!conn) throw new ValidationError('connection not found');
+
+    const user = await findOrCreateSsoUser(projectId, userinfo.email, userinfo.name, conn.jitEnabled);
+    const { sessionToken, expiresAt } = await createSsoSession(projectId, user.id, connectionId, {
+      userAgent: c.req.header('user-agent') ?? null,
+    });
+
+    const isProduction = env.BRIVEN_ENV === 'production';
+    const cookieValue = `${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=${isProduction ? 'None' : 'Lax'}${isProduction ? '; Secure' : ''}; Expires=${expiresAt.toUTCString()}`;
+    c.header('set-cookie', cookieValue);
+
+    // Redirect to default or RelayState when provided.
+    const relayState = c.req.query('RelayState') || '/';
+    return c.redirect(relayState);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ code: 'validation_failed', message: err.message }, 400);
+    }
+    log.error('oidc_callback_failed', {
+      projectId,
+      connectionId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return c.json({ code: 'oidc_callback_failed' }, 500);
+  }
+});
+
 // ─── Catch-all bridge ─────────────────────────────────────────────────────
 
 // ─── session activity helpers ─────────────────────────────────────────────
@@ -2947,24 +3030,6 @@ async function processTenantRequest(
     }
   }
 
-  // ── session inactivity timeout ──
-  if (config.session.inactivityTimeoutMinutes > 0) {
-    const activity = await checkSessionActivity(
-      projectId,
-      raw.headers.get('cookie') ?? undefined,
-      config.session.inactivityTimeoutMinutes,
-    );
-    if (!activity.active) {
-      return new Response(
-        JSON.stringify({
-          code: 'session_inactive',
-          message: activity.reason ?? 'session expired due to inactivity',
-        }),
-        { status: 401, headers: { 'content-type': 'application/json' } },
-      );
-    }
-  }
-
   // ── callback normalization (existing behavior) ──
   const normalized = normalizeTenantCallbacks(body, raw.headers.get('origin'));
   const headers = new Headers(raw.headers);
@@ -3016,6 +3081,22 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
     const instance = await getAuthInstance(projectId);
     const config = await getAuthConfig(projectId);
 
+    // Session inactivity timeout — checked on EVERY authenticated request,
+    // not just the eligible POSTs inside processTenantRequest.
+    if (config.session.inactivityTimeoutMinutes > 0) {
+      const activity = await checkSessionActivity(
+        projectId,
+        c.req.header('cookie') ?? undefined,
+        config.session.inactivityTimeoutMinutes,
+      );
+      if (!activity.active) {
+        return c.json(
+          { code: 'session_inactive', message: activity.reason ?? 'session expired due to inactivity' },
+          401,
+        );
+      }
+    }
+
     // Security checks + callback rewriting in one pass.
     const processed = await processTenantRequest(c.req.raw, projectId, config, clientIp);
     if (processed instanceof Response) {
@@ -3023,7 +3104,7 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
       return processed;
     }
 
-    const response = await runWithRequestContext({ ip, projectId }, () =>
+    const response = await runWithRequestContext({ ip, projectId, userAgent: c.req.header('user-agent') }, () =>
       instance.betterAuth.handler(processed),
     );
 

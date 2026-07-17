@@ -19,6 +19,8 @@ export interface RequestContext {
   ip: string | null;
   /** The tenant/project the request resolved to, when known. */
   projectId?: string | null;
+  /** User-Agent header for device fingerprinting. */
+  userAgent?: string | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

@@ -29,6 +29,8 @@ import { AUTH_JWKS_TABLE_SQL } from './auth-provisioning.js';
 import { brivenOwnOrigins, originsForProject } from './auth-origin-allowlist.js';
 import { publishEvent, type AuthEventType } from './outbound-webhooks.js';
 import { getTenantSecret } from './tenant-secrets.js';
+import { maybeAutoLinkOAuthAccount } from './auth-account-linking.js';
+import { maybeAlertNewDevice } from './auth-device-tracking.js';
 import {
   computeEnabledProviders,
   getAuthConfig,
@@ -73,6 +75,16 @@ export type BrivenAuthInstance = Awaited<ReturnType<typeof createAuthInstance>>;
 
 let pool: TenantInstancePool<BrivenAuthInstance> | null = null;
 let processSecret: string | null = null;
+
+/**
+ * In-memory map for OAuth auto-linking (Gap Fix #4).
+ * When `user.create.after` detects a duplicate email and moves the
+ * OAuth account to an existing user, it stores the mapping here so
+ * that the subsequent `session.create.before` hook can redirect the
+ * session to the correct (existing) user id.
+ * Entries are consumed (deleted) on first read in session.create.before.
+ */
+const oauthLinkMap = new Map<string, string>();
 
 /**
  * Resolve the Better Auth signing secret. Same fallback chain as the
@@ -243,11 +255,17 @@ export function buildTenantAuthPlugins(
   }
 
   if (p.passkey.enabled) {
+    // Derive rpID from the tenant's custom auth domain when configured,
+    // otherwise fall back to the default hosted domain. This ensures
+    // passkeys work on custom auth domains (e.g. auth.murphus.eu).
+    const rpID =
+      config.customAuthDomain ??
+      (env.BRIVEN_ENV === 'production' ? 'briven.tech' : 'localhost');
     plugins.push(
       passkey({
-        rpID: env.BRIVEN_ENV === 'production' ? 'briven.tech' : 'localhost',
-        rpName: 'Briven Auth',
-        origin: env.BRIVEN_API_ORIGIN,
+        rpID,
+        rpName: config.branding.senderName,
+        origin: hostedAuthBaseUrl(projectId, config),
       }) as unknown as TenantAuthPlugin,
     );
   }
@@ -256,6 +274,9 @@ export function buildTenantAuthPlugins(
     plugins.push(
       twoFactor({
         issuer: config.twoFactor.issuer ?? 'Briven Auth',
+        backupCodeOptions: {
+          amount: 10,
+        },
       }) as unknown as TenantAuthPlugin,
     );
   }
@@ -387,6 +408,15 @@ export function buildAuthDatabaseHooks(
           }
         },
         after: async (user: { id: string; email: string; createdAt?: unknown }) => {
+          // Automatic OAuth account linking — if another user already exists
+          // with the same email, move the OAuth account(s) to that user.
+          const linkResult = await maybeAutoLinkOAuthAccount(projectId, user.id, user.email);
+          if (linkResult) {
+            // Stash the mapping so session.create.before can redirect the
+            // session to the existing user.
+            oauthLinkMap.set(user.id, linkResult.linkedToUserId);
+          }
+
           // Control-plane sign-up geo capture (admin-only SEO analytics).
           // Fire-and-forget: captureSignupGeo swallows all its own errors, so
           // an unawaited promise can never reject or delay the auth response.
@@ -395,7 +425,7 @@ export function buildAuthDatabaseHooks(
           // HTTP request itself.
           void captureSignupGeo({
             projectId,
-            userId: user.id,
+            userId: linkResult?.linkedToUserId ?? user.id,
             email: user.email,
             ip: getRequestContext()?.ip ?? null,
           });
@@ -407,14 +437,14 @@ export function buildAuthDatabaseHooks(
               `INSERT INTO "_briven_auth_user_metadata" (id, user_id, public_metadata, private_metadata, created_at, updated_at)
                VALUES (gen_random_uuid()::text, $1, '{}'::jsonb, '{}'::jsonb, now(), now())
                ON CONFLICT (user_id) DO NOTHING`,
-              [user.id] as never,
+              [linkResult?.linkedToUserId ?? user.id] as never,
             );
           }).catch(() => {
             // Swallow — metadata seeding must never break sign-up.
           });
 
           await dispatch(projectId, 'auth.signup', {
-            userId: user.id,
+            userId: linkResult?.linkedToUserId ?? user.id,
             email: user.email,
             createdAt: isoOrUndefined(user.createdAt),
           });
@@ -444,6 +474,15 @@ export function buildAuthDatabaseHooks(
               );
             }
           }
+
+          // OAuth auto-link redirect: if this session is being created for a
+          // user that was just auto-linked to an existing user, redirect the
+          // session to the existing user id.
+          const linkedUserId = oauthLinkMap.get(session.userId);
+          if (linkedUserId) {
+            session.userId = linkedUserId;
+            oauthLinkMap.delete(session.userId);
+          }
         },
         after: async (session: { id: string; userId: string; createdAt?: unknown }) => {
           // Track session activity for inactivity timeout.
@@ -457,6 +496,22 @@ export function buildAuthDatabaseHooks(
               );
             }).catch(() => {
               // Swallow — activity tracking must never break sign-in.
+            });
+          }
+
+          // Device tracking — alert on new device (fire-and-forget).
+          const ctx = getRequestContext();
+          if (ctx?.userAgent) {
+            void runInProjectDatabase(projectId, async (tx) => {
+              const rows = (await tx.unsafe(
+                `SELECT email FROM "_briven_auth_users" WHERE id = $1 LIMIT 1`,
+                [session.userId] as never,
+              )) as Array<{ email: string }>;
+              if (rows[0]) {
+                await maybeAlertNewDevice(projectId, session.userId, rows[0].email, ctx.userAgent);
+              }
+            }).catch(() => {
+              // Swallow — device tracking must never break sign-in.
             });
           }
 

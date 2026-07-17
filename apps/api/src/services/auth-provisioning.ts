@@ -262,6 +262,20 @@ export function renderAuthProvisioningSql(): string[] {
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_session_activity_session_idx"
        ON "_briven_auth_session_activity" (session_id)`,
 
+    // ─── Device Tracking (Gap Fix #6) ───────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_devices" (
+       id            text        PRIMARY KEY,
+       user_id       text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       fingerprint   text        NOT NULL,
+       user_agent    text,
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_devices_user_fingerprint_uniq"
+       ON "_briven_auth_devices" (user_id, fingerprint)`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_devices_user_idx"
+       ON "_briven_auth_devices" (user_id)`,
+
     // ─── User Metadata (Phase 3) ────────────────────────────────────────────
     `CREATE TABLE IF NOT EXISTS "_briven_auth_user_metadata" (
        id                text        PRIMARY KEY,
@@ -490,6 +504,18 @@ export function renderAuthProvisioningSql(): string[] {
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_email_templates_name_uniq"
        ON "_briven_auth_email_templates" (name)`,
 
+    // ─── OIDC State Store (Gap Fix #3 — OIDC enterprise authorization flow)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_oidc_states" (
+       id            text        PRIMARY KEY,
+       state         text        NOT NULL,
+       nonce         text        NOT NULL,
+       connection_id text        NOT NULL,
+       expires_at    timestamptz NOT NULL,
+       created_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_oidc_states_state_uniq"
+       ON "_briven_auth_oidc_states" (state)`,
+
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -514,6 +540,7 @@ export const AUTH_TABLES = [
   '_briven_auth_user_security',
   '_briven_auth_waitlist',
   '_briven_auth_session_activity',
+  '_briven_auth_devices',
   '_briven_auth_user_metadata',
   '_briven_auth_user_emails',
   '_briven_auth_signin_tokens',
@@ -531,5 +558,6 @@ export const AUTH_TABLES = [
   '_briven_auth_user_usernames',
   '_briven_auth_test_tokens',
   '_briven_auth_email_templates',
+  '_briven_auth_oidc_states',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

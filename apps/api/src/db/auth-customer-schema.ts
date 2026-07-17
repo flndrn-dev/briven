@@ -792,6 +792,52 @@ export const authEmailTemplates = pgTable(
 export type AuthEmailTemplate = typeof authEmailTemplates.$inferSelect;
 
 /**
+ * OIDC state store — short-lived nonce/state pairs for the OIDC enterprise
+ * authorization-code flow.  States expire after 10 minutes and are deleted
+ * after a single use.
+ */
+export const authOidcStates = pgTable(
+  '_briven_auth_oidc_states',
+  {
+    id: id(),
+    state: text('state').notNull(),
+    nonce: text('nonce').notNull(),
+    connectionId: text('connection_id').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    stateUniq: uniqueIndex('_briven_auth_oidc_states_state_uniq').on(t.state),
+  }),
+);
+
+export type AuthOidcState = typeof authOidcStates.$inferSelect;
+
+/**
+ * Device tracking — fingerprint-based new-device detection (Gap Fix #6).
+ * Stores a hashed fingerprint per user + device. No raw IPs (privacy).
+ */
+export const authDevices = pgTable(
+  '_briven_auth_devices',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    fingerprint: text('fingerprint').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userFingerprintUniq: uniqueIndex('_briven_auth_devices_user_fingerprint_uniq').on(t.userId, t.fingerprint),
+    userIdx: index('_briven_auth_devices_user_idx').on(t.userId),
+  }),
+);
+
+export type AuthDevice = typeof authDevices.$inferSelect;
+
+/**
  * Phase 7.1 — Custom JWT signing keys.
  * Separate from Better Auth's jwks table so we control the key lifecycle
  * independently. Private key is a JWK string (JSON); encryption at rest
@@ -828,6 +874,8 @@ export const authSchema = {
   waitlist: authWaitlist,
   // Phase 2 — Session activity tracking.
   sessionActivity: authSessionActivity,
+  // Gap Fix #6 — Device tracking.
+  device: authDevices,
   // Phase 3 — User metadata.
   userMetadata: authUserMetadata,
   // Phase 3 — Multiple emails per user.
@@ -857,6 +905,8 @@ export const authSchema = {
   testToken: authTestTokens,
   // Phase 7.5 — Email templates.
   emailTemplate: authEmailTemplates,
+  // OIDC state store (Gap Fix #3).
+  oidcState: authOidcStates,
 } as const;
 
 /** Audit-action vocabulary. Open union — services can emit any string, but the
