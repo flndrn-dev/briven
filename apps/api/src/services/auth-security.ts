@@ -41,7 +41,16 @@ const BUILT_IN_DISPOSABLE = new Set([
 // ─── email validation helpers ─────────────────────────────────────────────
 
 function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
+  const trimmed = email.trim().toLowerCase();
+  const at = trimmed.lastIndexOf('@');
+  if (at < 0) return trimmed;
+  let local = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  // Gmail normalization: dots are ignored and plus aliases are stripped.
+  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+    local = local.replace(/\./g, '').split('+')[0]!;
+  }
+  return `${local}@${domain}`;
 }
 
 function domainFromEmail(email: string): string {

@@ -853,6 +853,45 @@ export const authCustomJwks = pgTable('_briven_auth_custom_jwks', {
 
 export type AuthCustomJwk = typeof authCustomJwks.$inferSelect;
 
+/**
+ * Phase 8.4 — Password policy per tenant.
+ * One row per project; enforced on sign-up and password change.
+ */
+export const authPasswordPolicy = pgTable('_briven_auth_password_policy', {
+  id: id(),
+  minLength: bigint('min_length', { mode: 'number' }).notNull().default(8),
+  requireUppercase: boolean('require_uppercase').notNull().default(false),
+  requireLowercase: boolean('require_lowercase').notNull().default(false),
+  requireNumber: boolean('require_number').notNull().default(false),
+  requireSpecial: boolean('require_special').notNull().default(false),
+  maxAgeDays: bigint('max_age_days', { mode: 'number' }),
+  preventReuse: bigint('prevent_reuse', { mode: 'number' }).notNull().default(0),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export type AuthPasswordPolicy = typeof authPasswordPolicy.$inferSelect;
+
+/**
+ * Phase 8.4 — Password history per user (for reuse prevention).
+ */
+export const authPasswordHistory = pgTable(
+  '_briven_auth_password_history',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    passwordHash: text('password_hash').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('_briven_auth_password_history_user_idx').on(t.userId),
+  }),
+);
+
+export type AuthPasswordHistory = typeof authPasswordHistory.$inferSelect;
+
 export const authSchema = {
   user: authUsers,
   session: authSessions,
@@ -907,6 +946,9 @@ export const authSchema = {
   emailTemplate: authEmailTemplates,
   // OIDC state store (Gap Fix #3).
   oidcState: authOidcStates,
+  // Gap Fix #13 — Password policy.
+  passwordPolicy: authPasswordPolicy,
+  passwordHistory: authPasswordHistory,
 } as const;
 
 /** Audit-action vocabulary. Open union — services can emit any string, but the

@@ -10,6 +10,8 @@
  * transfers explicitly. Deleting an org cascades to members + invites.
  */
 
+import { promises as dns } from 'node:dns';
+
 import { ValidationError } from '@briven/shared';
 
 import { runInProjectDatabase } from '../db/data-plane.js';
@@ -811,6 +813,51 @@ export async function verifyOrgDomain(
   orgId: string,
   domainId: string,
 ): Promise<OrgDomainOutput> {
+  // Fetch the domain row first so we can inspect the token before updating.
+  const domainRow = await runInProjectDatabase<
+    {
+      id: string;
+      org_id: string;
+      domain: string;
+      verification_token: string;
+      verified_at: Date | null;
+      auto_join_enabled: boolean;
+      created_at: Date;
+    } | null
+  >(projectId, async (tx) => {
+    const rows = (await tx.unsafe(
+      `SELECT id, org_id, domain, verification_token, verified_at, auto_join_enabled, created_at
+       FROM "_briven_auth_org_domains"
+       WHERE id = $1 AND org_id = $2
+       LIMIT 1`,
+      [domainId, orgId],
+    )) as {
+      id: string; org_id: string; domain: string; verification_token: string;
+      verified_at: Date | null; auto_join_enabled: boolean; created_at: Date;
+    }[];
+    return rows[0] ?? null;
+  });
+
+  if (!domainRow) throw new ValidationError('domain not found');
+
+  // DNS TXT challenge validation.
+  let txtRecords: string[][] = [];
+  try {
+    txtRecords = await dns.resolveTxt(domainRow.domain);
+  } catch {
+    // DNS query failed — treat as no records.
+    txtRecords = [];
+  }
+
+  const token = domainRow.verification_token;
+  const found = txtRecords.some((record) => record.some((part) => part.includes(token)));
+  if (!found) {
+    throw new ValidationError(
+      'dns txt record not found. add a txt record with the verification token to your domain dns.',
+    );
+  }
+
+  // Token validated — mark as verified.
   return runInProjectDatabase<OrgDomainOutput>(projectId, async (tx) => {
     const rows = (await tx.unsafe(
       `UPDATE "_briven_auth_org_domains"
@@ -822,8 +869,7 @@ export async function verifyOrgDomain(
       id: string; org_id: string; domain: string; verification_token: string;
       verified_at: Date | null; auto_join_enabled: boolean; created_at: Date;
     }[];
-    const row = rows[0];
-    if (!row) throw new ValidationError('domain not found');
+    const row = rows[0]!;
     return {
       id: row.id,
       orgId: row.org_id,

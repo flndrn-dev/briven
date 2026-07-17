@@ -23,6 +23,7 @@ import {
   createAuthSdkKey,
   isAssignableSdkKeyScope,
   listAuthSdkKeysForProject,
+  resolveAuthSdkKey,
   revokeAuthSdkKey,
 } from '../services/auth-sdk-keys.js';
 import { getProjectUserDetail, listProjectUsers } from '../services/auth-users.js';
@@ -42,6 +43,7 @@ import {
   AppDomainLimitExceeded,
   addOrigin,
   listOrigins,
+  originsForProject,
   removeOrigin,
 } from '../services/auth-origin-allowlist.js';
 import {
@@ -179,6 +181,12 @@ import {
   type EmailTemplateName,
   EMAIL_TEMPLATE_NAMES,
 } from '../services/auth-email-templates.js';
+import {
+  getPasswordPolicy,
+  setPasswordPolicy,
+  validatePassword,
+} from '../services/auth-password-policy.js';
+import { exportUserData } from '../services/auth-gdpr-export.js';
 
 /**
  * briven auth service router (BUILD_PLAN.md §4).
@@ -1270,6 +1278,58 @@ authServiceRouter.post(
   },
 );
 
+/**
+ * Admin revoke a specific user session.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/sessions/:sessionId/revoke',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    const sessionId = c.req.param('sessionId');
+    if (!projectId || !userId || !sessionId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id, :userId, or :sessionId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+
+    await runInProjectDatabase(projectId, async (tx) => {
+      // Verify the session belongs to the specified user before deleting.
+      const rows = (await tx.unsafe(
+        `SELECT id FROM "_briven_auth_sessions" WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        [sessionId, userId] as never,
+      )) as Array<{ id: string }>;
+      if (rows.length === 0) {
+        throw new ValidationError('session not found for this user');
+      }
+      await tx.unsafe(
+        `DELETE FROM "_briven_auth_sessions" WHERE id = $1`,
+        [sessionId] as never,
+      );
+      await tx.unsafe(
+        `DELETE FROM "_briven_auth_session_activity" WHERE session_id = $1`,
+        [sessionId] as never,
+      );
+      await tx.unsafe(
+        `DELETE FROM "_briven_auth_sso_sessions" WHERE session_id = $1`,
+        [sessionId] as never,
+      );
+    });
+
+    await invalidateAuthInstance(projectId);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.session.revoked',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId, sessionId },
+    });
+    return c.json({ ok: true });
+  },
+);
+
 // ─── Phase 6.4 — Bulk Operations ──────────────────────────────────────────
 
 const bulkBanSchema = z.object({
@@ -1599,6 +1659,55 @@ authServiceRouter.delete(
   },
 );
 
+// ─── Password Policy (Gap Fix #13) ────────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/password-policy',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const policy = await getPasswordPolicy(projectId);
+    return c.json({ policy });
+  },
+);
+
+authServiceRouter.put(
+  '/v1/projects/:id/auth/password-policy',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const policy = await setPasswordPolicy(projectId, {
+      minLength: typeof body.minLength === 'number' ? body.minLength : undefined,
+      requireUppercase: typeof body.requireUppercase === 'boolean' ? body.requireUppercase : undefined,
+      requireLowercase: typeof body.requireLowercase === 'boolean' ? body.requireLowercase : undefined,
+      requireNumber: typeof body.requireNumber === 'boolean' ? body.requireNumber : undefined,
+      requireSpecial: typeof body.requireSpecial === 'boolean' ? body.requireSpecial : undefined,
+      maxAgeDays: typeof body.maxAgeDays === 'number' ? body.maxAgeDays : null,
+      preventReuse: typeof body.preventReuse === 'number' ? body.preventReuse : undefined,
+    });
+    return c.json({ policy });
+  },
+);
+
+// ─── GDPR Data Export (Gap Fix #15) ───────────────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/users/:userId/export',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const data = await exportUserData(projectId, userId);
+    return c.json({ data });
+  },
+);
+
 // ─── customer-end-user surface (Better Auth handler bridge) ─────────────
 
 /**
@@ -1638,6 +1747,87 @@ function resolveTenant(c: {
     /* malformed request URL — fall through to unresolved */
   }
   return null;
+}
+
+/**
+ * Validate the SDK key sent as `Authorization: Bearer <publicKey>`.
+ * Returns `null` when the key is valid or when no Authorization header
+ * is present (browser-navigation flows such as email links cannot carry
+ * custom headers). Returns a `Response` when the key is invalid, expired,
+ * mismatched, or has insufficient scope for the HTTP method.
+ */
+async function enforceSdkKeyScope(
+  c: {
+    req: { header: (k: string) => string | undefined; method: string };
+    json: (obj: unknown, status?: number) => Response;
+  },
+  projectId: string,
+): Promise<Response | null> {
+  const authHeader = c.req.header('authorization');
+  if (!authHeader) return null; // Browser flows — no key to validate.
+
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return c.json(
+      { code: 'invalid_auth_header', message: 'Authorization header must be Bearer <token>' },
+      401,
+    );
+  }
+
+  const resolved = await resolveAuthSdkKey(match[1]!);
+  if (!resolved) {
+    return c.json(
+      { code: 'invalid_sdk_key', message: 'SDK key is invalid, revoked, or expired' },
+      401,
+    );
+  }
+
+  if (resolved.projectId !== projectId) {
+    return c.json(
+      { code: 'sdk_key_mismatch', message: 'SDK key does not belong to this project' },
+      403,
+    );
+  }
+
+  const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+  if (resolved.scope === 'read' && !safeMethods.includes(c.req.method.toUpperCase())) {
+    return c.json(
+      { code: 'insufficient_scope', message: 'read key cannot modify state' },
+      403,
+    );
+  }
+
+  return null; // Valid key with sufficient scope.
+}
+
+/**
+ * Validate a SAML/OIDC RelayState (or redirectTo) against a project's
+ * registered app origins. Prevents open-redirect attacks via the IdP
+ * response. Relative paths starting with `/` are always allowed;
+ * absolute URLs must match a registered origin.
+ */
+async function validateRelayState(
+  relayState: string,
+  projectId: string,
+): Promise<string> {
+  if (!relayState || relayState === '/') return '/';
+  // Relative paths are safe.
+  if (relayState.startsWith('/') && !relayState.startsWith('//')) {
+    return relayState;
+  }
+  // Absolute URL — validate origin against registered app origins.
+  try {
+    const url = new URL(relayState);
+    const origin = `${url.protocol}//${url.host}`;
+    const allowed = await originsForProject(projectId);
+    const allAllowed = [...allowed, env.BRIVEN_WEB_ORIGIN, env.BRIVEN_API_ORIGIN].filter(Boolean);
+    if (allAllowed.some((a) => a.toLowerCase() === origin.toLowerCase())) {
+      return relayState;
+    }
+  } catch {
+    // Not a valid URL — fall through to default.
+  }
+  return '/';
 }
 
 /**
@@ -2659,7 +2849,7 @@ authServiceRouter.get('/v1/auth-tenant/sso/saml/:connectionId/metadata', async (
 authServiceRouter.get('/v1/auth-tenant/sso/saml/:connectionId', async (c) => {
   const projectId = resolveTenant(c);
   if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
-  const relayState = c.req.query('redirectTo') ?? '/';
+  const relayState = await validateRelayState(c.req.query('redirectTo') ?? '/', projectId);
   try {
     const { redirectUrl } = await generateSamlAuthnRequest(projectId, c.req.param('connectionId'), relayState);
     return c.redirect(redirectUrl);
@@ -2697,7 +2887,7 @@ authServiceRouter.post('/v1/auth-tenant/sso/saml/:connectionId/acs', async (c) =
     c.header('set-cookie', cookieValue);
 
     // Redirect to the app's callback URL (from RelayState) or default.
-    const relayState = (body.RelayState as string) || '/';
+    const relayState = await validateRelayState((body.RelayState as string) || '/', projectId);
     return c.redirect(relayState);
   } catch (err) {
     if (err instanceof ValidationError) {
@@ -2761,7 +2951,7 @@ authServiceRouter.get('/v1/auth-tenant/sso/oidc/:connectionId/callback', async (
     c.header('set-cookie', cookieValue);
 
     // Redirect to default or RelayState when provided.
-    const relayState = c.req.query('RelayState') || '/';
+    const relayState = await validateRelayState(c.req.query('RelayState') || '/', projectId);
     return c.redirect(relayState);
   } catch (err) {
     if (err instanceof ValidationError) {
@@ -2895,7 +3085,7 @@ async function processTenantRequest(
       path.includes('/send-verification-email'));
 
   if (isAuthPost && config.security.rateLimiting.enabled) {
-    const ipLimit = checkIpRateLimit(projectId, clientIp, {
+    const ipLimit = await checkIpRateLimit(projectId, clientIp, {
       maxAttempts: config.security.rateLimiting.maxAttemptsPerIp,
       windowMinutes: config.security.rateLimiting.windowMinutes,
     });
@@ -2944,7 +3134,7 @@ async function processTenantRequest(
 
   // ── email rate limiting ──
   if (isAuthPost && email && config.security.rateLimiting.enabled) {
-    const emailLimit = checkEmailRateLimit(projectId, email, {
+    const emailLimit = await checkEmailRateLimit(projectId, email, {
       maxAttempts: 5,
       windowMinutes: 15,
     });
@@ -3030,6 +3220,24 @@ async function processTenantRequest(
     }
   }
 
+  // ── password policy enforcement ──
+  const isPasswordChange =
+    path.includes('/sign-up') || path.includes('/reset-password') || path.includes('/change-password');
+  if (isPasswordChange && passwordToCheck) {
+    try {
+      const policy = await getPasswordPolicy(projectId);
+      validatePassword(passwordToCheck, policy);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return new Response(
+          JSON.stringify({ code: 'weak_password', message: err.message }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // Unexpected error — swallow and let Better Auth handle it.
+    }
+  }
+
   // ── callback normalization (existing behavior) ──
   const normalized = normalizeTenantCallbacks(body, raw.headers.get('origin'));
   const headers = new Headers(raw.headers);
@@ -3063,6 +3271,10 @@ authServiceRouter.all('/v1/auth-tenant/*', async (c) => {
       400,
     );
   }
+
+  // Enforce SDK key scope when an Authorization header is present.
+  const keyError = await enforceSdkKeyScope(c, projectId);
+  if (keyError) return keyError;
 
   // Raw visitor IP for the control-plane sign-up geo capture. Better Auth's
   // user.create hook can't read the HTTP request, so we stash the IP in an

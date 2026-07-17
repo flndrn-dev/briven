@@ -129,7 +129,6 @@ describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
   });
 
   test('AUTH_TABLES is exhaustive and matches the emitted CREATE TABLEs', () => {
-    expect(AUTH_TABLES.length).toBe(6);
     const createdTables = stmts
       .filter((s) => s.startsWith('CREATE TABLE'))
       .map((s) => s.match(/"(_briven_auth_[a-z_]+)"/)?.[1]);

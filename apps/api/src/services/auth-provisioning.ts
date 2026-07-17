@@ -516,6 +516,30 @@ export function renderAuthProvisioningSql(): string[] {
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_oidc_states_state_uniq"
        ON "_briven_auth_oidc_states" (state)`,
 
+    // ─── Password Policy (Gap Fix #13 — password complexity & expiration)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_password_policy" (
+       id                text        PRIMARY KEY,
+       min_length        bigint      NOT NULL DEFAULT 8,
+       require_uppercase boolean     NOT NULL DEFAULT false,
+       require_lowercase boolean     NOT NULL DEFAULT false,
+       require_number    boolean     NOT NULL DEFAULT false,
+       require_special   boolean     NOT NULL DEFAULT false,
+       max_age_days      bigint,
+       prevent_reuse     bigint      NOT NULL DEFAULT 0,
+       created_at        timestamptz NOT NULL DEFAULT now(),
+       updated_at        timestamptz NOT NULL DEFAULT now()
+     )`,
+
+    // ─── Password History (Gap Fix #13 — prevent password reuse)
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_password_history" (
+       id            text        PRIMARY KEY,
+       user_id       text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       password_hash text        NOT NULL,
+       created_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS "_briven_auth_password_history_user_idx"
+       ON "_briven_auth_password_history" (user_id)`,
+
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -559,5 +583,7 @@ export const AUTH_TABLES = [
   '_briven_auth_test_tokens',
   '_briven_auth_email_templates',
   '_briven_auth_oidc_states',
+  '_briven_auth_password_policy',
+  '_briven_auth_password_history',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

@@ -53,6 +53,7 @@ import {
   type SsoConnection,
   type SsoProviderType,
   type User,
+  type UserEmail,
 } from '../index.js';
 
 const BrivenAuthContext = createContext<BrivenAuthClient | null>(null);
@@ -157,6 +158,113 @@ export function useUser(): UseUserResult {
   }, [client]);
 
   return { user, isLoading, refresh };
+}
+
+export interface UseUserMetadataResult {
+  metadata: Record<string, unknown> | null;
+  isLoading: boolean;
+  refresh: () => Promise<void>;
+  set: (patch: Record<string, unknown>) => Promise<void>;
+}
+
+/**
+ * Subscribe to the current user's public metadata.
+ * Fetches once on mount; caller can re-fetch via `refresh()`.
+ */
+export function useUserMetadata(): UseUserMetadataResult {
+  const client = useBrivenAuth();
+  const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null);
+  const [isLoading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const result = await client.user.getMetadata();
+    setMetadata(result.ok ? result.publicMetadata : null);
+    setLoading(false);
+  }, [client]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await client.user.getMetadata();
+      if (!cancelled) {
+        setMetadata(result.ok ? result.publicMetadata : null);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  const set = useCallback(
+    async (patch: Record<string, unknown>) => {
+      const result = await client.user.setMetadata(patch);
+      if (result.ok) {
+        setMetadata(result.publicMetadata);
+      }
+    },
+    [client],
+  );
+
+  return { metadata, isLoading, refresh, set };
+}
+
+export interface UseUserEmailsResult {
+  emails: UserEmail[] | null;
+  isLoading: boolean;
+  refresh: () => Promise<void>;
+  add: (email: string) => Promise<void>;
+  remove: (emailId: string) => Promise<void>;
+}
+
+/**
+ * Subscribe to the current user's additional email addresses.
+ * Fetches once on mount; caller can re-fetch via `refresh()`.
+ */
+export function useUserEmails(): UseUserEmailsResult {
+  const client = useBrivenAuth();
+  const [emails, setEmails] = useState<UserEmail[] | null>(null);
+  const [isLoading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const result = await client.user.listEmails();
+    setEmails(result.ok ? result.emails : null);
+    setLoading(false);
+  }, [client]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await client.user.listEmails();
+      if (!cancelled) {
+        setEmails(result.ok ? result.emails : null);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  const add = useCallback(
+    async (email: string) => {
+      const result = await client.user.addEmail(email);
+      if (result.ok) await refresh();
+    },
+    [client, refresh],
+  );
+
+  const remove = useCallback(
+    async (emailId: string) => {
+      const result = await client.user.removeEmail(emailId);
+      if (result.ok) await refresh();
+    },
+    [client, refresh],
+  );
+
+  return { emails, isLoading, refresh, add, remove };
 }
 
 export interface UseActiveOrganizationResult {
@@ -1470,4 +1578,5 @@ export type {
   SsoConnection,
   SsoProviderType,
   User,
+  UserEmail,
 };
