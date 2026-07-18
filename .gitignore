@@ -110,3 +110,7 @@ docs/
 docs/*
 docs/*/*
 specs/
+
+# Local operator secrets — never commit
+memory.md
+.local/

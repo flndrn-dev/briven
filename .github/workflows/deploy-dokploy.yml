@@ -1,9 +1,12 @@
 name: Deploy to Dokploy
 
+# Fires on every push to main (and workflow_dispatch for manual re-run).
+# Dokploy's compose webhook expects a GitHub-style push body with
+# ref: refs/heads/main — {"buildType":"manual"} returns "Branch Not Match".
+
 on:
   push:
     branches:
-      - briven-doltgres-readiness-s0-s1
       - main
   workflow_dispatch: {}
 
@@ -16,14 +19,18 @@ jobs:
         env:
           DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
           DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          GIT_REF: refs/heads/${{ github.ref_name }}
+          REPO_FULL: ${{ github.repository }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
           if [ -z "${DOKPLOY_WEBHOOK_URL:-}" ]; then
             echo "::error::DOKPLOY_WEBHOOK_URL secret is empty or missing."
-            echo "GitHub Actions never reached Dokploy — set the secret at:"
-            echo "  https://github.com/flndrn-dev/briven/settings/secrets/actions"
-            echo "Get the webhook URL from Dokploy → your Briven app → Deployments → Webhook."
+            echo "Set it at: https://github.com/flndrn-dev/briven/settings/secrets/actions"
+            echo "Value: https://admin.loowii.com/api/deploy/compose/<refreshToken>"
             exit 1
           fi
 
@@ -33,12 +40,26 @@ jobs:
             exit 1
           fi
 
-          echo "Calling Dokploy webhook…"
+          # Push-shaped body — required so Dokploy matches compose branch=main.
+          payload=$(printf '%s' "{
+            \"ref\": \"${GIT_REF}\",
+            \"after\": \"${SHA}\",
+            \"repository\": {
+              \"name\": \"${REPO_NAME}\",
+              \"full_name\": \"${REPO_FULL}\",
+              \"default_branch\": \"main\",
+              \"clone_url\": \"https://github.com/${REPO_FULL}.git\",
+              \"owner\": { \"login\": \"${OWNER}\", \"name\": \"${OWNER}\" }
+            }
+          }")
+
+          echo "Calling Dokploy webhook for ${GIT_REF} (${SHA:0:7})…"
           http_code=$(curl -sS -o /tmp/dokploy-response.txt -w "%{http_code}" \
             -X POST "${DOKPLOY_WEBHOOK_URL}" \
             -H "Authorization: Bearer ${DOKPLOY_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"buildType":"manual"}')
+            -H "X-GitHub-Event: push" \
+            -d "${payload}")
 
           echo "Dokploy HTTP status: ${http_code}"
           if [ -s /tmp/dokploy-response.txt ]; then
@@ -53,6 +74,7 @@ jobs:
               ;;
             *)
               echo "::error::Dokploy rejected the deploy trigger (HTTP ${http_code})."
+              echo "If body says Branch Not Match, webhook must send ref: refs/heads/main"
               exit 1
               ;;
           esac
