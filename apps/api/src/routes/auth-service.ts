@@ -1934,8 +1934,8 @@ async function enforceSdkKeyScope(
     );
   }
 
-  const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
-  if (resolved.scope === 'read' && !safeMethods.includes(c.req.method.toUpperCase())) {
+  const { sdkKeyAllowsMethod } = await import('../services/auth-hardening.js');
+  if (!sdkKeyAllowsMethod(resolved.scope, c.req.method)) {
     return c.json(
       { code: 'insufficient_scope', message: 'read key cannot modify state' },
       403,
@@ -1948,31 +1948,18 @@ async function enforceSdkKeyScope(
 /**
  * Validate a SAML/OIDC RelayState (or redirectTo) against a project's
  * registered app origins. Prevents open-redirect attacks via the IdP
- * response. Relative paths starting with `/` are always allowed;
- * absolute URLs must match a registered origin.
+ * response. Pure origin rules live in auth-hardening.sanitizeRelayState.
  */
 async function validateRelayState(
   relayState: string,
   projectId: string,
 ): Promise<string> {
-  if (!relayState || relayState === '/') return '/';
-  // Relative paths are safe.
-  if (relayState.startsWith('/') && !relayState.startsWith('//')) {
-    return relayState;
-  }
-  // Absolute URL — validate origin against registered app origins.
-  try {
-    const url = new URL(relayState);
-    const origin = `${url.protocol}//${url.host}`;
-    const allowed = await originsForProject(projectId);
-    const allAllowed = [...allowed, env.BRIVEN_WEB_ORIGIN, env.BRIVEN_API_ORIGIN].filter(Boolean);
-    if (allAllowed.some((a) => a.toLowerCase() === origin.toLowerCase())) {
-      return relayState;
-    }
-  } catch {
-    // Not a valid URL — fall through to default.
-  }
-  return '/';
+  const { sanitizeRelayState } = await import('../services/auth-hardening.js');
+  const allowed = await originsForProject(projectId);
+  const allAllowed = [...allowed, env.BRIVEN_WEB_ORIGIN, env.BRIVEN_API_ORIGIN].filter(
+    (x): x is string => typeof x === 'string' && x.length > 0,
+  );
+  return sanitizeRelayState(relayState, allAllowed);
 }
 
 /**

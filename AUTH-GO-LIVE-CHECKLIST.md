@@ -129,6 +129,15 @@ This is the real-world check that Redis-backed limits are working.
 
 ---
 
+## 8a. Rate limit on bad logins (optional)
+
+1. From the same IP, attempt many wrong passwords quickly (10–20).
+
+**Pass:** After a burst you get “try again later” / rate limited, not unlimited free guesses.  
+**N/A** if rate limiting is disabled for the project.
+
+---
+
 ## 8b. Password policy (if you tightened rules)
 
 Only if you set **Auth → password policy** (min length / required characters / max age):

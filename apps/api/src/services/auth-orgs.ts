@@ -840,7 +840,8 @@ export async function verifyOrgDomain(
 
   if (!domainRow) throw new ValidationError('domain not found');
 
-  // DNS TXT challenge validation.
+  // DNS TXT challenge validation (Sprint S4).
+  // Prefer `briven-domain-verification=<token>` but still accept raw token.
   let txtRecords: string[][] = [];
   try {
     txtRecords = await dns.resolveTxt(domainRow.domain);
@@ -849,11 +850,14 @@ export async function verifyOrgDomain(
     txtRecords = [];
   }
 
+  const { txtRecordsContainDomainToken, domainVerificationTxt } = await import(
+    './auth-hardening.js'
+  );
   const token = domainRow.verification_token;
-  const found = txtRecords.some((record) => record.some((part) => part.includes(token)));
+  const found = txtRecordsContainDomainToken(txtRecords, token);
   if (!found) {
     throw new ValidationError(
-      'dns txt record not found. add a txt record with the verification token to your domain dns.',
+      `dns txt record not found. add a txt record on ${domainRow.domain} with value "${domainVerificationTxt(token)}" (or the raw verification token).`,
     );
   }
 

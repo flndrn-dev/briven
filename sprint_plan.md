@@ -320,7 +320,7 @@ Reply with **A**, **B**, or **C** (or changes). **No feature coding under this p
 | S1 Never lock out | **Done (code)** | verify-totp path, hosted backup UI, React challenge, tests. Deployed via auto-deploy. |
 | S2 Suspicious access | **Done (code)** | Devices + session list/revoke APIs; fingerprint tests; new-device email path already wired. CI overall green again. |
 | S3 Policy & identity | **Done (code)** | Password complexity/reuse/expiry + force-reset; Gmail-normalized auto-link; admin unlink; tests. |
-| S4 Hardening | Pending | |
+| S4 Hardening | **Done (code)** | Domain TXT helper + tests; RelayState open-redirect sanitize; SDK scope matrix; rate-limit burst tests; OIDC start/callback already live. |
 | S5 DX & agents | Pending | Skill + pilot + checklist already in `05acab3` |
 | S6 Reliability bar | Pending | |
 | S7 Enterprise | Deferred | |
