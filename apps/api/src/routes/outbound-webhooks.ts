@@ -52,8 +52,26 @@ function validationResponse(issues: unknown) {
 outboundWebhooksRouter.get('/v1/projects/:id/outbound-webhooks', async (c) => {
   const user = c.get('user')!;
   const { project } = await assertProjectRole(c.req.param('id'), user.id, 'viewer');
-  const subscribers = await listSubscribers(project.id);
-  return c.json({ subscribers, knownEventTypes: KNOWN_EVENT_TYPES });
+  try {
+    const subscribers = await listSubscribers(project.id);
+    return c.json({ subscribers, knownEventTypes: KNOWN_EVENT_TYPES });
+  } catch (err) {
+    // Missing migration / schema drift must not 500 the Auth → Webhooks page
+    // (and the general webhooks panel). Return empty list + types so the UI
+    // still renders; create can surface a clearer error if the table is gone.
+    const message = err instanceof Error ? err.message : String(err);
+    // Lazy import to avoid circular log deps at module load in tests.
+    const { log } = await import('../lib/logger.js');
+    log.error('outbound_webhooks_list_failed', {
+      projectId: project.id,
+      message,
+    });
+    return c.json({
+      subscribers: [],
+      knownEventTypes: KNOWN_EVENT_TYPES,
+      warning: 'list_failed',
+    });
+  }
 });
 
 outboundWebhooksRouter.post('/v1/projects/:id/outbound-webhooks', async (c) => {

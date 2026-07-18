@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { apiJson } from '../../../../../../../lib/api';
+import { apiJson, ApiError } from '../../../../../../../lib/api';
 
 import { CreateAuthWebhookForm } from './create-auth-webhook-form';
 
@@ -27,9 +27,8 @@ interface AuthStateResponse {
 }
 
 /**
- * The auth event types the panel exposes as toggles. Kept in sync with
- * `apps/api/src/services/outbound-webhooks.ts:AUTH_EVENT_TYPES` — duplicated
- * here as a literal so the dashboard build doesn't import the api package.
+ * Auth event types the panel exposes as toggles. Keep in sync with
+ * `apps/api/src/services/outbound-webhooks.ts:AUTH_EVENT_TYPES`.
  */
 const AUTH_EVENT_TYPES = [
   'auth.signup',
@@ -39,6 +38,12 @@ const AUTH_EVENT_TYPES = [
   'auth.account.linked',
   'auth.account.unlinked',
   'auth.user.deleted',
+  'auth.user.banned',
+  'auth.user.unbanned',
+  'auth.user.suspended',
+  'auth.user.unsuspended',
+  'auth.waitlist.approved',
+  'auth.waitlist.rejected',
 ] as const;
 
 export const metadata = { title: 'auth · webhooks' };
@@ -74,13 +79,27 @@ export default async function AuthWebhooksPage({
     );
   }
 
-  const data = await apiJson<SubscribersResponse>(`/v1/projects/${id}/outbound-webhooks`);
-  // Surface only subscribers that subscribe to at least one auth event (or
-  // `*` which implicitly does). The general project webhooks panel handles
-  // the rest of the event types.
-  const authRelevant = data.subscribers.filter((s) => {
-    if (s.eventTypes === '*') return true;
-    const set = new Set(s.eventTypes.split(',').map((e) => e.trim()));
+  // Match the general project webhooks page: never throw the segment error
+  // boundary if the list call fails (missing table, 403, transient 5xx).
+  let loadError: string | null = null;
+  let data: SubscribersResponse = { subscribers: [], knownEventTypes: [] };
+  try {
+    data = await apiJson<SubscribersResponse>(`/v1/projects/${id}/outbound-webhooks`);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      loadError =
+        err.status === 403
+          ? 'you need at least viewer access to list webhooks'
+          : `could not load webhooks (${err.status}). try again, or open the project webhooks panel.`;
+    } else {
+      loadError = 'could not load webhooks. try again in a moment.';
+    }
+  }
+
+  const authRelevant = (data.subscribers ?? []).filter((s) => {
+    const raw = typeof s.eventTypes === 'string' ? s.eventTypes : '';
+    if (!raw || raw === '*') return raw === '*';
+    const set = new Set(raw.split(',').map((e) => e.trim()).filter(Boolean));
     return AUTH_EVENT_TYPES.some((e) => set.has(e));
   });
 
@@ -98,13 +117,31 @@ export default async function AuthWebhooksPage({
         </p>
       </header>
 
+      {loadError ? (
+        <div className="rounded-md border border-[var(--color-error)]/40 bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
+          <p className="text-[var(--color-error)]">{loadError}</p>
+          <p className="mt-2">
+            you can still manage outbound subscribers in the{' '}
+            <Link
+              href={`/dashboard/projects/${id}/webhooks`}
+              className="underline hover:text-[var(--color-primary)]"
+            >
+              project webhooks panel
+            </Link>
+            .
+          </p>
+        </div>
+      ) : null}
+
       <CreateAuthWebhookForm projectId={id} authEventTypes={AUTH_EVENT_TYPES} />
 
-      {authRelevant.length === 0 ? (
+      {authRelevant.length === 0 && !loadError ? (
         <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center font-mono text-xs text-[var(--color-text-muted)]">
           no auth webhooks yet. configure one above to receive auth events.
         </div>
-      ) : (
+      ) : null}
+
+      {authRelevant.length > 0 ? (
         <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
           <table className="w-full min-w-max font-mono text-xs">
             <thead className="bg-[var(--color-surface)] text-left text-[var(--color-text-muted)]">
@@ -138,7 +175,7 @@ export default async function AuthWebhooksPage({
                       </span>
                     ) : (
                       <span className="flex flex-wrap gap-1">
-                        {s.eventTypes
+                        {(typeof s.eventTypes === 'string' ? s.eventTypes : '')
                           .split(',')
                           .map((e) => e.trim())
                           .filter((e) =>
@@ -184,7 +221,7 @@ export default async function AuthWebhooksPage({
             </tbody>
           </table>
         </div>
-      )}
+      ) : null}
 
       <p className="font-mono text-[11px] text-[var(--color-text-subtle)]">
         edit / rotate secret / disable lives in the general{' '}
@@ -202,13 +239,13 @@ export default async function AuthWebhooksPage({
 
 function relative(iso: string): string {
   const then = Date.parse(iso);
-  if (Number.isNaN(then)) return iso;
+  if (Number.isNaN(then)) return String(iso).slice(0, 10);
   const deltaMs = Date.now() - then;
-  if (deltaMs < 0) return iso.slice(0, 10);
+  if (deltaMs < 0) return String(iso).slice(0, 10);
   if (deltaMs < 60_000) return 'just now';
   if (deltaMs < 60 * 60_000) return `${Math.floor(deltaMs / 60_000)}m ago`;
   if (deltaMs < 24 * 60 * 60_000) return `${Math.floor(deltaMs / (60 * 60_000))}h ago`;
   if (deltaMs < 30 * 24 * 60 * 60_000)
     return `${Math.floor(deltaMs / (24 * 60 * 60_000))}d ago`;
-  return iso.slice(0, 10);
+  return String(iso).slice(0, 10);
 }
