@@ -1,90 +1,35 @@
 name: Deploy to Dokploy
 
-# AUTO-DEPLOY OFF (2026-07-18): push-to-main no longer triggers deploys.
-# The France / Dokploy host was being overloaded by rebuilds on every
-# commit. Deploy only when a human runs this workflow from GitHub Actions.
+# =============================================================================
+# HARD STOP — AUTO-DEPLOY DISABLED (2026-07-18)
+# =============================================================================
+# This workflow is intentionally inert.
+# - No `push` trigger (will not run on git push)
+# - Job is permanently skipped (`if: false`)
+# - Also disabled in GitHub UI: Actions → Deploy to Dokploy → Disable workflow
 #
-# Dokploy's compose webhook still expects a GitHub-style push body with
-# ref: refs/heads/main — {"buildType":"manual"} returns "Branch Not Match".
+# When you WANT a deploy later:
+# 1. Re-enable the workflow in GitHub Actions settings
+# 2. Restore a real job body (see git history for 421ae07 / earlier)
+# 3. Run workflow_dispatch once
+#
+# Do NOT re-add `on: push` without flndrn explicit approval.
+# =============================================================================
 
 on:
   workflow_dispatch:
     inputs:
-      reason:
-        description: 'Why are you deploying? (optional note)'
-        required: false
-        default: 'manual deploy'
+      confirm:
+        description: 'Type DEPLOY to allow a future re-enable of this workflow body'
+        required: true
+        default: ''
 
 jobs:
-  deploy:
-    name: Deploy to dokploy
+  deploy-disabled:
+    name: auto-deploy is OFF
     runs-on: ubuntu-latest
+    # Permanent skip — never calls Dokploy.
+    if: false
     steps:
-      - name: Trigger Dokploy deploy
-        env:
-          DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-          # Always target main — Dokploy branch match is strict.
-          GIT_REF: refs/heads/main
-          REPO_FULL: ${{ github.repository }}
-          REPO_NAME: ${{ github.event.repository.name }}
-          OWNER: ${{ github.repository_owner }}
-          SHA: ${{ github.sha }}
-          REASON: ${{ github.event.inputs.reason }}
-        run: |
-          set -euo pipefail
-
-          echo "Manual deploy requested. Reason: ${REASON:-none}"
-          echo "AUTO push-deploy is disabled — this job only runs via workflow_dispatch."
-
-          if [ -z "${DOKPLOY_WEBHOOK_URL:-}" ]; then
-            echo "::error::DOKPLOY_WEBHOOK_URL secret is empty or missing."
-            echo "Set it at: https://github.com/flndrn-dev/briven/settings/secrets/actions"
-            echo "Value: https://admin.loowii.com/api/deploy/compose/<refreshToken>"
-            exit 1
-          fi
-
-          if [ -z "${DOKPLOY_API_KEY:-}" ]; then
-            echo "::error::DOKPLOY_API_KEY secret is empty or missing."
-            echo "Set it at: https://github.com/flndrn-dev/briven/settings/secrets/actions"
-            exit 1
-          fi
-
-          # Push-shaped body — required so Dokploy matches compose branch=main.
-          payload=$(printf '%s' "{
-            \"ref\": \"${GIT_REF}\",
-            \"after\": \"${SHA}\",
-            \"repository\": {
-              \"name\": \"${REPO_NAME}\",
-              \"full_name\": \"${REPO_FULL}\",
-              \"default_branch\": \"main\",
-              \"clone_url\": \"https://github.com/${REPO_FULL}.git\",
-              \"owner\": { \"login\": \"${OWNER}\", \"name\": \"${OWNER}\" }
-            }
-          }")
-
-          echo "Calling Dokploy webhook for ${GIT_REF} (${SHA:0:7})…"
-          http_code=$(curl -sS -o /tmp/dokploy-response.txt -w "%{http_code}" \
-            -X POST "${DOKPLOY_WEBHOOK_URL}" \
-            -H "Authorization: Bearer ${DOKPLOY_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -H "X-GitHub-Event: push" \
-            -d "${payload}")
-
-          echo "Dokploy HTTP status: ${http_code}"
-          if [ -s /tmp/dokploy-response.txt ]; then
-            echo "Response body:"
-            cat /tmp/dokploy-response.txt
-            echo
-          fi
-
-          case "${http_code}" in
-            200|201|202|204)
-              echo "Deploy trigger accepted by Dokploy."
-              ;;
-            *)
-              echo "::error::Dokploy rejected the deploy trigger (HTTP ${http_code})."
-              echo "If body says Branch Not Match, webhook must send ref: refs/heads/main"
-              exit 1
-              ;;
-          esac
+      - name: noop
+        run: echo "This job never runs. Auto-deploy is fully disabled."
