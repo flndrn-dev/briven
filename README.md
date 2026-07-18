@@ -21,6 +21,19 @@ briven deploy                         # or: briven dev
 Interactive: `briven setup` (pick new vs existing). Attach existing: `briven setup --project p_…`.  
 Docs: [connect](https://docs.briven.tech/connect) · [quickstart](https://docs.briven.tech/quickstart)
 
+### remotes (maintainers)
+
+- **GitHub** (auto-deploy on `main`): `https://github.com/flndrn-dev/briven.git`
+- **Konnos** (mirror): `https://code.konnos.org/flndrn/briven.git`
+
+One push to both (this machine is already configured; re-apply anywhere with):
+
+```bash
+./scripts/git-push-both.sh setup   # once per clone
+git push origin main               # updates GitHub + Konnos; GitHub kicks Dokploy
+# or: ./scripts/git-push-both.sh main
+```
+
 ## status
 
 phase 1 closing — runtime + realtime + studio + dashboard + cli all live on briven.tech. observability stack + nightly backups + automated deploys via konnos all running. private until the phase 3 dogfood window clears (oct 2026).
