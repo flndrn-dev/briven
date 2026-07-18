@@ -13,15 +13,22 @@ import type { MemberRole } from '../db/schema.js';
 import type { Session, User } from './session.js';
 
 /**
- * Authorise a request scoped to `/v1/projects/:id/...` either by:
+ * Authorise a request scoped to a project id path param either by:
  *   1. A valid session whose user has access to the project (via either an
  *      `orgMembers` row for the project's org, OR a direct `projectMembers`
  *      row), OR
- *   2. An `Authorization: Bearer brk_...` header whose key matches `:id`, OR
+ *   2. An `Authorization: Bearer brk_...` header whose key matches the
+ *      project id, OR
  *   3. An `Authorization: Bearer <jwt>` minted by `/v1/auth/cli-token`
  *      (scope=cli), resolved against the same project-access lookup as the
  *      cookie/session branch — so the CLI wizard and dashboard see the same
  *      effective role on the same project.
+ *
+ * `paramName` defaults to "id" (v1/projects/{id}/...). Pass "ref" for the
+ * Supabase-compat platform/{ref}/... surface. Hono only resolves params for
+ * the matched route, so platform routes must mount this middleware per-route
+ * with "ref" (a wildcard /platform/* use() never sees the ref param and used
+ * to 403 every request with "missing project id").
  *
  * On success this middleware populates:
  *   - `c.var.apiKeyId` — non-null when authed via API key, null for session
@@ -34,67 +41,69 @@ import type { Session, User } from './session.js';
  * Routes that need stricter gating chain `requireProjectRole(min)` after
  * this middleware.
  */
-export const requireProjectAuth = (): MiddlewareHandler => async (c, next) => {
-  const projectId = c.req.param('id');
-  if (!projectId) throw new ForbiddenError('missing project id');
+export const requireProjectAuth =
+  (paramName: string = 'id'): MiddlewareHandler =>
+  async (c, next) => {
+    const projectId = c.req.param(paramName);
+    if (!projectId) throw new ForbiddenError('missing project id');
 
-  const user = c.get('user') as User | null;
-  if (user) {
-    const access = await getProjectAccessForUser(projectId, user.id);
-    c.set('apiKeyId', null);
-    c.set('projectRole', access.role);
-    await next();
-    return;
-  }
-
-  const auth = c.req.header('authorization');
-  const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
-  if (!token) {
-    throw new UnauthorizedError();
-  }
-
-  // CLI JWT branch — accept scope=cli tokens minted by /v1/auth/cli-token.
-  // The token's `sub` identifies the user; we then resolve project access
-  // the same way the cookie/session branch does (getProjectAccessForUser),
-  // so both paths populate `projectRole` identically.
-  if (!token.startsWith('brk_')) {
-    let userRow: User | null = null;
-    try {
-      const payload = await verifyCliToken(token);
-      const [row] = await getDb()
-        .select({ id: usersTable.id, email: usersTable.email, name: usersTable.name })
-        .from(usersTable)
-        .where(eq(usersTable.id, payload.sub))
-        .limit(1);
-      if (!row) {
-        return c.json({ code: 'unauthorized', message: 'cli token user not found' }, 401);
-      }
-      userRow = row as unknown as User;
-    } catch (err) {
-      log.warn('project_auth_cli_jwt_rejected', {
-        err: err instanceof Error ? err.message : String(err),
-      });
-      return c.json({ code: 'unauthorized', message: 'invalid cli token' }, 401);
+    const user = c.get('user') as User | null;
+    if (user) {
+      const access = await getProjectAccessForUser(projectId, user.id);
+      c.set('apiKeyId', null);
+      c.set('projectRole', access.role);
+      await next();
+      return;
     }
-    c.set('user', userRow);
-    const access = await getProjectAccessForUser(projectId, userRow.id);
-    c.set('apiKeyId', null);
-    c.set('projectRole', access.role);
+
+    const auth = c.req.header('authorization');
+    const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
+    if (!token) {
+      throw new UnauthorizedError();
+    }
+
+    // CLI JWT branch — accept scope=cli tokens minted by /v1/auth/cli-token.
+    // The token's `sub` identifies the user; we then resolve project access
+    // the same way the cookie/session branch does (getProjectAccessForUser),
+    // so both paths populate `projectRole` identically.
+    if (!token.startsWith('brk_')) {
+      let userRow: User | null = null;
+      try {
+        const payload = await verifyCliToken(token);
+        const [row] = await getDb()
+          .select({ id: usersTable.id, email: usersTable.email, name: usersTable.name })
+          .from(usersTable)
+          .where(eq(usersTable.id, payload.sub))
+          .limit(1);
+        if (!row) {
+          return c.json({ code: 'unauthorized', message: 'cli token user not found' }, 401);
+        }
+        userRow = row as unknown as User;
+      } catch (err) {
+        log.warn('project_auth_cli_jwt_rejected', {
+          err: err instanceof Error ? err.message : String(err),
+        });
+        return c.json({ code: 'unauthorized', message: 'invalid cli token' }, 401);
+      }
+      c.set('user', userRow);
+      const access = await getProjectAccessForUser(projectId, userRow.id);
+      c.set('apiKeyId', null);
+      c.set('projectRole', access.role);
+      await next();
+      return;
+    }
+
+    const resolved = await resolveApiKey(token);
+    if (!resolved) throw new UnauthorizedError('invalid or revoked api key');
+    if (resolved.projectId !== projectId) {
+      throw new ForbiddenError('api key does not belong to this project');
+    }
+
+    c.set('apiKeyId', resolved.keyId);
+    c.set('projectRole', resolved.role);
     await next();
     return;
-  }
-
-  const resolved = await resolveApiKey(token);
-  if (!resolved) throw new UnauthorizedError('invalid or revoked api key');
-  if (resolved.projectId !== projectId) {
-    throw new ForbiddenError('api key does not belong to this project');
-  }
-
-  c.set('apiKeyId', resolved.keyId);
-  c.set('projectRole', resolved.role);
-  await next();
-  return;
-};
+  };
 
 /**
  * Gate a route on a minimum `MemberRole`. Must follow `requireProjectAuth`

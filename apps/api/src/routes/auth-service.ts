@@ -24,6 +24,7 @@ import {
   isAssignableSdkKeyScope,
   listAuthSdkKeysForProject,
   resolveAuthSdkKey,
+  revealAuthSdkKey,
   revokeAuthSdkKey,
 } from '../services/auth-sdk-keys.js';
 import { getProjectUserDetail, listProjectUsers } from '../services/auth-users.js';
@@ -1165,6 +1166,45 @@ authServiceRouter.delete(
     } catch (err) {
       if ((err as { code?: string }).code === 'not_found') {
         return c.json({ code: 'not_found' }, 404);
+      }
+      throw err;
+    }
+  },
+);
+
+/**
+ * SDK keys — reveal (copy again). Decrypts the AES-GCM ciphertext stored at
+ * create time and returns the plaintext once more. Always writes an audit
+ * row on success. Revoked / pre-0039 keys return 404 key_not_revealable.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/api-keys/:keyId/reveal',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const keyId = c.req.param('keyId');
+    if (!projectId || !keyId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :keyId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) {
+      return c.json({ code: 'unauthorized' }, 401);
+    }
+    try {
+      const revealed = await revealAuthSdkKey(projectId, keyId);
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'briven_auth.api_key.revealed',
+        ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { keyId },
+      });
+      return c.json({ plaintext: revealed.plaintext });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === 'not_found' || code === 'key_not_revealable') {
+        return c.json({ code: code ?? 'not_found' }, 404);
       }
       throw err;
     }

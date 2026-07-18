@@ -7,7 +7,8 @@ each subdirectory is a self-contained briven project you can copy as a starting 
 | [counter](./counter) | the smallest possible briven app: one row, two functions, reactive query end-to-end |
 | [todo-app](./todo-app) | the canonical hello-world: schema, four mutations + one reactive query, the react client |
 | [realtime-chat](./realtime-chat) | two-table schema + per-room reactive queries — a multi-room chat in ~80 lines |
-| (more on the way — file-uploads, oauth-protected api) | |
+| [auth-pilot](./auth-pilot) | smallest Briven Auth wiring: middleware proxy, `@briven/auth` client, hosted sign-in button |
+| (more on the way — file-uploads) | |
 
 ## use one of these
 

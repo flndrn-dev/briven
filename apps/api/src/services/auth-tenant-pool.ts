@@ -33,6 +33,7 @@ import { maybeAutoLinkOAuthAccount } from './auth-account-linking.js';
 import { maybeAlertNewDevice } from './auth-device-tracking.js';
 import {
   computeEnabledProviders,
+  DEFAULT_AUTH_CONFIG,
   getAuthConfig,
   type AuthConfig,
 } from './tenant-config-store.js';
@@ -300,7 +301,7 @@ export function buildTenantAuthPlugins(
 export function assembleTenantPlugins(
   passwordlessPlugins: TenantAuthPlugin[],
   genericOAuthConfigs: ReturnType<typeof buildGenericOAuthConfigs>,
-  config: AuthConfig,
+  config: AuthConfig = DEFAULT_AUTH_CONFIG,
 ): TenantAuthPlugin[] {
   const jwtClaims = config.jwtClaims ?? {};
   return [
@@ -388,7 +389,7 @@ async function userHasMfaEnrolled(projectId: string, userId: string): Promise<bo
 export function buildAuthDatabaseHooks(
   projectId: string,
   dispatch: AuthEventDispatcher,
-  config: AuthConfig,
+  config: AuthConfig = DEFAULT_AUTH_CONFIG,
 ) {
   return {
     user: {
@@ -410,7 +411,17 @@ export function buildAuthDatabaseHooks(
         after: async (user: { id: string; email: string; createdAt?: unknown }) => {
           // Automatic OAuth account linking — if another user already exists
           // with the same email, move the OAuth account(s) to that user.
-          const linkResult = await maybeAutoLinkOAuthAccount(projectId, user.id, user.email);
+          // Must never break sign-up if the data plane is unavailable.
+          let linkResult: { linkedToUserId: string } | null = null;
+          try {
+            linkResult = await maybeAutoLinkOAuthAccount(projectId, user.id, user.email);
+          } catch (err) {
+            log.warn('briven_auth_oauth_auto_link_failed', {
+              projectId,
+              userId: user.id,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
           if (linkResult) {
             // Stash the mapping so session.create.before can redirect the
             // session to the existing user.

@@ -20,6 +20,7 @@ export default function AuthPage() {
 
       <nav className="mt-6 flex flex-wrap gap-2 font-mono text-xs">
         {[
+          ['setup (10 min)', '#setup'],
           ['install', '#install'],
           ['get your keys', '#keys'],
           ['create the client', '#client'],
@@ -28,6 +29,7 @@ export default function AuthPage() {
           ['email sender domain', '#sender-domain'],
           ['verify users with tokens', '#verify-tokens'],
           ['security', '#security'],
+          ['agents', '#agents'],
         ].map(([label, href]) => (
           <a
             key={href}
@@ -38,6 +40,60 @@ export default function AuthPage() {
           </a>
         ))}
       </nav>
+
+      {/* setup --------------------------------------------------------- */}
+      <section id="setup" className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8">
+        <h2 className="font-mono text-lg tracking-tight">setup in 10 minutes</h2>
+        <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+          the shortest path from zero to a working sign-in. for a browser-only
+          sign-off after this, use the plain-language checklist in the briven
+          repo: <code>AUTH-GO-LIVE-CHECKLIST.md</code>.
+        </p>
+        <ol className="mt-3 list-inside list-decimal font-mono text-sm text-[var(--color-text-muted)] space-y-2">
+          <li>
+            open your project at{' '}
+            <a className="underline" href="https://briven.tech">
+              briven.tech
+            </a>{' '}
+            → <em>Auth</em> → enable auth if it is not already on.
+          </li>
+          <li>
+            <em>Auth → API keys</em> → create a key → copy{' '}
+            <code>pk_briven_auth_…</code> (browser-safe). never put a{' '}
+            <code>brk_…</code> key in the browser.
+          </li>
+          <li>
+            in your app folder (with <code>briven.json</code> from{' '}
+            <code>briven link</code>):
+            <Snippet>{`briven auth scaffold
+pnpm add @briven/auth`}</Snippet>
+            that writes <code>middleware.ts</code>, <code>lib/auth.ts</code>, and a
+            seeded <code>.env.local</code> if missing.
+          </li>
+          <li>
+            paste the public key into <code>NEXT_PUBLIC_BRIVEN_AUTH_KEY</code> (and
+            the same value into <code>BRIVEN_AUTH_PUBLIC_KEY</code> for middleware).
+          </li>
+          <li>
+            send users to the hosted page or drop in the panel:
+            <Snippet>{`// hosted (fastest pilot)
+window.location.assign(auth.hostedPageURL('sign-in', '/dashboard'));
+
+// or embedded React panel
+import { BrivenSignIn } from '@briven/auth/react';
+// <BrivenSignIn redirectTo="/dashboard" />`}</Snippet>
+          </li>
+          <li>
+            prove it in a real browser: sign up, sign out, sign in, refresh still
+            signed in. optional: wrong-password rejection + rate limit after many
+            failures (production needs redis — <code>/ready</code> must show{' '}
+            <code>redis: ok</code>).
+          </li>
+        </ol>
+        <p className="mt-3 font-mono text-xs text-[var(--color-text-subtle)]">
+          starter copy: <code>examples/auth-pilot/</code> in the briven monorepo.
+        </p>
+      </section>
 
       {/* install ------------------------------------------------------- */}
       <section id="install" className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8">
@@ -427,6 +483,34 @@ const { payload } = await jwtVerify(token, jwks);
           <code>https://api.briven.tech/v1/auth-tenant/*</code>. the service resolves your
           tenant from the header and routes the request. the SDK adds these headers for you.
         </section>
+      </section>
+
+      {/* agents -------------------------------------------------------- */}
+      <section id="agents" className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8">
+        <h2 className="font-mono text-lg tracking-tight">for AI agents</h2>
+        <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+          when an agent wires auth, it should follow the <code>briven-auth</code>{' '}
+          skill (not invent OAuth). trusted order: link project →{' '}
+          <code>briven auth scaffold</code> → install <code>@briven/auth</code> →
+          human pastes <code>pk_briven_auth_…</code> → hosted page or{' '}
+          <code>BrivenSignIn</code> → human runs the go-live checklist.
+        </p>
+        <ul className="mt-3 list-inside list-disc font-mono text-sm text-[var(--color-text-muted)] space-y-2">
+          <li>
+            MCP helpers are <strong>read-only</strong> today:{' '}
+            <code>auth_config_get</code>, <code>sender_domain_status</code>,{' '}
+            <code>auth_docs_ask</code>. they explain; they do not mint keys or
+            write provider secrets.
+          </li>
+          <li>
+            never put secrets in git or chat. never use <code>brk_</code> in{' '}
+            <code>NEXT_PUBLIC_*</code>.
+          </li>
+          <li>
+            sessions are cookies — prefer <code>getSession()</code> /{' '}
+            <code>useSession()</code>, not home-rolled localStorage tokens.
+          </li>
+        </ul>
       </section>
 
       <h2 className="mt-12 font-mono text-lg">what to read next</h2>

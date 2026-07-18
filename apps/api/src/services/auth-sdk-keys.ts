@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { newId, NotFoundError, ValidationError } from '@briven/shared';
+import { brivenError, newId, NotFoundError, ValidationError } from '@briven/shared';
 import { and, desc, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
@@ -10,6 +10,7 @@ import {
   type BrivenAuthSdkKey,
   type BrivenAuthSdkKeyScope,
 } from '../db/schema.js';
+import { decryptValue, encryptValue } from './project-env.js';
 
 /**
  * SDK keys for briven auth — issued from the dashboard's Auth → API Keys
@@ -21,8 +22,10 @@ import {
  *   - separate table (`briven_auth_sdk_keys`) so the deploy-key admin path
  *     and the SDK-key admin path don't share authorisation logic
  *
- * Plaintext is returned exactly once on creation. Storage is sha-256 hex
- * digest only — leaking the dump leaks zero usable keys.
+ * Plaintext is returned on creation and can be revealed later via the audited
+ * copy-again path (AES-256-GCM `encrypted_key`, migration 0039). Auth
+ * verification always uses the sha-256 `hash` only — leaking the dump without
+ * the KEK still leaks zero usable keys for sign-in.
  */
 
 const KEY_PREFIX = 'pk_briven_auth_';
@@ -63,6 +66,9 @@ export async function createAuthSdkKey(input: {
   const plaintext = `${KEY_PREFIX}${random}`;
   const hash = createHash('sha256').update(plaintext).digest('hex');
   const suffix = plaintext.slice(-4);
+  // Encrypt-at-rest for the audited "copy again" path. Hash remains the sole
+  // verification mechanism; ciphertext is never used for auth.
+  const encryptedKey = encryptValue(plaintext);
 
   const db = getDb();
   const [record] = await db
@@ -73,6 +79,7 @@ export async function createAuthSdkKey(input: {
       createdBy: input.createdBy,
       name,
       hash,
+      encryptedKey,
       prefix: KEY_PREFIX,
       suffix,
       scope,
@@ -129,6 +136,27 @@ export async function revokeAuthSdkKey(projectId: string, keyId: string): Promis
     .update(brivenAuthSdkKeys)
     .set({ revokedAt: new Date() })
     .where(eq(brivenAuthSdkKeys.id, keyId));
+}
+
+/**
+ * Decrypt a stored SDK key for the audited "copy again" dashboard action.
+ * Refuses revoked keys and pre-0039 rows with no ciphertext.
+ */
+export async function revealAuthSdkKey(
+  projectId: string,
+  keyId: string,
+): Promise<{ plaintext: string }> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(brivenAuthSdkKeys)
+    .where(and(eq(brivenAuthSdkKeys.id, keyId), eq(brivenAuthSdkKeys.projectId, projectId)))
+    .limit(1);
+  if (!row) throw new NotFoundError('briven_auth_sdk_key', keyId);
+  if (row.revokedAt || !row.encryptedKey) {
+    throw new brivenError('key_not_revealable', 'key cannot be revealed', { status: 404 });
+  }
+  return { plaintext: decryptValue(row.encryptedKey) };
 }
 
 /**

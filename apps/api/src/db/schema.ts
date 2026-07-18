@@ -1376,6 +1376,11 @@ export const brivenAuthSdkKeys = pgTable(
     name: text('name').notNull(),
     // sha-256 hex digest of the plaintext token. Never the plaintext itself.
     hash: text('hash').notNull(),
+    // AES-256-GCM ciphertext of the plaintext (migration 0039), encrypted with
+    // BRIVEN_ENCRYPTION_KEY. Used only for the audited "copy again" reveal
+    // path. NULL for pre-0039 keys (those can never be revealed — rotate).
+    // Auth verification always uses `hash`, never this column.
+    encryptedKey: text('encrypted_key'),
     // Plaintext prefix — currently always `pk_briven_auth_`. Stored so we
     // can render `<prefix>•••<suffix>` for the dashboard hint without
     // baking the constant into UI code.

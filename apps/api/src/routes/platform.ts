@@ -29,8 +29,10 @@ import { log } from "../lib/logger.js";
  *   /platform/rest/v1/{ref}/{table}
  *
  * These routes map the Supabase-style paths to briven's internal
- * studio service. Auth is enforced via requireProjectAuth + requireProjectRole
- * (same middleware as the /v1/projects/:id/studio/* routes).
+ * studio service. Auth is enforced via requireProjectAuth('ref') +
+ * requireProjectRole per route (NOT a wildcard .use) — Hono only resolves
+ * `:ref` on the matched route, so a `/platform/*` middleware never saw the
+ * project id and used to 403 every request.
  *
  * Unknown /platform/* paths return 404 with a logged warning so we can add
  * mappings as needed.
@@ -38,15 +40,18 @@ import { log } from "../lib/logger.js";
 
 const platformRouter = new Hono<AppEnv>();
 
-// Auth for all platform routes — session cookie from .briven.tech
-platformRouter.use("/platform/*", requireProjectAuth());
+/** Shared gate for every :ref route: resolve project + admin role. */
+const platformRefAuth = [
+  requireProjectAuth("ref"),
+  projectRateLimit("mutate"),
+  requireProjectRole("admin"),
+] as const;
 
 // ── pg-meta (schema introspection) ──────────────────────────────────────
 
 platformRouter.get(
   "/platform/pg-meta/:ref/tables",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const tables = await listProjectTables(c.req.param("ref"));
     return c.json(tables);
@@ -55,8 +60,7 @@ platformRouter.get(
 
 platformRouter.get(
   "/platform/pg-meta/:ref/schemas",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const schema = await getFullSchema(c.req.param("ref"));
     return c.json(schema);
@@ -65,8 +69,7 @@ platformRouter.get(
 
 platformRouter.get(
   "/platform/pg-meta/:ref/foreign-tables",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     // Return relationships as foreign-table info
     const rels = await listRelationships(c.req.param("ref"));
@@ -76,8 +79,7 @@ platformRouter.get(
 
 platformRouter.post(
   "/platform/pg-meta/:ref/query",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const body = (await c.req.json().catch(() => null)) as { sql?: string } | null;
@@ -107,8 +109,7 @@ platformRouter.post(
 
 platformRouter.get(
   "/platform/pg-meta/:ref/columns",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.query("table");
@@ -124,8 +125,7 @@ platformRouter.get(
 
 platformRouter.get(
   "/platform/rest/v1/:ref/:table",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
@@ -138,8 +138,7 @@ platformRouter.get(
 
 platformRouter.post(
   "/platform/rest/v1/:ref/:table",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
@@ -151,8 +150,7 @@ platformRouter.post(
 
 platformRouter.patch(
   "/platform/rest/v1/:ref/:table",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
@@ -170,8 +168,7 @@ platformRouter.patch(
 
 platformRouter.delete(
   "/platform/rest/v1/:ref/:table",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("table");
@@ -188,8 +185,7 @@ platformRouter.delete(
 
 platformRouter.post(
   "/platform/pg-meta/:ref/tables",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const body = await c.req.json<{ name: string; schema?: string; comment?: string; columns?: StudioColumnSpec[] }>();
@@ -209,8 +205,7 @@ platformRouter.post(
 
 platformRouter.delete(
   "/platform/pg-meta/:ref/tables/:id",
-  projectRateLimit("mutate"),
-  requireProjectRole("admin"),
+  ...platformRefAuth,
   async (c) => {
     const projectId = c.req.param("ref");
     const tableName = c.req.param("id");

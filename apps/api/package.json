@@ -18,14 +18,14 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@better-auth/passkey": "^1.6.9",
+    "@better-auth/passkey": "^1.6.23",
     "@briven/config": "workspace:*",
     "@briven/schema": "workspace:^",
     "@briven/shared": "workspace:*",
     "@hono/mcp": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@node-saml/node-saml": "^5.1.0",
-    "better-auth": "^1.6.9",
+    "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.14",
     "ioredis": "^5.10.1",

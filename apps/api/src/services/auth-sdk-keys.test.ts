@@ -110,12 +110,15 @@ mock.module('../middleware/project-auth.js', () => ({
     () =>
     async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
       c.set('user', { id: 'u_test' });
+      // requireAuthTeamAdmin() short-circuits when projectRole ≥ admin.
+      c.set('projectRole', 'admin');
       await next();
     },
   requireProjectRole:
     () =>
     async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
       c.set('user', { id: 'u_test' });
+      c.set('projectRole', 'admin');
       await next();
     },
 }));
