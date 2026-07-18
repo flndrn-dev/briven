@@ -18,6 +18,7 @@ const GROUPS: readonly NavGroup[] = [
     items: [
       { href: '/', label: 'overview' },
       { href: '/quickstart', label: 'quickstart' },
+      { href: '/connect', label: 'connect' },
       { href: '/cli', label: 'cli' },
       { href: '/templates', label: 'templates' },
     ],

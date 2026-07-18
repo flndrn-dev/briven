@@ -48,7 +48,8 @@ export async function runLink(argv: readonly string[]): Promise<number> {
 
   if (known.length === 0) {
     printError('no logged-in projects.');
-    step('run: briven login --project <p_...> --key <brk_...>');
+    step('run: briven connect && briven projects use <p_...>');
+    step('  or: briven login --project <p_...> --key <brk_...>');
     return 1;
   }
 
@@ -112,7 +113,8 @@ function printHelp(): void {
   step('briven link                       pick from logged-in projects');
   step('briven link --project p_abc123    link to a specific project');
   blankLine();
-  step('writes the project id into briven.json. requires `briven login` first.');
+  step('writes the project id into briven.json.');
+  step('requires a local project key first: briven projects use <p_...> or briven login.');
 }
 
 async function promptLine(prompt: string): Promise<string> {

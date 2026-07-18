@@ -9,6 +9,12 @@ export const metadata = {
 const INSTALL = pmInstall('@briven/cli', { dev: true });
 const ONE_SHOT = pmDlx('briven');
 const INIT = pmExec('briven init');
+const CONNECT = pmExec(
+  'briven connect',
+  'briven connect status',
+  'briven connect logout',
+  'briven connect --force',
+);
 const LOGIN = pmExec('briven login --project p_xxx --key brk_xxx');
 const WHOAMI = pmExec('briven whoami');
 const LINK = pmExec('briven link --project p_xxx');
@@ -29,6 +35,11 @@ const LOGS = pmExec('briven logs', 'briven logs --follow');
 const LOGOUT = pmExec('briven logout', 'briven logout --project p_xxx');
 const PROJECTS = pmExec(
   'briven projects list',
+  'briven projects list --remote',
+  'briven projects create --name my-app',
+  'briven projects use p_xxx',
+  'briven projects use p_xxx --link',
+  'briven projects unlink p_xxx',
   'briven projects set-default p_xxx',
 );
 const EXPORT = pmExec(
@@ -69,8 +80,29 @@ export default function CliPage() {
         </p>
       </Section>
 
-      <Section title="login">
-        <p>Store an API key so subsequent commands can authenticate against a specific project.</p>
+      <Section title="connect">
+        <p>
+          Sign this machine into the <em>platform</em> with browser OAuth. After connect you can
+          create projects and mint CLI keys without pasting dashboard secrets. See the full walkthrough
+          on the{' '}
+          <a className="underline" href="/connect">
+            connect
+          </a>{' '}
+          page.
+        </p>
+        <PmTabs commands={CONNECT} />
+        <p>
+          Stores a user session in <code>~/.config/briven/credentials.json</code>.{' '}
+          <code>connect logout</code> clears only that session; project <code>brk_…</code> keys stay
+          until <code>briven logout</code>.
+        </p>
+      </Section>
+
+      <Section title="login (manual key)">
+        <p>
+          Store a dashboard-issued API key for a project — the manual alternative to{' '}
+          <code>briven projects use</code> after <code>connect</code>.
+        </p>
         <PmTabs commands={LOGIN} />
         <p>
           Credentials land at <code>~/.config/briven/credentials.json</code> with mode 0600. Get a
@@ -152,12 +184,27 @@ export default function CliPage() {
 
       <Section title="projects">
         <p>
-          List every project authenticated on this machine (read straight from{' '}
-          <code>~/.config/briven/credentials.json</code> — no server round-trip) and switch
-          the default. The default project is what every other command picks up when{' '}
-          <code>briven.json</code> isn&apos;t around.
+          Full project lifecycle from the shell. Local commands read{' '}
+          <code>~/.config/briven/credentials.json</code>; remote / create / use need{' '}
+          <code>briven connect</code> first.
         </p>
         <PmTabs commands={PROJECTS} />
+        <ul className="list-disc pl-5">
+          <li>
+            <code>list</code> — keys on this machine; <code>list --remote</code> — account projects
+          </li>
+          <li>
+            <code>create --name …</code> — create on the platform, mint a CLI key, set default
+          </li>
+          <li>
+            <code>use &lt;id&gt;</code> — mint/store key for an existing project;{' '}
+            <code>--link</code> writes <code>projectId</code> into <code>briven.json</code>
+          </li>
+          <li>
+            <code>unlink</code> — drop the local key only; <code>set-default</code> — pick which
+            project other commands fall back to
+          </li>
+        </ul>
       </Section>
 
       <Section title="export / import">
@@ -187,6 +234,10 @@ export default function CliPage() {
           <li>
             <code>BRIVEN_API_ORIGIN</code> — override the control-plane origin for a self-hosted
             deployment. Default: <code>https://api.briven.tech</code>.
+          </li>
+          <li>
+            <code>BRIVEN_DASHBOARD_ORIGIN</code> — where browser OAuth opens (
+            <code>briven connect</code>). Default: <code>https://app.briven.tech</code>.
           </li>
           <li>
             <code>XDG_CONFIG_HOME</code> — where credentials are stored, following the XDG spec.

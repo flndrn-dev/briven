@@ -1,20 +1,42 @@
 import { PmTabs } from '../../components/pm-tabs';
 import { DocsShell } from '../../components/shell';
-import { pmInstall } from '../../lib/pm';
+import { pmDlx, pmExec, pmInstall } from '../../lib/pm';
 
 export const metadata = {
   title: 'connect',
 };
 
 const INSTALL_CLIENT = pmInstall('@briven/client');
+const ONE_SHOT = pmDlx('briven');
+const CONNECT = pmExec('briven connect');
+const CONNECT_STATUS = pmExec('briven connect status');
+const PROJECTS_REMOTE = pmExec('briven projects list --remote');
+const PROJECTS_CREATE = pmExec(
+  'briven projects create --name my-app',
+  'briven projects create --name my-app --region eu-west',
+);
+const PROJECTS_USE = pmExec(
+  'briven projects use p_01HZ...',
+  'briven projects use p_01HZ... --link',
+);
+const PROJECTS_UNLINK = pmExec('briven projects unlink p_01HZ...');
+const INIT_LINK = pmExec('briven init', 'briven link --project p_01HZ...', 'briven deploy');
+const LIFECYCLE = pmExec(
+  'briven connect',
+  'briven projects create --name my-app',
+  'briven init',
+  'briven link',
+  'briven deploy',
+);
 
 export default function ConnectPage() {
   return (
     <DocsShell>
       <h1 className="font-mono text-2xl tracking-tight">connect</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        how to point your app — or an AI agent — at your briven project. everything below needs
-        just three things from your project, and nothing else.
+        how to connect to briven — from the shell (platform login + project lifecycle), from your
+        app (SDK / HTTP), or from an AI agent (MCP). pick the path that matches what you&apos;re
+        doing.
       </p>
 
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
@@ -23,11 +45,109 @@ export default function ConnectPage() {
         <a className="underline" href="/doltgres/limitations">
           beta + limitations
         </a>
-        ). the SDK + HTTP path below are live today. the MCP path (path b) is a Pro/Team beta
+        ). the shell + SDK + HTTP paths below are live today. the MCP path is a Pro/Team beta
         that is still rolling out — treat its details as subject to change.
       </div>
 
-      <h2 className="mt-12 font-mono text-lg">the three things you need</h2>
+      {/* ─── path 0: shell lifecycle ─────────────────────────────────────── */}
+      <h2 className="mt-12 font-mono text-lg">path 0 · from the shell (recommended)</h2>
+      <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
+        the fastest way to get a machine talking to briven: sign in once in the browser, create or
+        pick a project, then deploy from your terminal. no copy-pasting keys from the dashboard
+        unless you want the manual path.
+      </p>
+
+      <h3 className="mt-6 font-mono text-sm">install the cli (or run one-off)</h3>
+      <div className="mt-2">
+        <PmTabs commands={ONE_SHOT} />
+      </div>
+      <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
+        or install as a dev dependency — full install options on the{' '}
+        <a className="underline" href="/cli">
+          cli
+        </a>{' '}
+        page.
+      </p>
+
+      <h3 className="mt-6 font-mono text-sm">1 · sign in to the platform</h3>
+      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+        <code>briven connect</code> opens your browser, you approve the cli, and a user session is
+        saved under <code>~/.config/briven/credentials.json</code> (mode 0600). this is your{' '}
+        <em>platform</em> login — not a project API key yet.
+      </p>
+      <PmTabs commands={CONNECT} />
+      <PmTabs commands={CONNECT_STATUS} />
+      <ul className="mt-3 list-disc pl-5 font-mono text-xs text-[var(--color-text-muted)]">
+        <li>
+          <code>briven connect</code> — browser OAuth; re-run with <code>--force</code> to refresh
+        </li>
+        <li>
+          <code>briven connect status</code> — who is signed in + which project keys sit on this
+          machine
+        </li>
+        <li>
+          <code>briven connect logout</code> — drop the platform session only (keeps project keys)
+        </li>
+      </ul>
+
+      <h3 className="mt-6 font-mono text-sm">2 · create or pick a project</h3>
+      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+        projects are your isolated backends (schema, functions, data). create one from the shell,
+        or attach an existing one and mint a local CLI key in one step.
+      </p>
+      <PmTabs commands={PROJECTS_REMOTE} />
+      <PmTabs commands={PROJECTS_CREATE} />
+      <PmTabs commands={PROJECTS_USE} />
+      <ul className="mt-3 list-disc pl-5 font-mono text-xs text-[var(--color-text-muted)]">
+        <li>
+          <code>list --remote</code> — every project on your account (needs{' '}
+          <code>connect</code>)
+        </li>
+        <li>
+          <code>create --name …</code> — creates on the platform, mints a <code>brk_…</code> CLI
+          key, sets it as default
+        </li>
+        <li>
+          <code>use &lt;p_…&gt;</code> — mint/store a key for an existing project;{' '}
+          <code>--link</code> also writes the id into <code>briven.json</code>
+        </li>
+        <li>
+          <code>unlink &lt;p_…&gt;</code> — forget the key on this machine only (project stays on
+          the platform)
+        </li>
+      </ul>
+      <PmTabs commands={PROJECTS_UNLINK} />
+
+      <h3 className="mt-6 font-mono text-sm">3 · scaffold, link, deploy</h3>
+      <PmTabs commands={INIT_LINK} />
+      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+        <code>init</code> drops the local folder layout; <code>link</code> binds the folder to the
+        project id; <code>deploy</code> pushes schema + functions. day-to-day iteration is{' '}
+        <code>briven dev</code> (watch mode).
+      </p>
+
+      <h3 className="mt-6 font-mono text-sm">full lifecycle (copy-paste)</h3>
+      <PmTabs commands={LIFECYCLE} />
+
+      <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
+        <strong className="text-[var(--color-text)]">two kinds of credentials.</strong>{' '}
+        <code>connect</code> stores a <em>user</em> session (who you are on the platform).{' '}
+        <code>projects create/use</code> (or manual <code>briven login --key brk_…</code>) stores a{' '}
+        <em>project</em> API key (what this machine can do inside one project).{' '}
+        <code>briven logout</code> clears everything; <code>briven connect logout</code> clears only
+        the platform session.
+      </div>
+
+      <p className="mt-4 font-mono text-sm text-[var(--color-text-muted)]">
+        self-host? set <code>BRIVEN_API_ORIGIN</code> and <code>BRIVEN_DASHBOARD_ORIGIN</code>{' '}
+        before <code>connect</code>. details on the{' '}
+        <a className="underline" href="/cli">
+          cli
+        </a>{' '}
+        page.
+      </p>
+
+      <h2 className="mt-12 font-mono text-lg">the three things you need (app / agent paths)</h2>
       <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
         open your project in the{' '}
         <a className="underline" href="https://briven.tech">
@@ -66,7 +186,7 @@ export default function ConnectPage() {
       </ul>
 
       {/* ─── path A: the SDK ─────────────────────────────────────────────── */}
-      <h2 className="mt-12 font-mono text-lg">path a · the @briven/client SDK</h2>
+      <h2 className="mt-12 font-mono text-lg">path a · the @briven/client SDK (your app)</h2>
       <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
         <code>@briven/client</code> is the framework-agnostic JavaScript client. it works in node,
         the browser, and any framework. (for react/svelte/vue with ready-made hooks, use the{' '}
@@ -160,7 +280,7 @@ export function Notes() {
       </p>
 
       {/* ─── path B: MCP ─────────────────────────────────────────────────── */}
-      <h2 className="mt-12 font-mono text-lg">path b · the MCP endpoint (for AI agents)</h2>
+      <h2 className="mt-12 font-mono text-lg">path b · the MCP endpoint (AI agents)</h2>
       <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
         MCP (Model Context Protocol) lets an AI coding agent — Claude Code, Cursor, Codex, Gemini
         CLI, and others — talk to your project directly: read your schema, query data, manage
@@ -222,14 +342,24 @@ export function Notes() {
       <h2 className="mt-12 font-mono text-lg">what to read next</h2>
       <ul className="mt-3 flex flex-col gap-2 font-mono text-sm">
         <NextLink
+          href="/cli"
+          title="cli reference"
+          body="every briven command — connect, projects, deploy, dev, env, db, doctor"
+        />
+        <NextLink
+          href="/quickstart"
+          title="quickstart"
+          body="from nothing to a live reactive query in a few minutes"
+        />
+        <NextLink
           href="/api-keys"
           title="api keys"
-          body="create, scope, and rotate the brk_ keys every path above depends on"
+          body="create, scope, and rotate the brk_ keys the app and manual login paths use"
         />
         <NextLink
           href="/sdks"
           title="client sdks"
-          body="react, svelte, and vue clients with useQuery/useMutation hooks built on this same client"
+          body="react, svelte, and vue clients with useQuery/useMutation hooks"
         />
         <NextLink
           href="/api"

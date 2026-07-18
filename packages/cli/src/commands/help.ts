@@ -5,8 +5,10 @@ usage:   briven <command> [options]
 
 commands:
   init              scaffold briven/ folder and briven.json (--template=todo-app|chat|blank)
+  connect           sign in to the platform (browser OAuth) + show status
+  projects          project lifecycle: list, create, use, unlink, set-default
   auth              manage Briven Auth (scaffold middleware, configure providers)
-  login             store an api key for a project
+  login             store a dashboard api key for a project (manual path)
   logout            forget stored credentials
   whoami            verify stored credentials against the server
   deploy            create a deployment from the current project
@@ -18,15 +20,20 @@ commands:
   db                open studio or psql against the project database
   export            export schema + functions to a json archive
   import            create a deployment from a json archive on the linked project
-  projects          list projects authenticated on this machine + set default
   doctor            run a health check against the linked api
   ai                generate schema / function / explain code (schema|function|explain)
+
+lifecycle (typical):
+  briven connect
+  briven projects create --name my-app
+  briven init && briven link
+  briven deploy
 
 options:
   --version, -v     print the cli version and exit
   --help, -h        print this help and exit
 
-docs:    https://docs.briven.tech
+docs:    https://docs.briven.tech/connect
 source:  https://code.konnos.org/flndrn/briven
 `;
 

@@ -1,9 +1,29 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
 
 import { run } from './index.js';
 
 describe('@briven/cli entry', () => {
+  let tempDir: string;
+  let prevXdg: string | undefined;
+
+  before(async () => {
+    // Isolate from the developer's real ~/.config/briven so "no credentials"
+    // assertions stay deterministic.
+    prevXdg = process.env.XDG_CONFIG_HOME;
+    tempDir = await mkdtemp(join(tmpdir(), 'briven-cli-test-'));
+    process.env.XDG_CONFIG_HOME = tempDir;
+  });
+
+  after(async () => {
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = prevXdg;
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
   it('exports run()', () => {
     assert.equal(typeof run, 'function');
   });
@@ -51,6 +71,16 @@ describe('@briven/cli entry', () => {
     assert.equal(code, 1);
   });
 
+  it('returns 0 for "connect --help"', async () => {
+    const code = await run(['connect', '--help']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 0 for "connect status" without a session', async () => {
+    const code = await run(['connect', 'status']);
+    assert.equal(code, 0);
+  });
+
   it('returns 0 for "projects --help"', async () => {
     const code = await run(['projects', '--help']);
     assert.equal(code, 0);
@@ -63,6 +93,21 @@ describe('@briven/cli entry', () => {
 
   it('returns 1 for "projects set-default" without an argument', async () => {
     const code = await run(['projects', 'set-default']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 1 for "projects create" without --name', async () => {
+    const code = await run(['projects', 'create']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 1 for "projects use" without a project id', async () => {
+    const code = await run(['projects', 'use']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 1 for "projects unlink" without a project id', async () => {
+    const code = await run(['projects', 'unlink']);
     assert.equal(code, 1);
   });
 

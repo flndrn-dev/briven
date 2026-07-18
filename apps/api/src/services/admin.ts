@@ -347,7 +347,8 @@ export async function adminStats(): Promise<{
     sql`SELECT count(*)::int AS c FROM migration_requests WHERE status NOT IN ('completed', 'cancelled')`,
   );
   const [oa] = await db.execute<{ c: number }>(
-    sql`SELECT count(*)::int AS c FROM abuse_reports WHERE status IN ('open', 'investigating')`,
+    // abuseStatus enum is ['open','triaged','resolved'] only
+    sql`SELECT count(*)::int AS c FROM abuse_reports WHERE status IN ('open', 'triaged')`,
   );
   const [sup] = await db.execute<{ c: number }>(
     sql`SELECT count(*)::int AS c FROM email_suppressions`,

@@ -17,7 +17,9 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
   NODE_VERSION: '20'
   PNPM_VERSION: '9.12.0'
-  BUN_VERSION: '1.1.34'
+  # Keep in step with local Bun (hkdfSync / node:crypto surface). 1.1.x
+  # was missing exports that unit tests and tenant-secret-store need.
+  BUN_VERSION: '1.3.14'
 
 jobs:
   lint:
@@ -63,10 +65,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
-    # Product packages only (no studio fork). A handful of @briven/api
-    # auth tests still need fixture/env polish after the gap-fix sprint —
-    # non-blocking until that suite is green; typecheck remains the hard gate.
-    continue-on-error: true
+    # Product packages only (no studio fork). Hard gate: suite must pass.
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -105,8 +104,10 @@ jobs:
   audit:
     name: security audit
     runs-on: ubuntu-latest
-    # Advisories in studio-fork transitive deps; keep visible but non-blocking.
-    continue-on-error: true
+    # Advisories are mostly studio-fork / transitive (vite via better-auth
+    # vitest, protobufjs, …). Report them as annotations but always exit 0
+    # so GitHub does not email "Some jobs were not successful" on every push.
+    # Hard gates remain lint + typecheck + test.
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -117,7 +118,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level=high
+      - name: pnpm audit (advisory)
+        run: |
+          set +e
+          pnpm audit --audit-level=high
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::pnpm audit reported high/critical advisories (exit $code). Mostly transitive/studio-fork; tracked separately from merge gates."
+          fi
+          exit 0
 
   cli-tarball-smoke:
     name: cli tarball smoke

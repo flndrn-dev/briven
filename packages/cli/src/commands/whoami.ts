@@ -19,7 +19,8 @@ export async function runWhoami(): Promise<number> {
     banner('whoami');
     blankLine();
     step('no linked project found.');
-    step('run: briven login --project <p_...> --key <brk_...>');
+    step('run: briven connect && briven projects use <p_...>');
+    step('  or: briven login --project <p_...> --key <brk_...>');
     return 1;
   }
 

@@ -8,7 +8,12 @@ export const metadata = {
 
 const SCAFFOLD = pmJoin(
   pmPlain('$ mkdir my-app && cd my-app'),
-  pmExec('npx @briven/cli   # wizard: browser auth + new-or-existing project + template pick'),
+  pmExec(
+    'briven connect',
+    'briven projects create --name my-app',
+    'briven init',
+    'briven link',
+  ),
 );
 
 const INSTALL_CLIENT = pmInstall('@briven/react');
@@ -24,35 +29,30 @@ export default function QuickstartPage() {
       </p>
 
       <ol className="mt-8 flex flex-col gap-6 font-mono text-sm text-[var(--color-text-muted)]">
-        <Step n={1} title="create a project in the dashboard">
-          Sign in at <a className="underline" href="https://briven.tech">briven.tech</a>, click{' '}
-          <em>new project</em>, copy the resulting project id (looks like{' '}
-          <code>p_01HZ…</code>).
-          <div className="mt-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 text-xs">
-            <strong className="text-[var(--color-text)]">dashboard-only path:</strong> if you
-            want to avoid the CLI entirely, open the project&apos;s <em>studio</em> tab and
-            click <em>+ new table</em> — define columns, set PKs/FKs/indexes, then insert rows
-            and run queries from the SQL editor. The <em>copy as schema.ts</em> button
-            graduates you to CLI + git when you&apos;re ready. The steps below describe the
-            CLI flow.
-          </div>
-        </Step>
-        <Step n={2} title="generate an api key">
-          Open <em>api keys</em> on the new project and create one — pick the{' '}
-          <code>developer</code> role for local iteration. The plaintext (
-          <code>brk_…</code>) is shown once; store it in a secret manager immediately.
-        </Step>
-        <Step n={3} title="scaffold locally">
+        <Step n={1} title="connect + create a project from the shell">
+          Install the CLI (or use <code>npx @briven/cli</code>), sign in with browser OAuth, create
+          a project, scaffold files, and link this folder. Full detail:{' '}
+          <a className="underline" href="/connect">
+            connect
+          </a>
+          .
           <PmTabs commands={SCAFFOLD} />
-          <p className="mt-1 text-[var(--color-text-subtle)]">
-            <code>briven init</code> drops three files: <code>briven.config.ts</code>,{' '}
-            <code>briven/schema.ts</code>, and <code>briven/functions/notes.ts</code>. The default{' '}
-            template is a minimal notes app you can deploy as-is. Use{' '}
-            <code>briven init --template=todo-app</code> or <code>--template=chat</code> for richer
-            starting points.
+          <div className="mt-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 text-xs">
+            <strong className="text-[var(--color-text)]">dashboard-only path:</strong> sign in at{' '}
+            <a className="underline" href="https://briven.tech">
+              briven.tech
+            </a>
+            , create a project, open <em>studio</em>, click <em>+ new table</em>. Use{' '}
+            <em>copy as schema.ts</em> when you want CLI + git. Manual key path:{' '}
+            <code>briven login --project p_… --key brk_…</code>.
+          </div>
+          <p className="mt-2 text-[var(--color-text-subtle)]">
+            <code>briven init</code> drops the layout (<code>briven.json</code>,{' '}
+            <code>briven/schema.ts</code>, example functions). Templates:{' '}
+            <code>--template=todo-app</code> or <code>--template=chat</code>.
           </p>
         </Step>
-        <Step n={4} title="edit the schema + function">
+        <Step n={2} title="edit the schema + function">
           <p>
             Open <code>briven/schema.ts</code>:
           </p>
@@ -96,7 +96,7 @@ export const create = mutation({
   },
 });`}</Snippet>
         </Step>
-        <Step n={5} title="deploy">
+        <Step n={3} title="deploy">
           <PmTabs commands={DEPLOY} />
           <p className="mt-1">
             The CLI prints a schema diff, applies it transactionally on the data plane, uploads the
@@ -104,7 +104,7 @@ export const create = mutation({
             under <em>deployments</em> on the dashboard.
           </p>
         </Step>
-        <Step n={6} title="wire it up from your app">
+        <Step n={4} title="wire it up from your app">
           <PmTabs commands={INSTALL_CLIENT} />
           <p className="mt-1">
             In your app (Next.js, Vite, Remix — anything React):

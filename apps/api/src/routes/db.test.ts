@@ -33,10 +33,12 @@ const realProjects = { ...(await import('../services/projects.js')) };
 
 // Test-authenticated requests carry `x-test-role`; everything else falls
 // through to the REAL requireProjectAuth (session/brk_/cli-jwt branches).
+// MUST forward `paramName` — platform routes use requireProjectAuth('ref');
+// defaulting to 'id' reintroduces the "missing project id" 403 on /platform/*.
 mock.module('../middleware/project-auth.js', () => ({
   ...realProjectAuth,
   requireProjectAuth:
-    () =>
+    (paramName: string = 'id') =>
     async (
       c: {
         req: { header: (name: string) => string | undefined };
@@ -46,7 +48,7 @@ mock.module('../middleware/project-auth.js', () => ({
     ) => {
       const role = c.req.header('x-test-role');
       if (!role) {
-        return realProjectAuth.requireProjectAuth()(c as never, next);
+        return realProjectAuth.requireProjectAuth(paramName)(c as never, next);
       }
       c.set('user', { id: 'u_dbtest', email: 'dbtest@example.com', name: 'db test' });
       c.set('apiKeyId', null);

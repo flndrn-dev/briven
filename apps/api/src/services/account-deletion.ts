@@ -246,9 +246,16 @@ async function isSoleOwner(org: Organization, userId: string): Promise<boolean> 
 
 /**
  * Hard-delete every soft-deleted user whose 30-day grace window has
- * elapsed. Cascades via the FK ON DELETE CASCADE rules already in the
- * schema (sessions, accounts, audit_logs.actor_id ref but nullable —
- * actorId nulls out). Called by the account-deletion-gc worker.
+ * elapsed. Called by the account-deletion-gc worker.
+ *
+ * Order matters (migration 0042 / 0044):
+ *   1. Hard-delete soft-deleted orgs solely owned by expired users.
+ *      Ownership is taken from org_members (role='owner'), NOT
+ *      organizations.created_by — that column is SET NULL on user
+ *      delete, so a created_by-only predicate leaves zombie orgs that
+ *      block the user DELETE forever.
+ *   2. Hard-delete the expired users themselves. Remaining FKs cascade
+ *      or SET NULL (sessions, accounts, audit_logs.actor_id, …).
  *
  * Returns the count of users hard-deleted. Idempotent: safe to retry
  * after a crash.
@@ -256,12 +263,33 @@ async function isSoleOwner(org: Organization, userId: string): Promise<boolean> 
 export async function hardDeleteExpiredAccounts(opts: { graceDays?: number } = {}): Promise<number> {
   const db = getDb();
   const graceDays = opts.graceDays ?? 30;
-  // Use a raw SQL fragment so the threshold comparison happens entirely
-  // in SQL (no JS-side date drift).
+  // Threshold comparison entirely in SQL (no JS-side date drift).
+  const grace = sql`now() - (${graceDays} || ' days')::interval`;
+
+  // 1. Soft-deleted orgs owned (sole owner role) by users past grace.
+  await db.execute(sql`
+    DELETE FROM organizations
+    WHERE deleted_at IS NOT NULL
+      AND id IN (
+        SELECT m.org_id
+        FROM org_members m
+        WHERE m.role = 'owner'
+          AND m.user_id IN (
+            SELECT u.id
+            FROM users u
+            WHERE u.deleted_at IS NOT NULL
+              AND u.deleted_at < ${grace}
+          )
+        GROUP BY m.org_id
+        HAVING COUNT(*) = 1
+      )
+  `);
+
+  // 2. Users past grace.
   const rows = (await db.execute(sql`
     DELETE FROM users
     WHERE deleted_at IS NOT NULL
-      AND deleted_at < now() - (${graceDays} || ' days')::interval
+      AND deleted_at < ${grace}
     RETURNING id
   `)) as unknown as Array<{ id: string }>;
   log.info('account_hard_delete_run', { graceDays, deleted: rows.length });

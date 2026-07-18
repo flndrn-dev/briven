@@ -10,6 +10,7 @@ import { runExport } from './commands/export.js';
 import { runImport } from './commands/import.js';
 import { runInit } from './commands/init.js';
 import { runInvoke } from './commands/invoke.js';
+import { runConnect } from './commands/connect.js';
 import { runLink } from './commands/link.js';
 import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
@@ -37,6 +38,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   switch (first) {
     case 'init':
       return runInit(rest);
+    case 'connect':
+      return runConnect(rest);
     case 'link':
       return runLink(rest);
     case 'login':

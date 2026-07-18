@@ -2,13 +2,17 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-import { apiCall } from './api-client.js';
 import { generate, type SchemaSnapshot } from './codegen.js';
 import { writeProjectConfig } from './project-config.js';
-import { readUserCredential, writeProjectCredential, writeUserCredential } from './config.js';
 import { mergeEnvFile } from './env-file.js';
-import { runOAuth } from './oauth.js';
 import { runInit } from './commands/init.js';
+import {
+  createRemoteProject,
+  ensurePlatformSession,
+  fetchMe,
+  listRemoteProjects,
+  mintAndStoreKey,
+} from './platform.js';
 import { REGIONS } from './regions.js';
 import { pullSchemaToDisk } from './schema-pull.js';
 import { banner, blankLine, error as printError, step, success } from './output.js';
@@ -83,27 +87,18 @@ export async function runWizard(env: WizardEnv): Promise<void> {
   banner('briven setup');
   blankLine();
 
-  let user = await readUserCredential();
-  if (!user) {
-    step('opening browser to authorize the cli…');
-    const { token } = await runOAuth({
-      apiOrigin: env.apiOrigin,
-      dashboardOrigin: env.dashboardOrigin,
-    });
-    const me = await apiCall<{ user: { id: string; email: string } }>('/v1/me', {
-      apiOrigin: env.apiOrigin,
-      bearer: token,
-    });
-    user = {
-      token,
-      userId: me.user.id,
-      apiOrigin: env.apiOrigin,
-      savedAt: new Date().toISOString(),
-    };
-    await writeUserCredential(user);
-    success(`signed in as ${me.user.email}`);
-    blankLine();
+  step('checking platform session…');
+  const user = await ensurePlatformSession({
+    quiet: true,
+    origins: { apiOrigin: env.apiOrigin, dashboardOrigin: env.dashboardOrigin },
+  });
+  try {
+    const me = await fetchMe(user.apiOrigin, user.token);
+    success(`signed in as ${me.email}`);
+  } catch {
+    success('platform session ready');
   }
+  blankLine();
 
   const choice = await promptLine('(N)ew project or (E)xisting? [N/e] ');
   if (choice.trim().toLowerCase().startsWith('e')) {
@@ -123,12 +118,7 @@ async function newBranch(env: WizardEnv, token: string, cwd: string): Promise<vo
   const regionIdx = Math.max(1, Number.parseInt(regionPick || '1', 10)) - 1;
   const region = REGIONS[regionIdx]?.id ?? REGIONS[0]!.id;
 
-  const created = await apiCall<{ project: { id: string; slug: string } }>('/v1/projects', {
-    apiOrigin: env.apiOrigin,
-    bearer: token,
-    method: 'POST',
-    body: { name, region, tier: 'free' },
-  });
+  const created = await createRemoteProject(env.apiOrigin, token, { name, region });
 
   step('pick template:');
   const tpls = ['blank', 'todo-app', 'chat', 'convex-notes', 'supabase-auth-todos'] as const;
@@ -138,37 +128,33 @@ async function newBranch(env: WizardEnv, token: string, cwd: string): Promise<vo
   const template = tpls[tIdx] ?? 'blank';
 
   await runInit(['--name', name, '--template', template, '--force']);
-  await writeProjectConfig({ name, projectId: created.project.id }, cwd);
-  await mintAndStoreKey(env, token, created.project.id);
+  await writeProjectConfig({ name, projectId: created.id }, cwd);
+  step('minting cli credentials…');
+  await mintAndStoreKey(env.apiOrigin, token, created.id);
   await writeGeneratedFiles({
     cwd,
     snapshot: { version: 1, tables: {} },
     functionFilenames: await listFunctionFilenames(cwd),
   });
-  await writeEnvLocal({ cwd, projectId: created.project.id, apiOrigin: env.apiOrigin });
-  success(`created ${created.project.slug} (${created.project.id})`);
-  step(`dashboard: ${env.dashboardOrigin}/dashboard/projects/${created.project.id}`);
+  await writeEnvLocal({ cwd, projectId: created.id, apiOrigin: env.apiOrigin });
+  success(`created ${created.slug} (${created.id})`);
+  step(`dashboard: ${env.dashboardOrigin}/dashboard/projects/${created.id}`);
 }
 
 async function existingBranch(env: WizardEnv, token: string, cwd: string): Promise<void> {
-  const list = await apiCall<{
-    projects: Array<{ id: string; slug: string; region: string; tier: string; orgName: string }>;
-  }>('/v1/me/projects', {
-    apiOrigin: env.apiOrigin,
-    bearer: token,
-  });
+  const projects = await listRemoteProjects(env.apiOrigin, token);
 
-  if (list.projects.length === 0) {
+  if (projects.length === 0) {
     printError('no projects on your account yet — re-run and pick (N)ew.');
     return;
   }
   step('your projects:');
-  list.projects.forEach((p, i) =>
+  projects.forEach((p, i) =>
     step(`  ${i + 1}. ${p.orgName ?? '—'}/${p.slug}  (${p.id}) · ${p.region} · ${p.tier}`),
   );
-  const pick = await promptLine(`pick [1-${list.projects.length}]: `);
+  const pick = await promptLine(`pick [1-${projects.length}]: `);
   const idx = Number.parseInt(pick.trim(), 10) - 1;
-  const project = list.projects[idx];
+  const project = projects[idx];
   if (!project) {
     printError('invalid selection');
     return;
@@ -181,7 +167,8 @@ async function existingBranch(env: WizardEnv, token: string, cwd: string): Promi
     cwd,
   });
   await writeProjectConfig({ name: project.slug, projectId: project.id }, cwd);
-  await mintAndStoreKey(env, token, project.id);
+  step('minting cli credentials…');
+  await mintAndStoreKey(env.apiOrigin, token, project.id);
   await writeGeneratedFiles({
     cwd,
     snapshot: { version: 1, tables: {} },
@@ -190,32 +177,6 @@ async function existingBranch(env: WizardEnv, token: string, cwd: string): Promi
   await writeEnvLocal({ cwd, projectId: project.id, apiOrigin: env.apiOrigin });
   success(`linked ${project.slug} (${project.id})`);
   step(`dashboard: ${env.dashboardOrigin}/dashboard/projects/${project.id}`);
-}
-
-/**
- * Mint a project-scoped admin key via the control-plane and persist it
- * to `~/.config/briven/credentials.json` so subsequent `briven dev`
- * invocations have credentials. The plaintext is returned once by the
- * API and never logged.
- */
-async function mintAndStoreKey(env: WizardEnv, token: string, projectId: string): Promise<void> {
-  step('minting cli credentials…');
-  const minted = await apiCall<{
-    key: { id: string; suffix: string; createdAt: string };
-    plaintext: string;
-  }>(`/v1/projects/${projectId}/api-keys`, {
-    apiOrigin: env.apiOrigin,
-    bearer: token,
-    method: 'POST',
-    body: { name: 'cli', role: 'admin' },
-  });
-  await writeProjectCredential({
-    projectId,
-    apiKey: minted.plaintext,
-    apiOrigin: env.apiOrigin,
-    suffix: minted.key.suffix,
-    createdAt: minted.key.createdAt,
-  });
 }
 
 function promptLine(prompt: string): Promise<string> {

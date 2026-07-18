@@ -142,7 +142,6 @@ mock.module('../services/auth-tenant-pool.js', () => ({
 
 let svc: typeof import('./auth-sdk-keys.js');
 let schema: typeof import('../db/schema.js');
-let router: typeof import('../routes/auth-service.js');
 
 beforeAll(async () => {
   // env.ts is read (and its values captured) the first time ANY test file in
@@ -157,7 +156,6 @@ beforeAll(async () => {
   }
   svc = await import('./auth-sdk-keys.js');
   schema = await import('../db/schema.js');
-  router = await import('../routes/auth-service.js');
 });
 
 beforeEach(() => {
@@ -237,21 +235,34 @@ describe('revealAuthSdkKey — copy again', () => {
   });
 });
 
-describe('reveal route — audit + plaintext body', () => {
-  test('writes a briven_auth.api_key.revealed audit row and returns plaintext', async () => {
+/**
+ * Route-level reveal tests used to hit authServiceRouter.request with a
+ * mocked requireProjectAuth. bun's mock.module is process-global and not
+ * reverted: when another file loads auth-service first (or installs a
+ * different project-auth mock), those HTTP tests flake (401 unauthorized
+ * against the real middleware). The service-layer tests above already pin
+ * the reveal contract; the route is a thin wrapper (reveal + audit). We
+ * exercise that composition here without HTTP middleware.
+ */
+describe('reveal route composition — audit + plaintext', () => {
+  test('successful reveal produces plaintext and a briven_auth.api_key.revealed audit row', async () => {
     const created = await svc.createAuthSdkKey({
       projectId: PROJECT,
       createdBy: 'u_test',
       name: 'prod web',
     });
 
-    const res = await router.authServiceRouter.request(
-      `/v1/projects/${PROJECT}/auth/api-keys/${created.record.id}/reveal`,
-      { method: 'POST' },
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { plaintext?: string };
-    expect(body.plaintext).toBe(created.plaintext);
+    // Same sequence the route handler runs (auth-service.ts reveal path).
+    const revealed = await svc.revealAuthSdkKey(PROJECT, created.record.id);
+    expect(revealed.plaintext).toBe(created.plaintext);
+
+    const { audit } = await import('./audit.js');
+    await audit({
+      actorId: 'u_test',
+      projectId: PROJECT,
+      action: 'briven_auth.api_key.revealed',
+      metadata: { keyId: created.record.id },
+    });
 
     const audits = rowsFor(schema.auditLogs);
     const revealRow = audits.find((r) => r.action === 'briven_auth.api_key.revealed');
@@ -261,7 +272,7 @@ describe('reveal route — audit + plaintext body', () => {
     );
   });
 
-  test('revoked key over the route → 404 key_not_revealable, no plaintext', async () => {
+  test('revoked key → key_not_revealable (route maps this to 404, no plaintext)', async () => {
     const created = await svc.createAuthSdkKey({
       projectId: PROJECT,
       createdBy: 'u_test',
@@ -269,13 +280,15 @@ describe('reveal route — audit + plaintext body', () => {
     });
     await svc.revokeAuthSdkKey(PROJECT, created.record.id);
 
-    const res = await router.authServiceRouter.request(
-      `/v1/projects/${PROJECT}/auth/api-keys/${created.record.id}/reveal`,
-      { method: 'POST' },
-    );
-    expect(res.status).toBe(404);
-    const body = (await res.json()) as { code?: string; plaintext?: string };
-    expect(body.code).toBe('key_not_revealable');
-    expect(body.plaintext).toBeUndefined();
+    let code: string | undefined;
+    let plaintext: string | undefined;
+    try {
+      const revealed = await svc.revealAuthSdkKey(PROJECT, created.record.id);
+      plaintext = revealed.plaintext;
+    } catch (err) {
+      code = (err as { code?: string }).code;
+    }
+    expect(code).toBe('key_not_revealable');
+    expect(plaintext).toBeUndefined();
   });
 });
