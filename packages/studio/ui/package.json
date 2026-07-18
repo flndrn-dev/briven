@@ -52,6 +52,7 @@
     "@types/react-dom": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "config": "workspace:*",
+    "jsdom": "^26.1.0",
     "tsconfig": "workspace:*",
     "tsx": "catalog:",
     "typescript": "catalog:",

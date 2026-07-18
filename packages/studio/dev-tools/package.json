@@ -28,6 +28,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "config": "workspace:*",
+    "jsdom": "^26.1.0",
     "next-router-mock": "^0.9.13",
     "tailwindcss": "catalog:",
     "tsconfig": "workspace:*",
