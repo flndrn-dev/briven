@@ -2,7 +2,14 @@ import { notFound } from 'next/navigation';
 
 import { HostedFlow } from './hosted-flow';
 
-const FORM_FLOWS = ['sign-in', 'sign-up', 'magic-link', 'otp', 'new-password'] as const;
+const FORM_FLOWS = [
+  'sign-in',
+  'sign-up',
+  'magic-link',
+  'otp',
+  'new-password',
+  'two-factor',
+] as const;
 type FormFlow = (typeof FORM_FLOWS)[number];
 
 function isFormFlow(value: string): value is FormFlow {

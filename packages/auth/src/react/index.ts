@@ -1441,37 +1441,42 @@ export interface TwoFactorSetupProps {
 
 export function TwoFactorSetup(props: TwoFactorSetupProps) {
   const auth = useBrivenAuth();
-  const [step, setStep] = useState<'idle' | 'enabling' | 'verify'>('idle');
+  const [step, setStep] = useState<'idle' | 'enabling' | 'verify' | 'done'>('idle');
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const handleEnable = useCallback(async () => {
     setStep('enabling');
     setError(null);
-    const result = await auth.twoFactor.enable();
+    const result = await auth.twoFactor.enable(password || undefined);
     if (result.ok) {
       setStep('verify');
     } else {
       setError(result.message);
       setStep('idle');
     }
-  }, [auth]);
+  }, [auth, password]);
 
   const handleVerify = useCallback(
     async (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       setError(null);
       const result = await auth.twoFactor.verify(code);
-      if (result.ok) {
-        const codes = await auth.twoFactor.generateBackupCodes();
+      if (result.ok && !('twoFactorRequired' in result && result.twoFactorRequired)) {
+        const codes = await auth.twoFactor.generateBackupCodes(password || undefined);
         if (codes.ok) setBackupCodes(codes.codes);
+        setStep('done');
         props.onEnabled?.();
+      } else if (result.ok) {
+        // Unexpected intermediate challenge during enroll — still show verify UI.
+        setError('enter the authenticator code again');
       } else {
         setError(result.message);
       }
     },
-    [auth, code, props],
+    [auth, code, password, props],
   );
 
   return createElement(
@@ -1479,16 +1484,34 @@ export function TwoFactorSetup(props: TwoFactorSetupProps) {
     { className: props.className ?? 'briven-auth-2fa-setup' },
     step === 'idle'
       ? createElement(
-          'button',
-          { type: 'button', onClick: handleEnable, className: 'briven-auth-submit' },
-          'enable two-factor',
+          'div',
+          { className: 'briven-auth-form' },
+          createElement('p', { className: 'briven-auth-message' }, 'confirm your password, then scan the authenticator setup'),
+          createElement('input', {
+            type: 'password',
+            required: true,
+            placeholder: 'password',
+            value: password,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value),
+            className: 'briven-auth-input',
+            autoComplete: 'current-password',
+          }),
+          createElement(
+            'button',
+            { type: 'button', onClick: handleEnable, className: 'briven-auth-submit' },
+            'enable two-factor',
+          ),
         )
       : null,
     step === 'verify'
       ? createElement(
           'form',
           { onSubmit: handleVerify, className: 'briven-auth-form' },
-          createElement('p', { className: 'briven-auth-message' }, 'enter the 6-digit code from your authenticator app'),
+          createElement(
+            'p',
+            { className: 'briven-auth-message' },
+            'enter the 6-digit code from your authenticator app',
+          ),
           createElement('input', {
             type: 'text',
             required: true,
@@ -1498,6 +1521,7 @@ export function TwoFactorSetup(props: TwoFactorSetupProps) {
             pattern: '\\d{6}',
             maxLength: 6,
             className: 'briven-auth-input',
+            autoComplete: 'one-time-code',
           }),
           createElement('button', { type: 'submit', className: 'briven-auth-submit' }, 'verify'),
         )
@@ -1506,7 +1530,11 @@ export function TwoFactorSetup(props: TwoFactorSetupProps) {
       ? createElement(
           'div',
           { className: 'briven-auth-backup-codes' },
-          createElement('p', { className: 'briven-auth-message' }, 'save these backup codes:'),
+          createElement(
+            'p',
+            { className: 'briven-auth-message' },
+            'save these backup codes now — each works once if you lose your phone:',
+          ),
           createElement(
             'ul',
             {},
@@ -1514,6 +1542,94 @@ export function TwoFactorSetup(props: TwoFactorSetupProps) {
           ),
         )
       : null,
+    error ? createElement('p', { className: 'briven-auth-error', role: 'alert' }, error) : null,
+  );
+}
+
+// ─── TwoFactorChallenge (sign-in recovery) ───────────────────────────────
+
+export interface TwoFactorChallengeProps {
+  className?: string;
+  onSuccess?: (userId: string) => void;
+}
+
+/**
+ * Shown after password sign-in when the account has 2FA enabled.
+ * Accepts either a TOTP app code or a single-use backup recovery code.
+ */
+export function TwoFactorChallenge(props: TwoFactorChallengeProps) {
+  const auth = useBrivenAuth();
+  const [mode, setMode] = useState<'totp' | 'backup'>('totp');
+  const [code, setCode] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setPending(true);
+      setError(null);
+      try {
+        const result =
+          mode === 'totp'
+            ? await auth.twoFactor.verify(code)
+            : await auth.twoFactor.verifyBackupCode(code);
+        if (result.ok && 'userId' in result) {
+          props.onSuccess?.(result.userId);
+        } else if (result.ok) {
+          setError('still needs another step — try again');
+        } else {
+          setError(result.message);
+        }
+      } finally {
+        setPending(false);
+      }
+    },
+    [auth, code, mode, props],
+  );
+
+  return createElement(
+    'div',
+    { className: props.className ?? 'briven-auth-2fa-challenge' },
+    createElement(
+      'form',
+      { onSubmit: handleSubmit, className: 'briven-auth-form' },
+      createElement(
+        'p',
+        { className: 'briven-auth-message' },
+        mode === 'totp'
+          ? 'enter the 6-digit code from your authenticator app'
+          : 'enter one of your single-use backup codes (lost phone recovery)',
+      ),
+      createElement('input', {
+        type: 'text',
+        required: true,
+        placeholder: mode === 'totp' ? '6-digit code' : 'backup code',
+        value: code,
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCode(e.target.value),
+        className: 'briven-auth-input',
+        autoComplete: mode === 'totp' ? 'one-time-code' : 'off',
+        ...(mode === 'totp' ? { pattern: '\\d{6}', maxLength: 6 } : {}),
+      }),
+      createElement(
+        'button',
+        { type: 'submit', className: 'briven-auth-submit', disabled: pending },
+        pending ? 'checking…' : mode === 'totp' ? 'verify' : 'use backup code',
+      ),
+    ),
+    createElement(
+      'button',
+      {
+        type: 'button',
+        className: 'briven-auth-link',
+        onClick: () => {
+          setMode(mode === 'totp' ? 'backup' : 'totp');
+          setCode('');
+          setError(null);
+        },
+      },
+      mode === 'totp' ? 'lost your phone? use a backup code' : 'use authenticator code instead',
+    ),
     error ? createElement('p', { className: 'briven-auth-error', role: 'alert' }, error) : null,
   );
 }

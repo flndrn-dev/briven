@@ -316,8 +316,8 @@ Reply with **A**, **B**, or **C** (or changes). **No feature coding under this p
 
 | Sprint | Status | Notes |
 | --- | --- | --- |
-| S0 Baseline & ship | **In progress** | Code shipped to prod API `05acab3` (2026-07-18). GH Dokploy webhook still fails ("Branch Not Match") — deployed via France SSH. **Human:** finish `AUTH-GO-LIVE-CHECKLIST.md` on a pilot project. |
-| S1 Never lock out | Pending | Next after checklist baseline |
+| S0 Baseline & ship | **Mostly done** | Prod API + auto-deploy fixed. **Human:** still finish browser checklist when ready. |
+| S1 Never lock out | **In progress** | Fixed SDK verify path (`verify-totp`), `twoFactorRequired` result, hosted `/two-factor` + backup recovery UI, React `TwoFactorChallenge`, unit tests. |
 | S2 Suspicious access | Pending | |
 | S3 Policy & identity | Pending | |
 | S4 Hardening | Pending | |

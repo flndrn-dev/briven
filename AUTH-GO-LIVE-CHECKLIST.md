@@ -129,6 +129,24 @@ This is the real-world check that Redis-backed limits are working.
 
 ---
 
+## 9b. Lost phone / 2FA backup codes (if you turned on two-factor)
+
+Only if **Auth → providers** has two-factor / MFA enabled and a test user enrolled:
+
+1. Enroll 2FA on a test account and **save the backup codes** shown once.
+2. Sign out.
+3. Sign in with password → you should be asked for a second factor.
+4. Click **“lost your phone? use a backup code”** (hosted page) or use the SDK `twoFactor.verifyBackupCode`.
+5. Enter one saved backup code.
+
+**Pass:** You get in without the authenticator app.  
+**Pass:** That backup code does **not** work a second time (single-use).  
+**Pass:** Regenerating codes invalidates the old list (if you use regenerate).
+
+If 2FA is off for the pilot, mark this row N/A.
+
+---
+
 ## 10. Pilot app wiring (agent or human)
 
 If an AI agent sets up your app, they should follow the **briven-auth** skill and:
@@ -156,6 +174,7 @@ If an AI agent sets up your app, they should follow the **briven-auth** skill an
 | 7 | Session after refresh | ☐ | |
 | 8 | Rate limit (optional) | ☐ | |
 | 9 | Users list in dashboard | ☐ | |
+| 9b | 2FA backup code recovery (or N/A) | ☐ | |
 | 10 | Pilot app works for a friend | ☐ | |
 
 **You sign off when:** rows 0–4 and 7 are all pass, and anything you advertise (magic link / Google / etc.) is pass too.

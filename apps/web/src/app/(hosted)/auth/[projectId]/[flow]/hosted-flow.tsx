@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
-type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp' | 'new-password';
+type FormFlow = 'sign-in' | 'sign-up' | 'magic-link' | 'otp' | 'new-password' | 'two-factor';
 
 interface Props {
   projectId: string;
@@ -38,6 +38,7 @@ const TITLES: Record<FormFlow, string> = {
   'magic-link': 'sign in with magic link',
   otp: 'sign in with one-time code',
   'new-password': 'choose a new password',
+  'two-factor': 'two-factor check',
 };
 
 const SUB_TITLES: Record<FormFlow, string> = {
@@ -46,6 +47,7 @@ const SUB_TITLES: Record<FormFlow, string> = {
   'magic-link': "we'll email you a one-shot sign-in link",
   otp: "we'll email you a 6-digit code",
   'new-password': 'enter your new password below',
+  'two-factor': 'authenticator code or backup recovery code',
 };
 
 interface ErrorBody {
@@ -73,6 +75,8 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   const [magicSent, setMagicSent] = useState(false);
   const [otpRequested, setOtpRequested] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+  const [twoFactorMode, setTwoFactorMode] = useState<'totp' | 'backup'>('totp');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
 
@@ -143,10 +147,40 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleSignIn(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      await post('/sign-in/email', { email, password });
+      const body = (await post('/sign-in/email', { email, password })) as {
+        twoFactorRedirect?: boolean;
+        user?: { id?: string };
+      };
+      // Password ok but account has 2FA — continue on the challenge page.
+      if (body?.twoFactorRedirect === true) {
+        router.push(
+          `/auth/${projectId}/two-factor?callbackURL=${encodeURIComponent(callbackURL)}`,
+        );
+        return;
+      }
       router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'sign-in failed');
+    }
+  }
+
+  async function handleTwoFactor(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    try {
+      if (twoFactorMode === 'totp') {
+        await post('/two-factor/verify-totp', { code: twoFactorCode });
+      } else {
+        await post('/two-factor/verify-backup-code', { code: twoFactorCode });
+      }
+      router.push(callbackURL);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : twoFactorMode === 'totp'
+            ? 'authenticator code failed'
+            : 'backup code failed',
+      );
     }
   }
 
@@ -318,13 +352,46 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
         )
       ) : null}
 
+      {flow === 'two-factor' ? (
+        <form className="flex flex-col gap-3" onSubmit={handleTwoFactor}>
+          <Field
+            label={twoFactorMode === 'totp' ? '6-digit code' : 'backup recovery code'}
+            type="text"
+            value={twoFactorCode}
+            onChange={setTwoFactorCode}
+            autoComplete={twoFactorMode === 'totp' ? 'one-time-code' : undefined}
+            inputMode={twoFactorMode === 'totp' ? 'numeric' : 'text'}
+            pattern={twoFactorMode === 'totp' ? '\\d{6}' : undefined}
+            maxLength={twoFactorMode === 'totp' ? 6 : undefined}
+          />
+          <Submit
+            pending={pending}
+            idle={twoFactorMode === 'totp' ? 'verify' : 'use backup code'}
+            busy="checking…"
+          />
+          <button
+            type="button"
+            className="font-mono text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
+            onClick={() => {
+              setTwoFactorMode(twoFactorMode === 'totp' ? 'backup' : 'totp');
+              setTwoFactorCode('');
+              setError(null);
+            }}
+          >
+            {twoFactorMode === 'totp'
+              ? 'lost your phone? use a backup code'
+              : 'use authenticator code instead'}
+          </button>
+        </form>
+      ) : null}
+
       {error ? (
         <p className="font-mono text-xs text-[var(--color-error)]" role="alert">
           {error}
         </p>
       ) : null}
 
-      {flow !== 'new-password' ? (
+      {flow !== 'new-password' && flow !== 'two-factor' ? (
         <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-4">
           <p className="text-center font-mono text-[11px] text-[var(--color-text-subtle)]">
             or continue with
@@ -352,7 +419,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
             password sign-in
           </Link>
         ) : null}
-        {flow !== 'sign-up' ? (
+        {flow !== 'sign-up' && flow !== 'two-factor' ? (
           <Link
             href={`/auth/${projectId}/sign-up`}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
@@ -360,7 +427,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
             create account
           </Link>
         ) : null}
-        {flow !== 'magic-link' ? (
+        {flow !== 'magic-link' && flow !== 'two-factor' ? (
           <Link
             href={`/auth/${projectId}/magic-link`}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
@@ -368,7 +435,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
             magic link
           </Link>
         ) : null}
-        {flow !== 'otp' ? (
+        {flow !== 'otp' && flow !== 'two-factor' ? (
           <Link
             href={`/auth/${projectId}/otp`}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"

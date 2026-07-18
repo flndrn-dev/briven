@@ -98,6 +98,13 @@ export type SignInErrorCode =
 
 export type SignInResult =
   | { ok: true; userId: string; sessionExpiresAt: string }
+  /**
+   * Password (or other first factor) succeeded but the account has 2FA on.
+   * Caller must complete the challenge with `twoFactor.verify` (TOTP) or
+   * `twoFactor.verifyBackupCode` (single-use recovery codes). The interim
+   * two-factor cookie is already set via credentials: 'include'.
+   */
+  | { ok: true; twoFactorRequired: true }
   | { ok: false; code: SignInErrorCode; message: string };
 
 export type SimpleResult =
@@ -406,9 +413,17 @@ export interface BrivenAuthClient {
   };
   readonly twoFactor: {
     enable(password?: string): Promise<SimpleResult>;
+    /** Complete MFA enroll or sign-in challenge with a TOTP app code. */
     verify(code: string): Promise<SignInResult>;
     disable(password?: string): Promise<SimpleResult>;
-    generateBackupCodes(): Promise<{ ok: true; codes: string[] } | { ok: false; code: SignInErrorCode; message: string }>;
+    /**
+     * Mint a new set of single-use recovery codes (invalidates old ones).
+     * Better Auth requires the account password unless passwordless backup
+     * generation is enabled on the tenant.
+     */
+    generateBackupCodes(
+      password?: string,
+    ): Promise<{ ok: true; codes: string[] } | { ok: false; code: SignInErrorCode; message: string }>;
     /**
      * Sign in using a single-use backup/recovery code when the TOTP device
      * is lost. Consumes the code on success. This is the account-recovery
@@ -522,10 +537,15 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
         token?: string;
         expiresAt?: string;
         session?: { expiresAt?: string };
+        twoFactorRedirect?: boolean;
         error?: { code?: string; message?: string };
         code?: string;
         message?: string;
       };
+      // Better Auth signals "password ok, now finish 2FA" this way.
+      if (b.twoFactorRedirect === true) {
+        return { ok: true, twoFactorRequired: true };
+      }
       if (b.user?.id) {
         const expiresAt =
           b.expiresAt ??
@@ -1297,7 +1317,8 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async verify(code) {
         try {
-          const body = await post<unknown>('/two-factor/verify', { code });
+          // Better Auth endpoint is verify-totp (not /two-factor/verify).
+          const body = await post<unknown>('/two-factor/verify-totp', { code });
           return asSignInResult(body);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
@@ -1311,13 +1332,20 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
           return { ok: false, code: 'network_error', message: 'network error' };
         }
       },
-      async generateBackupCodes() {
+      async generateBackupCodes(password) {
         try {
-          const body = await post<unknown>('/two-factor/generate-backup-codes', {});
+          const body = await post<unknown>(
+            '/two-factor/generate-backup-codes',
+            password ? { password } : {},
+          );
           if (body && typeof body === 'object') {
             const b = body as { backupCodes?: string[]; error?: { code?: string; message?: string } };
             if (Array.isArray(b.backupCodes)) return { ok: true, codes: b.backupCodes };
-            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'generate failed' };
+            return {
+              ok: false,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'generate failed',
+            };
           }
           return { ok: false, code: 'unknown', message: 'generate failed' };
         } catch {
