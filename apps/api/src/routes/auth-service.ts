@@ -186,7 +186,6 @@ import {
   assertPasswordNotReused,
   forcePasswordReset,
   getPasswordPolicy,
-  recordPasswordHistory,
   setPasswordPolicy,
   validatePassword,
 } from '../services/auth-password-policy.js';
