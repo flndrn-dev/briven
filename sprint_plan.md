@@ -316,14 +316,27 @@ Reply with **A**, **B**, or **C** (or changes). **No feature coding under this p
 
 | Sprint | Status | Notes |
 | --- | --- | --- |
-| S0 Baseline & ship | **Next** | Local auth test fixes + better-auth upgrade exist; need ship + checklist |
-| S1 Never lock out | Pending | |
+| S0 Baseline & ship | **In progress** | Code shipped to prod API `05acab3` (2026-07-18). GH Dokploy webhook still fails ("Branch Not Match") — deployed via France SSH. **Human:** finish `AUTH-GO-LIVE-CHECKLIST.md` on a pilot project. |
+| S1 Never lock out | Pending | Next after checklist baseline |
 | S2 Suspicious access | Pending | |
 | S3 Policy & identity | Pending | |
 | S4 Hardening | Pending | |
-| S5 DX & agents | Pending | Partial already (skill, pilot, docs) |
+| S5 DX & agents | Pending | Skill + pilot + checklist already in `05acab3` |
 | S6 Reliability bar | Pending | |
 | S7 Enterprise | Deferred | |
+
+### S0 evidence log
+
+| Check | Result |
+| --- | --- |
+| Prod before | `buildSha` `cebbb2c…`, redis ok |
+| Commit | `05acab3` — auth readiness + sprint plan A |
+| Push | `main` → `origin/main` |
+| GH Deploy workflow | Failed HTTP 301 / `Branch Not Match` (webhook payload) |
+| Manual deploy | France `187.124.64.116` pull + `docker compose build/up api` |
+| Prod after | API container healthy; confirm `/info` sha = `05acab3…` |
+| Auth unit tests | 30 pass (tenant plugins, sdk keys, platform-auth) |
+| Human checklist | **Your turn** — `AUTH-GO-LIVE-CHECKLIST.md` |
 
 ---
 
