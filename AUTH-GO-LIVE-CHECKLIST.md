@@ -129,6 +129,29 @@ This is the real-world check that Redis-backed limits are working.
 
 ---
 
+## 8b. Password policy (if you tightened rules)
+
+Only if you set **Auth → password policy** (min length / required characters / max age):
+
+1. Try sign-up or reset with a password that breaks the rules → must be rejected with a clear message.
+2. If **max age** is set, an old password should block new sessions until the user resets.
+3. Admin can **force password reset** on a user → next sign-in fails until they reset.
+
+**Pass:** Weak password refused; force-reset blocks login until change.  
+**N/A** if you keep default relaxed policy.
+
+---
+
+## 8c. Account linking (if you use Google + email)
+
+1. Sign up with email+password.
+2. Sign in with Google using the **same Gmail** (including `name+tag@gmail.com` variants).
+
+**Pass:** One user, not two. Linked accounts show under the user in the dashboard.  
+**Pass:** Admin can unlink a social account only when another sign-in method remains.
+
+---
+
 ## 9a. New device notice (if you can check email)
 
 1. Sign in from a browser you have not used for this account (or a private window with a different user-agent is enough for a weak check).

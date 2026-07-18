@@ -40,15 +40,20 @@ const BUILT_IN_DISPOSABLE = new Set([
 
 // ─── email validation helpers ─────────────────────────────────────────────
 
-function normalizeEmail(email: string): string {
+/**
+ * Normalize email for gates + linking.
+ * Gmail/googlemail: ignore dots and strip +tags so `a.b+x@gmail.com` ≡ `ab@gmail.com`.
+ */
+export function normalizeEmail(email: string): string {
   const trimmed = email.trim().toLowerCase();
   const at = trimmed.lastIndexOf('@');
   if (at < 0) return trimmed;
   let local = trimmed.slice(0, at);
   const domain = trimmed.slice(at + 1);
-  // Gmail normalization: dots are ignored and plus aliases are stripped.
+  // Gmail normalization: dots ignored, +tags stripped, googlemail → gmail.
   if (domain === 'gmail.com' || domain === 'googlemail.com') {
     local = local.replace(/\./g, '').split('+')[0]!;
+    return `${local}@gmail.com`;
   }
   return `${local}@${domain}`;
 }

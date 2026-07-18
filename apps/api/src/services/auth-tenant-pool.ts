@@ -31,6 +31,7 @@ import { publishEvent, type AuthEventType } from './outbound-webhooks.js';
 import { getTenantSecret } from './tenant-secrets.js';
 import { maybeAutoLinkOAuthAccount } from './auth-account-linking.js';
 import { maybeAlertNewDevice } from './auth-device-tracking.js';
+import { mustChangePassword } from './auth-password-policy.js';
 import {
   computeEnabledProviders,
   DEFAULT_AUTH_CONFIG,
@@ -471,6 +472,17 @@ export function buildAuthDatabaseHooks(
           const blocked = isUserBlocked(sec);
           if (blocked.blocked) {
             throw new Error(blocked.reason ?? 'account access denied');
+          }
+
+          // Password expiry / admin force-reset (Sprint S3).
+          try {
+            const must = await mustChangePassword(projectId, session.userId);
+            if (must.required) {
+              throw new Error(must.reason ?? 'password change required');
+            }
+          } catch (err) {
+            if (err instanceof Error && /password/i.test(err.message)) throw err;
+            // Table missing / data-plane blip — do not brick sign-in.
           }
 
           // MFA enforcement. When twoFactor.required is true, every user

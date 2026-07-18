@@ -135,7 +135,7 @@ import {
   updateSsoConnection,
   validateSamlResponse,
 } from '../services/auth-sso.js';
-import { listUserAccounts } from '../services/auth-account-linking.js';
+import { listUserAccounts, unlinkUserAccount } from '../services/auth-account-linking.js';
 import {
   addAuthTeamMember,
   findUserByEmail,
@@ -183,7 +183,10 @@ import {
   EMAIL_TEMPLATE_NAMES,
 } from '../services/auth-email-templates.js';
 import {
+  assertPasswordNotReused,
+  forcePasswordReset,
   getPasswordPolicy,
+  recordPasswordHistory,
   setPasswordPolicy,
   validatePassword,
 } from '../services/auth-password-policy.js';
@@ -873,6 +876,73 @@ authServiceRouter.get(
     }
     const accounts = await listUserAccounts(projectId, userId);
     return c.json({ accounts });
+  },
+);
+
+/**
+ * Admin unlink one linked account (OAuth / credential row) from a user.
+ * Refuses to remove the only remaining sign-in method.
+ */
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/users/:userId/accounts/:accountId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    const accountId = c.req.param('accountId');
+    if (!projectId || !userId || !accountId) {
+      return c.json({ code: 'validation_failed', message: 'missing param' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    try {
+      await unlinkUserAccount(projectId, userId, accountId);
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'auth.account.unlinked',
+        ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+        userAgent: c.req.header('user-agent') ?? null,
+        metadata: { userId, accountId },
+      });
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      if ((err as { code?: string }).code === 'not_found') {
+        return c.json({ code: 'not_found' }, 404);
+      }
+      throw err;
+    }
+  },
+);
+
+/**
+ * Admin: force password change on next sign-in.
+ */
+authServiceRouter.post(
+  '/v1/projects/:id/auth/users/:userId/force-password-reset',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+    await forcePasswordReset(projectId, userId, body.reason);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.password.force_reset',
+      ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: { userId, reason: body.reason },
+    });
+    return c.json({ ok: true });
   },
 );
 
@@ -3296,13 +3366,25 @@ async function processTenantRequest(
     }
   }
 
-  // ── password policy enforcement ──
+  // ── password policy enforcement (complexity + reuse) ──
   const isPasswordChange =
-    path.includes('/sign-up') || path.includes('/reset-password') || path.includes('/change-password');
+    path.includes('/sign-up') ||
+    path.includes('/reset-password') ||
+    path.includes('/change-password');
   if (isPasswordChange && passwordToCheck) {
     try {
       const policy = await getPasswordPolicy(projectId);
       validatePassword(passwordToCheck, policy);
+      // Reuse check needs a user id when available (change/reset for known user).
+      const bodyUserId =
+        typeof body.userId === 'string'
+          ? body.userId
+          : typeof (body as { user?: { id?: string } }).user?.id === 'string'
+            ? (body as { user: { id: string } }).user.id
+            : null;
+      if (bodyUserId && policy.preventReuse > 0) {
+        await assertPasswordNotReused(projectId, bodyUserId, passwordToCheck, policy);
+      }
     } catch (err) {
       if (err instanceof ValidationError) {
         return new Response(

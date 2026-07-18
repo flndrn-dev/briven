@@ -1,41 +1,52 @@
 /**
- * OAuth account linking — Gap Fix #4.
+ * OAuth account linking — Gap Fix #4 / Sprint S3.
  *
  * Automatically links OAuth accounts to existing users when the email
- * matches.  Prevents duplicate user rows for the same person across
- * multiple social providers.
+ * matches (Gmail-normalized). Manual unlink for admin repair.
  */
 
+import { NotFoundError, ValidationError } from '@briven/shared';
+
 import { runInProjectDatabase } from '../db/data-plane.js';
+import { normalizeEmail } from './auth-security.js';
 
 /**
  * After an OAuth user is created, check whether another user already
- * exists with the same email.  If so, move the OAuth account to the
- * existing user and delete the duplicate user.
- *
- * This runs inside `user.create.after` so the session has not been
- * created yet — Better Auth creates the session after the user hook.
+ * exists with the same normalized email.  If so, move the OAuth account(s)
+ * to the existing user and delete the duplicate user.
  */
 export async function maybeAutoLinkOAuthAccount(
   projectId: string,
   newUserId: string,
   email: string,
 ): Promise<{ linkedToUserId: string } | null> {
-  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedEmail = normalizeEmail(email);
 
   return runInProjectDatabase(projectId, async (tx) => {
-    // Find all users with this email (including the one just created).
-    const users = (await tx.unsafe(
-      `SELECT id, email FROM "_briven_auth_users" WHERE lower(email) = lower($1) ORDER BY created_at ASC`,
-      [normalizedEmail] as never,
-    )) as Array<{ id: string; email: string }>;
+    // Candidate set: exact lower(email) match, or all gmail/googlemail rows
+    // (dots/+ aliases only matter for those domains).
+    const domain = normalizedEmail.slice(normalizedEmail.lastIndexOf('@') + 1);
+    const candidates =
+      domain === 'gmail.com'
+        ? ((await tx.unsafe(
+            `SELECT id, email FROM "_briven_auth_users"
+             WHERE lower(email) LIKE '%@gmail.com' OR lower(email) LIKE '%@googlemail.com'
+             ORDER BY created_at ASC`,
+            [] as never,
+          )) as Array<{ id: string; email: string }>)
+        : ((await tx.unsafe(
+            `SELECT id, email FROM "_briven_auth_users"
+             WHERE lower(email) = lower($1)
+             ORDER BY created_at ASC`,
+            [email] as never,
+          )) as Array<{ id: string; email: string }>);
 
-    if (users.length < 2) return null;
+    const matches = candidates.filter((u) => normalizeEmail(u.email) === normalizedEmail);
+    if (matches.length < 2) return null;
 
-    const existingUser = users[0]!;
-    if (existingUser.id === newUserId) return null; // The new user is the oldest — nothing to do.
+    const existingUser = matches[0]!;
+    if (existingUser.id === newUserId) return null;
 
-    // Find the OAuth account(s) belonging to the new user.
     const accounts = (await tx.unsafe(
       `SELECT id, provider_id, account_id FROM "_briven_auth_accounts" WHERE user_id = $1`,
       [newUserId] as never,
@@ -43,16 +54,13 @@ export async function maybeAutoLinkOAuthAccount(
 
     if (accounts.length === 0) return null;
 
-    // Move each account to the existing user.
     for (const account of accounts) {
-      // Check for duplicate (provider_id, account_id) on the target user.
       const dup = (await tx.unsafe(
         `SELECT id FROM "_briven_auth_accounts" WHERE user_id = $1 AND provider_id = $2 AND account_id = $3 LIMIT 1`,
         [existingUser.id, account.provider_id, account.account_id] as never,
       )) as Array<{ id: string }>;
 
       if (dup.length > 0) {
-        // Already linked — delete the duplicate account row.
         await tx.unsafe(
           `DELETE FROM "_briven_auth_accounts" WHERE id = $1`,
           [account.id] as never,
@@ -65,7 +73,6 @@ export async function maybeAutoLinkOAuthAccount(
       }
     }
 
-    // Delete the duplicate user (cascades sessions, etc. via FK).
     await tx.unsafe(
       `DELETE FROM "_briven_auth_users" WHERE id = $1`,
       [newUserId] as never,
@@ -75,9 +82,6 @@ export async function maybeAutoLinkOAuthAccount(
   });
 }
 
-/**
- * List all linked accounts for a user.
- */
 export async function listUserAccounts(
   projectId: string,
   userId: string,
@@ -94,4 +98,43 @@ export async function listUserAccounts(
     accountId: r.account_id,
     createdAt: r.created_at,
   }));
+}
+
+/**
+ * Unlink one OAuth/social account from a user.
+ * Refuses to remove the last remaining sign-in method (credential or sole account).
+ */
+export async function unlinkUserAccount(
+  projectId: string,
+  userId: string,
+  accountId: string,
+): Promise<void> {
+  await runInProjectDatabase(projectId, async (tx) => {
+    const accounts = (await tx.unsafe(
+      `SELECT id, provider_id FROM "_briven_auth_accounts" WHERE user_id = $1`,
+      [userId] as never,
+    )) as Array<{ id: string; provider_id: string }>;
+
+    const target = accounts.find((a) => a.id === accountId);
+    if (!target) {
+      throw new NotFoundError('auth_account', accountId);
+    }
+
+    if (accounts.length <= 1) {
+      throw new ValidationError(
+        'cannot unlink the only sign-in method — add another provider or set a password first',
+      );
+    }
+
+    // Keep at least one path in: either credential remains, or another OAuth.
+    const others = accounts.filter((a) => a.id !== accountId);
+    if (others.length === 0) {
+      throw new ValidationError('cannot unlink the only sign-in method');
+    }
+
+    await tx.unsafe(
+      `DELETE FROM "_briven_auth_accounts" WHERE id = $1 AND user_id = $2`,
+      [accountId, userId] as never,
+    );
+  });
 }

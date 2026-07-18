@@ -540,6 +540,13 @@ export function renderAuthProvisioningSql(): string[] {
     `CREATE INDEX IF NOT EXISTS "_briven_auth_password_history_user_idx"
        ON "_briven_auth_password_history" (user_id)`,
 
+    // ─── Force password reset (Sprint S3 — admin-flagged next sign-in) ─────
+    `CREATE TABLE IF NOT EXISTS "_briven_auth_password_force_reset" (
+       user_id   text        PRIMARY KEY REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+       reason    text,
+       forced_at timestamptz NOT NULL DEFAULT now()
+     )`,
+
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
 
@@ -585,5 +592,6 @@ export const AUTH_TABLES = [
   '_briven_auth_oidc_states',
   '_briven_auth_password_policy',
   '_briven_auth_password_history',
+  '_briven_auth_password_force_reset',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];
