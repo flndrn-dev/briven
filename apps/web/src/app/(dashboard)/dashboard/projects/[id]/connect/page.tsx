@@ -70,15 +70,19 @@ export default async function ConnectPage({
       <section className="flex flex-col gap-3">
         <h3 className="font-mono text-sm text-[var(--color-text)]">cli usage</h3>
         <pre className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] p-4 font-mono text-xs text-[var(--color-code-text)]">
-          <code>{`# point the cli at this project
-briven login --project ${id} --key <brk_…>
-briven link
+          <code>{`# recommended — attach this project + wire the folder
+briven setup --project ${id}
 
-# deploy a schema.ts + functions
+# then deploy / watch
 briven deploy
+# or: briven dev
 
 # call a function
-briven invoke listTodos`}</code>
+briven invoke listTodos
+
+# manual key path (if you already have a brk_ key)
+# briven login --project ${id} --key <brk_…>
+# briven link`}</code>
         </pre>
       </section>
     </section>

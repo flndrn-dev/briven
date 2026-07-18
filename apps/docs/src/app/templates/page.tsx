@@ -86,17 +86,27 @@ export default function TemplatesPage() {
     <DocsShell>
       <h1 className="font-mono text-2xl tracking-tight">cli templates</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        every <code>briven init --template=&lt;name&gt;</code> ships inline with the cli — no
-        network call, works on a fresh machine. pick one that matches your starting point;
-        you can always edit the files after.
+        optional starter files only — not the core product. the product path is{' '}
+        <code>briven setup</code> (sign in + new or existing cloud project + wire this folder).
+        pass <code>--template</code> when you want a sample schema/functions layout.
       </p>
 
       <pre className="mt-4 overflow-x-auto rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] p-3 font-mono text-xs text-[var(--color-code-text)]">
-        <code>briven init my-app --template=todo-app</code>
+        <code>{`# recommended — cloud project + folder in one go
+briven setup --name my-app --template=todo-app
+briven deploy
+
+# local files only (no cloud) — then run setup to wire a project
+briven init --template=todo-app`}</code>
       </pre>
 
       <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
-        pass <code>--list-templates</code> to print the available names without scaffolding.
+        pass <code>briven init --list-templates</code> to print available names without
+        scaffolding. full connect flow:{' '}
+        <a className="underline" href="/connect">
+          connect
+        </a>
+        .
       </p>
 
       {TEMPLATES.map((t) => (
@@ -126,7 +136,7 @@ export default function TemplatesPage() {
             <code>{t.schema}</code>
           </pre>
           <pre className="mt-3 overflow-x-auto rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] p-3 font-mono text-xs text-[var(--color-code-text)]">
-            <code>{`briven init my-app --template=${t.name}\ncd my-app\nbriven login --project <p_id> --key <brk_key>\nbriven deploy`}</code>
+            <code>{`mkdir my-app && cd my-app\nbriven setup --name my-app --template=${t.name}\nbriven deploy`}</code>
           </pre>
         </section>
       ))}

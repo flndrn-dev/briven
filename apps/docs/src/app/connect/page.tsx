@@ -35,9 +35,9 @@ export default function ConnectPage() {
     <DocsShell>
       <h1 className="font-mono text-2xl tracking-tight">connect</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        how to connect to briven — from the shell (platform login + project lifecycle), from your
-        app (SDK / HTTP), or from an AI agent (MCP). pick the path that matches what you&apos;re
-        doing.
+        how to connect to briven. <strong className="text-[var(--color-text)]">shell first:</strong>{' '}
+        <code>briven setup</code> is the product path (Convex-style: sign in + new or existing
+        project + wire this folder). then the app SDK / HTTP, or an AI agent via MCP.
       </p>
 
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">

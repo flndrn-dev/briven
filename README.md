@@ -10,6 +10,17 @@ three surfaces:
 - **briven-core** — the open-source engine, self-hostable under agpl-3.0
 - **[`npx briven`](https://www.npmjs.com/package/@briven/cli)** — the developer cli, mit-licensed
 
+### get started (cli)
+
+```bash
+mkdir my-app && cd my-app
+npx @briven/cli setup --name my-app   # sign in + create project + wire folder
+briven deploy                         # or: briven dev
+```
+
+Interactive: `briven setup` (pick new vs existing). Attach existing: `briven setup --project p_…`.  
+Docs: [connect](https://docs.briven.tech/connect) · [quickstart](https://docs.briven.tech/quickstart)
+
 ## status
 
 phase 1 closing — runtime + realtime + studio + dashboard + cli all live on briven.tech. observability stack + nightly backups + automated deploys via konnos all running. private until the phase 3 dogfood window clears (oct 2026).

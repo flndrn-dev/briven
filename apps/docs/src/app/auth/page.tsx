@@ -66,7 +66,7 @@ export default function AuthPage() {
           </li>
           <li>
             in your app folder (with <code>briven.json</code> from{' '}
-            <code>briven link</code>):
+            <code>briven setup</code>):
             <Snippet>{`briven auth scaffold
 pnpm add @briven/auth`}</Snippet>
             that writes <code>middleware.ts</code>, <code>lib/auth.ts</code>, and a

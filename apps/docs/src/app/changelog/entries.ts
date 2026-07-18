@@ -9,6 +9,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-07-18',
+    tags: ['feat', 'docs'],
+    title: 'briven setup — Convex-style one-command connect + project wiring',
+    body: 'New CLI command `briven setup` signs in via browser OAuth, creates a new cloud project or attaches an existing one (`--name` / `--project`), scaffolds the folder, mints a CLI key, and writes briven.json. Bare `briven` with no linked project starts setup. Docs (connect, quickstart, cli, templates), dashboard empty-state, and project connect panel all promote this path. Templates remain optional starters only — not the product model. Manual `login` + `link` still works for CI/key paste.',
+  },
+  {
     date: '2026-05-12',
     tags: ['feat', 'docs'],
     title: 'AI.md operator setup guide + per-feature model overrides',

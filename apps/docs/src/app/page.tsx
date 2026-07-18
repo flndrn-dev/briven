@@ -18,9 +18,14 @@ export default function DocsIndex() {
         <DocCard
           href="/quickstart"
           title="quickstart"
-          body="from nothing to deployed in five minutes."
+          body="briven setup → deploy. five minutes from nothing to live."
         />
-        <DocCard href="/cli" title="cli" body="every command, flag, and env var." />
+        <DocCard
+          href="/connect"
+          title="connect"
+          body="one-command shell setup (new or existing project), sdk, mcp."
+        />
+        <DocCard href="/cli" title="cli" body="every command — setup, deploy, dev, and more." />
         <DocCard
           href="/schema"
           title="schema dsl"

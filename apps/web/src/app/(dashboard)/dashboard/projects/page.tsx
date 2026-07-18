@@ -130,25 +130,25 @@ export default async function ProjectsPage() {
                   prototyping and small one-off changes.
                 </p>
                 <p className="mt-2 text-[var(--color-text-muted)]">
-                  <strong>cli + git</strong> — one command, wizard handles auth, project
-                  pick or create, and scaffolding:
+                  <strong>cli + git</strong> — one command (Convex-style): sign in, create or
+                  attach a project, wire this folder:
                 </p>
                 <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
-                  <code>{`mkdir my-app && cd my-app && npx @briven/cli`}</code>
+                  <code>{`mkdir my-app && cd my-app
+npx @briven/cli setup --name my-app
+# or: briven setup --project p_…   (existing)
+briven deploy`}</code>
                 </pre>
                 <p className="mt-1 text-[var(--color-text-muted)]">
-                  browser opens to authorize, then asks{' '}
-                  <em>new project or existing?</em> and picks a template. swap templates
-                  with <code>briven init --template todo-app|chat|blank</code> later. anything
-                  you build in studio has a <em>copy as schema.ts</em> button to graduate
-                  to git.
+                  interactive: <code>briven setup</code> asks new vs existing. optional
+                  starter files: <code>--template todo-app|chat|blank</code> (templates are
+                  not the product). studio has <em>copy as schema.ts</em> to graduate to git.
                 </p>
                 <details className="mt-2 text-[10px] text-[var(--color-text-subtle)]">
-                  <summary className="cursor-pointer">manual / CI flow (no wizard)</summary>
+                  <summary className="cursor-pointer">manual key path (no browser OAuth)</summary>
                   <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
                     <code>
-                      {`npx @briven/cli init my-app --template todo-app
-cd my-app
+                      {`npx @briven/cli init --template todo-app
 briven login --project <p_id> --key <brk_key>
 briven link
 briven deploy`}
@@ -159,7 +159,7 @@ briven deploy`}
                   <summary className="cursor-pointer">offline install (curl, no npm)</summary>
                   <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
                     <code>{`curl -fsSL https://briven.tech/install | sh
-cd my-app && briven`}</code>
+cd my-app && briven setup`}</code>
                   </pre>
                 </details>
               </li>

@@ -324,14 +324,17 @@ function EmptyProjects() {
     <div className="flex flex-col gap-4 rounded-md border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
       <p className="font-sans text-sm text-[var(--color-text)]">no projects yet.</p>
       <ol className="flex flex-col gap-2 font-mono text-xs text-[var(--color-text-muted)]">
-        <li>1. create a project — picks a region, generates a deploy key.</li>
         <li>
-          2. <code>npx briven init</code> wires up <code>briven/schema.ts</code> and a function
-          folder.
+          1. from a folder:{' '}
+          <code>npx @briven/cli setup --name my-app</code> — signs in, creates a cloud project,
+          wires the folder.
         </li>
         <li>
-          3. <code>npx briven deploy</code> ships it. studio + logs open up the moment the first
-          deploy lands.
+          2. or click <em>create your first project</em> here, then{' '}
+          <code>briven setup --project p_…</code> from your app folder.
+        </li>
+        <li>
+          3. <code>briven deploy</code> (or <code>briven dev</code>) ships schema + functions.
         </li>
       </ol>
       <Link
@@ -426,7 +429,7 @@ function OnboardingFlow() {
         <OnboardingStep
           n={3}
           title="deploy a function"
-          body="briven init from the CLI scaffolds a project locally. briven deploy ships it. your useQuery() hook in the dashboard goes live."
+          body="briven setup signs in, creates or attaches a cloud project, and wires the folder. briven deploy ships it."
           cta={{ label: 'cli docs', href: 'https://docs.briven.tech/cli', external: true }}
           tone="next"
         />
