@@ -322,7 +322,7 @@ Reply with **A**, **B**, or **C** (or changes). **No feature coding under this p
 | S3 Policy & identity | **Done (code)** | Password complexity/reuse/expiry + force-reset; Gmail-normalized auto-link; admin unlink; tests. |
 | S4 Hardening | **Done (code)** | Domain TXT helper + tests; RelayState open-redirect sanitize; SDK scope matrix; rate-limit burst tests; OIDC start/callback already live. |
 | S5 DX & agents | **Done (code)** | Docs 2FA + testing tokens; skill/scaffold/pilot/MCP guidance aligned to S1–S4. |
-| S6 Reliability bar | **In progress** | Redis + status story documented (`docs/S6-RELIABILITY.md`). Platform `/ready` redis ok. **Blocked on human:** AUTH checklist 1–4+7 + second-project isolation (`BETA-V1-NEXT-STEPS.md`). |
+| S6 Reliability bar | **Code/ops done** | Counters + `/v1/admin/auth-reliability` + admin Health panel + rate-limit tests + `scripts/s6-auth-verify.sh` + docs. Platform probe PASS. **Human product claim still needs:** AUTH checklist 1–4+7 + 2nd project isolation. |
 | S7 Enterprise | Deferred | |
 
 ### S0 evidence log

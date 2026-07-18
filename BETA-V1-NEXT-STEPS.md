@@ -17,9 +17,9 @@ Three needles, in order:
 | # | Work | Status | Evidence |
 | --- | --- | --- | --- |
 | 1 | AUTH-GO-LIVE on pilot project | **In progress** — platform OK; browser rows need human | This file §1 + `AUTH-GO-LIVE-CHECKLIST.md` |
-| 2a | Second-project isolation | **Doc + code path ready** — human confirm in dashboard | §2.1 |
-| 2b | Redis chaos notes | **Done (documented)** | `docs/S6-RELIABILITY.md` |
-| 2c | Status / auth-degraded story | **Done (docs + status pages)** | status + trust wording |
+| 2a | Second-project isolation | **Code tests + doc** — human confirm still required | unit tests + §2.1 |
+| 2b | Redis chaos notes + tests | **Done** | `docs/S6-RELIABILITY.md` + `auth-rate-limit.test.ts` |
+| 2c | Status / metrics / admin snapshot | **Done** | status pages + `/v1/admin/auth-reliability` + Health panel |
 | 3 | Dogfood app (auth-pilot) | **Path ready** — needs env keys + one browser pass | `examples/auth-pilot` |
 
 **Product claim “friends can use auth”:** only after §1 sign-off rows **0–4 + 7** are pass.

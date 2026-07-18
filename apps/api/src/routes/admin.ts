@@ -138,6 +138,15 @@ adminRouter.get('/v1/admin/overview', async (c) => c.json(await getAdminOverview
  */
 adminRouter.get('/v1/admin/health', async (c) => c.json(await getHealthSummary()));
 
+/**
+ * S6 — Auth reliability snapshot (rate-limit pressure, mailer fails, redis).
+ * Admin-only; powers cockpit ops and post-incident review.
+ */
+adminRouter.get('/v1/admin/auth-reliability', async (c) => {
+  const { getAuthReliabilitySnapshot } = await import('../services/auth-reliability.js');
+  return c.json(await getAuthReliabilitySnapshot());
+});
+
 adminRouter.get('/v1/admin/users', async (c) => {
   const rows = await listUsers(200);
   return c.json({ users: rows });

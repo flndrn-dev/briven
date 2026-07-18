@@ -38,6 +38,18 @@ export interface HealthSummary {
 
 const POLL_MS = 10_000;
 
+interface AuthReliabilitySnapshot {
+  redisConfigured: boolean;
+  redisOk: boolean | null;
+  counters: {
+    rateLimitDenied: number;
+    rateLimitMemoryFallback: number;
+    mailerFailures: number;
+    authRoute5xx: number;
+  };
+  watch: readonly string[];
+}
+
 export function HealthBoard({
   apiOrigin,
   initial,
@@ -46,6 +58,7 @@ export function HealthBoard({
   initial: HealthSummary | null;
 }) {
   const [data, setData] = useState<HealthSummary | null>(initial);
+  const [authRel, setAuthRel] = useState<AuthReliabilitySnapshot | null>(null);
   const [failed, setFailed] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(initial ? Date.now() : null);
 
@@ -62,6 +75,15 @@ export function HealthBoard({
       setFailed(false);
     } catch {
       setFailed(true);
+    }
+    try {
+      const res = await fetch(`${apiOrigin}/v1/admin/auth-reliability`, {
+        credentials: 'include',
+        headers: { accept: 'application/json' },
+      });
+      if (res.ok) setAuthRel((await res.json()) as AuthReliabilitySnapshot);
+    } catch {
+      // optional panel — older API builds won't have the route yet
     }
   }, [apiOrigin]);
 
@@ -185,6 +207,75 @@ export function HealthBoard({
           </div>
         )}
       </Section>
+
+      {/* ── S6 auth reliability ──────────────────────────────────────── */}
+      <Section title="auth reliability (S6)" icon={<ZapIcon size={16} />}>
+        {authRel === null ? (
+          <p className="font-mono text-xs text-[var(--color-text-subtle)]">
+            auth reliability snapshot not available yet (deploy API with S6, or route missing).
+          </p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <MetricTile
+                label="rate-limit denials"
+                value={authRel.counters.rateLimitDenied}
+                hint="since process boot"
+              />
+              <MetricTile
+                label="memory fallback"
+                value={authRel.counters.rateLimitMemoryFallback}
+                hint={
+                  authRel.redisOk === false
+                    ? 'redis down — limits per process'
+                    : '0 = redis path in use'
+                }
+              />
+              <MetricTile
+                label="mailer failures"
+                value={authRel.counters.mailerFailures}
+                hint="hard fails after fallback"
+              />
+              <MetricTile
+                label="auth route 5xx"
+                value={authRel.counters.authRoute5xx}
+                hint="internal errors on /auth*"
+              />
+            </div>
+            <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
+              redis:{' '}
+              {authRel.redisConfigured
+                ? authRel.redisOk
+                  ? 'ok'
+                  : 'unreachable'
+                : 'not configured'}{' '}
+              · also scrape{' '}
+              <code className="text-[var(--color-text)]">GET /metrics</code> for{' '}
+              <code>briven_auth_*</code> counters
+            </p>
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+}) {
+  return (
+    <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+      <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+        {label}
+      </p>
+      <p className="mt-2 font-mono text-2xl text-[var(--color-text)]">{value}</p>
+      <p className="mt-1 font-mono text-[10px] text-[var(--color-text-muted)]">{hint}</p>
     </div>
   );
 }

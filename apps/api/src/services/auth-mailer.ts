@@ -1,6 +1,7 @@
 import { env } from '../env.js';
 import { sendTenantEmail } from '../lib/email.js';
 import { log } from '../lib/logger.js';
+import { recordAuthMailerFailure } from './auth-reliability.js';
 import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
 import { getEmailTemplate, renderTemplate, type EmailTemplateName } from './auth-email-templates.js';
 
@@ -246,14 +247,23 @@ async function sendForTenant(label: string, args: TenantSendArgs): Promise<void>
     // flow (it 500'd konnos magic-link, 2026-07-07) — retry once from
     // the always-verified briven fallback sender instead.
     const fallbackFrom = resolveFallbackFromAddress(config);
-    if (from === fallbackFrom) throw err; // already on the fallback — a real outage, surface it
+    if (from === fallbackFrom) {
+      // Already on the fallback — real outage. S6.3: surface for operators.
+      recordAuthMailerFailure(label);
+      throw err;
+    }
     log.warn('tenant_sender_domain_rejected_falling_back', {
       label,
       projectId: args.projectId,
       senderDomain: config.branding.senderDomain,
       error: err instanceof Error ? err.message : String(err),
     });
-    await sendTenantEmail(label, { from: fallbackFrom, ...payload });
+    try {
+      await sendTenantEmail(label, { from: fallbackFrom, ...payload });
+    } catch (err2) {
+      recordAuthMailerFailure(`${label}_fallback`);
+      throw err2;
+    }
   }
 }
 

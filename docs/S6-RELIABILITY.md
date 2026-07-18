@@ -65,17 +65,25 @@ Safe staging procedure:
 
 ## S6.3 What to watch (metrics / logs)
 
-Until a dedicated auth dashboard exists, operators should watch:
-
 | Signal | Where |
 | --- | --- |
 | Platform awake | `GET /health`, `GET /ready` |
 | Redis | `checks.redis` on `/ready` |
-| Auth errors | API logs: `auth_*`, `rate_limiter_redis_error`, `briven_auth_*` |
-| Mailer failures | Logs around signup / magic link / new-device email |
+| **Auth reliability snapshot** | `GET /v1/admin/auth-reliability` (admin session) · admin cockpit **Health → auth reliability (S6)** |
+| Prometheus | `GET /metrics` → `briven_auth_rate_limit_denied_total`, `briven_auth_rate_limit_memory_fallback_total`, `briven_auth_mailer_failures_total`, `briven_auth_route_5xx_total` |
+| Auth errors | API logs: `auth_*`, `rate_limiter_redis_error`, `briven_auth_*`, `auth_rate_limit_using_memory_fallback` |
+| Mailer failures | Counter + logs when tenant send fails after fallback |
 | Deploy freshness | `GET /info` → `buildSha` vs git `main` |
+| Automated probes | `./scripts/s6-auth-verify.sh` (read-only; no deploy) |
 
-**Alert ideas (minimal):** page if `/ready` fails 2+ minutes; page if redis unreachable while URL configured; weekly review of auth 5xx count.
+**Unit tests (no Redis required for memory path):**
+
+```bash
+cd apps/api
+bun test src/services/auth-rate-limit.test.ts src/services/auth-reliability.test.ts src/services/auth-tenant-isolation.test.ts
+```
+
+**Alert ideas (minimal):** page if `/ready` fails 2+ minutes; page if redis unreachable while URL configured; page if `briven_auth_route_5xx_total` or mailer failures spike.
 
 ---
 
@@ -108,10 +116,21 @@ Ship a short public note (changelog + optional status):
 
 ---
 
-## S6 definition of done (product claim)
+## S6 definition of done
+
+### Code / ops (agent-deliverable) — **DONE 2026-07-18**
 
 - [x] Redis behavior documented (this file)  
-- [x] Status degradation story drafted  
-- [ ] Human AUTH checklist rows 0–4 + 7 on pilot  
-- [ ] Second project isolation confirmed  
+- [x] Status degradation story on status pages  
+- [x] Rate-limit memory fallback unit tests (S6.2)  
+- [x] Per-project rate-limit isolation unit test  
+- [x] Auth reliability counters + `GET /v1/admin/auth-reliability` + admin Health panel  
+- [x] Prometheus `briven_auth_*` metrics help + mailer/5xx hooks  
+- [x] `./scripts/s6-auth-verify.sh` platform probe script  
+- [x] Tenant redaction isolation unit tests  
+
+### Human (product claim “friends can rely on auth”)
+
+- [ ] AUTH checklist rows 1–4 + 7 on pilot (`AUTH-GO-LIVE-CHECKLIST.md`)  
+- [ ] Second project isolation confirmed in dashboard  
 - [ ] flndrn says “yes, friends can use this”  

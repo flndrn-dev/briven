@@ -10,6 +10,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-07-18',
+    tags: ['feat', 'security', 'docs'],
+    title: 'S6 auth reliability bar — metrics, tests, admin snapshot',
+    body: 'Closes the code/ops half of the Clerk-gap reliability sprint: process counters + Prometheus briven_auth_* series (rate-limit denials, memory fallback, mailer failures, auth 5xx); GET /v1/admin/auth-reliability; admin Health panel section; unit tests for memory rate limits and per-project isolation; scripts/s6-auth-verify.sh for read-only platform probes. Human browser AUTH-GO-LIVE + second-project check still required before “friends can rely on auth.” Auto-deploy remains OFF.',
+  },
+  {
+    date: '2026-07-18',
     tags: ['docs', 'security'],
     title: 'beta next steps: auth checklist track + S6 reliability notes',
     body: 'BETA-V1-NEXT-STEPS.md tracks auth go-live, second-project isolation, and dogfood. docs/S6-RELIABILITY.md documents Redis rate-limit fail-open behavior and customer status blurbs. Status pages explain “if sign-in feels broken.” Platform probe: production /ready redis ok. Human browser checklist rows 1–4+7 still required before “friends can rely on auth.”',

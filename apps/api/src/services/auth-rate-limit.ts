@@ -4,6 +4,10 @@ import { Redis } from 'ioredis';
 
 import { log } from '../lib/logger.js';
 import { env } from '../env.js';
+import {
+  recordAuthRateLimitDenied,
+  recordAuthRateLimitMemoryFallback,
+} from './auth-reliability.js';
 
 /**
  * Rate limiter for briven auth endpoints.
@@ -109,6 +113,7 @@ async function checkRedisRateLimit(
 
   if (count > opts.maxAttempts) {
     const retryAfter = Math.max(ttl, 0);
+    recordAuthRateLimitDenied('redis');
     return {
       allowed: false,
       limit: opts.maxAttempts,
@@ -150,6 +155,7 @@ function checkMemoryRateLimit(
 
   if (bucket.count >= opts.maxAttempts) {
     const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
+    recordAuthRateLimitDenied('memory');
     return {
       allowed: false,
       limit: opts.maxAttempts,
@@ -177,6 +183,9 @@ function checkMemoryRateLimit(
  * Check whether an action is within the rate limit. If allowed, increments
  * the counter atomically. If denied, the counter is NOT incremented.
  */
+/** S6.2: count at most once per process so /metrics isn't flooded in dev. */
+let memoryFallbackNoted = false;
+
 export async function checkRateLimit(
   type: 'ip' | 'email',
   projectId: string,
@@ -186,6 +195,14 @@ export async function checkRateLimit(
   const redis = getRedis();
   if (redis) {
     return checkRedisRateLimit(redisKey(type, projectId, identifier), opts);
+  }
+  // S6.2: no Redis → process-local limits (fail-open for multi-instance accuracy).
+  if (!memoryFallbackNoted) {
+    memoryFallbackNoted = true;
+    recordAuthRateLimitMemoryFallback();
+    log.warn('auth_rate_limit_using_memory_fallback', {
+      reason: 'BRIVEN_REDIS_URL missing or redis client unavailable',
+    });
   }
   return checkMemoryRateLimit(makeBucketKey(type, projectId, identifier), opts);
 }
