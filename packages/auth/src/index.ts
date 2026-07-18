@@ -107,6 +107,13 @@ export type SignInResult =
   | { ok: true; twoFactorRequired: true }
   | { ok: false; code: SignInErrorCode; message: string };
 
+/** True when sign-in fully completed (session ready), not merely 2FA-pending. */
+export function isFullySignedIn(
+  result: SignInResult,
+): result is { ok: true; userId: string; sessionExpiresAt: string } {
+  return result.ok === true && 'userId' in result;
+}
+
 export type SimpleResult =
   | { ok: true }
   | { ok: false; code: SignInErrorCode; message: string };

@@ -298,9 +298,11 @@ export const BrivenSignIn = {
       pending.value = 'password';
       error.value = null;
       const result: SignInResult = await auth.signIn.email({ email: email.value, password: password.value });
-      if (result.ok) {
+      if (result.ok && 'userId' in result) {
         props.onSuccess?.({ userId: result.userId });
-      } else {
+      } else if (result.ok && 'twoFactorRequired' in result) {
+        error.value = 'two-factor required — complete the challenge';
+      } else if (!result.ok) {
         error.value = result.message;
       }
       pending.value = null;
@@ -486,9 +488,11 @@ export const BrivenSignUp = {
         password: password.value,
         name: name.value || undefined,
       });
-      if (result.ok) {
+      if (result.ok && 'userId' in result) {
         props.onSuccess?.({ userId: result.userId });
-      } else {
+      } else if (result.ok && 'twoFactorRequired' in result) {
+        error.value = 'two-factor required — complete the challenge';
+      } else if (!result.ok) {
         error.value = result.message;
       }
       pending.value = false;

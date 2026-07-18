@@ -1319,6 +1319,42 @@ authServiceRouter.post(
 );
 
 /**
+ * Admin list a user's live sessions (no tokens — id + device hint only).
+ */
+authServiceRouter.get(
+  '/v1/projects/:id/auth/users/:userId/sessions',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const { listSessionsForUser } = await import('../services/auth-device-tracking.js');
+    const sessions = await listSessionsForUser(projectId, userId);
+    return c.json({ items: sessions });
+  },
+);
+
+/**
+ * Admin list a user's known devices (fingerprint + human hint).
+ */
+authServiceRouter.get(
+  '/v1/projects/:id/auth/users/:userId/devices',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.req.param('userId');
+    if (!projectId || !userId) {
+      return c.json({ code: 'validation_failed', message: 'missing :id or :userId' }, 400);
+    }
+    const { listDevicesForUser } = await import('../services/auth-device-tracking.js');
+    const devices = await listDevicesForUser(projectId, userId);
+    return c.json({ items: devices });
+  },
+);
+
+/**
  * Admin revoke a specific user session.
  */
 authServiceRouter.post(

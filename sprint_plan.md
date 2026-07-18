@@ -317,8 +317,8 @@ Reply with **A**, **B**, or **C** (or changes). **No feature coding under this p
 | Sprint | Status | Notes |
 | --- | --- | --- |
 | S0 Baseline & ship | **Mostly done** | Prod API + auto-deploy fixed. **Human:** still finish browser checklist when ready. |
-| S1 Never lock out | **In progress** | Fixed SDK verify path (`verify-totp`), `twoFactorRequired` result, hosted `/two-factor` + backup recovery UI, React `TwoFactorChallenge`, unit tests. |
-| S2 Suspicious access | Pending | |
+| S1 Never lock out | **Done (code)** | verify-totp path, hosted backup UI, React challenge, tests. Deployed via auto-deploy. |
+| S2 Suspicious access | **In progress** | Device fingerprint helpers + list sessions/devices admin APIs + last-seen bump; CI typecheck fix. |
 | S3 Policy & identity | Pending | |
 | S4 Hardening | Pending | |
 | S5 DX & agents | Pending | Skill + pilot + checklist already in `05acab3` |

@@ -401,9 +401,11 @@ export function BrivenSignIn(props: BrivenSignInProps) {
       setPending('password');
       setError(null);
       const result: SignInResult = await auth.signIn.email({ email, password });
-      if (result.ok) {
+      if (result.ok && 'userId' in result) {
         props.onSuccess?.({ userId: result.userId });
-      } else {
+      } else if (result.ok && 'twoFactorRequired' in result) {
+        setError('two-factor required — complete the challenge');
+      } else if (!result.ok) {
         setError(result.message);
       }
       setPending(null);
@@ -630,9 +632,11 @@ export function BrivenSignUp(props: BrivenSignUpProps) {
         password,
         name: name || undefined,
       });
-      if (result.ok) {
+      if (result.ok && 'userId' in result) {
         props.onSuccess?.({ userId: result.userId });
-      } else {
+      } else if (result.ok && 'twoFactorRequired' in result) {
+        setError('two-factor required — complete the challenge');
+      } else if (!result.ok) {
         setError(result.message);
       }
       setPending(false);

@@ -11,7 +11,8 @@
     "build": "echo 'runtime: no build step — bun runs TS directly'",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test src tests/metrics-endpoint.test.ts",
+    "test:integration": "bun test tests/integration"
   },
   "dependencies": {
     "@briven/config": "workspace:*",

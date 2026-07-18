@@ -112,8 +112,16 @@ async function probeDataPlane(): Promise<boolean> {
 }
 
 app.post('/invoke', async (c) => {
+  // Fail CLOSED always: missing secret or bad bearer → 401. Never skip auth
+  // when BRIVEN_RUNTIME_SHARED_SECRET is unset (that was an open endpoint).
   const expected = env.BRIVEN_RUNTIME_SHARED_SECRET;
-  if (expected) {
+  if (!expected) {
+    return c.json(
+      { code: 'unauthorized', message: 'runtime shared secret not configured' },
+      401,
+    );
+  }
+  {
     const auth = c.req.header('authorization');
     const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
     if (!token || !constantTimeEqual(token, expected)) {

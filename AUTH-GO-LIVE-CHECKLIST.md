@@ -129,6 +129,16 @@ This is the real-world check that Redis-backed limits are working.
 
 ---
 
+## 9a. New device notice (if you can check email)
+
+1. Sign in from a browser you have not used for this account (or a private window with a different user-agent is enough for a weak check).
+2. Check the account email for a **“new device signed in”** message.
+
+**Pass:** Email arrives (or spam) with a simple device hint (e.g. “Chrome on macOS”).  
+**N/A** if you only ever use one browser.
+
+---
+
 ## 9b. Lost phone / 2FA backup codes (if you turned on two-factor)
 
 Only if **Auth → providers** has two-factor / MFA enabled and a test user enrolled:
