@@ -8,6 +8,13 @@ export const metadata = {
 
 const INSTALL_CLIENT = pmInstall('@briven/client');
 const ONE_SHOT = pmDlx('briven');
+const SETUP = pmExec(
+  'briven setup',
+  'briven setup --name my-app',
+  'briven setup --project p_01HZ...',
+  'briven setup --name my-app --template todo-app --region eu-west',
+);
+const SETUP_THEN = pmExec('briven deploy', 'briven dev');
 const CONNECT = pmExec('briven connect');
 const CONNECT_STATUS = pmExec('briven connect status');
 const PROJECTS_REMOTE = pmExec('briven projects list --remote');
@@ -21,13 +28,7 @@ const PROJECTS_USE = pmExec(
 );
 const PROJECTS_UNLINK = pmExec('briven projects unlink p_01HZ...');
 const INIT_LINK = pmExec('briven init', 'briven link --project p_01HZ...', 'briven deploy');
-const LIFECYCLE = pmExec(
-  'briven connect',
-  'briven projects create --name my-app',
-  'briven init',
-  'briven link',
-  'briven deploy',
-);
+const LIFECYCLE = pmExec('briven setup', 'briven deploy');
 
 export default function ConnectPage() {
   return (
@@ -52,9 +53,9 @@ export default function ConnectPage() {
       {/* ─── path 0: shell lifecycle ─────────────────────────────────────── */}
       <h2 className="mt-12 font-mono text-lg">path 0 · from the shell (recommended)</h2>
       <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
-        the fastest way to get a machine talking to briven: sign in once in the browser, create or
-        pick a project, then deploy from your terminal. no copy-pasting keys from the dashboard
-        unless you want the manual path.
+        convex-style: one command signs you in, creates a <em>new</em> cloud project or attaches an{' '}
+        <em>existing</em> one, and wires this folder. templates are optional starters — not the
+        product model.
       </p>
 
       <h3 className="mt-6 font-mono text-sm">install the cli (or run one-off)</h3>
@@ -66,81 +67,59 @@ export default function ConnectPage() {
         <a className="underline" href="/cli">
           cli
         </a>{' '}
-        page.
+        page. running bare <code>briven</code> with no linked folder also starts setup.
       </p>
 
-      <h3 className="mt-6 font-mono text-sm">1 · sign in to the platform</h3>
+      <h3 className="mt-6 font-mono text-sm">one command · briven setup</h3>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        <code>briven connect</code> opens your browser, you approve the cli, and a user session is
-        saved under <code>~/.config/briven/credentials.json</code> (mode 0600). this is your{' '}
-        <em>platform</em> login — not a project API key yet.
+        opens the browser to sign in, asks new vs existing (or takes flags), mints a CLI key, writes{' '}
+        <code>briven.json</code> + scaffold files, and leaves you ready to deploy.
       </p>
-      <PmTabs commands={CONNECT} />
-      <PmTabs commands={CONNECT_STATUS} />
+      <PmTabs commands={SETUP} />
       <ul className="mt-3 list-disc pl-5 font-mono text-xs text-[var(--color-text-muted)]">
         <li>
-          <code>briven connect</code> — browser OAuth; re-run with <code>--force</code> to refresh
+          <code>briven setup</code> — interactive: (N)ew or (E)xisting, name, region, optional
+          template
         </li>
         <li>
-          <code>briven connect status</code> — who is signed in + which project keys sit on this
-          machine
+          <code>--name my-app</code> — create a new cloud project (no prompts if you also pass{' '}
+          <code>--yes</code>)
         </li>
         <li>
-          <code>briven connect logout</code> — drop the platform session only (keeps project keys)
+          <code>--project p_…</code> — attach an existing project by id or slug
+        </li>
+        <li>
+          <code>--template todo-app</code> — optional starter files only
         </li>
       </ul>
-
-      <h3 className="mt-6 font-mono text-sm">2 · create or pick a project</h3>
-      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        projects are your isolated backends (schema, functions, data). create one from the shell,
-        or attach an existing one and mint a local CLI key in one step.
-      </p>
-      <PmTabs commands={PROJECTS_REMOTE} />
-      <PmTabs commands={PROJECTS_CREATE} />
-      <PmTabs commands={PROJECTS_USE} />
-      <ul className="mt-3 list-disc pl-5 font-mono text-xs text-[var(--color-text-muted)]">
-        <li>
-          <code>list --remote</code> — every project on your account (needs{' '}
-          <code>connect</code>)
-        </li>
-        <li>
-          <code>create --name …</code> — creates on the platform, mints a <code>brk_…</code> CLI
-          key, sets it as default
-        </li>
-        <li>
-          <code>use &lt;p_…&gt;</code> — mint/store a key for an existing project;{' '}
-          <code>--link</code> also writes the id into <code>briven.json</code>
-        </li>
-        <li>
-          <code>unlink &lt;p_…&gt;</code> — forget the key on this machine only (project stays on
-          the platform)
-        </li>
-      </ul>
-      <PmTabs commands={PROJECTS_UNLINK} />
-
-      <h3 className="mt-6 font-mono text-sm">3 · scaffold, link, deploy</h3>
-      <PmTabs commands={INIT_LINK} />
-      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        <code>init</code> drops the local folder layout; <code>link</code> binds the folder to the
-        project id; <code>deploy</code> pushes schema + functions. day-to-day iteration is{' '}
-        <code>briven dev</code> (watch mode).
-      </p>
+      <PmTabs commands={SETUP_THEN} />
 
       <h3 className="mt-6 font-mono text-sm">full lifecycle (copy-paste)</h3>
       <PmTabs commands={LIFECYCLE} />
 
+      <h3 className="mt-6 font-mono text-sm">step-by-step (when you want the pieces)</h3>
+      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+        same job, split into smaller commands — useful for scripts or power users.
+      </p>
+      <PmTabs commands={CONNECT} />
+      <PmTabs commands={CONNECT_STATUS} />
+      <PmTabs commands={PROJECTS_REMOTE} />
+      <PmTabs commands={PROJECTS_CREATE} />
+      <PmTabs commands={PROJECTS_USE} />
+      <PmTabs commands={PROJECTS_UNLINK} />
+      <PmTabs commands={INIT_LINK} />
+
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
         <strong className="text-[var(--color-text)]">two kinds of credentials.</strong>{' '}
-        <code>connect</code> stores a <em>user</em> session (who you are on the platform).{' '}
-        <code>projects create/use</code> (or manual <code>briven login --key brk_…</code>) stores a{' '}
-        <em>project</em> API key (what this machine can do inside one project).{' '}
+        <code>setup</code> / <code>connect</code> store a <em>user</em> session (who you are).{' '}
+        setup also mints a <em>project</em> API key (what this machine can do inside one project).{' '}
         <code>briven logout</code> clears everything; <code>briven connect logout</code> clears only
         the platform session.
       </div>
 
       <p className="mt-4 font-mono text-sm text-[var(--color-text-muted)]">
         self-host? set <code>BRIVEN_API_ORIGIN</code> and <code>BRIVEN_DASHBOARD_ORIGIN</code>{' '}
-        before <code>connect</code>. details on the{' '}
+        before <code>setup</code>. details on the{' '}
         <a className="underline" href="/cli">
           cli
         </a>{' '}

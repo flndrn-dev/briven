@@ -4,8 +4,9 @@ const HELP = `
 usage:   briven <command> [options]
 
 commands:
-  init              scaffold briven/ folder and briven.json (--template=todo-app|chat|blank)
-  connect           sign in to the platform (browser OAuth) + show status
+  setup             one command: sign in + new/existing project + wire this folder
+  init              scaffold briven/ folder only (no cloud) — prefer \`setup\`
+  connect           sign in to the platform only (browser OAuth)
   projects          project lifecycle: list, create, use, unlink, set-default
   auth              manage Briven Auth (scaffold middleware, configure providers)
   login             store a dashboard api key for a project (manual path)
@@ -23,11 +24,9 @@ commands:
   doctor            run a health check against the linked api
   ai                generate schema / function / explain code (schema|function|explain)
 
-lifecycle (typical):
-  briven connect
-  briven projects create --name my-app
-  briven init && briven link
-  briven deploy
+lifecycle (convex-style):
+  briven setup              # or: briven setup --name my-app
+  briven deploy             # or: briven dev
 
 options:
   --version, -v     print the cli version and exit

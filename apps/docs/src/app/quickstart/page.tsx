@@ -8,12 +8,7 @@ export const metadata = {
 
 const SCAFFOLD = pmJoin(
   pmPlain('$ mkdir my-app && cd my-app'),
-  pmExec(
-    'briven connect',
-    'briven projects create --name my-app',
-    'briven init',
-    'briven link',
-  ),
+  pmExec('briven setup --name my-app'),
 );
 
 const INSTALL_CLIENT = pmInstall('@briven/react');
@@ -29,27 +24,28 @@ export default function QuickstartPage() {
       </p>
 
       <ol className="mt-8 flex flex-col gap-6 font-mono text-sm text-[var(--color-text-muted)]">
-        <Step n={1} title="connect + create a project from the shell">
-          Install the CLI (or use <code>npx @briven/cli</code>), sign in with browser OAuth, create
-          a project, scaffold files, and link this folder. Full detail:{' '}
+        <Step n={1} title="one command: briven setup">
+          Install the CLI (or use <code>npx @briven/cli</code>). Then{' '}
+          <code>briven setup</code> signs you in, creates or attaches a cloud project, and wires
+          this folder — Convex-style. Full detail:{' '}
           <a className="underline" href="/connect">
             connect
           </a>
           .
           <PmTabs commands={SCAFFOLD} />
           <div className="mt-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 text-xs">
-            <strong className="text-[var(--color-text)]">dashboard-only path:</strong> sign in at{' '}
+            <strong className="text-[var(--color-text)]">other paths:</strong> interactive{' '}
+            <code>briven setup</code> (pick new vs existing), or{' '}
+            <code>briven setup --project p_…</code> for an existing project. Dashboard-only: sign
+            in at{' '}
             <a className="underline" href="https://briven.tech">
               briven.tech
             </a>
-            , create a project, open <em>studio</em>, click <em>+ new table</em>. Use{' '}
-            <em>copy as schema.ts</em> when you want CLI + git. Manual key path:{' '}
-            <code>briven login --project p_… --key brk_…</code>.
+            , use studio, then <em>copy as schema.ts</em> when you want CLI + git.
           </div>
           <p className="mt-2 text-[var(--color-text-subtle)]">
-            <code>briven init</code> drops the layout (<code>briven.json</code>,{' '}
-            <code>briven/schema.ts</code>, example functions). Templates:{' '}
-            <code>--template=todo-app</code> or <code>--template=chat</code>.
+            optional starter: <code>--template=todo-app</code> or <code>--template=chat</code>{' '}
+            (templates are not the product — just files).
           </p>
         </Step>
         <Step n={2} title="edit the schema + function">

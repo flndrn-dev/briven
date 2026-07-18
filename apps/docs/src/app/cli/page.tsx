@@ -8,6 +8,12 @@ export const metadata = {
 
 const INSTALL = pmInstall('@briven/cli', { dev: true });
 const ONE_SHOT = pmDlx('briven');
+const SETUP = pmExec(
+  'briven setup',
+  'briven setup --name my-app',
+  'briven setup --project p_xxx',
+  'briven setup --name my-app --template todo-app --region eu-west',
+);
 const INIT = pmExec('briven init');
 const CONNECT = pmExec(
   'briven connect',
@@ -68,27 +74,34 @@ export default function CliPage() {
         <PmTabs commands={ONE_SHOT} />
       </Section>
 
+      <Section title="setup (recommended)">
+        <p>
+          Convex-style one command: browser sign-in, create a <em>new</em> cloud project or attach
+          an <em>existing</em> one, scaffold this folder, mint a CLI key. Full walkthrough on the{' '}
+          <a className="underline" href="/connect">
+            connect
+          </a>{' '}
+          page. Bare <code>briven</code> with no linked project also starts setup.
+        </p>
+        <PmTabs commands={SETUP} />
+      </Section>
+
       <Section title="init">
         <p>
-          Scaffold <code>briven.json</code>, <code>briven/schema.ts</code>, and an example function.
+          Scaffold local files only (<code>briven.json</code>, schema, example function) — no cloud.
+          Prefer <code>briven setup</code> when you want the full connect + project flow.
         </p>
         <PmTabs commands={INIT} />
         <p>
-          Creates the project layout in the current directory. Pass <code>--name</code> to override
-          the default (the directory name). Pass <code>--force</code> to overwrite an existing{' '}
-          <code>briven.json</code>.
+          Pass <code>--name</code> to override the directory name. Pass <code>--force</code> to
+          overwrite an existing <code>briven.json</code>.
         </p>
       </Section>
 
       <Section title="connect">
         <p>
-          Sign this machine into the <em>platform</em> with browser OAuth. After connect you can
-          create projects and mint CLI keys without pasting dashboard secrets. See the full walkthrough
-          on the{' '}
-          <a className="underline" href="/connect">
-            connect
-          </a>{' '}
-          page.
+          Sign this machine into the <em>platform</em> only (browser OAuth) without scaffolding.
+          Usually you want <code>briven setup</code> instead.
         </p>
         <PmTabs commands={CONNECT} />
         <p>

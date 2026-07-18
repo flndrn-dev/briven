@@ -583,11 +583,11 @@ export async function runInit(argv: readonly string[]): Promise<number> {
     step(`  ${path}`);
   }
   blankLine();
-  step('next: create a project in the dashboard, then run');
-  step('      briven login --project <id> --key <brk_...>');
-  step('      briven link');
-  step('      briven deploy');
-  link('https://docs.briven.tech/cli');
+  step('local files only. to create/link a cloud project + wire this folder:');
+  step('      briven setup');
+  step('  or: briven setup --name my-app');
+  step('then: briven deploy   |   briven dev');
+  link('https://docs.briven.tech/connect');
   return 0;
 }
 

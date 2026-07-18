@@ -71,6 +71,16 @@ describe('@briven/cli entry', () => {
     assert.equal(code, 1);
   });
 
+  it('returns 0 for "setup --help"', async () => {
+    const code = await run(['setup', '--help']);
+    assert.equal(code, 0);
+  });
+
+  it('returns 1 for "setup" with both --name and --project', async () => {
+    const code = await run(['setup', '--name', 'x', '--project', 'p_x']);
+    assert.equal(code, 1);
+  });
+
   it('returns 0 for "connect --help"', async () => {
     const code = await run(['connect', '--help']);
     assert.equal(code, 0);

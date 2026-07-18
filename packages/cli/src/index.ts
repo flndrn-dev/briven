@@ -16,13 +16,20 @@ import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
 import { runLogs } from './commands/logs.js';
 import { runProjects } from './commands/projects.js';
+import { runSetupCommand } from './commands/setup.js';
 import { printVersion } from './commands/version.js';
 import { runWhoami } from './commands/whoami.js';
+import { readProjectConfig } from './project-config.js';
 
 export async function run(argv: readonly string[]): Promise<number> {
   const [first, ...rest] = argv;
 
   if (!first) {
+    // Convex-style default: unlinked folder → setup; linked → watch.
+    const local = await readProjectConfig();
+    if (!local?.projectId) {
+      return runSetupCommand([]);
+    }
     return runDev([]);
   }
   if (first === '--help' || first === '-h' || first === 'help') {
@@ -36,6 +43,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   }
 
   switch (first) {
+    case 'setup':
+      return runSetupCommand(rest);
     case 'init':
       return runInit(rest);
     case 'connect':
