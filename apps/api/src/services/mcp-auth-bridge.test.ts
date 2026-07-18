@@ -50,6 +50,25 @@ describe('mcp auth bridge — pure helpers', () => {
     expect(ids).toContain('sender-domain-setup');
   });
 
+  test('2FA / backup code question hits two-factor guidance', () => {
+    const ids = matchAuthGuidance('lost phone how do backup recovery codes work for 2fa').map(
+      (m) => m.id,
+    );
+    expect(ids).toContain('two-factor-backup-codes');
+  });
+
+  test('e2e testing token question hits testing-tokens guidance', () => {
+    const ids = matchAuthGuidance('how do I use a testing token for playwright e2e ci').map(
+      (m) => m.id,
+    );
+    expect(ids).toContain('testing-tokens-e2e');
+  });
+
+  test('scaffold question hits scaffold-setup guidance', () => {
+    const ids = matchAuthGuidance('briven auth scaffold next middleware setup').map((m) => m.id);
+    expect(ids).toContain('scaffold-setup');
+  });
+
   test('unrelated question returns no matches', () => {
     expect(matchAuthGuidance('kubernetes ingress annotations')).toEqual([]);
   });

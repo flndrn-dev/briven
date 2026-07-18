@@ -26,6 +26,8 @@ export default function AuthPage() {
           ['create the client', '#client'],
           ['react bindings', '#react'],
           ['sign-in flows', '#flows'],
+          ['two-factor + backup codes', '#two-factor'],
+          ['testing tokens', '#testing-tokens'],
           ['email sender domain', '#sender-domain'],
           ['verify users with tokens', '#verify-tokens'],
           ['security', '#security'],
@@ -333,6 +335,56 @@ if (result.ok) {
         </section>
       </section>
 
+      {/* two-factor ------------------------------------------------------ */}
+      <section
+        id="two-factor"
+        className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8"
+      >
+        <h2 className="font-mono text-lg tracking-tight">two-factor + backup codes</h2>
+        <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+          when the project has two-factor enabled, password sign-in may return{' '}
+          <code>twoFactorRequired</code>. complete the challenge with a TOTP app code or a
+          single-use <strong>backup recovery code</strong> (for lost phones).
+        </p>
+        <Snippet>{`// after password sign-in returns twoFactorRequired:
+const totp = await auth.twoFactor.verify('123456');
+// or lost phone:
+const backup = await auth.twoFactor.verifyBackupCode('XXXX-XXXX');
+
+// enroll (show codes once after verify):
+await auth.twoFactor.enable(password);
+await auth.twoFactor.verify(appCode);
+const { codes } = await auth.twoFactor.generateBackupCodes(password);
+// save codes offline — each works once`}</Snippet>
+        <p className="mt-3 font-mono text-xs text-[var(--color-text-subtle)]">
+          hosted pages: after password, users land on{' '}
+          <code>/auth/&lt;projectId&gt;/two-factor</code> with a toggle for backup codes.
+          react: <code>TwoFactorSetup</code> + <code>TwoFactorChallenge</code> from{' '}
+          <code>@briven/auth/react</code>.
+        </p>
+      </section>
+
+      {/* testing tokens ------------------------------------------------- */}
+      <section
+        id="testing-tokens"
+        className="mt-10 scroll-mt-20 border-t border-[var(--color-border-subtle)] pt-8"
+      >
+        <h2 className="font-mono text-lg tracking-tight">testing tokens (e2e)</h2>
+        <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+          for automated tests, mint a <strong>testing token</strong> in the dashboard (or{' '}
+          <code>POST /v1/projects/:id/auth/test-tokens</code> as an admin). it bypasses bot
+          checks, rate limits, and MFA for a short window and is returned <em>once</em> as{' '}
+          <code>briven_test_…</code>.
+        </p>
+        <Snippet>{`// CI / e2e (never commit the raw token)
+const session = await auth.signIn.testToken(process.env.BRIVEN_AUTH_TEST_TOKEN!);
+// → { ok: true, expiresAt } and a real session cookie`}</Snippet>
+        <p className="mt-3 font-mono text-xs text-[var(--color-text-subtle)]">
+          revoke used tokens in the dashboard. production apps for real humans should not rely
+          on testing tokens.
+        </p>
+      </section>
+
       {/* sender domain -------------------------------------------------- */}
       <section
         id="sender-domain"
@@ -462,7 +514,8 @@ const { payload } = await jwtVerify(token, jwks);
           <li>
             the <code>pk_briven_auth_</code> key is browser-safe: it identifies the tenant and
             unlocks the end-user sign-in surface only. your server <code>brk_*</code> keys are
-            not — keep them server-side.
+            not — keep them server-side. <code>read</code> scope keys cannot POST mutating
+            auth-tenant routes.
           </li>
           <li>
             never log or display an end-user&apos;s email or IP. the <code>User</code> object
@@ -473,6 +526,15 @@ const { payload } = await jwtVerify(token, jwks);
             sessions live in an http cookie the service sets on sign-in; the SDK sends requests
             with <code>credentials: &apos;include&apos;</code> so the browser stores and returns
             it. you don&apos;t handle tokens yourself.
+          </li>
+          <li>
+            password policy (length / character rules / max age / force reset) and rate limits
+            are per-project. production should show <code>redis: ok</code> on{' '}
+            <code>/ready</code> so limits share across servers.
+          </li>
+          <li>
+            new device emails use a hashed browser fingerprint (no raw IPs). SSO redirects after
+            SAML/OIDC only allow listed app origins.
           </li>
         </ul>
 
@@ -509,6 +571,18 @@ const { payload } = await jwtVerify(token, jwks);
           <li>
             sessions are cookies — prefer <code>getSession()</code> /{' '}
             <code>useSession()</code>, not home-rolled localStorage tokens.
+          </li>
+          <li>
+            for e2e, use testing tokens (<code>auth.signIn.testToken</code>), not real MFA
+            bypass hacks. for lost-phone recovery, implement backup codes (see{' '}
+            <a className="underline" href="#two-factor">
+              two-factor
+            </a>
+            ).
+          </li>
+          <li>
+            framework hooks: react <code>useUserMetadata</code> / <code>useUserEmails</code>;
+            vue + svelte have matching helpers. pilot: <code>examples/auth-pilot/</code>.
           </li>
         </ul>
       </section>

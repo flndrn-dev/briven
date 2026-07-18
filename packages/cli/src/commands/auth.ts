@@ -162,10 +162,12 @@ async function runScaffold(): Promise<number> {
   blankLine();
   step('next:');
   step('  1. pnpm add @briven/auth   (or npm i @briven/auth)');
-  step('  2. dashboard → Auth → API keys → create key (pk_briven_auth_…)');
+  step('  2. dashboard → Auth → API keys → create key (pk_briven_auth_…, scope read-write)');
   step('  3. paste key into NEXT_PUBLIC_BRIVEN_AUTH_KEY (+ BRIVEN_AUTH_PUBLIC_KEY)');
   step('  4. copy the sign-in example into a real page');
-  step('  5. run AUTH-GO-LIVE-CHECKLIST.md in a browser before real users');
+  step('  5. if 2FA is on: handle twoFactorRequired (hosted /two-factor or TwoFactorChallenge)');
+  step('  6. run AUTH-GO-LIVE-CHECKLIST.md in a browser before real users');
+  step('  7. e2e only: Auth → testing tokens → auth.signIn.testToken(…)');
   link('https://docs.briven.tech/auth');
   return 0;
 }

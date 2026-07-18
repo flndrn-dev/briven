@@ -38,6 +38,10 @@ const DOCS = {
   flows: 'https://docs.briven.tech/auth#flows',
   security: 'https://docs.briven.tech/auth#security',
   verifyTokens: 'https://docs.briven.tech/auth#verify-tokens',
+  twoFactor: 'https://docs.briven.tech/auth#two-factor',
+  testingTokens: 'https://docs.briven.tech/auth#testing-tokens',
+  setup: 'https://docs.briven.tech/auth#setup',
+  agents: 'https://docs.briven.tech/auth#agents',
 } as const;
 
 /* ── auth_config_get ─────────────────────────────────────────────────── */
@@ -285,6 +289,103 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
       'after sign-in/out, call refresh() on your session hook so the UI updates without a reload.',
     ],
     docs: DOCS.security,
+  },
+  {
+    id: 'two-factor-backup-codes',
+    topic: 'two-factor and lost-phone backup codes',
+    keywords: [
+      'two',
+      'factor',
+      '2fa',
+      'mfa',
+      'totp',
+      'backup',
+      'recovery',
+      'code',
+      'codes',
+      'authenticator',
+      'lost',
+      'phone',
+    ],
+    answer:
+      'when 2FA is on, password sign-in may return twoFactorRequired. finish with ' +
+      'auth.twoFactor.verify (TOTP app code) or auth.twoFactor.verifyBackupCode (single-use ' +
+      'recovery codes for lost phones). enroll with enable → verify → generateBackupCodes ' +
+      'and show the codes once. hosted path: /auth/<projectId>/two-factor.',
+    applyInYourProject: [
+      'after signIn.email, if result.ok && "twoFactorRequired" in result, show TwoFactorChallenge or redirect to the hosted two-factor page.',
+      'never store backup codes in your database — only the user should keep them offline.',
+      'use auth.twoFactor.verify (not a made-up /two-factor/verify path) — the live endpoint is verify-totp under the hood.',
+    ],
+    docs: DOCS.twoFactor,
+  },
+  {
+    id: 'testing-tokens-e2e',
+    topic: 'testing tokens for e2e / ci',
+    keywords: ['test', 'testing', 'token', 'e2e', 'ci', 'playwright', 'bypass', 'mfa'],
+    answer:
+      'mint a short-lived briven_test_… token as a project admin (dashboard or POST ' +
+      '/v1/projects/:id/auth/test-tokens). exchange it with auth.signIn.testToken(raw) to get ' +
+      'a real session without MFA/rate-limit friction. raw token is shown once; revoke after CI.',
+    applyInYourProject: [
+      'store the raw token only in CI secrets (BRIVEN_AUTH_TEST_TOKEN), never in git.',
+      'call createBrivenAuth({ projectId, publicKey }) then auth.signIn.testToken(process.env.BRIVEN_AUTH_TEST_TOKEN!).',
+      'do not use testing tokens for real end users in production flows.',
+    ],
+    docs: DOCS.testingTokens,
+  },
+  {
+    id: 'password-policy',
+    topic: 'password policy and force reset',
+    keywords: [
+      'password',
+      'policy',
+      'weak',
+      'length',
+      'reuse',
+      'expired',
+      'force',
+      'reset',
+      'complexity',
+    ],
+    answer:
+      'per-project password policy covers min length, character classes, max age, and reuse. ' +
+      'admins can force a password change on next sign-in. weak passwords are rejected on ' +
+      'sign-up/reset/change; expired or force-reset users cannot open a session until they reset.',
+    applyInYourProject: [
+      'read policy via dashboard or GET /v1/projects/:id/auth/password-policy before showing signup rules in your UI.',
+      'surface the server error message (code weak_password) next to the password field — do not invent rules that disagree with the project policy.',
+    ],
+    docs: DOCS.security,
+  },
+  {
+    id: 'new-device-sessions',
+    topic: 'new device alerts and session revoke',
+    keywords: ['device', 'new', 'session', 'sessions', 'revoke', 'alert', 'fingerprint'],
+    answer:
+      'on sign-in from an unseen browser fingerprint, briven can email a new-device notice ' +
+      '(no raw IPs stored). admins can list sessions/devices for a user and revoke a ' +
+      'specific session. end users can list/revoke via the SDK sessions helpers.',
+    applyInYourProject: [
+      'offer a "sessions" settings page using auth.sessions.list() / auth.sessions.revoke(sessionId).',
+      'tell users to check spam if they do not see new-device mail; branding/sender domain still applies.',
+    ],
+    docs: DOCS.security,
+  },
+  {
+    id: 'scaffold-setup',
+    topic: 'scaffold briven auth into a next app',
+    keywords: ['scaffold', 'setup', 'middleware', 'next', 'briven auth scaffold', 'pilot'],
+    answer:
+      'from a linked project (briven.json present), run `briven auth scaffold` then install ' +
+      '@briven/auth. that writes middleware.ts, lib/auth.ts, and .env.local seeds. paste the ' +
+      'pk_briven_auth_… key, then use hostedPageURL or BrivenSignIn. prove with AUTH-GO-LIVE-CHECKLIST.md.',
+    applyInYourProject: [
+      'run briven link if briven.json is missing, then briven auth scaffold.',
+      'set NEXT_PUBLIC_BRIVEN_PROJECT_ID and NEXT_PUBLIC_BRIVEN_AUTH_KEY (and BRIVEN_AUTH_PUBLIC_KEY to the same value for middleware).',
+      'copy examples/auth-pilot/ for a minimal hosted sign-in button pattern.',
+    ],
+    docs: DOCS.setup,
   },
 ] as const;
 

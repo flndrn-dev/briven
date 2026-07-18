@@ -197,6 +197,7 @@ If an AI agent sets up your app, they should follow the **briven-auth** skill an
 2. Install `@briven/auth` (and `@briven/auth/react` for React).
 3. Paste project id + `pk_briven_auth_…` into env vars.
 4. Put a sign-in page on screen and a “who am I” check after login.
+5. Optional e2e: mint a **testing token** and call `auth.signIn.testToken` in CI only.
 
 **Pass:** A second person can sign up on your pilot URL without you hand-holding the code.
 

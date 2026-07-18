@@ -370,9 +370,10 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
   },
   {
     slug: '/auth',
-    title: 'auth · @briven/auth end-user sign-in + email sender domain + verifiable tokens (jwt + jwks)',
+    title:
+      'auth · @briven/auth sign-in, 2FA backup codes, testing tokens, sender domain, jwt+jwks',
     summary:
-      'drop-in end-user sign-in for your app: email + password, magic link, email OTP, passkeys, OAuth social. covers install, pk_briven_auth keys, React hooks, the BrivenSignIn panel, and the email sender domain: how sign-in emails send from noreply@briven.tech by default, how to brand them as noreply@yourdomain via Auth → branding (root domain, never an auth. subdomain), the SPF + DKIM DNS records that verify it, and the automatic fallback that keeps sign-in emails working until the domain verifies. also covers verifiable tokens: GET /v1/auth-tenant/token returns a short-lived signed JWT for the signed-in user, GET /v1/auth-tenant/jwks returns the project JSON Web Key Set, so your app verifies sessions locally with any standard JWT library instead of a get-session round-trip — keys are per-project and rotation lands via the JWKS endpoint.',
+      'drop-in end-user sign-in: email + password, magic link, email OTP, passkeys, OAuth. install, pk_briven_auth keys, React/Vue/Svelte hooks, BrivenSignIn, two-factor + backup recovery codes, testing tokens for e2e (briven_test_… / signIn.testToken), password policy, new-device alerts, sender domain DNS, and verifiable JWT+JWKS for local session verification. agents: briven auth scaffold + AUTH-GO-LIVE-CHECKLIST.md.',
     keywords: [
       'auth',
       'sign in',
@@ -381,6 +382,16 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'otp',
       'passkey',
       'oauth',
+      'two-factor',
+      '2fa',
+      'mfa',
+      'backup codes',
+      'recovery codes',
+      'testing tokens',
+      'e2e',
+      'test token',
+      'password policy',
+      'scaffold',
       'sender domain',
       'email domain',
       'custom domain email',
@@ -400,6 +411,8 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'token endpoint',
       'json web key set',
       'key rotation',
+      'new device',
+      'rate limit',
     ],
   },
 ];

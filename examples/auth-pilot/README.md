@@ -16,6 +16,13 @@ Not a full product UI — a **wiring kit**:
 
 Email + password only is enough for a pilot. Turn on Google/magic link later in the dashboard.
 
+**If you enable two-factor:** after password sign-in, users may hit the hosted
+`/auth/<projectId>/two-factor` step (authenticator code **or** a backup recovery
+code). In React apps use `TwoFactorChallenge` from `@briven/auth/react`.
+
+**For CI/e2e:** mint a testing token in the dashboard (or admin API) and call
+`auth.signIn.testToken(process.env.BRIVEN_AUTH_TEST_TOKEN!)`.
+
 ## 10-minute path
 
 ```sh
