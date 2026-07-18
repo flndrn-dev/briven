@@ -138,6 +138,32 @@ export default async function StatusPage() {
         </p>
       </section>
 
+      <section className="relative z-10 mx-auto w-full max-w-4xl px-6 pb-4">
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 font-mono text-xs text-[var(--color-text-muted)]">
+          <p className="text-[var(--color-text)]">what if sign-in feels broken?</p>
+          <ul className="mt-3 list-disc space-y-2 pl-5">
+            <li>
+              check <code className="text-[var(--color-text)]">redis</code> under the api probe
+              above — rate limits need it healthy; logins can still work if only cache is down.
+            </li>
+            <li>
+              already-open sessions usually keep working; new sign-ups / magic links need the mail
+              path.
+            </li>
+            <li>
+              we post short incident notes here and on{' '}
+              <Link
+                href="https://docs.briven.tech/status"
+                className="text-[var(--color-text-link)] underline-offset-2 hover:underline"
+              >
+                docs status
+              </Link>{' '}
+              when something is customer-visible.
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <section className="relative z-10 mx-auto w-full max-w-4xl px-6">
         <div
           className={`rounded-[var(--radius-md)] border p-5 font-mono text-sm ${

@@ -1,8 +1,8 @@
 # auth-pilot
 
-Smallest trustworthy Briven Auth setup for a real browser test.
+Smallest trustworthy **Briven Auth** setup for a real browser test (dogfood kit).
 
-**For humans:** follow `AUTH-GO-LIVE-CHECKLIST.md` in the Briven repo.  
+**For humans:** follow repo root `AUTH-GO-LIVE-CHECKLIST.md` + `BETA-V1-NEXT-STEPS.md`.  
 **For agents:** follow the `briven-auth` skill.
 
 ## What you get
@@ -23,38 +23,52 @@ code). In React apps use `TwoFactorChallenge` from `@briven/auth/react`.
 **For CI/e2e:** mint a testing token in the dashboard (or admin API) and call
 `auth.signIn.testToken(process.env.BRIVEN_AUTH_TEST_TOKEN!)`.
 
-## 10-minute path
+## 10-minute dogfood path (recommended)
 
 ```sh
-# 0. you already have a Briven project + Auth enabled in the dashboard
+# 0. Platform awake (or ask an agent)
+#    curl -s https://api.briven.tech/ready   → redis: ok
 
-# 1. copy this folder into your app monorepo (or start from an empty Next app)
-cp -r examples/auth-pilot my-auth-pilot
-cd my-auth-pilot
+# 1. Copy this kit
+cp -r examples/auth-pilot ~/Desktop/auth-pilot-dogfood
+cd ~/Desktop/auth-pilot-dogfood
 
-# 2. link to your project (writes projectId into briven.json)
-briven link
+# 2. One command: sign in + new or existing project + wire folder
+#    NEW project:
+briven setup --name auth-pilot
+#    OR attach an EXISTING project:
+# briven setup --project p_YOUR_ID
 
-# 3. generate/refresh scaffold files (safe: will not overwrite existing .env.local)
+# 3. Auth scaffold (middleware + lib/auth + env template)
 briven auth scaffold
-
-# 4. install the client
 pnpm add @briven/auth
-# React UI optional:
-# pnpm add @briven/auth   # react hooks live at @briven/auth/react
 
-# 5. paste pk_briven_auth_… into .env.local
+# 4. Dashboard: project → Auth → Enable (if needed) → API keys → create
+#    pk_briven_auth_…  (browser only — never brk_)
+
+# 5. Paste into .env.local (do not commit)
+#    NEXT_PUBLIC_BRIVEN_PROJECT_ID=p_…
+#    NEXT_PUBLIC_BRIVEN_API_ORIGIN=https://api.briven.tech
 #    NEXT_PUBLIC_BRIVEN_AUTH_KEY=pk_briven_auth_…
 #    BRIVEN_AUTH_PUBLIC_KEY=pk_briven_auth_…   # same value
 
-# 6. run your Next app, open the sign-in page, complete checklist rows 0–4 + 7
+# 6. Run your Next host, open /sign-in
+# 7. Complete AUTH-GO-LIVE-CHECKLIST rows 3, 4, 7 (sign-up, wrong password, refresh)
+```
+
+### Manual key path (if you already have a key)
+
+```sh
+briven login --project p_… --key brk_…   # server/cli key only
+briven link
+briven auth scaffold
 ```
 
 ## Files in this folder
 
 ```
 auth-pilot/
-├─ briven.json          # name only until `briven link`
+├─ briven.json          # name only until setup/link
 ├─ middleware.ts        # /api/auth/* → api.briven.tech/v1/auth-tenant/*
 ├─ lib/
 │  └─ auth.ts           # createBrivenAuth client
@@ -73,4 +87,5 @@ auth-pilot/
 ## Docs
 
 - https://docs.briven.tech/auth  
-- Briven repo: `AUTH-GO-LIVE-CHECKLIST.md`
+- https://docs.briven.tech/connect  
+- Repo: `AUTH-GO-LIVE-CHECKLIST.md`, `BETA-V1-NEXT-STEPS.md`, `docs/S6-RELIABILITY.md`

@@ -118,6 +118,20 @@ export default async function StatusPage() {
         for incident history + post-mortems, see the changelog.
       </p>
 
+      <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
+        <p className="text-[var(--color-text)]">if sign-in feels broken</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>
+            look at api → <code>redis</code>: abuse limits need it <code>ok</code>. logins can still
+            work if only the cache is down (limits may be softer).
+          </li>
+          <li>open sessions usually keep working; new magic links need mail delivery.</li>
+          <li>
+            ops notes: repo <code>docs/S6-RELIABILITY.md</code> (Redis behavior + isolation).
+          </li>
+        </ul>
+      </div>
+
       <div
         className={`mt-8 rounded-md border p-4 font-mono text-sm ${
           allOk

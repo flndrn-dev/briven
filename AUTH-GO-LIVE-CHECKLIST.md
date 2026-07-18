@@ -20,7 +20,10 @@ Open these in a browser tab (or ask an agent to curl them). You want green / “
 
 If Redis is **not** `"ok"`, stop — logins can still work, but abuse protection is weaker. Fix Redis before a public launch.
 
-**Checked once on 2026-07-18:** production reported `ready` with `redis: ok`.
+**Checked once on 2026-07-18:** production reported `ready` with `redis: ok`.  
+**Re-checked 2026-07-18 (agent):** `health` ok + `ready` with `control_postgres`, `data_plane_postgres`, `runtime`, **`redis: ok`**. Row **0 = PASS**.
+
+**Tracker for the whole beta push:** see `BETA-V1-NEXT-STEPS.md` (checklist + S6 + dogfood).
 
 ---
 
@@ -193,7 +196,7 @@ If 2FA is off for the pilot, mark this row N/A.
 
 If an AI agent sets up your app, they should follow the **briven-auth** skill and:
 
-1. Run `briven link` (if not already) then `briven auth scaffold`.
+1. Run `briven setup --project <p_…>` (or `briven link` if already logged in) then `briven auth scaffold`.
 2. Install `@briven/auth` (and `@briven/auth/react` for React).
 3. Paste project id + `pk_briven_auth_…` into env vars.
 4. Put a sign-in page on screen and a “who am I” check after login.
@@ -207,18 +210,19 @@ If an AI agent sets up your app, they should follow the **briven-auth** skill an
 
 | # | Item | Pass? | Notes |
 | --- | --- | --- | --- |
-| 0 | Platform ready + redis ok | ☐ | |
-| 1 | Auth enabled | ☐ | |
-| 2 | Public key created | ☐ | |
+| 0 | Platform ready + redis ok | ☑ | agent 2026-07-18 — `/ready` redis ok |
+| 1 | Auth enabled | ☐ | project id: |
+| 2 | Public key created | ☐ | last4: |
 | 3 | Sign-up + sign-in | ☐ | |
 | 4 | Wrong password rejected | ☐ | |
-| 5 | Magic link / OTP (if on) | ☐ | |
-| 6 | Social (if on) | ☐ | |
+| 5 | Magic link / OTP (if on) | ☐ | or N/A |
+| 6 | Social (if on) | ☐ | or N/A |
 | 7 | Session after refresh | ☐ | |
-| 8 | Rate limit (optional) | ☐ | |
+| 8 | Rate limit (optional) | ☐ | or N/A |
 | 9 | Users list in dashboard | ☐ | |
 | 9b | 2FA backup code recovery (or N/A) | ☐ | |
 | 10 | Pilot app works for a friend | ☐ | |
+| S6.1 | Second project isolation | ☐ | see BETA-V1-NEXT-STEPS.md |
 
 **You sign off when:** rows 0–4 and 7 are all pass, and anything you advertise (magic link / Google / etc.) is pass too.
 

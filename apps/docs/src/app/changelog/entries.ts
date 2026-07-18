@@ -10,6 +10,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-07-18',
+    tags: ['docs', 'security'],
+    title: 'beta next steps: auth checklist track + S6 reliability notes',
+    body: 'BETA-V1-NEXT-STEPS.md tracks auth go-live, second-project isolation, and dogfood. docs/S6-RELIABILITY.md documents Redis rate-limit fail-open behavior and customer status blurbs. Status pages explain “if sign-in feels broken.” Platform probe: production /ready redis ok. Human browser checklist rows 1–4+7 still required before “friends can rely on auth.”',
+  },
+  {
+    date: '2026-07-18',
     tags: ['feat', 'docs'],
     title: 'briven setup — Convex-style one-command connect + project wiring',
     body: 'New CLI command `briven setup` signs in via browser OAuth, creates a new cloud project or attaches an existing one (`--name` / `--project`), scaffolds the folder, mints a CLI key, and writes briven.json. Bare `briven` with no linked project starts setup. Docs (connect, quickstart, cli, templates), dashboard empty-state, and project connect panel all promote this path. Templates remain optional starters only — not the product model. Manual `login` + `link` still works for CI/key paste.',
