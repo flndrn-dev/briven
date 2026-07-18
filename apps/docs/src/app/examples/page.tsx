@@ -15,7 +15,7 @@ const EXAMPLES: readonly Example[] = [
     id: 'todo',
     title: 'todo app',
     description:
-      'one-user todo list. ships as `briven init --template todo-app`. minimal example to see reactive queries in action: every insert / update / delete from the cli or studio re-runs the active subscriptions on the client.',
+      'one-user todo list. optional starter via `briven setup --template todo-app` (or `briven init --template todo-app` for local files only). minimal example to see reactive queries in action: every insert / update / delete from the cli or studio re-runs the active subscriptions on the client.',
     schema: `import { boolean, schema, table, text, timestamp } from '@briven/cli/schema';
 
 export default schema({
