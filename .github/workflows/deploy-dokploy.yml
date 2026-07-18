@@ -1,14 +1,19 @@
 name: Deploy to Dokploy
 
-# Fires on every push to main (and workflow_dispatch for manual re-run).
-# Dokploy's compose webhook expects a GitHub-style push body with
+# AUTO-DEPLOY OFF (2026-07-18): push-to-main no longer triggers deploys.
+# The France / Dokploy host was being overloaded by rebuilds on every
+# commit. Deploy only when a human runs this workflow from GitHub Actions.
+#
+# Dokploy's compose webhook still expects a GitHub-style push body with
 # ref: refs/heads/main — {"buildType":"manual"} returns "Branch Not Match".
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you deploying? (optional note)'
+        required: false
+        default: 'manual deploy'
 
 jobs:
   deploy:
@@ -19,13 +24,18 @@ jobs:
         env:
           DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
           DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-          GIT_REF: refs/heads/${{ github.ref_name }}
+          # Always target main — Dokploy branch match is strict.
+          GIT_REF: refs/heads/main
           REPO_FULL: ${{ github.repository }}
           REPO_NAME: ${{ github.event.repository.name }}
           OWNER: ${{ github.repository_owner }}
           SHA: ${{ github.sha }}
+          REASON: ${{ github.event.inputs.reason }}
         run: |
           set -euo pipefail
+
+          echo "Manual deploy requested. Reason: ${REASON:-none}"
+          echo "AUTO push-deploy is disabled — this job only runs via workflow_dispatch."
 
           if [ -z "${DOKPLOY_WEBHOOK_URL:-}" ]; then
             echo "::error::DOKPLOY_WEBHOOK_URL secret is empty or missing."

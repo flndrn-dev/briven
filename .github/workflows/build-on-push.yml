@@ -11,9 +11,9 @@ name: build-on-push
 # Tag :main is a moving pointer at the latest main build; :sha-<commit> is
 # an immutable pin so a deploy can reference an exact build if needed.
 
+# Push-triggered builds OFF by default — was firing on every main commit and
+# adding load/noise. Run manually from Actions when you want new GHCR images.
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 concurrency:

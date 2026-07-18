@@ -30,9 +30,12 @@ One push to both (this machine is already configured; re-apply anywhere with):
 
 ```bash
 ./scripts/git-push-both.sh setup   # once per clone
-git push origin main               # updates GitHub + Konnos; GitHub kicks Dokploy
+git push origin main               # updates GitHub + Konnos only (no auto-deploy)
 # or: ./scripts/git-push-both.sh main
 ```
+
+**Auto-deploy is OFF.** Pushing to `main` does **not** redeploy production.
+To deploy: GitHub → Actions → **Deploy to Dokploy** → **Run workflow** (manual only).
 
 ## status
 

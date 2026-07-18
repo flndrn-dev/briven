@@ -48,5 +48,5 @@ git remote get-url --push --all origin | sed 's/^/  /'
 if [[ "$DO_PUSH" -eq 1 ]]; then
   echo "Pushing '${BRANCH}' → GitHub + Konnos…"
   git push -u origin "$BRANCH"
-  echo "Done. (Push to GitHub main triggers Dokploy auto-deploy.)"
+  echo "Done. (Code only — auto-deploy is OFF. Deploy via Actions → Deploy to Dokploy.)"
 fi
