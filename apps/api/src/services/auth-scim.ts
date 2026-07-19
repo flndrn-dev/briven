@@ -606,6 +606,19 @@ export async function scimCreateGroup(
     }
   });
 
+  // Phase 9.2: map group → org role when configured.
+  if (members.length > 0) {
+    try {
+      const { applyScimGroupRoleMaps } = await import('./auth-scim-role-maps.js');
+      await applyScimGroupRoleMaps(projectId, displayName, members);
+    } catch (err) {
+      log.warn('scim_group_role_map_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return scimGetGroup(projectId, id, apiOrigin);
 }
 

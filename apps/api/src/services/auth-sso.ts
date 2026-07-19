@@ -518,6 +518,7 @@ function generateOidcNonce(): string {
 export async function generateOidcAuthUrl(
   projectId: string,
   connectionId: string,
+  opts: { redirectTo?: string } = {},
 ): Promise<{ redirectUrl: string }> {
   const conn = await getSsoConnection(projectId, connectionId);
   if (!conn) throw new ValidationError('sso connection not found');
@@ -538,14 +539,35 @@ export async function generateOidcAuthUrl(
 
   const state = generateOidcState();
   const nonce = generateOidcNonce();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const usePkce = oidcConfig.pkce !== false;
+  const codeVerifier = usePkce ? randomBytes(32).toString('base64url') : null;
+  const redirectTo = opts.redirectTo ?? null;
 
-  // Store state+nonce for callback validation.
+  // Store state+nonce (+ PKCE verifier + post-login redirect) for callback.
   await runInProjectDatabase(projectId, async (tx) => {
+    // Self-heal PKCE table for tenants provisioned before S7.
+    await tx.unsafe(
+      `CREATE TABLE IF NOT EXISTS "_briven_auth_oidc_pkce" (
+         state text PRIMARY KEY,
+         code_verifier text NOT NULL,
+         redirect_to text,
+         expires_at timestamptz NOT NULL,
+         created_at timestamptz NOT NULL DEFAULT now()
+       )`.replace(/\s+/g, ' '),
+    );
     await tx.unsafe(
       `INSERT INTO "_briven_auth_oidc_states" (id, state, nonce, connection_id, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
-      [randomBytes(16).toString('hex'), state, nonce, connectionId, new Date(Date.now() + 10 * 60 * 1000)] as never,
+      [randomBytes(16).toString('hex'), state, nonce, connectionId, expiresAt] as never,
     );
+    if (codeVerifier || redirectTo) {
+      await tx.unsafe(
+        `INSERT INTO "_briven_auth_oidc_pkce" (state, code_verifier, redirect_to, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        [state, codeVerifier ?? '', redirectTo, expiresAt] as never,
+      );
+    }
   });
 
   const url = new URL(authorizationUrl);
@@ -556,10 +578,11 @@ export async function generateOidcAuthUrl(
   url.searchParams.set('state', state);
   url.searchParams.set('nonce', nonce);
 
-  if (oidcConfig.pkce !== false) {
-    // PKCE is on by default.
-    const codeChallenge = generateOidcState(); // reuse as code_challenge
-    url.searchParams.set('code_challenge', codeChallenge);
+  if (usePkce && codeVerifier) {
+    // S256: BASE64URL(SHA256(code_verifier))
+    const { createHash } = await import('node:crypto');
+    const challenge = createHash('sha256').update(codeVerifier).digest('base64url');
+    url.searchParams.set('code_challenge', challenge);
     url.searchParams.set('code_challenge_method', 'S256');
   }
 
@@ -569,6 +592,8 @@ export async function generateOidcAuthUrl(
 export interface OidcTokenResponse {
   email: string;
   name?: string;
+  /** Validated post-login redirect path/URL from start flow (may be null). */
+  redirectTo?: string | null;
 }
 
 export async function exchangeOidcCode(
@@ -583,27 +608,35 @@ export async function exchangeOidcCode(
     throw new ValidationError('connection is not an OIDC provider');
   }
 
-  // Validate state.
-  const stateRow = await runInProjectDatabase(projectId, async (tx) => {
+  // Validate state + load PKCE verifier / redirect.
+  const stateBundle = await runInProjectDatabase(projectId, async (tx) => {
     const rows = (await tx.unsafe(
       `SELECT nonce, connection_id, expires_at FROM "_briven_auth_oidc_states" WHERE state = $1 LIMIT 1`,
       [state] as never,
     )) as Array<{ nonce: string; connection_id: string; expires_at: Date }>;
+    let pkce: { code_verifier: string; redirect_to: string | null } | null = null;
     if (rows[0]) {
-      // Delete on first use (one-time).
-      await tx.unsafe(
-        `DELETE FROM "_briven_auth_oidc_states" WHERE state = $1`,
-        [state] as never,
-      );
+      await tx.unsafe(`DELETE FROM "_briven_auth_oidc_states" WHERE state = $1`, [state] as never);
+      try {
+        const pkceRows = (await tx.unsafe(
+          `DELETE FROM "_briven_auth_oidc_pkce" WHERE state = $1
+           RETURNING code_verifier, redirect_to`,
+          [state] as never,
+        )) as Array<{ code_verifier: string; redirect_to: string | null }>;
+        pkce = pkceRows[0] ?? null;
+      } catch {
+        // Table may not exist on ancient tenants; PKCE optional then.
+        pkce = null;
+      }
     }
-    return rows[0] ?? null;
+    return { stateRow: rows[0] ?? null, pkce };
   });
 
-  if (!stateRow) throw new ValidationError('invalid or expired OIDC state');
-  if (stateRow.connection_id !== connectionId) {
+  if (!stateBundle.stateRow) throw new ValidationError('invalid or expired OIDC state');
+  if (stateBundle.stateRow.connection_id !== connectionId) {
     throw new ValidationError('OIDC state does not match connection');
   }
-  if (stateRow.expires_at < new Date()) {
+  if (stateBundle.stateRow.expires_at < new Date()) {
     throw new ValidationError('OIDC state has expired');
   }
 
@@ -619,7 +652,8 @@ export async function exchangeOidcCode(
   const { getTenantSecret } = await import('./tenant-secrets.js');
   const clientSecret = await getTenantSecret(projectId, 'auth', `oidc_${connectionId}_client_secret`);
 
-  // Exchange code for token.
+  const codeVerifier = stateBundle.pkce?.code_verifier;
+  // Exchange code for token (include code_verifier when PKCE was used).
   const tokenRes = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -629,6 +663,7 @@ export async function exchangeOidcCode(
       redirect_uri: oidcCallbackUrl(connectionId),
       client_id: oidcConfig.clientId ?? '',
       ...(clientSecret ? { client_secret: clientSecret } : {}),
+      ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
     }),
   });
 
@@ -681,5 +716,6 @@ export async function exchangeOidcCode(
       (userinfo.given_name && userinfo.family_name
         ? `${userinfo.given_name} ${userinfo.family_name}`
         : undefined),
+    redirectTo: stateBundle.pkce?.redirect_to ?? null,
   };
 }

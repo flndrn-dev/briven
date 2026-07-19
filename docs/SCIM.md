@@ -60,12 +60,20 @@ Inactive users (`active: false`) are **banned** in Briven Auth; re-activate unba
 
 ---
 
+## Group → org role mapping
+
+```http
+PUT /v1/projects/:id/auth/scim/role-maps
+{ "displayName": "Engineering", "orgId": "org_…", "role": "member" }
+```
+
+When a SCIM Group named `Engineering` is created with members, those users are added to the org.
+
 ## What SCIM does **not** do yet
 
 - Bulk operations  
-- Full group → Briven org role auto-mapping polish  
 - SMS  
-- Compliance sales pack (separate)
+- Every IdP’s proprietary extension schema
 
 ---
 

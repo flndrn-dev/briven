@@ -604,6 +604,25 @@ export const AUTH_SCIM_DDL_SQL: readonly string[] = [
      created_at timestamptz NOT NULL DEFAULT now(),
      PRIMARY KEY (group_id, member_id)
    )`,
+  // SCIM group displayName → Briven org + role (Phase 9.2)
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_scim_role_maps" (
+     id            text PRIMARY KEY,
+     display_name  text NOT NULL,
+     org_id        text NOT NULL,
+     role          text NOT NULL DEFAULT 'member',
+     created_at    timestamptz NOT NULL DEFAULT now(),
+     updated_at    timestamptz NOT NULL DEFAULT now()
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_role_maps_name_uniq"
+     ON "_briven_auth_scim_role_maps" (lower(display_name))`,
+  // OIDC PKCE verifier storage (never ALTER oidc_states — new table)
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_oidc_pkce" (
+     state          text PRIMARY KEY,
+     code_verifier  text NOT NULL,
+     redirect_to    text,
+     expires_at     timestamptz NOT NULL,
+     created_at     timestamptz NOT NULL DEFAULT now()
+   )`,
 ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 
 /**
@@ -653,5 +672,7 @@ export const AUTH_TABLES = [
   '_briven_auth_scim_users',
   '_briven_auth_scim_groups',
   '_briven_auth_scim_group_members',
+  '_briven_auth_scim_role_maps',
+  '_briven_auth_oidc_pkce',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];

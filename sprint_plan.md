@@ -4,7 +4,7 @@
 **Owner:** flndrn + agent  
 **Status:** Engineering complete — product claim waits on human proof  
 **Scope level:** **L1 beta trust + L2 dogfood/polish**  
-**Enterprise start:** SCIM 2.0 Users/Groups + tokens shipped 2026-07-19 (`docs/SCIM.md`). Full S7 (compliance kit, deep SSO polish) still incremental.  
+**Enterprise (S7):** SCIM + group→org maps + compliance sales kit + OIDC PKCE polish shipped 2026-07-19. See `docs/ENTERPRISE-PACK.md`.  
 
 ---
 

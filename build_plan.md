@@ -20,7 +20,7 @@
 | WebAuthn / Passkeys | Yes | Yes |
 | Multi-tenant (organizations) | Yes | Yes — custom roles, domain verification, auto-join, membership requests |
 | SAML 2.0 SSO | Enterprise plan | Yes — SP-initiated + IdP-initiated, JIT provisioning |
-| OIDC Enterprise | Enterprise plan | Partial — connection table ready, flow pending |
+| OIDC Enterprise | Enterprise plan | Yes — start/callback + PKCE polish (S7) |
 | User metadata (public/private) | Yes | Yes |
 | Multiple emails per user | Yes | Yes |
 | Session management (list/revoke) | Yes | Yes — with max lifetime, refresh age, inactivity timeout |
@@ -159,7 +159,7 @@
 | 5.1 SAML 2.0 IdP integration | **Done** | `@node-saml/node-saml` SP; metadata, AuthnRequest, ACS endpoints |
 | 5.2 SP-initiated flow | **Done** | `GET /sso/saml/:id` → AuthnRequest → IdP redirect |
 | 5.3 IdP-initiated flow | **Done** | `POST /sso/saml/:id/acs` accepts direct IdP SAMLResponse |
-| 5.4 OIDC Enterprise foundation | **Pending** | Connection table supports `providerType: 'oidc'`; start/callback endpoints missing |
+| 5.4 OIDC Enterprise foundation | **Done** | Start/callback routes + PKCE S256 + redirectTo (S7 polish) |
 | 5.5 JIT provisioning | **Done** | `findOrCreateSsoUser()` auto-creates user on first SSO sign-in when enabled |
 | 5.6 Automatic deprovisioning | **Done** | `_briven_auth_sso_sessions` tracks SSO-created sessions; `revokeAllSessionsForConnection()` |
 | 5.7 Per-connection pricing hooks | **Pending** | No billing events or metering exist yet |
@@ -218,8 +218,9 @@
 | Task | Status | Notes |
 |------|--------|-------|
 | 9.1 SCIM 2.0 user provisioning | **Done** (2026-07-19) | `/v1/projects/:id/scim/v2/Users` CRUD; `_briven_auth_scim_users` |
-| 9.2 SCIM group → org role mapping | **Partial** | Groups CRUD + members stored; deep org-role map later |
+| 9.2 SCIM group → org role mapping | **Done** (2026-07-19) | `…/auth/scim/role-maps` + apply on Group create |
 | 9.3 SCIM sync endpoints | **Done** (bearer push) | `scim_briven_…` tokens; docs/SCIM.md |
+| 9.4 Enterprise compliance sales kit | **Done** (2026-07-19) | `…/compliance/pack`, sign-dpa/baa, trust page, docs/ENTERPRISE-PACK.md |
 
 ---
 
@@ -263,7 +264,7 @@
 
 | Claim | Correction |
 |-------|------------|
-| 5.4 OIDC Enterprise — "Done" | Reverted to **Pending** — only table column exists, no flow |
+| 5.4 OIDC Enterprise — "Done" | Confirmed shipped + S7 PKCE polish |
 | 3.6 React SDK metadata hooks — "Done" | Reverted to **Pending** — hooks do not exist in React SDK |
 | 5.7 Per-connection pricing hooks — "Done" | Reverted to **Pending** — no billing events or metering exist |
 

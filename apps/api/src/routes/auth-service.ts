@@ -151,6 +151,16 @@ import { listAppLogs, purgeOldAppLogs, purgeOldAuditLogs } from '../services/aut
 import { bulkBanUsers, bulkDeleteUsers, bulkInviteUsers } from '../services/auth-bulk-ops.js';
 import { getComplianceSettings, setComplianceSettings } from '../services/auth-compliance.js';
 import {
+  buildEnterpriseSalesPack,
+  signGdprDpa,
+  signHipaaBaa,
+} from '../services/auth-enterprise-pack.js';
+import {
+  deleteScimRoleMap,
+  listScimRoleMaps,
+  upsertScimRoleMap,
+} from '../services/auth-scim-role-maps.js';
+import {
   createJwtTemplate,
   deleteJwtTemplate,
   generateJwtToken,
@@ -3040,9 +3050,10 @@ authServiceRouter.get('/v1/auth-tenant/sso/oidc/:connectionId', async (c) => {
   const projectId = resolveTenant(c);
   if (!projectId) return c.json({ code: 'tenant_unresolved' }, 400);
   const connectionId = c.req.param('connectionId');
+  const redirectTo = await validateRelayState(c.req.query('redirectTo') ?? '/', projectId);
 
   try {
-    const { redirectUrl } = await generateOidcAuthUrl(projectId, connectionId);
+    const { redirectUrl } = await generateOidcAuthUrl(projectId, connectionId, { redirectTo });
     return c.redirect(redirectUrl);
   } catch (err) {
     if (err instanceof ValidationError) {
@@ -3082,8 +3093,12 @@ authServiceRouter.get('/v1/auth-tenant/sso/oidc/:connectionId/callback', async (
     const cookieValue = `${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=${isProduction ? 'None' : 'Lax'}${isProduction ? '; Secure' : ''}; Expires=${expiresAt.toUTCString()}`;
     c.header('set-cookie', cookieValue);
 
-    // Redirect to default or RelayState when provided.
-    const relayState = await validateRelayState(c.req.query('RelayState') || '/', projectId);
+    // Prefer redirect stored at OIDC start (validated); fallback to query RelayState.
+    const preferred =
+      userinfo.redirectTo && userinfo.redirectTo.length > 0
+        ? userinfo.redirectTo
+        : c.req.query('RelayState') || '/';
+    const relayState = await validateRelayState(preferred, projectId);
     return c.redirect(relayState);
   } catch (err) {
     if (err instanceof ValidationError) {
@@ -3781,6 +3796,138 @@ authServiceRouter.patch(
       metadata: { fields: Object.keys(patch) },
     });
     return c.json({ compliance: settings });
+  },
+);
+
+/** Full enterprise sales kit (DPA/BAA/retention templates + project status). */
+authServiceRouter.get(
+  '/v1/projects/:id/auth/compliance/pack',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const pack = await buildEnterpriseSalesPack(projectId, env.BRIVEN_API_ORIGIN);
+    return c.json(pack);
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/compliance/sign-dpa',
+  requireProjectRole('owner'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { signedBy?: string };
+    const signedBy = typeof body.signedBy === 'string' && body.signedBy.trim()
+      ? body.signedBy.trim()
+      : actor.email ?? actor.id;
+    const compliance = await signGdprDpa(projectId, signedBy);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.compliance.dpa_signed',
+      metadata: { signedBy },
+    });
+    return c.json({ compliance });
+  },
+);
+
+authServiceRouter.post(
+  '/v1/projects/:id/auth/compliance/sign-baa',
+  requireProjectRole('owner'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { signedBy?: string };
+    const signedBy = typeof body.signedBy === 'string' && body.signedBy.trim()
+      ? body.signedBy.trim()
+      : actor.email ?? actor.id;
+    const compliance = await signHipaaBaa(projectId, signedBy);
+    await audit({
+      actorId: actor.id,
+      projectId,
+      action: 'auth.compliance.baa_signed',
+      metadata: { signedBy },
+    });
+    return c.json({ compliance });
+  },
+);
+
+// ─── SCIM group → org role maps (Phase 9.2) ───────────────────────────────
+
+authServiceRouter.get(
+  '/v1/projects/:id/auth/scim/role-maps',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const items = await listScimRoleMaps(projectId);
+    return c.json({ items });
+  },
+);
+
+authServiceRouter.put(
+  '/v1/projects/:id/auth/scim/role-maps',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed' }, 400);
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const body = (await c.req.json().catch(() => null)) as {
+      displayName?: string;
+      orgId?: string;
+      role?: string;
+    } | null;
+    if (!body?.displayName || !body?.orgId) {
+      return c.json({ code: 'validation_failed', message: 'displayName and orgId required' }, 400);
+    }
+    try {
+      const item = await upsertScimRoleMap(projectId, {
+        displayName: body.displayName,
+        orgId: body.orgId,
+        role: body.role,
+      });
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'briven_auth.scim_role_map.upsert',
+        metadata: { mapId: item.id, orgId: item.orgId },
+      });
+      return c.json({ item });
+    } catch (err) {
+      return c.json(
+        { code: 'validation_failed', message: err instanceof Error ? err.message : 'failed' },
+        400,
+      );
+    }
+  },
+);
+
+authServiceRouter.delete(
+  '/v1/projects/:id/auth/scim/role-maps/:mapId',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    const mapId = c.req.param('mapId');
+    const actor = c.get('user');
+    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    try {
+      await deleteScimRoleMap(projectId, mapId);
+      await audit({
+        actorId: actor.id,
+        projectId,
+        action: 'briven_auth.scim_role_map.deleted',
+        metadata: { mapId },
+      });
+      return c.json({ ok: true });
+    } catch {
+      return c.json({ code: 'not_found' }, 404);
+    }
   },
 );
 
