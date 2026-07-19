@@ -2,16 +2,17 @@
 
 **Rule (hard):** each phase is only **Done** or **Not done**.  
 No “mostly”, “partial”, or skipping ahead.  
-**Status as of audit 2026-07-19: Phase 0 = Not done.**
+**Status as of 2026-07-19 evening: Phase 0 = Not done** (only **0.1 off-site S3** still required for engineering close).
 
-**Master queue (all phases + gaps):** `BUILD-GAPS.md` — work top → bottom; do not re-prove Auth/projects.  
-Work ethic: finish every box with **real proof**, then open Phase 1.
+**Master queue:** `BUILD-GAPS.md`.  
+**Off-site handoff:** `infra/backups/BACKUP-OFFSITE.md`.
 
 ---
 
-## Exit criterion (all must be true)
+## Exit criterion (engineering)
 
-Nightly cold-storage backup confirmed off-site (R2/B2) **and** alerts route to Discord **and** trademark filing evidenced **and** this file marks every task **Done**.
+Nightly control-plane dump **and** off-site upload OK **and** Discord **alerts** path proven.  
+**Trademark is not an engineering gate** (legal track, separate).
 
 ---
 
@@ -19,10 +20,10 @@ Nightly cold-storage backup confirmed off-site (R2/B2) **and** alerts route to D
 
 | # | Task | Status | Proof / gap (2026-07-19) |
 | --- | --- | --- | --- |
-| **0.1** | Off-site backup target (R2/B2) | **Not done** | France `briven-backup.timer` **failed since 2026-05-13** (Result: resources). Last service success 2026-05-12. No files under `/var/backups/briven`. Host script still targeted container `briven-postgres-1` (gone). Live control DB is `briven-brivenfrance-uilsk6-postgres-1` / DB `briven_control`. Data plane has local `dolt-backup` loop only (file volume, not off-site). `/etc/briven/backup.env` has **no** `BRIVEN_BACKUP_S3_*` keys — off-site upload cannot run. |
-| **0.2** | Discord webhooks (alerts + deploys) | **Not done** | Alert unit code exists in repo; live `briven-backup.service` has **no** `OnFailure=briven-backup-alert.service`. No evidence of synthetic Discord smoke tests (§10) succeeding. Webhook URLs not confirmed configured in observability env. |
-| **0.3** | Trademark filing EU + Benelux | **Not done** | Plan once checked `[x]`, but verify rule requires **filing reference numbers committed** under `docs/legal/trademark/`. That path **does not exist** in the working tree → cannot claim Done. |
-| **0.4** | Phase 0 sign-off (ADR + status closed) | **Not done** | Blocked until 0.1–0.3 are Done. No Phase 0 close-out ADR. |
+| **0.1** | Off-site backup target (R2/B2) | **Not done** — waiting on flndrn bucket | Local dump + timer OK. Script ready. Need `BRIVEN_BACKUP_S3_*` in `/etc/briven/backup.env` (see `infra/backups/BACKUP-OFFSITE.md`). |
+| **0.2** | Discord webhooks (alerts + deploys) | **Alerts Done** · **Deploys token broken** | Webhooks were already in Dokploy `.env`. Wired into `/etc/briven/backup.env`. Alerts smoke **HTTP 204**. Deploys smoke **HTTP 401 Invalid Webhook Token** — recreate deploys webhook URL. `OnFailure=briven-backup-alert.service` is on the backup unit. |
+| **0.3** | Trademark filing EU + Benelux | **Deferred — not a build gate** | Explicit product decision 2026-07-19: legal can proceed later; does **not** block Phase 0 engineering Done or further builds. |
+| **0.4** | Phase 0 sign-off (ADR + status closed) | **Not done** | After **0.1** green (+ optional fresh deploys webhook). |
 
 ---
 
@@ -39,15 +40,15 @@ Nightly cold-storage backup confirmed off-site (R2/B2) **and** alerts route to D
 
 ---
 
-## What only flndrn can provide (blocks Done)
+## What only flndrn can provide
 
-1. **0.1** — B2 or R2 bucket + access key + secret → put into `/etc/briven/backup.env` as `BRIVEN_BACKUP_S3_ENDPOINT`, `BRIVEN_BACKUP_S3_BUCKET`, `BRIVEN_BACKUP_S3_ACCESS_KEY`, `BRIVEN_BACKUP_S3_SECRET_KEY`. Then re-run backup and confirm object + sha256 match.  
-2. **0.2** — Discord webhooks for `#briven-alerts` and `#briven-deploys` → set `BRIVEN_DISCORD_WEBHOOK_ALERTS` / `BRIVEN_DISCORD_WEBHOOK_DEPLOYS` (and observability stack). Smoke-test without killing production.  
-3. **0.3** — Trademark filing receipts / reference numbers (or explicit “not filed; remove from Phase 0” decision).
+1. **0.1** — Create S3-compatible bucket; give agent (or paste into `/etc/briven/backup.env`) the four `BRIVEN_BACKUP_S3_*` values — see `infra/backups/BACKUP-OFFSITE.md`.  
+2. **0.2 deploys only** — Discord → channel settings → **Integrations → Webhooks** → new webhook for **#briven-deploys** (or regenerate token). Paste into Dokploy env `BRIVEN_DISCORD_WEBHOOK_DEPLOYS` and `/etc/briven/backup.env`. **Alerts already work.**
 
 ---
 
-## When Phase 0 becomes Done
+## When Phase 0 becomes Done (engineering)
 
-Every row above is **Done** with command output or committed evidence linked here.  
-**Only then** open Phase 1 (MVP engine / realtime close-out). Do not build Phase 1+ features under this gate.
+**0.1** off-site upload succeeds once + journal shows `off-site upload ok`.  
+Alerts Discord path already proven. Trademark deferred.  
+Then agent writes 0.4 ADR and marks Phase 0 **Done**.

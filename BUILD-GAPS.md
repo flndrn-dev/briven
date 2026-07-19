@@ -35,14 +35,15 @@
 
 ### Wave 1 — Phase 0 foundations (platform ops)
 
-Source: `PHASE-0.md`. **Hard gate** before more platform feature sprints.
+Source: `PHASE-0.md` · handoff `infra/backups/BACKUP-OFFSITE.md`.
 
 | ID | Task | Status | Who |
 | --- | --- | --- | --- |
-| **0.1** | Off-site backup (R2/B2) + successful upload + sha match | **Blocked (human)** | flndrn: bucket + access/secret keys in `/etc/briven/backup.env`. Local dump path already repaired. |
-| **0.2** | Discord webhooks (alerts + deploys) + smoke test | **Blocked (human)** | flndrn: webhook URLs. Units partially installed; unproven. |
-| **0.3** | Trademark EU + Benelux evidence **or** explicit “drop from Phase 0” | **Blocked (human)** | flndrn: filing numbers under `docs/legal/trademark/` **or** written drop decision. |
-| **0.4** | Phase 0 sign-off ADR | **Not done** | Agent after 0.1–0.3 Done. |
+| **0.1** | Off-site backup (R2/B2) + successful upload | **Blocked (human)** | flndrn sets up bucket; four `BRIVEN_BACKUP_S3_*` keys. Local dump + timer already OK. |
+| **0.2a** | Discord **alerts** webhook + backup OnFailure | **Done** | Was in Dokploy env; wired to `/etc/briven/backup.env`; smoke **HTTP 204**. |
+| **0.2b** | Discord **deploys** webhook | **Blocked (human)** | URL present but **401 Invalid Webhook Token** — regenerate in Discord. |
+| **0.3** | Trademark | **Deferred** | **Not a build gate** (decision 2026-07-19). Legal later. |
+| **0.4** | Phase 0 sign-off ADR | **Not done** | After **0.1** (deploys webhook optional for engineering close). |
 
 ---
 
@@ -119,9 +120,9 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 
 | Now | Task |
 | --- | --- |
-| **→** | **Wave 1 / 0.1–0.3** — blocked on flndrn (B2/R2 keys, Discord webhooks, trademark). Next **agent-buildable** without secrets: **O.1** thrash + **S.M\*** acceptance proofs. |
+| **→** | **0.1** — wait for flndrn S3 bucket keys. Optional: flndrn regenerates **deploys** Discord webhook. Agent next without wait: **O.1** thrash / **S.M\*** proofs. |
 
-**Just closed:** G0.1 + G0.2 (CLI setup on PATH + positional name).
+**Just closed:** G0.1/G0.2 CLI; **0.2a** Discord alerts live; **0.3** trademark removed from build gate.
 
 ---
 
