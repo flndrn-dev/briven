@@ -4,7 +4,7 @@
 No “mostly”, “partial”, or skipping ahead.  
 **Status as of audit 2026-07-19: Phase 0 = Not done.**
 
-Source checklist: platform plan (`docs/archive/road-to-ga.md` Phase 0).  
+**Master queue (all phases + gaps):** `BUILD-GAPS.md` — work top → bottom; do not re-prove Auth/projects.  
 Work ethic: finish every box with **real proof**, then open Phase 1.
 
 ---

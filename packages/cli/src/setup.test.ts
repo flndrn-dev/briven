@@ -36,4 +36,21 @@ describe('parseSetupArgs', () => {
     assert.equal(a.project, 'p_abc');
     assert.equal(a.yes, true);
   });
+
+  it('positional name → create new project', () => {
+    const a = parseSetupArgs(['my-cool-app']);
+    assert.equal(a.name, 'my-cool-app');
+    assert.equal(a.project, undefined);
+  });
+
+  it('positional p_ id → attach existing project', () => {
+    const a = parseSetupArgs(['p_01HZabc123']);
+    assert.equal(a.project, 'p_01HZabc123');
+    assert.equal(a.name, undefined);
+  });
+
+  it('explicit --name wins over positional', () => {
+    const a = parseSetupArgs(['ignored', '--name', 'real-name']);
+    assert.equal(a.name, 'real-name');
+  });
 });

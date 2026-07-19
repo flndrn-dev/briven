@@ -64,6 +64,9 @@ export function parseSetupArgs(argv: readonly string[]): SetupArgs {
     origins: resolveOrigins(),
   };
 
+  // Bare args: `briven setup my-app` → name; `briven setup p_…` / known id → project.
+  const positionals: string[] = [];
+
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if ((arg === '--name' || arg === '-n') && argv[i + 1]) {
@@ -94,10 +97,27 @@ export function parseSetupArgs(argv: readonly string[]): SetupArgs {
         apiOrigin: out.origins.apiOrigin,
         dashboardOrigin: argv[++i],
       });
+    } else if (arg && !arg.startsWith('-')) {
+      positionals.push(arg);
+    }
+  }
+
+  // Positional after flags: first bare token is project name or existing project id/slug.
+  if (positionals.length > 0 && !out.name && !out.project) {
+    const bare = positionals[0]!;
+    if (looksLikeProjectRef(bare)) {
+      out.project = bare;
+    } else {
+      out.name = bare;
     }
   }
 
   return out;
+}
+
+/** Project ids (`p_…`) or obvious refs — treat as --project, else --name. */
+export function looksLikeProjectRef(value: string): boolean {
+  return /^p_[A-Za-z0-9]+$/u.test(value);
 }
 
 export function printSetupHelp(): void {
@@ -107,7 +127,8 @@ export function printSetupHelp(): void {
   blankLine();
   step('usage:');
   step('  briven setup                         interactive (recommended)');
-  step('  briven setup --name my-app           create a new project + scaffold');
+  step('  briven setup my-app                  create a new project named my-app');
+  step('  briven setup --name my-app           same as above');
   step('  briven setup --project p_01HZ...     attach an existing project');
   step('  briven setup --name app --template todo-app --region eu-west');
   blankLine();
