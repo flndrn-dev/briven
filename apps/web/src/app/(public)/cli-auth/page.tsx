@@ -3,8 +3,23 @@ import { redirect } from 'next/navigation';
 import { apiJson } from '../../../lib/api';
 import { allow, deny } from './actions';
 
-interface MeResp {
-  user: { id: string; email: string };
+/**
+ * `/v1/me` returns a flat profile `{ id, email, ... }` (see apps/api meRouter).
+ * Tolerate a nested `{ user }` shape in case older proxies wrap it.
+ */
+function profileFromMe(data: unknown): { id: string; email: string } | null {
+  if (!data || typeof data !== 'object') return null;
+  const rec = data as Record<string, unknown>;
+  if (typeof rec.id === 'string' && typeof rec.email === 'string') {
+    return { id: rec.id, email: rec.email };
+  }
+  if (rec.user && typeof rec.user === 'object') {
+    const u = rec.user as Record<string, unknown>;
+    if (typeof u.id === 'string' && typeof u.email === 'string') {
+      return { id: u.id, email: u.email };
+    }
+  }
+  return null;
 }
 
 function isLoopbackHttp(url: string): boolean {
@@ -37,11 +52,15 @@ export default async function CliAuthPage({
     return <ErrorCard reason="state too long" />;
   }
 
-  let user: { id: string; email: string };
+  let user: { id: string; email: string } | null = null;
   try {
-    const data = await apiJson<MeResp>('/v1/me');
-    user = data.user;
+    const data = await apiJson<unknown>('/v1/me');
+    user = profileFromMe(data);
   } catch {
+    user = null;
+  }
+
+  if (!user) {
     const back = `/cli-auth?redirect=${encodeURIComponent(redirectUrl)}&state=${encodeURIComponent(state)}${host ? `&host=${encodeURIComponent(host)}` : ''}`;
     redirect(`/signin?next=${encodeURIComponent(back)}`);
   }
