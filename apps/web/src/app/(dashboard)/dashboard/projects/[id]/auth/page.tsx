@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 
 import { apiJson } from '../../../../../../lib/api';
 import { EnableAuthButton } from './enable-button';
@@ -156,6 +157,16 @@ export default async function AuthOverviewPage({
           ]}
         />
       </div>
+
+      <Link
+        href={`/dashboard/projects/${id}/auth/enterprise`}
+        className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-4 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
+      >
+        <span className="text-[var(--color-text)]">enterprise · SCIM · compliance →</span>
+        <span className="mt-1 block text-[11px]">
+          company directory sync tokens, group→team maps, DPA/BAA sales pack — no raw API calls.
+        </span>
+      </Link>
 
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
         <p>

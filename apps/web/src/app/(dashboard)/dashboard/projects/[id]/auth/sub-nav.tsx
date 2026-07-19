@@ -17,6 +17,7 @@ const TABS: Array<{ slug: string; label: string }> = [
   { slug: '/api-keys', label: 'api keys' },
   { slug: '/webhooks', label: 'webhooks' },
   { slug: '/usage', label: 'usage' },
+  { slug: '/enterprise', label: 'enterprise' },
 ];
 
 /**

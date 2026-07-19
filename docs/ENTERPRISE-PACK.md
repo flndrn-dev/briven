@@ -4,6 +4,19 @@ Plain-language map of Briven Auth **enterprise** capabilities for sales + ops.
 
 ---
 
+## Dashboard (no API by hand)
+
+Project → **Auth** → tab **enterprise**  
+(`/dashboard/projects/<id>/auth/enterprise`)
+
+- Copy SCIM base URL  
+- Download compliance pack JSON  
+- Record DPA / BAA signed  
+- Create / revoke SCIM tokens  
+- Map SCIM groups → org roles  
+
+---
+
 ## What’s included
 
 | Area | Status | Where |
