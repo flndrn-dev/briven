@@ -1,22 +1,24 @@
 name: Deploy to Dokploy
 
-# Manual-only deploy. Does NOT run on push (auto-deploy off).
-# Dokploy compose also has autoDeploy=false (set 2026-07-19).
+# Auto-deploy on push to main (re-enabled 2026-07-19 by flndrn request).
+# Also runnable by hand via workflow_dispatch.
 #
-# Prerequisites: set repo secrets DOKPLOY_WEBHOOK_URL + DOKPLOY_API_KEY
-# then Actions → Deploy to Dokploy → Run workflow.
+# Secrets required: DOKPLOY_WEBHOOK_URL + DOKPLOY_API_KEY
+# Dokploy compose autoDeploy should also be true so git webhooks / Actions both work.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       reason:
         description: 'Why deploy? (note only)'
         required: false
-        default: 'manual clerk-gap / ops deploy'
+        default: 'manual deploy'
 
 jobs:
   deploy:
-    name: Deploy to dokploy (manual)
+    name: Deploy to dokploy
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Dokploy deploy
@@ -28,13 +30,12 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           OWNER: ${{ github.repository_owner }}
           SHA: ${{ github.sha }}
-          REASON: ${{ github.event.inputs.reason }}
+          REASON: ${{ github.event.inputs.reason || github.event.head_commit.message || 'push' }}
         run: |
           set -euo pipefail
-          echo "Manual deploy only. Reason: ${REASON:-none}"
+          echo "Deploy trigger. Reason: ${REASON:-none}"
           if [ -z "${DOKPLOY_WEBHOOK_URL:-}" ] || [ -z "${DOKPLOY_API_KEY:-}" ]; then
             echo "::error::Missing DOKPLOY_WEBHOOK_URL or DOKPLOY_API_KEY secrets."
-            echo "Deploy instead via Dokploy UI or API compose.deploy with a session."
             exit 1
           fi
           payload=$(printf '%s' "{

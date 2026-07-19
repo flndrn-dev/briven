@@ -25,6 +25,7 @@ import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
 import { authCliRouter } from './routes/auth-cli.js';
 import { authServiceRouter } from './routes/auth-service.js';
+import { authScimRouter } from './routes/auth-scim.js';
 import { billingRouter } from './routes/billing.js';
 import { brandingPublicRouter } from './routes/branding-public.js';
 import { dbRouter } from './routes/db.js';
@@ -203,6 +204,7 @@ app.route('/', mcpServerRouter);
 // is ready to serve customer traffic.
 if (env.BRIVEN_AUTH_ENABLED) {
   app.route('/', authServiceRouter);
+  app.route('/', authScimRouter);
   log.info('auth_service_mounted', { kill_switch: 'on' });
 }
 

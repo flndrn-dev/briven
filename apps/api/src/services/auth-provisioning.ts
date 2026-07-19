@@ -547,8 +547,64 @@ export function renderAuthProvisioningSql(): string[] {
        forced_at timestamptz NOT NULL DEFAULT now()
      )`,
 
+    // ─── SCIM 2.0 (Phase 9 — enterprise directory provisioning) ────────────
+    ...AUTH_SCIM_DDL_SQL,
+
   ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 }
+
+/**
+ * SCIM tables — also exported so existing tenants can self-heal without a
+ * full re-Enable Auth (same pattern as AUTH_JWKS_TABLE_SQL).
+ */
+export const AUTH_SCIM_DDL_SQL: readonly string[] = [
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_scim_tokens" (
+     id           text        PRIMARY KEY,
+     name         text        NOT NULL,
+     hash         text        NOT NULL,
+     prefix       text        NOT NULL,
+     suffix       text        NOT NULL,
+     last_used_at timestamptz,
+     created_at   timestamptz NOT NULL DEFAULT now(),
+     revoked_at   timestamptz
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_tokens_hash_uniq"
+     ON "_briven_auth_scim_tokens" (hash)`,
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_scim_users" (
+     id           text        PRIMARY KEY,
+     user_id      text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+     external_id  text,
+     user_name    text        NOT NULL,
+     active       boolean     NOT NULL DEFAULT true,
+     display_name text,
+     raw          jsonb       NOT NULL DEFAULT '{}'::jsonb,
+     created_at   timestamptz NOT NULL DEFAULT now(),
+     updated_at   timestamptz NOT NULL DEFAULT now()
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_users_user_uniq"
+     ON "_briven_auth_scim_users" (user_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_users_username_uniq"
+     ON "_briven_auth_scim_users" (lower(user_name))`,
+  `CREATE INDEX IF NOT EXISTS "_briven_auth_scim_users_external_idx"
+     ON "_briven_auth_scim_users" (external_id)`,
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_scim_groups" (
+     id           text        PRIMARY KEY,
+     display_name text        NOT NULL,
+     external_id  text,
+     active       boolean     NOT NULL DEFAULT true,
+     raw          jsonb       NOT NULL DEFAULT '{}'::jsonb,
+     created_at   timestamptz NOT NULL DEFAULT now(),
+     updated_at   timestamptz NOT NULL DEFAULT now()
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_groups_name_uniq"
+     ON "_briven_auth_scim_groups" (lower(display_name))`,
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_scim_group_members" (
+     group_id   text NOT NULL REFERENCES "_briven_auth_scim_groups"(id) ON DELETE CASCADE,
+     member_id  text NOT NULL,
+     created_at timestamptz NOT NULL DEFAULT now(),
+     PRIMARY KEY (group_id, member_id)
+   )`,
+].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
 
 /**
  * Names of every table this emitter creates. Useful for the "is auth
@@ -593,5 +649,9 @@ export const AUTH_TABLES = [
   '_briven_auth_password_policy',
   '_briven_auth_password_history',
   '_briven_auth_password_force_reset',
+  '_briven_auth_scim_tokens',
+  '_briven_auth_scim_users',
+  '_briven_auth_scim_groups',
+  '_briven_auth_scim_group_members',
 ] as const;
 export type AuthTableName = (typeof AUTH_TABLES)[number];
