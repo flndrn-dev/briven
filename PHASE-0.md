@@ -26,13 +26,16 @@ Nightly cold-storage backup confirmed off-site (R2/B2) **and** alerts route to D
 
 ---
 
-## Agent work in progress (does not mark phase Done)
+## Agent actions already taken (still not Phase Done)
 
-| Action | Intent |
-| --- | --- |
-| Repair backup script + systemd units on France | Restore **local** daily control-plane dumps + failure alerting hook |
-| Reset failed timer | Stop “timer dead for 2 months” |
-| Keep this file honest | Only flip **Done** when verify steps pass |
+| When | Action | Evidence |
+| --- | --- | --- |
+| 2026-07-19 | Fixed backup script for live compose postgres container | `/usr/local/bin/briven-backup.sh` dumps `briven_control` from `briven-brivenfrance-uilsk6-postgres-1` |
+| 2026-07-19 | Reset failed timer; next fire scheduled | `systemctl list-timers`: **Mon 2026-07-20 02:17:00 CEST** |
+| 2026-07-19 | Manual run succeeded **local only** | `ok briven_control: 742814 bytes → /var/backups/briven/briven_control/2026-07-19/11-05-35.dump.gz` + log: `off-site upload skipped` |
+| 2026-07-19 | Installed `OnFailure=briven-backup-alert.service` unit files | Present on host; Discord still unproven without webhook |
+
+**These repairs do not make 0.1 Done** — off-site mirror still missing.
 
 ---
 
