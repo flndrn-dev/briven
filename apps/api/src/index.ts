@@ -156,6 +156,12 @@ app.route('/', healthRouter);
 app.route('/', authRouter);
 app.route('/', authCliRouter);
 app.route('/', meRouter);
+// SCIM protocol + token admin (enterprise) — mount before projectsRouter
+// so /v1/projects/:id/scim/v2 is not only gated by session requireAuth
+// (also carved out in session.requireAuth for defense in depth).
+if (env.BRIVEN_AUTH_ENABLED) {
+  app.route('/', authScimRouter);
+}
 app.route('/', projectsRouter);
 app.route('/', apiKeysRouter);
 app.route('/', membersRouter);
@@ -204,7 +210,7 @@ app.route('/', mcpServerRouter);
 // is ready to serve customer traffic.
 if (env.BRIVEN_AUTH_ENABLED) {
   app.route('/', authServiceRouter);
-  app.route('/', authScimRouter);
+  // authScimRouter also mounted earlier (before projectsRouter)
   log.info('auth_service_mounted', { kill_switch: 'on' });
 }
 

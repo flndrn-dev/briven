@@ -57,6 +57,33 @@ describe('requireAuth — Bearer JWT', () => {
     const body = (await res.json()) as { code: string; message: string };
     expect(body.message).toMatch(/invalid cli token/i);
   });
+
+  it('lets SCIM paths through for scim_briven tokens (directory sync)', async () => {
+    const { Hono } = await import('hono');
+    const { requireAuth } = await import('./session.js');
+    const app = new Hono<AppEnv>();
+    app.use('*', requireAuth());
+    app.get('/v1/projects/:id/scim/v2/Users', (c) => c.json({ ok: true }));
+    const res = await app.request(
+      '/v1/projects/p_test/scim/v2/Users',
+      { headers: { authorization: 'Bearer scim_briven_fake_token' } },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+  });
+
+  it('lets /scim/v2 paths through without a session (handler enforces token)', async () => {
+    const { Hono } = await import('hono');
+    const { requireAuth } = await import('./session.js');
+    const app = new Hono<AppEnv>();
+    app.use('*', requireAuth());
+    app.get('/v1/projects/:id/scim/v2/ServiceProviderConfig', (c) =>
+      c.json({ scim: true }),
+    );
+    const res = await app.request('/v1/projects/p_test/scim/v2/ServiceProviderConfig');
+    expect(res.status).toBe(200);
+  });
 });
 
 afterAll(() => {

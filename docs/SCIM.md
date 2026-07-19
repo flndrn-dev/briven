@@ -13,6 +13,10 @@ Your company’s IT system (Okta, Microsoft Entra, Google Workspace, etc.) can *
 https://api.briven.tech/v1/projects/<PROJECT_ID>/scim/v2
 ```
 
+**Opening this URL in a browser alone is not enough** — SCIM always needs a
+Bearer token (`scim_briven_…`). Without a token you should get **401**.  
+Create the token in the dashboard: **Auth → enterprise → SCIM tokens**.
+
 IdPs need:
 
 | Field | Value |

@@ -36,9 +36,26 @@ export const requireAuth = (): MiddlewareHandler => async (c, next) => {
     return;
   }
 
+  // SCIM 2.0 directory-sync (enterprise): protocol lives on
+  // `/v1/projects/:id/scim/v2/*` and authenticates with `scim_briven_…`
+  // bearer tokens only — not dashboard sessions or CLI JWTs. The broad
+  // `/v1/projects/*` requireAuth on projectsRouter must NOT reject those
+  // requests; auth-scim router enforces the token itself.
+  const path = c.req.path;
+  if (path.includes('/scim/v2')) {
+    await next();
+    return;
+  }
+
   const authHeader = c.req.header('authorization');
   if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
     const token = authHeader.slice(7).trim();
+    // SCIM tokens are never CLI JWTs — pass through even off /scim paths
+    // (defensive; primary carve-out is path-based above).
+    if (token.startsWith('scim_briven_')) {
+      await next();
+      return;
+    }
     try {
       const { verifyCliToken } = await import('../lib/cli-jwt.js');
       const payload = await verifyCliToken(token);
