@@ -17,6 +17,7 @@ import { runLogout } from './commands/logout.js';
 import { runLogs } from './commands/logs.js';
 import { runProjects } from './commands/projects.js';
 import { runSetupCommand } from './commands/setup.js';
+import { runStorage } from './commands/storage.js';
 import { printVersion } from './commands/version.js';
 import { runWhoami } from './commands/whoami.js';
 import { readProjectConfig } from './project-config.js';
@@ -81,6 +82,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       return runAi(rest);
     case 'auth':
       return runAuth(rest);
+    case 'storage':
+      return runStorage(rest);
   }
 
   process.stderr.write(`briven: unknown command '${first}'\n`);

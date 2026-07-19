@@ -98,6 +98,12 @@ projectsRouter.use('/v1/projects/:id/realtime-stats', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/export', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/studio/*', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/ai/*', requireProjectAuth());
+// Storage keys (MinIO bucket + S3 service accounts) — CLI `briven storage setup`
+projectsRouter.use('/v1/projects/:id/storage-keys', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/storage-keys/*', requireProjectAuth());
+// File uploads / list (session or brk_ after same carve-out pattern)
+projectsRouter.use('/v1/projects/:id/files', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/files/*', requireProjectAuth());
 
 projectsRouter.use('/v1/projects', requireAuth());
 projectsRouter.use('/v1/projects/*', requireAuth());
