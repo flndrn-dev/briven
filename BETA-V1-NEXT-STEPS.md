@@ -1,8 +1,9 @@
 # Beta v1 — next steps tracker
 
 **Owner:** flndrn  
-**Started:** 2026-07-18  
-**Goal:** Move from “platform exists” to “friends can rely on a pilot.”
+**Started:** 2026-07-18 · **Superseded by:** `sprint_plan.md` (Clerk gap L1/L2, 2026-07-19)  
+**Goal:** Move from “platform exists” to “friends can rely on a pilot.”  
+**Evidence pack:** `docs/CLERK-GAP-EVIDENCE.md`
 
 Three needles, in order:
 

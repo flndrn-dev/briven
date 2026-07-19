@@ -17,13 +17,20 @@ Companion: `AUTH-GO-LIVE-CHECKLIST.md`, `BETA-V1-NEXT-STEPS.md`, `sprint_plan.md
 
 **How you prove it (human, 10 minutes):**
 
+```bash
+./scripts/auth-isolation-check.sh          # prints steps + runs s6 probes
+# full how-to: scripts/auth-isolation-verify.md
+# runbook:     docs/runbooks/auth-tenant-isolation.md
+```
+
 1. Project A: enable Auth, create key A, sign up `user-a@example.com`.  
 2. Project B: enable Auth, create key B (different key).  
 3. Project B → Auth → Users: **must not** list `user-a@example.com`.  
 4. Point a test app at key B + project B id; sign-up creates a **new** user B only.  
 5. (Optional) Try using key A with project B id in env → should fail auth (wrong project).
 
-**Pass:** no shared user rows, no shared sessions, no shared keys across projects.
+**Pass:** no shared user rows, no shared sessions, no shared keys across projects.  
+**Evidence:** fill `docs/CLERK-GAP-EVIDENCE.md` section A (S6.1).
 
 ---
 
@@ -84,6 +91,13 @@ bun test src/services/auth-rate-limit.test.ts src/services/auth-reliability.test
 ```
 
 **Alert ideas (minimal):** page if `/ready` fails 2+ minutes; page if redis unreachable while URL configured; page if `briven_auth_route_5xx_total` or mailer failures spike.
+
+### Mail deliverability (custom domains)
+
+1. Dashboard → project → Auth → branding → set **sender domain**.  
+2. Add the DNS records shown (SPF / DKIM as listed).  
+3. Until verified, Briven falls back to `noreply@briven.tech` so login mail still works.  
+4. If magic links fail: check spam, branding config, `GET /ready`, then mailer failure counters after API deploy (`briven_auth_mailer_failures_total` / admin Health → auth reliability).
 
 ---
 

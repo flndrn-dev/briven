@@ -1,35 +1,62 @@
 name: Deploy to Dokploy
 
-# =============================================================================
-# HARD STOP — AUTO-DEPLOY DISABLED (2026-07-18)
-# =============================================================================
-# This workflow is intentionally inert.
-# - No `push` trigger (will not run on git push)
-# - Job is permanently skipped (`if: false`)
-# - Also disabled in GitHub UI: Actions → Deploy to Dokploy → Disable workflow
+# Manual-only deploy. Does NOT run on push (auto-deploy off).
+# Dokploy compose also has autoDeploy=false (set 2026-07-19).
 #
-# When you WANT a deploy later:
-# 1. Re-enable the workflow in GitHub Actions settings
-# 2. Restore a real job body (see git history for 421ae07 / earlier)
-# 3. Run workflow_dispatch once
-#
-# Do NOT re-add `on: push` without flndrn explicit approval.
-# =============================================================================
+# Prerequisites: set repo secrets DOKPLOY_WEBHOOK_URL + DOKPLOY_API_KEY
+# then Actions → Deploy to Dokploy → Run workflow.
 
 on:
   workflow_dispatch:
     inputs:
-      confirm:
-        description: 'Type DEPLOY to allow a future re-enable of this workflow body'
-        required: true
-        default: ''
+      reason:
+        description: 'Why deploy? (note only)'
+        required: false
+        default: 'manual clerk-gap / ops deploy'
 
 jobs:
-  deploy-disabled:
-    name: auto-deploy is OFF
+  deploy:
+    name: Deploy to dokploy (manual)
     runs-on: ubuntu-latest
-    # Permanent skip — never calls Dokploy.
-    if: false
     steps:
-      - name: noop
-        run: echo "This job never runs. Auto-deploy is fully disabled."
+      - name: Trigger Dokploy deploy
+        env:
+          DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          GIT_REF: refs/heads/main
+          REPO_FULL: ${{ github.repository }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ github.sha }}
+          REASON: ${{ github.event.inputs.reason }}
+        run: |
+          set -euo pipefail
+          echo "Manual deploy only. Reason: ${REASON:-none}"
+          if [ -z "${DOKPLOY_WEBHOOK_URL:-}" ] || [ -z "${DOKPLOY_API_KEY:-}" ]; then
+            echo "::error::Missing DOKPLOY_WEBHOOK_URL or DOKPLOY_API_KEY secrets."
+            echo "Deploy instead via Dokploy UI or API compose.deploy with a session."
+            exit 1
+          fi
+          payload=$(printf '%s' "{
+            \"ref\": \"${GIT_REF}\",
+            \"after\": \"${SHA}\",
+            \"repository\": {
+              \"name\": \"${REPO_NAME}\",
+              \"full_name\": \"${REPO_FULL}\",
+              \"default_branch\": \"main\",
+              \"clone_url\": \"https://github.com/${REPO_FULL}.git\",
+              \"owner\": { \"login\": \"${OWNER}\", \"name\": \"${OWNER}\" }
+            }
+          }")
+          http_code=$(curl -sS -o /tmp/dokploy-response.txt -w "%{http_code}" \
+            -X POST "${DOKPLOY_WEBHOOK_URL}" \
+            -H "Authorization: Bearer ${DOKPLOY_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d "${payload}")
+          echo "Dokploy HTTP status: ${http_code}"
+          cat /tmp/dokploy-response.txt || true
+          case "${http_code}" in
+            200|201|202|204) echo "Deploy trigger accepted." ;;
+            *) echo "::error::Dokploy rejected deploy"; exit 1 ;;
+          esac

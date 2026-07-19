@@ -25,36 +25,41 @@ code). In React apps use `TwoFactorChallenge` from `@briven/auth/react`.
 
 ## 10-minute dogfood path (recommended)
 
-```sh
-# 0. Platform awake (or ask an agent)
-#    curl -s https://api.briven.tech/ready   → redis: ok
+This is the **Clerk-gap soft item**: a second human can sign up without you pasting code at them.
 
-# 1. Copy this kit
+```sh
+# 0. Platform awake
+#    ./scripts/s6-auth-verify.sh
+
+# 1. Copy this kit outside the monorepo (or use your real app)
 cp -r examples/auth-pilot ~/Desktop/auth-pilot-dogfood
 cd ~/Desktop/auth-pilot-dogfood
 
-# 2. One command: sign in + new or existing project + wire folder
-#    NEW project:
+# 2. Wire to cloud (Convex-style)
 briven setup --name auth-pilot
-#    OR attach an EXISTING project:
-# briven setup --project p_YOUR_ID
+#    or: briven setup --project p_YOUR_EXISTING_PILOT
 
-# 3. Auth scaffold (middleware + lib/auth + env template)
+# 3. Auth files + package
 briven auth scaffold
 pnpm add @briven/auth
 
-# 4. Dashboard: project → Auth → Enable (if needed) → API keys → create
-#    pk_briven_auth_…  (browser only — never brk_)
+# 4. Dashboard: project → Auth → Enable → API keys → create
+#    pk_briven_auth_… only (never put brk_ in the browser)
 
 # 5. Paste into .env.local (do not commit)
 #    NEXT_PUBLIC_BRIVEN_PROJECT_ID=p_…
 #    NEXT_PUBLIC_BRIVEN_API_ORIGIN=https://api.briven.tech
 #    NEXT_PUBLIC_BRIVEN_AUTH_KEY=pk_briven_auth_…
-#    BRIVEN_AUTH_PUBLIC_KEY=pk_briven_auth_…   # same value
+#    BRIVEN_AUTH_PUBLIC_KEY=pk_briven_auth_…
 
-# 6. Run your Next host, open /sign-in
-# 7. Complete AUTH-GO-LIVE-CHECKLIST rows 3, 4, 7 (sign-up, wrong password, refresh)
+# 6. Run Next, open /sign-in
+# 7. YOU: AUTH-GO-LIVE rows 3, 4, 7
+# 8. FRIEND: same URL — sign up with their email (soft gap closed)
+# 9. Isolation: second project must NOT list either user
+#    → ./scripts/auth-isolation-check.sh
 ```
+
+Record pass/fail in `docs/CLERK-GAP-EVIDENCE.md`.
 
 ### Manual key path (if you already have a key)
 
