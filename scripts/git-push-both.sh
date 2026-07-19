@@ -3,7 +3,8 @@
 #
 # Configures `origin` so:
 #   git push origin main
-# updates both remotes. GitHub push still triggers Dokploy auto-deploy.
+# updates both remotes. When Deploy to Dokploy is enabled + secrets set,
+# push to main triggers production deploy (auto-deploy).
 #
 # Usage:
 #   ./scripts/git-push-both.sh setup    # only configure dual-push (once per clone)
@@ -48,5 +49,5 @@ git remote get-url --push --all origin | sed 's/^/  /'
 if [[ "$DO_PUSH" -eq 1 ]]; then
   echo "Pushing '${BRANCH}' → GitHub + Konnos…"
   git push -u origin "$BRANCH"
-  echo "Done. (Code only — auto-deploy is OFF. Deploy via Actions → Deploy to Dokploy.)"
+  echo "Done. (GitHub + Konnos. If Deploy-to-Dokploy is enabled, prod may rebuild.)"
 fi
