@@ -11,8 +11,8 @@ No “mostly”, “partial”, or skipping ahead.
 
 ## Exit criterion (engineering)
 
-Nightly control-plane dump **and** off-site upload OK **and** Discord **alerts** path proven.  
-**Trademark is not an engineering gate** (legal track, separate).
+Nightly control-plane dump **and** off-site upload OK.  
+Discord + trademark are **not** engineering gates.
 
 ---
 
@@ -42,13 +42,11 @@ Nightly control-plane dump **and** off-site upload OK **and** Discord **alerts**
 
 ## What only flndrn can provide
 
-1. **0.1** — Create S3-compatible bucket; give agent (or paste into `/etc/briven/backup.env`) the four `BRIVEN_BACKUP_S3_*` values — see `infra/backups/BACKUP-OFFSITE.md`.  
-2. **0.2 deploys only** — Discord → channel settings → **Integrations → Webhooks** → new webhook for **#briven-deploys** (or regenerate token). Paste into Dokploy env `BRIVEN_DISCORD_WEBHOOK_DEPLOYS` and `/etc/briven/backup.env`. **Alerts already work.**
+1. **0.1** — Create S3-compatible bucket; give agent (or paste into `/etc/briven/backup.env`) the four `BRIVEN_BACKUP_S3_*` values — see `infra/backups/BACKUP-OFFSITE.md`.
 
 ---
 
 ## When Phase 0 becomes Done (engineering)
 
 **0.1** off-site upload succeeds once + journal shows `off-site upload ok`.  
-Alerts Discord path already proven. Trademark deferred.  
 Then agent writes 0.4 ADR and marks Phase 0 **Done**.
