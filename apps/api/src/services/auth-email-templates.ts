@@ -34,13 +34,19 @@ export async function getEmailTemplate(
   projectId: string,
   name: EmailTemplateName,
 ): Promise<{ subject: string; html: string; text: string | null } | null> {
-  const rows = await runInProjectDatabase(projectId, async (tx) => {
-    return (await tx.unsafe(
-      `SELECT subject, html, text FROM "_briven_auth_email_templates" WHERE name = $1 AND active = true LIMIT 1`,
-      [name] as never,
-    )) as Array<{ subject: string; html: string; text: string | null }>;
-  });
-  return rows[0] ?? null;
+  try {
+    const rows = await runInProjectDatabase(projectId, async (tx) => {
+      return (await tx.unsafe(
+        `SELECT subject, html, text FROM "_briven_auth_email_templates" WHERE name = $1 AND active = true LIMIT 1`,
+        [name] as never,
+      )) as Array<{ subject: string; html: string; text: string | null }>;
+    });
+    return rows[0] ?? null;
+  } catch {
+    // Table missing on older tenants (before self-heal) must never 500 the
+    // magic-link / OTP send path — fall back to built-in templates.
+    return null;
+  }
 }
 
 export async function setEmailTemplate(

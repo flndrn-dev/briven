@@ -25,7 +25,7 @@ import {
   sendBrivenAuthOtp,
   sendBrivenAuthPasswordReset,
 } from './auth-mailer.js';
-import { AUTH_JWKS_TABLE_SQL } from './auth-provisioning.js';
+import { ensureTenantAuthSchema } from './auth-provisioning.js';
 import { brivenOwnOrigins, originsForProject } from './auth-origin-allowlist.js';
 import { publishEvent, type AuthEventType } from './outbound-webhooks.js';
 import { getTenantSecret } from './tenant-secrets.js';
@@ -791,17 +791,21 @@ async function createAuthInstance(projectId: string) {
   const genericOAuthConfigs = buildGenericOAuthConfigs(config, oauthSecrets);
   const plugins = assembleTenantPlugins(passwordlessPlugins, genericOAuthConfigs, config);
 
-  // Self-heal the jwt plugin's key table on projects provisioned BEFORE the
-  // jwks table joined the DDL batch (provisioning only runs when a customer
-  // clicks Enable Auth, so live tenants never re-run it). Idempotent
-  // `CREATE TABLE IF NOT EXISTS`, once per instance boot — without this,
-  // `GET /v1/auth-tenant/token` would 500 on every pre-existing project.
-  // Failure is logged but NOT fatal: the rest of auth (sign-in/session)
-  // works without the table; only the jwt endpoints would error.
+  // Self-heal auth schema on projects provisioned BEFORE later DDL landed
+  // (email templates, passkeys, two_factor column, jwks). Provisioning only
+  // runs on first "Enable Auth", so live tenants never re-run the full batch.
+  // Without this, magic-link / OTP 500 on missing tables/columns (Mavi 2026-07).
+  // Failures are non-fatal so sign-in still attempts when heal partially fails.
   try {
-    await pgPool.query(AUTH_JWKS_TABLE_SQL);
+    const heal = await ensureTenantAuthSchema(pgPool);
+    if (heal.columnAdded) {
+      log.info('briven_auth_schema_healed_column', {
+        projectId,
+        column: 'two_factor_enabled',
+      });
+    }
   } catch (err) {
-    log.warn('briven_auth_jwks_ensure_failed', {
+    log.warn('briven_auth_schema_ensure_failed', {
       projectId,
       message: err instanceof Error ? err.message : String(err),
     });

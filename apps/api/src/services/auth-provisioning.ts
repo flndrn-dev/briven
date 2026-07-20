@@ -48,6 +48,104 @@ export const AUTH_JWKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS "_briven_auth_jwk
   .trim();
 
 /**
+ * Tables that older "Enable Auth" projects may be missing after schema growth.
+ * CREATE TABLE IF NOT EXISTS only — safe on Doltgres (no ALTER IF NOT EXISTS).
+ * Called on every tenant auth instance boot so magic-link / OTP / passkey
+ * do not 500 on schema drift (Mavi Pay incident 2026-07-21:
+ * missing `_briven_auth_email_templates` + `two_factor_enabled` column).
+ */
+export const AUTH_SELF_HEAL_TABLE_SQL: readonly string[] = [
+  AUTH_JWKS_TABLE_SQL,
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_email_templates" (
+     id text PRIMARY KEY,
+     name text NOT NULL,
+     subject text NOT NULL,
+     html text NOT NULL,
+     text text,
+     active boolean NOT NULL DEFAULT true,
+     created_at timestamptz NOT NULL DEFAULT now(),
+     updated_at timestamptz NOT NULL DEFAULT now()
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_email_templates_name_uniq"
+     ON "_briven_auth_email_templates" (name)`,
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_two_factors" (
+     id text PRIMARY KEY,
+     secret text NOT NULL,
+     backup_codes text NOT NULL,
+     user_id text NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+     verified boolean NOT NULL DEFAULT true,
+     created_at timestamptz NOT NULL DEFAULT now(),
+     updated_at timestamptz NOT NULL DEFAULT now()
+   )`,
+  `CREATE INDEX IF NOT EXISTS "_briven_auth_two_factors_user_idx"
+     ON "_briven_auth_two_factors" (user_id)`,
+  `CREATE TABLE IF NOT EXISTS "_briven_auth_passkeys" (
+     id text PRIMARY KEY,
+     name text,
+     public_key text NOT NULL,
+     user_id text NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
+     credential_id text NOT NULL,
+     counter bigint NOT NULL DEFAULT 0,
+     created_at timestamptz NOT NULL DEFAULT now(),
+     updated_at timestamptz NOT NULL DEFAULT now()
+   )`,
+  `CREATE INDEX IF NOT EXISTS "_briven_auth_passkeys_user_idx"
+     ON "_briven_auth_passkeys" (user_id)`,
+].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
+
+/**
+ * Minimal pg-like client for self-heal (pool or client with `.query`).
+ */
+export interface AuthSchemaQueryClient {
+  query(sql: string, params?: unknown[]): Promise<unknown>;
+}
+
+/**
+ * Ensure critical auth tables + the `two_factor_enabled` user column exist.
+ * Doltgres does not support `ADD COLUMN IF NOT EXISTS`, so we probe
+ * information_schema then issue a bare ADD COLUMN when missing.
+ *
+ * Failures are logged by the caller — individual statements continue so one
+ * bad DDL does not block the rest.
+ */
+export async function ensureTenantAuthSchema(
+  client: AuthSchemaQueryClient,
+): Promise<{ tablesOk: number; columnAdded: boolean }> {
+  let tablesOk = 0;
+  for (const sql of AUTH_SELF_HEAL_TABLE_SQL) {
+    try {
+      await client.query(sql);
+      tablesOk += 1;
+    } catch {
+      // continue — table may already exist under a partial shape
+    }
+  }
+
+  let columnAdded = false;
+  try {
+    const probe = (await client.query(
+      `SELECT 1 AS ok FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = '_briven_auth_users'
+         AND column_name = 'two_factor_enabled'
+       LIMIT 1`,
+    )) as { rows?: Array<{ ok: number }> };
+    const hasCol = Array.isArray(probe?.rows) && probe.rows.length > 0;
+    if (!hasCol) {
+      await client.query(
+        `ALTER TABLE "_briven_auth_users"
+         ADD COLUMN two_factor_enabled boolean NOT NULL DEFAULT false`,
+      );
+      columnAdded = true;
+    }
+  } catch {
+    // users table missing entirely (auth not provisioned) — skip
+  }
+
+  return { tablesOk, columnAdded };
+}
+
+/**
  * Emit the full DDL batch for a project's auth tables. Caller wraps it in
  * `runInProjectDatabase(projectId, tx)` — the connection is bound to the
  * project's own DoltGres database (`proj_<id>`, public schema), so no
