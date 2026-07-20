@@ -65,9 +65,12 @@ export async function upsertScimRoleMap(
   const now = new Date().toISOString();
 
   await runInProjectDatabase(projectId, async (tx) => {
+    // Store + match display names case-insensitively by normalizing to lower
+    // on write. DoltGres rejects expression indexes on lower(col).
+    const nameKey = displayName.toLowerCase();
     const existing = (await tx.unsafe(
-      `SELECT id FROM "_briven_auth_scim_role_maps" WHERE lower(display_name) = lower($1) LIMIT 1`,
-      [displayName] as never[],
+      `SELECT id FROM "_briven_auth_scim_role_maps" WHERE display_name = $1 LIMIT 1`,
+      [nameKey] as never[],
     )) as Array<{ id: string }>;
     if (existing[0]) {
       await tx.unsafe(
@@ -81,7 +84,7 @@ export async function upsertScimRoleMap(
         `INSERT INTO "_briven_auth_scim_role_maps"
            (id, display_name, org_id, role, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5::timestamptz, $5::timestamptz)`,
-        [id, displayName, input.orgId, role, now] as never[],
+        [id, nameKey, input.orgId, role, now] as never[],
       );
     }
   });
@@ -173,7 +176,7 @@ async function ensureRoleMapTable(projectId: string): Promise<void> {
     );
     await tx.unsafe(
       `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_role_maps_name_uniq"
-         ON "_briven_auth_scim_role_maps" (lower(display_name))`.replace(/\s+/g, ' '),
+         ON "_briven_auth_scim_role_maps" (display_name)`.replace(/\s+/g, ' '),
     );
   });
 }

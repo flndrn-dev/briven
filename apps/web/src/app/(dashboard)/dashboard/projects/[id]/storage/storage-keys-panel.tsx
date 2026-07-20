@@ -45,8 +45,9 @@ export function StorageKeysPanel({ projectId, endpoint, initial }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   async function create(): Promise<void> {
-    const label = name.trim();
-    if (!label) return;
+    // Default label so "new key" always does something — empty name used to
+    // silently no-op (disabled button + early return), which felt broken.
+    const label = name.trim() || 'default';
     setPending(true);
     setErrMsg(null);
     try {
@@ -149,14 +150,18 @@ export function StorageKeysPanel({ projectId, endpoint, initial }: Props) {
           <button
             type="button"
             onClick={() => void create()}
-            disabled={pending || !name.trim()}
+            disabled={pending}
             className="rounded-md bg-[var(--color-primary)] px-4 py-2 font-mono text-xs font-medium text-[var(--color-text-inverse)] transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
           >
             {pending ? 'minting…' : 'new key'}
           </button>
           {errMsg ? (
             <span className="font-mono text-[11px] text-[var(--color-error)]">{errMsg}</span>
-          ) : null}
+          ) : (
+            <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
+              leave name empty → key labeled &quot;default&quot;
+            </span>
+          )}
         </div>
       )}
 
