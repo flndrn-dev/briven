@@ -40,10 +40,9 @@ Source: `PHASE-0.md` · handoff `infra/backups/BACKUP-OFFSITE.md`.
 | ID | Task | Status | Who |
 | --- | --- | --- | --- |
 | **0.1** | Off-site backup (R2/B2) + successful upload | **Blocked (human)** | flndrn sets up bucket; four `BRIVEN_BACKUP_S3_*` keys. Local dump + timer already OK. |
-| **0.2a** | Discord **alerts** webhook + backup OnFailure | **Done** | Was in Dokploy env; wired to `/etc/briven/backup.env`; smoke **HTTP 204**. |
-| **0.2b** | Discord **deploys** webhook | **Blocked (human)** | URL present but **401 Invalid Webhook Token** — regenerate in Discord. |
-| **0.3** | Trademark | **Deferred** | **Not a build gate** (decision 2026-07-19). Legal later. |
-| **0.4** | Phase 0 sign-off ADR | **Not done** | After **0.1** (deploys webhook optional for engineering close). |
+| **0.2** | Discord ops webhooks (alerts / deploys) | **Deferred — not a build gate** | **Why it was ever listed:** optional “pager” for ops (backup failed / deploy noise) into a chat channel — **not a product feature for customers**. flndrn 2026-07-20: do not care / do not block. Alerts path already works if wanted later; deploys URL can rot. |
+| **0.3** | Trademark | **Deferred** | **Not a build gate**. Legal later. |
+| **0.4** | Phase 0 sign-off ADR | **Not done** | After **0.1** only. |
 
 ---
 
@@ -120,9 +119,9 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 
 | Now | Task |
 | --- | --- |
-| **→** | **0.1** — wait for flndrn S3 bucket keys. Optional: flndrn regenerates **deploys** Discord webhook. Agent next without wait: **O.1** thrash / **S.M\*** proofs. |
+| **→** | **0.1** — wait for flndrn S3 bucket keys (only Phase 0 engineering gate left). Agent without wait: **O.1** thrash / **S.M\*** proofs. |
 
-**Just closed:** G0.1/G0.2 CLI; **0.2a** Discord alerts live; **0.3** trademark removed from build gate.
+**Closed / deferred:** G0 CLI; Discord ops (0.2) not a gate; trademark (0.3) not a gate; Auth enable fixed.
 
 ---
 
