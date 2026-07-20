@@ -8,11 +8,9 @@ import { log } from '../lib/logger.js';
  * (`BRIVEN_DATA_PLANE_URL`). Used for DoltGres database provisioning /
  * teardown and readiness pings.
  *
- * @README-BRIVEN ADR 0001 — the converged data plane is DoltGres, which works
- * with the `pg` driver (node-postgres) but NOT postgres.js (postgres.js's
- * extended-protocol pipelining desyncs against DoltGres). So the admin path
- * here uses `pg`. The control plane (apps/api/src/db/client.ts + drizzle)
- * stays on postgres.js — it talks to real Postgres, not DoltGres.
+ * ADR-0004 — Briven is Doltgres end-to-end. Both control and data plane use
+ * the `pg` driver (node-postgres). postgres.js desyncs against Doltgres
+ * wire protocol (`unhandled message`).
  */
 let _client: pg.Pool | null = null;
 
