@@ -139,7 +139,7 @@
     "ui": "workspace:*",
     "ui-patterns": "workspace:*",
     "use-debounce": "^7.0.1",
-    "use-stick-to-bottom": "^1.1.1",
+    "use-stick-to-bottom": "^1.1.6",
     "uuid": "^14.0.0",
     "valtio": "catalog:",
     "zod": "catalog:",
