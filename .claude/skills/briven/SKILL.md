@@ -59,3 +59,11 @@ Hosted, version-controlled SQL database service built on **Dolt** (open-source, 
    Prefer **one** deploy call (not deploy+redeploy+deploy). A healthy live site with a still-red panel is **not** done — the panel must show a successful deploy too.
 
 14. **O.1 Deploy thrash (2026-07-20) — keep Dokploy `autoDeploy: false`.** Git push must NOT rebuild the whole stack. Full Dokploy deploy runs `compose up -d --build --remove-orphans` on every service; stacked rebuilds leave api/realtime **Dead** / `Address already in use` and public API 404s. For normal code ship: SSH France → `git pull` → `build` + `up -d --no-deps` **only the services that changed** (usually `api` and/or `web`). Use full compose.deploy only for the “failed panel → one clean green” rule (#13). Do not re-enable autoDeploy without flndrn explicit OK + load plan.
+
+15. **Handoff to other projects only after Auth + project S3 are in order.** File: `HANDOFF-AUTH-FOR-OTHER-PROJECTS.md`. Gate OPEN = both product tracks ready. Phase 0.1 platform backup is **not** part of the gate and must not delay other apps once the gate is OPEN. Do not send konnos/mavi-pay/etc. agents to integrate while the handoff gate says CLOSED.
+
+16. **STANDING RULE — batch work, then ONE deploy, then test (2026-07-20).** flndrn: do **not** deploy after every small change (CPU thrash + flaky site). Pattern:
+    1. **Build a large chunk** locally (several related fixes/features, tests green locally where possible).
+    2. **One deploy** of that chunk (prefer service-scoped build; never stack; never autoDeploy).
+    3. **Then** run live/acceptance testing against production.
+    Pushing git for backup is fine while autoDeploy is false; **deploy ≠ push**. Only deploy when the batch is ready or flndrn explicitly says deploy.

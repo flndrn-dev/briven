@@ -1,5 +1,13 @@
 # Briven France — safe deploy (O.1)
 
+## Cadence (flndrn hard rule)
+
+1. Finish a **large chunk** of work first (many related changes, local tests).
+2. **One** deploy for that whole chunk — never after every small edit.
+3. **Then** run live testing.
+
+`git push` with `autoDeploy: false` does **not** rebuild France. Deploy only when the batch is ready (or flndrn says “deploy”).
+
 ## Why this exists
 
 Dokploy’s full **Deploy** button runs roughly:

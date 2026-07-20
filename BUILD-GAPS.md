@@ -39,7 +39,7 @@ Source: `PHASE-0.md` · handoff `infra/backups/BACKUP-OFFSITE.md`.
 
 | ID | Task | Status | Who |
 | --- | --- | --- | --- |
-| **0.1** | Off-site backup (R2/B2) + successful upload | **Done** | flndrn 2026-07-20: human complete. |
+| **0.1** | Off-site backup (R2/B2) + successful upload | **Deferred** | flndrn 2026-07-20: do **after** product S3 + Auth handoff for other projects. Not day-to-day product. See `BACKUP-OFFSITE.md`. |
 | **0.2** | Discord ops webhooks (alerts / deploys) | **Deferred — not a build gate** | **Why it was ever listed:** optional “pager” for ops (backup failed / deploy noise) into a chat channel — **not a product feature for customers**. flndrn 2026-07-20: do not care / do not block. Alerts path already works if wanted later; deploys URL can rot. |
 | **0.3** | Trademark | **Deferred** | **Not a build gate**. Legal later. |
 | **0.4** | Phase 0 sign-off ADR | **Not done** | After **0.1** only. |
@@ -101,7 +101,7 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 | ID | Task | Status | Notes |
 | --- | --- | --- | --- |
 | **O.1** | Stop Dokploy full-stack thrash (stacked `up --build`) | **Done** | 2026-07-20: `autoDeploy` forced **false** (was true → thrash). Docs: `infra/dokploy/SAFE-DEPLOY.md` + skill gotcha #14 + memory safe SSH path. Prefer service-scoped build/up. |
-| **O.2** | Traefik multi-service warning on `briven-api` labels | **Not done** | Noisy; routing works when API is up. Clean labels when touching compose. |
+| **O.2** | Traefik multi-service warning on `briven-api` labels | **Done** (code) | Explicit `.service=` on routers; `/_t` router moved onto imgproxy container. Needs one future deploy of compose labels only. |
 | **O.3** | Disk headroom on France (~85% used) | **Done** | 2026-07-20 safe prune: 66%→**56%** (126G→107G used). Build cache kept ≤20GB. No volumes pruned. |
 
 ---
@@ -119,9 +119,9 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 
 | Now | Task |
 | --- | --- |
-| **→** | **0.1, A.1, O.1, O.3, S.M2 Done.** Human left: **S.M6** storage sign-off; **A.2/A.3** isolation + friends claim; Phase 0 **0.4** ADR after 0.1. |
+| **→** | **Handoff CLOSED** until product **Auth + project S3** are both in order. Doc: `HANDOFF-AUTH-FOR-OTHER-PROJECTS.md` (gate section). **0.1 backup** is not part of the handoff. No deploy until flndrn says deploy. |
 
-**Closed / deferred:** G0 CLI; S.M1–5; O.1 thrash; O.3 disk; 0.1 backup; A.1 auth drill; Discord (0.2); trademark (0.3).
+**Closed / deferred:** G0 CLI; S.M* product proof; O.1/O.3; A.1 human drill (re-confirm for gate OPEN); Discord (0.2); trademark (0.3); **0.1 backup deferred after handoff OPEN**.
 
 ---
 

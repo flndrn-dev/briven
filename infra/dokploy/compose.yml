@@ -373,6 +373,7 @@ services:
       - 'traefik.http.routers.briven-api.rule=Host(`api.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-api.entrypoints=websecure'
       - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-api.service=briven-api'
       - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
 
   runtime:

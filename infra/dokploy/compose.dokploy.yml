@@ -389,26 +389,15 @@ services:
       - 'traefik.http.routers.briven-api.rule=Host(`api.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-api.entrypoints=websecure'
       - 'traefik.http.routers.briven-api.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-api.service=briven-api'
       - 'traefik.http.services.briven-api.loadbalancer.server.port=3001'
-      # media.briven.tech -> the api (serves GET /media/<project>/<file> public
-      # objects with per-tenant CORS). Same service/port as briven-api; Traefik
-      # auto-issues the Let's Encrypt cert so the padlock is valid.
+      # media.briven.tech -> this api (public file bytes). Explicit .service= on
+      # every router so Traefik does not treat the container as multi-service.
       - 'traefik.http.routers.briven-media.rule=Host(`media.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-media.entrypoints=websecure'
       - 'traefik.http.routers.briven-media.tls.certresolver=letsencrypt'
       - 'traefik.http.routers.briven-media.service=briven-api'
-      # media.briven.tech/_t/... -> imgproxy (M4 signed image transforms). Same
-      # host as briven-media, but a HIGHER-priority router so /_t/* is peeled
-      # off to imgproxy while everything else on media.<domain> keeps hitting
-      # the api's public /media/<project>/<file> objects. Traefik picks the
-      # highest-priority matching router; briven-media has no explicit priority
-      # (defaults to its rule length), so we pin briven-imgt above it. imgproxy
-      # is configured with IMGPROXY_PATH_PREFIX=/_t so it strips /_t itself.
-      - 'traefik.http.routers.briven-imgt.rule=Host(`media.${BRIVEN_DOMAIN}`) && PathPrefix(`/_t`)'
-      - 'traefik.http.routers.briven-imgt.priority=100'
-      - 'traefik.http.routers.briven-imgt.entrypoints=websecure'
-      - 'traefik.http.routers.briven-imgt.tls.certresolver=letsencrypt'
-      - 'traefik.http.routers.briven-imgt.service=briven-imgproxy'
+      # /_t image transforms: router lives on the imgproxy service (below), not here.
 
   # imgproxy — on-the-fly image transforms (M4). Sits BEHIND media.<domain>
   # under the /_t path prefix (no new public subdomain, per the media-host
@@ -450,10 +439,14 @@ services:
       - 'briven_logs=true'
       - 'traefik.enable=true'
       - 'traefik.docker.network=dokploy-network'
-      # Traefik must know which container port to load-balance to. No router
-      # is declared on this service itself — the media-host /_t router above
-      # (on the api service labels) points here via service=briven-imgproxy.
       - 'traefik.http.services.briven-imgproxy.loadbalancer.server.port=8080'
+      # Higher priority than briven-media so /_t/* hits imgproxy; rest of
+      # media.<domain> stays on the api. IMGPROXY_PATH_PREFIX=/_t strips prefix.
+      - 'traefik.http.routers.briven-imgt.rule=Host(`media.${BRIVEN_DOMAIN}`) && PathPrefix(`/_t`)'
+      - 'traefik.http.routers.briven-imgt.priority=100'
+      - 'traefik.http.routers.briven-imgt.entrypoints=websecure'
+      - 'traefik.http.routers.briven-imgt.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-imgt.service=briven-imgproxy'
 
   runtime:
     build:
@@ -559,6 +552,7 @@ services:
       - 'traefik.http.routers.briven-web.rule=Host(`${BRIVEN_DOMAIN}`) || Host(`app.${BRIVEN_DOMAIN}`) || Host(`admin.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-web.entrypoints=websecure'
       - 'traefik.http.routers.briven-web.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-web.service=briven-web'
       - 'traefik.http.services.briven-web.loadbalancer.server.port=3000'
 
   docs:
@@ -589,6 +583,7 @@ services:
       - 'traefik.http.routers.briven-docs.rule=Host(`docs.${BRIVEN_DOMAIN}`)'
       - 'traefik.http.routers.briven-docs.entrypoints=websecure'
       - 'traefik.http.routers.briven-docs.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.briven-docs.service=briven-docs'
       - 'traefik.http.services.briven-docs.loadbalancer.server.port=3002'
       # status.${BRIVEN_DOMAIN} — same docs container; bare `/` rewrites to
       # /status. Other paths pass through (so /api/status/incidents.xml works).

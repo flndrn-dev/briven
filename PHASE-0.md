@@ -2,7 +2,8 @@
 
 **Rule (hard):** each phase is only **Done** or **Not done**.  
 No “mostly”, “partial”, or skipping ahead.  
-**Status as of 2026-07-19 evening: Phase 0 = Not done** (only **0.1 off-site S3** still required for engineering close).
+**Status as of 2026-07-20: Phase 0 = Not done** (only **0.1 off-site S3** still required for engineering close).  
+**Note:** Project dashboard “Storage keys” ≠ 0.1. See `BACKUP-OFFSITE.md` comparison table.
 
 **Master queue:** `BUILD-GAPS.md`.  
 **Off-site handoff:** `infra/backups/BACKUP-OFFSITE.md`.
@@ -20,7 +21,7 @@ Discord + trademark are **not** engineering gates.
 
 | # | Task | Status | Proof / gap (2026-07-19) |
 | --- | --- | --- | --- |
-| **0.1** | Off-site backup target (R2/B2) | **Not done** — waiting on flndrn bucket | Local dump + timer OK. Script ready. Need `BRIVEN_BACKUP_S3_*` in `/etc/briven/backup.env` (see `infra/backups/BACKUP-OFFSITE.md`). |
+| **0.1** | Off-site backup target (R2/B2) | **Deferred** (flndrn 2026-07-20) | After product S3 + Auth handoff for other apps. Local dump + timer already OK. Project Storage ≠ this. |
 | **0.2** | Discord webhooks (alerts + deploys) | **Deferred — not a build gate** | Optional ops “pager” into chat — **not customer product**. flndrn 2026-07-20: drop from engineering gate. Alerts already wired if useful later. |
 | **0.3** | Trademark filing EU + Benelux | **Deferred — not a build gate** | Legal track only. |
 | **0.4** | Phase 0 sign-off (ADR + status closed) | **Not done** | After **0.1** green only. |

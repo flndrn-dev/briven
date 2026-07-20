@@ -3,6 +3,17 @@
 **You (flndrn)** create the S3-compatible bucket (Backblaze B2, Cloudflare R2, or AWS S3).  
 **Agent** only needs the four values below written into `/etc/briven/backup.env` on France, then a test run.
 
+## Not the same as project Storage keys
+
+| | **Project Storage** (dashboard screenshot) | **Phase 0.1 off-site backup** (this file) |
+| --- | --- | --- |
+| What | Each customer project's own bucket for **app files** | Platform copy of Briven's **control database** dumps |
+| Where you see it | Project → Storage → keys (`s3.briven.tech`, `proj-…`) | Only on the France server env file |
+| Env names | `BRIVEN_STORAGE_*` / app `.env.local` | `BRIVEN_BACKUP_S3_*` in `/etc/briven/backup.env` |
+| Status 2026-07-20 | **Product path Done** | **Still skipped** until the four keys below are set |
+
+If you only created a key under a project’s Storage page, that is **not** 0.1.
+
 ## Values to put in `/etc/briven/backup.env`
 
 ```bash
