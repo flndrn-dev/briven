@@ -1,7 +1,9 @@
 /**
- * Convex-style one-shot setup: sign in → new or existing project → wire this folder.
+ * Product CLI paths (split like Convex’s “new vs existing”):
  *
- * This is the product path for "open a terminal and get a live Briven backend."
+ *   briven setup    → create a **new** cloud project + wire this folder + S3
+ *   briven connect  → attach an **existing** project + wire this folder + S3
+ *
  * Templates are optional starters, not the product model.
  */
 
@@ -41,10 +43,21 @@ export type SetupTemplate = (typeof TEMPLATES)[number];
 
 export interface SetupArgs {
   name?: string;
+  /** @deprecated on setup — use `briven connect --project`. Still parsed so we can redirect. */
   project?: string;
   region: string;
   template: SetupTemplate;
   yes: boolean;
+  cwd: string;
+  origins: Origins;
+}
+
+/** Args shared by attach-existing (`briven connect`). */
+export interface ConnectProjectArgs {
+  project?: string;
+  template: SetupTemplate;
+  yes: boolean;
+  force: boolean;
   cwd: string;
   origins: Origins;
 }
@@ -66,7 +79,8 @@ export function parseSetupArgs(argv: readonly string[]): SetupArgs {
     origins: resolveOrigins(),
   };
 
-  // Bare args: `briven setup my-app` → name; `briven setup p_…` / known id → project.
+  // Bare arg: `briven setup my-app` → new project name only.
+  // `p_…` is NOT accepted here — use `briven connect`.
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -104,56 +118,127 @@ export function parseSetupArgs(argv: readonly string[]): SetupArgs {
     }
   }
 
-  // Positional after flags: first bare token is project name or existing project id/slug.
-  if (positionals.length > 0 && !out.name && !out.project) {
-    const bare = positionals[0]!;
-    if (looksLikeProjectRef(bare)) {
-      out.project = bare;
-    } else {
-      out.name = bare;
-    }
+  if (positionals.length > 0 && !out.name) {
+    out.name = positionals[0];
   }
 
   return out;
 }
 
-/** Project ids (`p_…`) or obvious refs — treat as --project, else --name. */
+/** Project ids (`p_…`) — use with `briven connect`, not setup. */
 export function looksLikeProjectRef(value: string): boolean {
   return /^p_[A-Za-z0-9]+$/u.test(value);
+}
+
+export function parseConnectProjectArgs(argv: readonly string[]): ConnectProjectArgs {
+  const out: ConnectProjectArgs = {
+    template: 'blank',
+    yes: false,
+    force: false,
+    cwd: process.cwd(),
+    origins: resolveOrigins(),
+  };
+  const positionals: string[] = [];
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if ((arg === '--project' || arg === '-p') && argv[i + 1]) {
+      out.project = argv[++i];
+    } else if (arg?.startsWith('--project=')) {
+      out.project = arg.slice('--project='.length);
+    } else if ((arg === '--template' || arg === '-t') && argv[i + 1]) {
+      out.template = argv[++i] as SetupTemplate;
+    } else if (arg?.startsWith('--template=')) {
+      out.template = arg.slice('--template='.length) as SetupTemplate;
+    } else if (arg === '--yes' || arg === '-y') {
+      out.yes = true;
+    } else if (arg === '--force' || arg === '-f') {
+      out.force = true;
+    } else if (arg === '--api-origin' && argv[i + 1]) {
+      out.origins = resolveOrigins({
+        apiOrigin: argv[++i],
+        dashboardOrigin: out.origins.dashboardOrigin,
+      });
+    } else if (arg === '--dashboard-origin' && argv[i + 1]) {
+      out.origins = resolveOrigins({
+        apiOrigin: out.origins.apiOrigin,
+        dashboardOrigin: argv[++i],
+      });
+    } else if (arg && !arg.startsWith('-')) {
+      positionals.push(arg);
+    }
+  }
+
+  if (positionals.length > 0 && !out.project) {
+    out.project = positionals[0];
+  }
+
+  return out;
 }
 
 export function printSetupHelp(): void {
   banner('setup');
   blankLine();
-  step('one command: sign in → project → S3 bucket+key → wire this folder');
+  step('create a **new** cloud project + S3 bucket/key + wire this folder');
   blankLine();
   step('usage:');
   step('  briven setup                         interactive (recommended)');
   step('  briven setup my-app                  create a new project named my-app');
   step('  briven setup --name my-app           same as above');
-  step('  briven setup --project p_01HZ...     attach an existing project');
   step('  briven setup --name app --template todo-app --region eu-west');
   blankLine();
   step('always includes:');
   step('  · platform sign-in');
-  step('  · new or existing cloud project');
+  step('  · brand-new cloud project');
   step('  · private S3 bucket + storage key → .env.local');
   step('  · local scaffold + CLI project key');
   blankLine();
   step('options:');
   step('  --name, -n <name>        create a new cloud project with this name');
-  step('  --project, -p <id|slug>  use an existing project on your account');
-  step('  --region <id>            region for new projects (default: eu-west)');
+  step('  --region <id>            region (default: eu-west)');
   step('  --template, -t <name>    blank | todo-app | chat | convex-notes | …');
   step('  --yes, -y                defaults for remaining prompts (folder name, etc.)');
+  blankLine();
+  step('existing project? use:');
+  step('  briven connect                       pick an existing project');
+  step('  briven connect p_01HZ...             attach that project');
   blankLine();
   step('after setup:');
   step('  briven deploy   |   briven dev');
   printLink('https://docs.briven.tech/connect');
 }
 
+export function printConnectProjectHelp(): void {
+  banner('connect');
+  blankLine();
+  step('attach an **existing** cloud project + S3 key + wire this folder');
+  blankLine();
+  step('usage:');
+  step('  briven connect                       sign in + pick a project (recommended)');
+  step('  briven connect p_01HZ...             attach this project id');
+  step('  briven connect --project p_01HZ...   same as above');
+  step('  briven connect my-slug               attach by project slug');
+  blankLine();
+  step('also:');
+  step('  briven connect status                show platform session + local keys');
+  step('  briven connect logout                forget platform session (keep project keys)');
+  blankLine();
+  step('options:');
+  step('  --project, -p <id|slug>  existing project on your account');
+  step('  --template, -t <name>    scaffold template if folder has no briven/ yet');
+  step('  --yes, -y                non-interactive when possible (first project if only one)');
+  step('  --force, -f              re-authorize in the browser before attaching');
+  blankLine();
+  step('brand-new project? use:');
+  step('  briven setup my-app');
+  blankLine();
+  step('after connect:');
+  step('  briven deploy   |   briven dev');
+  printLink('https://docs.briven.tech/connect');
+}
+
 /**
- * Full Convex-style setup. Returns process exit code.
+ * Create a **new** project and wire this folder. Returns process exit code.
  */
 export async function runSetup(argv: readonly string[] = []): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
@@ -163,8 +248,17 @@ export async function runSetup(argv: readonly string[] = []): Promise<number> {
 
   const args = parseSetupArgs(argv);
 
-  if (args.project && args.name) {
-    printError('pass either --name (new) or --project (existing), not both');
+  // Redirect: attach existing belongs to `briven connect`.
+  if (args.project) {
+    printError('setup creates a new project only');
+    step(`to attach an existing project:  briven connect ${args.project}`);
+    step('or:  briven connect --project ' + args.project);
+    return 1;
+  }
+  if (args.name && looksLikeProjectRef(args.name)) {
+    printError(`"${args.name}" looks like an existing project id`);
+    step(`to attach it:  briven connect ${args.name}`);
+    step('to create a new project with a normal name:  briven setup my-app');
     return 1;
   }
 
@@ -182,7 +276,7 @@ export async function runSetup(argv: readonly string[] = []): Promise<number> {
 
   banner('setup');
   blankLine();
-  step('connect this folder to a briven cloud project (new or existing)');
+  step('create a new briven cloud project and wire this folder');
   blankLine();
 
   try {
@@ -195,9 +289,6 @@ export async function runSetup(argv: readonly string[] = []): Promise<number> {
     success(`signed in as ${me.email}`);
     blankLine();
 
-    if (args.project) {
-      return await attachExisting(args, user.token, args.project);
-    }
     if (args.name) {
       return await createNew(args, user.token, args.name, args.region, args.template);
     }
@@ -207,16 +298,68 @@ export async function runSetup(argv: readonly string[] = []): Promise<number> {
       return await createNew(args, user.token, name, args.region, args.template);
     }
 
-    const choice = await promptLine('(N)ew project or (E)xisting? [N/e] ');
-    if (choice.trim().toLowerCase().startsWith('e')) {
-      return await interactiveExisting(args, user.token);
-    }
     return await interactiveNew(args, user.token);
   } catch (err) {
     if (err instanceof ApiCallError) {
       printError(`setup failed: ${err.code} (${err.status}) — ${err.message}`);
     } else {
       printError(err instanceof Error ? err.message : 'setup failed');
+    }
+    return 1;
+  }
+}
+
+/**
+ * Attach an **existing** project and wire this folder. Used by `briven connect`.
+ */
+export async function runConnectProject(argv: readonly string[] = []): Promise<number> {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    printConnectProjectHelp();
+    return 0;
+  }
+
+  const args = parseConnectProjectArgs(argv);
+
+  if (!TEMPLATES.includes(args.template)) {
+    printError(`unknown template: ${args.template}`);
+    step(`known: ${TEMPLATES.join(', ')}`);
+    return 1;
+  }
+
+  banner('connect');
+  blankLine();
+  step('attach an existing briven cloud project to this folder');
+  blankLine();
+
+  const setupLike: SetupArgs = {
+    region: REGIONS[0]!.id,
+    template: args.template,
+    yes: args.yes,
+    cwd: args.cwd,
+    origins: args.origins,
+  };
+
+  try {
+    step(args.force ? 're-authorizing in the browser…' : 'signing in to the platform…');
+    const user = await ensurePlatformSession({
+      force: args.force,
+      quiet: true,
+      origins: args.origins,
+    });
+    const me = await fetchMe(user.apiOrigin, user.token);
+    success(`signed in as ${me.email}`);
+    blankLine();
+
+    if (args.project) {
+      return await attachExisting(setupLike, user.token, args.project);
+    }
+
+    return await interactiveExisting(setupLike, user.token, args.yes);
+  } catch (err) {
+    if (err instanceof ApiCallError) {
+      printError(`connect failed: ${err.code} (${err.status}) — ${err.message}`);
+    } else {
+      printError(err instanceof Error ? err.message : 'connect failed');
     }
     return 1;
   }
@@ -271,10 +414,25 @@ async function interactiveNew(args: SetupArgs, token: string): Promise<number> {
   return createNew(args, token, name, region, template);
 }
 
-async function interactiveExisting(args: SetupArgs, token: string): Promise<number> {
+async function interactiveExisting(
+  args: SetupArgs,
+  token: string,
+  yes = false,
+): Promise<number> {
   const projects = await listRemoteProjects(args.origins.apiOrigin, token);
   if (projects.length === 0) {
-    printError('no projects on your account yet — pick (N)ew instead.');
+    printError('no projects on your account yet');
+    step('create one first:  briven setup my-app');
+    return 1;
+  }
+  if (yes && projects.length === 1) {
+    return finishExisting(args, token, projects[0]!);
+  }
+  if (yes && projects.length > 1) {
+    printError('several projects on your account — pass which one:');
+    step('  briven connect p_…');
+    step('  briven connect --project <slug>');
+    projects.forEach((p) => step(`  · ${p.slug}  (${p.id})`));
     return 1;
   }
   step('your projects:');

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { decideBranch, parseSetupArgs } from './setup.js';
+import {
+  decideBranch,
+  looksLikeProjectRef,
+  parseConnectProjectArgs,
+  parseSetupArgs,
+} from './setup.js';
 
 describe('decideBranch', () => {
   it('missing briven.json → wizard', () => {
@@ -15,7 +20,7 @@ describe('decideBranch', () => {
   });
 });
 
-describe('parseSetupArgs', () => {
+describe('parseSetupArgs (new project only)', () => {
   it('defaults', () => {
     const a = parseSetupArgs([]);
     assert.equal(a.template, 'blank');
@@ -31,7 +36,7 @@ describe('parseSetupArgs', () => {
     assert.equal(a.region, 'us-east');
   });
 
-  it('parses --project and --yes', () => {
+  it('still parses --project so setup can redirect to connect', () => {
     const a = parseSetupArgs(['--project=p_abc', '-y']);
     assert.equal(a.project, 'p_abc');
     assert.equal(a.yes, true);
@@ -43,14 +48,36 @@ describe('parseSetupArgs', () => {
     assert.equal(a.project, undefined);
   });
 
-  it('positional p_ id → attach existing project', () => {
+  it('positional p_ id is treated as a name token (runSetup redirects to connect)', () => {
     const a = parseSetupArgs(['p_01HZabc123']);
-    assert.equal(a.project, 'p_01HZabc123');
-    assert.equal(a.name, undefined);
+    assert.equal(a.name, 'p_01HZabc123');
+    assert.equal(a.project, undefined);
+    assert.equal(looksLikeProjectRef(a.name!), true);
   });
 
   it('explicit --name wins over positional', () => {
     const a = parseSetupArgs(['ignored', '--name', 'real-name']);
     assert.equal(a.name, 'real-name');
+  });
+});
+
+describe('parseConnectProjectArgs (existing project)', () => {
+  it('defaults', () => {
+    const a = parseConnectProjectArgs([]);
+    assert.equal(a.project, undefined);
+    assert.equal(a.yes, false);
+    assert.equal(a.force, false);
+  });
+
+  it('positional p_ id → project', () => {
+    const a = parseConnectProjectArgs(['p_01HZabc123']);
+    assert.equal(a.project, 'p_01HZabc123');
+  });
+
+  it('parses --project and --force', () => {
+    const a = parseConnectProjectArgs(['--project', 'my-slug', '--force', '-y']);
+    assert.equal(a.project, 'my-slug');
+    assert.equal(a.force, true);
+    assert.equal(a.yes, true);
   });
 });

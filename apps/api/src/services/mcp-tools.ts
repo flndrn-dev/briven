@@ -18,9 +18,11 @@ import {
 import { signedTransformUrl, isImageTransformConfigured } from './image-transform.js';
 import {
   deleteFile,
+  listDeletedFiles,
   listFiles,
   presignDownload,
   presignUpload,
+  restoreFile,
   setFilePublic,
 } from './storage.js';
 import { createStorageKey, listStorageKeys, revokeStorageKey } from './storage-keys.js';
@@ -399,7 +401,9 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
     {
       title: 'Delete a storage file',
       description:
-        'Delete one file from your project storage. Returns the deleted file id.',
+        'Soft-delete one file from your project storage. It appears under ' +
+        'recently deleted and can be restored within your plan recovery window. ' +
+        'Returns the deleted file id.',
       inputSchema: { fileId: z.string().describe('File id in your project') },
       annotations: { readOnlyHint: false },
     },
@@ -407,6 +411,52 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
       await auditCall('storage_delete_file', { fileId });
       await deleteFile(fileId, ctx.projectId);
       return jsonResult({ deleted: true, fileId });
+    },
+  );
+
+  server.registerTool(
+    'storage_list_deleted',
+    {
+      title: 'List recently deleted files',
+      description:
+        'List soft-deleted files still inside your plan recovery window ' +
+        '(newest first). Use storage_restore_file to undo a delete.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      await auditCall('storage_list_deleted', {});
+      const files = await listDeletedFiles(ctx.projectId);
+      return jsonResult({
+        files: files.map((f) => ({
+          id: f.id,
+          name: f.name,
+          contentType: f.contentType,
+          sizeBytes: f.sizeBytes,
+          deletedAt: f.deletedAt,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    'storage_restore_file',
+    {
+      title: 'Restore a deleted file',
+      description:
+        'Undo a soft-delete: bring a file back from recently deleted within the ' +
+        'recovery window. Returns the restored file id and status.',
+      inputSchema: { fileId: z.string().describe('Deleted file id in your project') },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ fileId }) => {
+      await auditCall('storage_restore_file', { fileId });
+      const result = await restoreFile(fileId, ctx.projectId);
+      return jsonResult({
+        restored: true,
+        fileId: result.file.id,
+        name: result.file.name,
+        status: result.status,
+      });
     },
   );
 
@@ -925,6 +975,8 @@ export const READ_TOOLS = [
   'storage_upload_url',
   'storage_download_url',
   'storage_delete_file',
+  'storage_list_deleted',
+  'storage_restore_file',
   'storage_make_public',
   'storage_mint_key',
   'storage_list_keys',

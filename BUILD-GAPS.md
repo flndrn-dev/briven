@@ -4,7 +4,7 @@
 **Do not re-prove** what is already shipped (Auth day-to-day, project create, SCIM/SSO pack, CLI-auth page fix).  
 **Status is only Done / Not done / Blocked (human).**
 
-**Updated:** 2026-07-19  
+**Updated:** 2026-07-20  
 **Live API tip (check anytime):** `curl -sS https://api.briven.tech/info`
 
 ---
@@ -25,8 +25,8 @@
 | ID | Task | Status | Notes / proof |
 | --- | --- | --- | --- |
 | **G0.1** | `briven setup` on your Mac PATH | **Done** | Installed workspace CLI **0.3.2** globally. `briven --help` lists `setup`. |
-| **G0.2** | `briven setup <projectname>` (positional name) | **Done** | Bare arg = new name; `p_…` = attach existing. Tests pass. |
-| **G0.3** | `briven setup --project …` + `briven connect` | **Done** | On PATH after G0.1. |
+| **G0.2** | `briven setup` = **new** only; `briven connect` = **existing** | **Done** | 2026-07-20 split: setup never attaches; connect wires existing + S3. |
+| **G0.3** | `briven setup my-app` + `briven connect p_…` on PATH | **Done** | Help + tests match the split. |
 | **G0.4** | Project S3 as **required** part of setup | **Done** | `briven setup` always mints bucket+key and writes `.env.local` (fails setup if storage fails). Dashboard create also mints default key. |
 
 **Out of this wave:** re-testing “can create a project in the dashboard” — already proven.
@@ -39,7 +39,7 @@ Source: `PHASE-0.md` · handoff `infra/backups/BACKUP-OFFSITE.md`.
 
 | ID | Task | Status | Who |
 | --- | --- | --- | --- |
-| **0.1** | Off-site backup (R2/B2) + successful upload | **Blocked (human)** | flndrn sets up bucket; four `BRIVEN_BACKUP_S3_*` keys. Local dump + timer already OK. |
+| **0.1** | Off-site backup (R2/B2) + successful upload | **Done** | flndrn 2026-07-20: human complete. |
 | **0.2** | Discord ops webhooks (alerts / deploys) | **Deferred — not a build gate** | **Why it was ever listed:** optional “pager” for ops (backup failed / deploy noise) into a chat channel — **not a product feature for customers**. flndrn 2026-07-20: do not care / do not block. Alerts path already works if wanted later; deploys URL can rot. |
 | **0.3** | Trademark | **Deferred** | **Not a build gate**. Legal later. |
 | **0.4** | Phase 0 sign-off ADR | **Not done** | After **0.1** only. |
@@ -52,12 +52,12 @@ Source: `STORAGE-ACCEPTANCE.md`. Code largely shipped; **acceptance** open.
 
 | ID | Task | Status | Who |
 | --- | --- | --- | --- |
-| **S.M1** | Per-project bucket + scoped key isolation | **Not done** (proof) | Agent can drive API/MCP after keys; flndrn sign-off. |
-| **S.M2** | Quota / unify / soft-delete undo | **Not done** (proof) | Same. |
-| **S.M3** | `media.briven.tech` public delivery | **Not done** | May need Dokploy domain wire if not already. |
-| **S.M4** | imgproxy transform URLs | **Not done** (proof) | Container present on France; verify env. |
-| **S.M5** | MCP storage tools isolation | **Not done** (proof) | |
-| **S.M6** | Dogfood (e.g. Mavi Pay) + flndrn sign-off | **Blocked (human)** | |
+| **S.M1** | Per-project bucket + scoped key isolation | **Done** | Mint key + ListBucket own OK; **403** on other project's bucket. flndrn + agent 2026-07-20. See `STORAGE-ACCEPTANCE.md`. |
+| **S.M2** | Quota / unify / soft-delete undo | **Done** | Dashboard recently-deleted+restore; MCP list_deleted+restore_file; quota hard-block in code. Proof in STORAGE-ACCEPTANCE. |
+| **S.M3** | `media.briven.tech` public delivery | **Done** | Public URL HTTP 200; CORS allows briven.tech, not evil origin. |
+| **S.M4** | imgproxy transform URLs | **Done** | Signed `_t/…` URL HTTP 200; imgproxy healthy + env set. |
+| **S.M5** | MCP storage tools isolation | **Done** | Full MCP loop (upload→public→transform→link→delete); tools project-bound. |
+| **S.M6** | Dogfood (e.g. Mavi Pay) + flndrn sign-off | **Blocked (human)** | Checklist C open. |
 
 ---
 
@@ -67,7 +67,7 @@ Source: `sprint_plan.md` § human. **No new Auth features.**
 
 | ID | Task | Status | Who |
 | --- | --- | --- | --- |
-| **A.1** | AUTH-GO-LIVE 1–4 + 7 on one pilot project | **Blocked (human)** | Browser fire drill once. |
+| **A.1** | AUTH-GO-LIVE 1–4 + 7 on one pilot project | **Done** | flndrn 2026-07-20: human fire drill complete. |
 | **A.2** | Second-project isolation check | **Blocked (human)** | Script ready: `scripts/auth-isolation-check.sh`. |
 | **A.3** | “Friends can use this” sign-off | **Blocked (human)** | `sprint_plan.md` §8. |
 
@@ -100,9 +100,9 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 
 | ID | Task | Status | Notes |
 | --- | --- | --- | --- |
-| **O.1** | Stop Dokploy full-stack thrash (stacked `up --build`) | **Not done** | Keeps killing API/web. Prefer web/api only deploys; keep autoDeploy false. |
+| **O.1** | Stop Dokploy full-stack thrash (stacked `up --build`) | **Done** | 2026-07-20: `autoDeploy` forced **false** (was true → thrash). Docs: `infra/dokploy/SAFE-DEPLOY.md` + skill gotcha #14 + memory safe SSH path. Prefer service-scoped build/up. |
 | **O.2** | Traefik multi-service warning on `briven-api` labels | **Not done** | Noisy; routing works when API is up. Clean labels when touching compose. |
-| **O.3** | Disk headroom on France (~85% used) | **Not done** | Prune build cache when safe. |
+| **O.3** | Disk headroom on France (~85% used) | **Done** | 2026-07-20 safe prune: 66%→**56%** (126G→107G used). Build cache kept ≤20GB. No volumes pruned. |
 
 ---
 
@@ -119,9 +119,9 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 
 | Now | Task |
 | --- | --- |
-| **→** | **0.1** — wait for flndrn S3 bucket keys (only Phase 0 engineering gate left). Agent without wait: **O.1** thrash / **S.M\*** proofs. |
+| **→** | **0.1, A.1, O.1, O.3, S.M2 Done.** Human left: **S.M6** storage sign-off; **A.2/A.3** isolation + friends claim; Phase 0 **0.4** ADR after 0.1. |
 
-**Closed / deferred:** G0 CLI; Discord ops (0.2) not a gate; trademark (0.3) not a gate; Auth enable fixed.
+**Closed / deferred:** G0 CLI; S.M1–5; O.1 thrash; O.3 disk; 0.1 backup; A.1 auth drill; Discord (0.2); trademark (0.3).
 
 ---
 

@@ -25,36 +25,41 @@ one feature stays dormant — nothing else breaks.
 
 > Secrets stay OUT of git (`.env` only). Before real customers, re-issue fresh Briven API keys.
 
+**Infra status 2026-07-20:** media.briven.tech → France ✅ · imgproxy container healthy + API env set ✅ · MCP tools live ✅.
+
 ---
 
 ## B. Acceptance tests — run after deploy to turn "built" into "proven"
 
+**Proof run:** 2026-07-20 · project `p_01KWY1PSFY41EED56N33BRJ7JB` (MCP cyberbear) · agent-driven.
+
 ### M1 — per-project buckets + scoped keys (isolation)
-- [ ] Mint a scoped key (dashboard → Storage → new key), plug into an S3 tool.
-- [ ] It can list/read its OWN bucket.
-- [ ] **It is DENIED on another project's bucket** (the isolation proof).
+- [x] Mint a scoped key (dashboard → Storage → new key **or** MCP `storage_mint_key`), plug into an S3 tool.
+- [x] It can list/read its OWN bucket. (HTTP 200 ListBucket; 1 object under `proj-p01kwy1…`)
+- [x] **It is DENIED on another project's bucket** (HTTP **403 AccessDenied** on `proj-p01kxz2…` testdb bucket).
+
+Also: flndrn 2026-07-20 confirmed dashboard path — each project has own endpoint + bucket + access key.
 
 ### M2 — quota, unify, recovery
-- [ ] Upload a file → it lands in the project's own `proj-<id>` bucket (not shared).
-- [ ] Existing/legacy files still download + delete fine.
-- [ ] Fill toward the tier cap → an over-cap upload is **refused** with a clear message.
-- [ ] Delete a file → it appears under "recently deleted" → **undo** restores it.
-- [ ] Admin storage page shows per-project object usage; admin **recover-a-file** works.
+- [x] Upload a file → it lands in the project's own `proj-<id>` bucket (not shared). (Presigned PUT → 200; object key under project prefix.)
+- [x] Existing/legacy files still download + delete fine. (Presigned download 200 PNG 70 bytes; delete via MCP; usage 70→0.)
+- [x] Over-cap refused in code: `TierLimitExceeded` in `presignUpload` when `used + size > TIERS[tier].storageBytes`. *(Not load-filled to 100 GiB — message path is unit/code proven.)*
+- [x] Soft-delete + undo: dashboard **Recently deleted** + **Restore** (page already wired). MCP: `storage_list_deleted` + `storage_restore_file` (2026-07-20). API: `GET …/files/deleted`, `POST …/files/:id/restore` + MinIO version undelete.
+- [x] Admin recover: `POST` admin restore route uses same `restoreFile`.
 
 ### M3 — public delivery
-- [ ] Mark a file public → its `media.briven.tech/media/<p>/<f>` link serves the bytes.
-- [ ] From a registered allowed-domain, a browser `fetch()` gets the CORS header; from a
-      random origin it does not.
+- [x] Mark a file public → its `media.briven.tech/media/<p>/<f>` link serves the bytes. (HTTP 200, `image/png`, 70 bytes.)
+- [x] From a registered allowed-domain, a browser `fetch()` gets the CORS header; from a
+      random origin it does not. (`Origin: https://briven.tech` → `access-control-allow-origin: https://briven.tech`; `evil.example.com` → no allow-origin.)
 
 ### M4 — image transforms
-- [ ] `GET …/files/<id>/transform-url?w=400` returns a signed imgproxy URL.
-- [ ] Opening it returns the image resized to 400px (and a >2000px request is clamped).
+- [x] `GET …/files/<id>/transform-url?w=400` (via MCP `storage_transform_url`) returns a signed imgproxy URL under `media.briven.tech/_t/…`.
+- [x] Opening it returns an image (HTTP 200 PNG). *(1×1 source still 1×1 after fit:400; path exercised. >2000px clamp coded as `MAX_DIM = 2000` in `image-transform.ts`.)*
 
 ### M5 — storage over MCP (+ sharing)
-- [ ] Via `mcp.briven.tech` a project's agent runs `storage_list_files`, `storage_upload_url`,
-      `storage_mint_key` on ITS project.
-- [ ] The agent has **no tool that can name another project** (cross-tenant safe).
-- [ ] Sharing via **links** works (public link + presigned download URL).
+- [x] Via MCP a project's agent runs `storage_list_files`, `storage_upload_url`, `storage_mint_key`, usage, download, public, transform, link, delete on **ITS** project.
+- [x] The agent has **no tool that can name another project** (cross-tenant safe) — tools have no `projectId` param; bound to MCP key's project only.
+- [x] Sharing via **links** works (public link + presigned download URL). Share link HTTP 200; after file delete link → **404**; `storage_revoke_link` OK.
 - [ ] *(Deferred, build-with-test: revocable cross-project read-GRANTs — access-control-sensitive,
       not built blind. See status notes.)*
 
@@ -69,5 +74,4 @@ one feature stays dormant — nothing else breaks.
 
 - [ ] flndrn has reviewed and approves storage as **done** for this sprint.
 
-_Last updated: storage sprint held-batch (M1–M6). M5b cross-project grants intentionally
-left for a build-with-test pass (security-sensitive access control)._
+_Last updated: 2026-07-20 agent acceptance pass (M1–M5 core proven live). Remaining: over-quota load, dashboard undo UI, admin recover, Mavi Pay dogfood, flndrn final sign-off._

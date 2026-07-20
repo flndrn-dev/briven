@@ -51,3 +51,11 @@ Hosted, version-controlled SQL database service built on **Dolt** (open-source, 
 ## Conventions
 - Deploy/manage via Dokploy (admin.loowii.com) — its tRPC API works via authed browser fetch (`application.*`, `postgres.*`, `*.deploy`, `domain.create`). `project.all` omits per-service serverId; read `application.one`/`postgres.one` per id to tell which server.
 - Billing today = Polar.sh (subscription-oriented). Prepaid wallet will likely need mavi-pay or a custom ledger.
+
+13. **STANDING RULE — "fix the failed deployment" = fix the server AND trigger ONE Dokploy deploy.** Never stop at silent SSH repair. When flndrn (or anyone) says the deployment failed / shows a red Dokploy run / "Address already in use" / Docker command failed:
+   1. **Fix** on France: remove stuck `Created` containers + non-compose orphans on the briven network; get api/web/runtime/docs/realtime healthy.
+   2. **Trigger one Dokploy deploy** (session login → `POST /api/trpc/compose.deploy` with composeId from `memory.md`) so the panel gets a green run. This is the panel “Deploy” button — **not** git auto-deploy.
+   3. **Watch** the deploy log until `Docker Compose Deployed: ✅` (or handle network race again with rm stuck + `compose up -d --no-deps` the failed services).
+   Prefer **one** deploy call (not deploy+redeploy+deploy). A healthy live site with a still-red panel is **not** done — the panel must show a successful deploy too.
+
+14. **O.1 Deploy thrash (2026-07-20) — keep Dokploy `autoDeploy: false`.** Git push must NOT rebuild the whole stack. Full Dokploy deploy runs `compose up -d --build --remove-orphans` on every service; stacked rebuilds leave api/realtime **Dead** / `Address already in use` and public API 404s. For normal code ship: SSH France → `git pull` → `build` + `up -d --no-deps` **only the services that changed** (usually `api` and/or `web`). Use full compose.deploy only for the “failed panel → one clean green” rule (#13). Do not re-enable autoDeploy without flndrn explicit OK + load plan.

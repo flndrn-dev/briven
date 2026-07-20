@@ -76,8 +76,13 @@ describe('@briven/cli entry', () => {
     assert.equal(code, 0);
   });
 
-  it('returns 1 for "setup" with both --name and --project', async () => {
-    const code = await run(['setup', '--name', 'x', '--project', 'p_x']);
+  it('returns 1 for "setup --project" (existing projects use connect)', async () => {
+    const code = await run(['setup', '--project', 'p_x']);
+    assert.equal(code, 1);
+  });
+
+  it('returns 1 for "setup" with a p_ id as the name (redirect to connect)', async () => {
+    const code = await run(['setup', 'p_01HZabc123']);
     assert.equal(code, 1);
   });
 

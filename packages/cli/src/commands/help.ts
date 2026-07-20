@@ -4,10 +4,10 @@ const HELP = `
 usage:   briven <command> [options]
 
 commands:
-  setup             sign in + project + S3 bucket/key + wire this folder (complete)
-  storage           MinIO/S3 for this project (setup | status) — also run by setup
+  setup             create a **new** project + S3 + wire this folder
+  connect           attach an **existing** project + S3 + wire this folder
+  storage           MinIO/S3 for this project (setup | status) — also run by setup/connect
   init              scaffold briven/ folder only (no cloud) — prefer \`setup\`
-  connect           sign in to the platform only (browser OAuth)
   projects          project lifecycle: list, create, use, unlink, set-default
   auth              manage Briven Auth (scaffold middleware, configure providers)
   login             store a dashboard api key for a project (manual path)
@@ -26,7 +26,8 @@ commands:
   ai                generate schema / function / explain code (schema|function|explain)
 
 lifecycle (convex-style):
-  briven setup              # or: briven setup my-app  (wires project + S3 default key)
+  briven setup my-app       # brand-new project + S3 key
+  briven connect p_…        # existing project + S3 key
   briven deploy             # or: briven dev
 
 options:
