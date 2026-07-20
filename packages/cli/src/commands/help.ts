@@ -4,8 +4,8 @@ const HELP = `
 usage:   briven <command> [options]
 
 commands:
-  setup             one command: sign in + new/existing project + wire this folder
-  storage           MinIO/S3 bucket for this project (setup | status)
+  setup             sign in + project + S3 bucket/key + wire this folder (complete)
+  storage           MinIO/S3 for this project (setup | status) — also run by setup
   init              scaffold briven/ folder only (no cloud) — prefer \`setup\`
   connect           sign in to the platform only (browser OAuth)
   projects          project lifecycle: list, create, use, unlink, set-default

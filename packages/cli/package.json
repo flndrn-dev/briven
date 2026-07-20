@@ -1,6 +1,6 @@
 {
   "name": "@briven/cli",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "ship typescript backends to your own version-controlled database",
   "license": "MIT",
   "type": "module",

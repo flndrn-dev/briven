@@ -158,7 +158,7 @@ async function storageStatus(argv: readonly string[]): Promise<number> {
 
 async function storageSetup(argv: readonly string[]): Promise<number> {
   const projectFlag = flagValue(argv, '--project');
-  const name = flagValue(argv, '--name') ?? 'default';
+  let name = flagValue(argv, '--name') ?? 'default';
   const writeEnv = hasFlag(argv, '--write-env');
   const envFile = flagValue(argv, '--env-file') ?? '.env.local';
 
@@ -167,25 +167,21 @@ async function storageSetup(argv: readonly string[]): Promise<number> {
     banner('storage setup');
     step(`project  ${projectId}`);
     step(`api      ${apiOrigin}`);
+    step('ensuring MinIO bucket + minting bucket-scoped S3 key…');
 
-    // If an active key already exists, reuse it (don't mint a new secret each setup).
+    // Always mint a key so we have a full secret (required for .env.local).
+    // If the requested name is taken, pick a unique label.
     const listed = await apiCall<ListResponse>(`/v1/projects/${projectId}/storage-keys`, {
       apiOrigin,
       apiKey,
-    });
-    const active = listed.keys.filter((k) => k.enabled && !k.revokedAt);
-    if (active.length > 0) {
-      const k = active[0]!;
-      success('bucket already set up');
-      step(`bucket    ${k.bucket}`);
-      step(`endpoint  ${listed.endpoint}`);
-      step(`accessKey ${k.accessKeyId}`);
-      step('(active key exists — secret was shown only at first mint)');
-      step('mint another: briven storage setup --name <label>');
-      return 0;
+    }).catch(() => ({ keys: [] as ListResponse['keys'], endpoint: '' }));
+    const used = new Set(
+      listed.keys.filter((k) => k.enabled && !k.revokedAt).map((k) => k.name),
+    );
+    if (used.has(name)) {
+      name = `${name}-${Date.now().toString(36).slice(-5)}`;
+      step(`key name already used — minting as "${name}"`);
     }
-
-    step('ensuring MinIO bucket + minting bucket-scoped S3 key…');
 
     const created = await apiCall<CreatedStorageKey>(
       `/v1/projects/${projectId}/storage-keys`,
@@ -198,12 +194,12 @@ async function storageSetup(argv: readonly string[]): Promise<number> {
     );
 
     blankLine();
-    success('bucket ready');
+    success('S3 bucket + key ready');
     step(`bucket    ${created.bucket}`);
     step(`endpoint  ${created.endpoint}`);
     step(`accessKey ${created.accessKey}`);
     step(`secretKey ${created.secretKey}`);
-    step('(secret shown once — copy it now)');
+    step('(secret shown once — also written to env when --write-env)');
     blankLine();
     step('S3-compatible env (for apps / AWS SDK / rclone):');
     step(`  AWS_ENDPOINT_URL=${created.endpoint}`);
@@ -212,6 +208,8 @@ async function storageSetup(argv: readonly string[]): Promise<number> {
     step(`  AWS_REGION=auto`);
     step(`  S3_BUCKET=${created.bucket}`);
 
+    // Default: write env when called from setup, or when --write-env is set.
+    // `briven setup` always passes --write-env so the folder is fully wired.
     if (writeEnv) {
       const path = resolve(process.cwd(), envFile);
       const block = [
@@ -230,7 +228,6 @@ async function storageSetup(argv: readonly string[]): Promise<number> {
       try {
         const existing = await readFile(path, 'utf8').catch(() => '');
         if (existing.includes('BRIVEN_STORAGE_BUCKET=')) {
-          // Replace prior block roughly by appending a dated note
           await appendFile(
             path,
             `\n# --- briven storage setup ${new Date().toISOString()} (appended; review duplicates) ---\n${block}`,
@@ -243,9 +240,6 @@ async function storageSetup(argv: readonly string[]): Promise<number> {
         printError(`could not write ${envFile}: ${e instanceof Error ? e.message : e}`);
         return 1;
       }
-    } else {
-      blankLine();
-      step('tip: briven storage setup --write-env   # save into .env.local');
     }
 
     return 0;

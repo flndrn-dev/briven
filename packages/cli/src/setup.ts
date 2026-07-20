@@ -125,7 +125,7 @@ export function looksLikeProjectRef(value: string): boolean {
 export function printSetupHelp(): void {
   banner('setup');
   blankLine();
-  step('one command: sign in → new or existing project → wire this folder');
+  step('one command: sign in → project → S3 bucket+key → wire this folder');
   blankLine();
   step('usage:');
   step('  briven setup                         interactive (recommended)');
@@ -133,6 +133,12 @@ export function printSetupHelp(): void {
   step('  briven setup --name my-app           same as above');
   step('  briven setup --project p_01HZ...     attach an existing project');
   step('  briven setup --name app --template todo-app --region eu-west');
+  blankLine();
+  step('always includes:');
+  step('  · platform sign-in');
+  step('  · new or existing cloud project');
+  step('  · private S3 bucket + storage key → .env.local');
+  step('  · local scaffold + CLI project key');
   blankLine();
   step('options:');
   step('  --name, -n <name>        create a new cloud project with this name');
@@ -330,16 +336,17 @@ async function createNew(
     storage: created.storage,
   });
 
+  // Storage is required for a complete setup — not an optional extra step.
   if (created.storage) {
     success('S3 bucket + default storage key ready (saved in .env.local)');
     step(`bucket  ${created.storage.bucket}`);
   } else {
-    // Fallback if API didn't return storage (MinIO off / older API).
-    await ensureStorageInSetup(created.id);
+    const st = await ensureStorageInSetup(created.id);
+    if (st !== 0) return st;
   }
 
   blankLine();
-  success('folder wired to your new briven project');
+  success('folder fully wired (project + CLI key + S3)');
   printDone(args, created.id, created.slug);
   return 0;
 }
@@ -395,19 +402,20 @@ async function finishExisting(
     apiOrigin: args.origins.apiOrigin,
   });
 
-  // If the project has no storage key yet, mint one (new or old projects).
-  await ensureStorageInSetup(project.id);
+  // Required: attach always gets a fresh key + .env.local storage block.
+  const st = await ensureStorageInSetup(project.id);
+  if (st !== 0) return st;
 
   blankLine();
-  success(`folder wired to existing project ${project.slug}`);
+  success(`folder fully wired to ${project.slug} (project + CLI key + S3)`);
   printDone(args, project.id, project.slug);
   return 0;
 }
 
-/** Bucket + default key + write env — never fails setup if storage is off. */
-async function ensureStorageInSetup(projectId: string): Promise<void> {
+/** Bucket + key + write env. Returns 0 on success; setup must abort on non-zero. */
+async function ensureStorageInSetup(projectId: string): Promise<number> {
+  step('ensuring S3 bucket + storage key (required)…');
   try {
-    step('ensuring S3 bucket + default storage key…');
     const code = await runStorage([
       'setup',
       '--name',
@@ -417,16 +425,24 @@ async function ensureStorageInSetup(projectId: string): Promise<void> {
       projectId,
     ]);
     if (code !== 0) {
-      step('storage setup skipped or failed — run later: briven storage setup --write-env');
+      printError(
+        'storage setup failed — briven setup is incomplete without an S3 bucket/key.',
+      );
+      step('platform: check MinIO (BRIVEN_MINIO_*) on the API host.');
+      step('or retry: briven storage setup --write-env');
+      return 1;
     }
-  } catch {
-    step('storage setup skipped — run later: briven storage setup --write-env');
+    return 0;
+  } catch (err) {
+    printError(err instanceof Error ? err.message : 'storage setup failed');
+    return 1;
   }
 }
 
 function printDone(args: SetupArgs, projectId: string, slug: string): void {
   step(`project   ${slug} (${projectId})`);
   step(`dashboard ${args.origins.dashboardOrigin}/dashboard/projects/${projectId}`);
+  step('storage   S3 bucket + key in .env.local (BRIVEN_STORAGE_* / AWS_*)');
   blankLine();
   step('next:');
   step('  briven deploy     push schema + functions once');
