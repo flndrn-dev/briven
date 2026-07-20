@@ -119,7 +119,7 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 
 | Now | Task |
 | --- | --- |
-| **→** | **Handoff OPEN** (`HANDOFF-AUTH-FOR-OTHER-PROJECTS.md`). Sprint `SPRINT-AUTH-S3-HANDOFF.md` done. Live API `704ac63`. Other projects may integrate Auth + project S3. **0.1 backup** still deferred. |
+| **→** | **Control plane on Doltgres** (2026-07-21 cutover). Product line = Doltgres only. Stock Postgres = rollback only. Handoff OPEN. Backup rethink = dolt_backup + off-site for all DBs + MinIO. |
 
 **Closed / deferred:** G0 CLI; S.M* product; O.1/O.2/O.3; A.1; handoff OPEN; Discord (0.2); trademark (0.3); **0.1 backup deferred**.
 
