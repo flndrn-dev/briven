@@ -10,7 +10,10 @@ import { runWithRequestContext } from '../lib/request-context.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
 import { requireAuthTeamAdmin } from '../middleware/auth-team.js';
 import { audit, hashIp } from '../services/audit.js';
-import { renderAuthProvisioningSql } from '../services/auth-provisioning.js';
+import {
+  ensureTenantAuthSchema,
+  renderAuthProvisioningSql,
+} from '../services/auth-provisioning.js';
 import { getAuthInstance, invalidateAuthInstance } from '../services/auth-tenant-pool.js';
 import { listAuditEntries } from '../services/auth-audit.js';
 import { getAuthAnalyticsOverview, getAuthMauStats, getProviderBreakdown } from '../services/auth-mau.js';
@@ -461,6 +464,15 @@ authServiceRouter.post(
         for (const stmt of statements) {
           await tx.unsafe(stmt);
         }
+        // Self-heal columns CREATE IF NOT EXISTS cannot add (Doltgres has no
+        // ADD COLUMN IF NOT EXISTS). Keeps re-Enable Auth and old tenants safe.
+        const txClient = {
+          query: async (sql: string, params?: unknown[]) => {
+            const rows = await tx.unsafe(sql, (params ?? []) as never);
+            return { rows: Array.isArray(rows) ? rows : [] };
+          },
+        };
+        await ensureTenantAuthSchema(txClient);
         // Flip the meta flag so other code paths can probe "is auth on?"
         // without inspecting pg_tables. DoltGres lacks `ON CONFLICT ... DO
         // UPDATE` (no `excluded` pseudo-table), so emulate the upsert: insert
