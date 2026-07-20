@@ -26,12 +26,12 @@ Platform backup (Phase 0.1) is **not** part of the gate.
 
 | Item | Status |
 | --- | --- |
-| Auth product path | **Pending final OPEN** — engineering largely ready; confirm live checklist + any pending deploy of latest Auth-related code if needed |
-| Project S3 product path | **Pending final OPEN** — product mint/isolation proven in session; confirm live dashboard still good |
+| Auth product path | **OPEN** — live `/ready` + redis ok; `s6-auth-verify` PASS on `buildSha` `704ac63` (2026-07-20); human AUTH-GO-LIVE 1–4+7 reported done |
+| Project S3 product path | **OPEN** — isolation + mint proven; media/s3 live; dashboard key mint (screenshots); restore MCP in live API build |
 | Platform backup 0.1 | **Out of scope for handoff** (deferred) |
-| **Handoff to other projects** | **CLOSED until Auth + S3 both marked OPEN** |
+| **Handoff to other projects** | **OPEN — other projects may follow §7 prompt** |
 
-When both are ready, change the last row to **OPEN — other projects may follow §7 prompt** and tell flndrn.
+_Opened 2026-07-20 after final sprint `SPRINT-AUTH-S3-HANDOFF.md` (one api-only ship + probes)._
 
 ---
 

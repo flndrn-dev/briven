@@ -119,9 +119,9 @@ Source: `build_plan.md` — **re-audited 2026-07-19**. Stale “Pending” rows 
 
 | Now | Task |
 | --- | --- |
-| **→** | **Handoff CLOSED** until product **Auth + project S3** are both in order. Doc: `HANDOFF-AUTH-FOR-OTHER-PROJECTS.md` (gate section). **0.1 backup** is not part of the handoff. No deploy until flndrn says deploy. |
+| **→** | **Handoff OPEN** (`HANDOFF-AUTH-FOR-OTHER-PROJECTS.md`). Sprint `SPRINT-AUTH-S3-HANDOFF.md` done. Live API `704ac63`. Other projects may integrate Auth + project S3. **0.1 backup** still deferred. |
 
-**Closed / deferred:** G0 CLI; S.M* product proof; O.1/O.3; A.1 human drill (re-confirm for gate OPEN); Discord (0.2); trademark (0.3); **0.1 backup deferred after handoff OPEN**.
+**Closed / deferred:** G0 CLI; S.M* product; O.1/O.2/O.3; A.1; handoff OPEN; Discord (0.2); trademark (0.3); **0.1 backup deferred**.
 
 ---
 

@@ -80,26 +80,26 @@ F1 commit/push → F2 local tests → F3 one deploy → F4 S3 live → F5 Auth l
 
 | ID | Result | Proof |
 | --- | --- | --- |
-| F1 | | |
-| F2 | | |
-| F3 | | buildSha: |
-| F4 | | |
-| F5 | | |
-| F6 | | |
-| F7 | | |
-| F8 | | |
+| F1 | **PASS** | Commit `704ac63` pushed main (handoff + sprint + Traefik O.2) |
+| F2 | **PASS** | CLI 94/94; MCP server tests 23/23 |
+| F3 | **PASS** | France: api-only build + recreate api+imgproxy; live `buildSha=704ac632a50a…` |
+| F4 | **PASS** (prior + live) | Prior session isolation 403 + mint; media 200; s3 health 200 after ship. MCP client briefly 404 during recreate — API `/mcp` 405 on GET is expected for streamable MCP |
+| F5 | **PASS** | `./scripts/s6-auth-verify.sh` all PASS; redis ok |
+| F6 | **PASS** (human earlier) | Dashboard Storage key mint screenshots 2026-07-20 |
+| F7 | **PASS** (human earlier) | AUTH-GO-LIVE 1–4+7 reported done |
+| F8 | **PASS** | Handoff gate set **OPEN** |
 
 ---
 
 ## 7. Definition of done
 
-- [ ] Live API healthy (`/ready` all ok, redis ok)  
-- [ ] Live build includes this sprint’s Auth/S3 fixes (or proven equivalent)  
-- [ ] Project S3 path works end-to-end (key mint + isolation already known; restore if shipped)  
-- [ ] Auth path works for pilot (human F7)  
-- [ ] Handoff file gate = **OPEN**  
-- [ ] Other projects may use §7 prompt in handoff  
-- [ ] 0.1 backup still **deferred** (not blocking)
+- [x] Live API healthy (`/ready` all ok, redis ok)  
+- [x] Live build includes this sprint’s Auth/S3 fixes (or proven equivalent)  
+- [x] Project S3 path works end-to-end (key mint + isolation already known; restore if shipped)  
+- [x] Auth path works for pilot (human F7)  
+- [x] Handoff file gate = **OPEN**  
+- [x] Other projects may use §7 prompt in handoff  
+- [x] 0.1 backup still **deferred** (not blocking)
 
 ---
 
