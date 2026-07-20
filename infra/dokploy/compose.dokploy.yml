@@ -6,15 +6,15 @@
 
 # briven — canonical self-host compose (build-from-source).
 #
-# Post ADR-0002 (docs/ADR/0002-converge-on-doltgres.md): the platform
-# runs on TWO database engines, on purpose:
+# Product line (flndrn 2026-07-21): Briven is Doltgres end-to-end.
 #
-#   - control plane  = stock Postgres (pgvector image), env BRIVEN_DATABASE_URL.
-#       sign-in, orgs, projects, billing, secrets, auth. drizzle migrations
-#       run at api boot. NEVER points at DoltGres.
-#   - data plane     = DoltGres (dolthub/doltgresql), env BRIVEN_DATA_PLANE_URL.
-#       Postgres-wire, accessed with the `pg` driver, one DATABASE per
-#       customer project. Realtime polls DOLT_HASHOF('HEAD') (no LISTEN/NOTIFY).
+#   - control plane  = DoltGres database `briven_control` on the doltgres service
+#       (sign-in, orgs, projects, billing, Briven Auth). BRIVEN_DATABASE_URL.
+#   - data plane     = same DoltGres cluster, one DATABASE per customer project
+#       (`proj_…`). BRIVEN_DATA_PLANE_URL. Realtime polls DOLT_HASHOF('HEAD').
+#
+# Stock Postgres (pgvector) may still exist on the host for rollback only —
+# live traffic must not use it. Do not reintroduce control-on-Postgres.
 #
 # This file supersedes the two earlier conflicting composes:
 #   - the old Dolt-MySQL build (dolthub/dolt-sql-server + BRIVEN_URL mysql) —
@@ -313,7 +313,9 @@ services:
       BRIVEN_SUPERADMIN_EMAILS: ${BRIVEN_SUPERADMIN_EMAILS:-}
       BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN},https://admin.${BRIVEN_DOMAIN}
       # Control plane — stock Postgres, postgres.js/drizzle.
-      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable
+      # Control brain on Doltgres (same cluster as project DBs). Password is
+      # DOLTGRES, not the legacy stock-Postgres password.
+      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_DOLTGRES_PASSWORD}@doltgres:5432/briven_control?sslmode=disable
       # Data plane — DoltGres, `pg` driver, database-per-project. The api
       # connects to the default `postgres` database and CREATEs per-project
       # databases on this server.

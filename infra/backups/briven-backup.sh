@@ -2,11 +2,12 @@
 # Daily backup of briven control plane (+ optional off-site mirror).
 # Runs on the France host via systemd (briven-backup.{service,timer}).
 #
-# Topology (2026-07):
-#   - Control plane: stock Postgres container (users/projects/billing)
-#   - Data plane: DoltGres — separate dolt-backup container already runs
-#     native `dolt_backup` to a local volume. This script does NOT replace
-#     that loop; it protects the control meta-DB and can mirror dumps off-site.
+# Topology (2026-07-21): Briven is Doltgres end-to-end.
+#   - Control + data plane: DoltGres (briven_control + proj_* databases).
+#   - dolt-backup sidecar runs native dolt_backup for ALL databases including
+#     briven_control. This host script is a transitional dump helper for
+#     stock Postgres rollback windows only — prefer dolt_backup + off-site
+#     mirror of the doltgres_backups volume for real DR.
 #
 # Env (optional, /etc/briven/backup.env):
 #   BRIVEN_BACKUP_PG_CONTAINER   default: briven-brivenfrance-uilsk6-postgres-1

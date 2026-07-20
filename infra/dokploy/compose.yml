@@ -3,7 +3,7 @@
 # Post ADR-0002 (docs/ADR/0002-converge-on-doltgres.md): the platform
 # runs on TWO database engines, on purpose:
 #
-#   - control plane  = stock Postgres (pgvector image), env BRIVEN_DATABASE_URL.
+#   - control plane  = DoltGres database briven_control (product line: all Doltgres).
 #       sign-in, orgs, projects, billing, secrets, auth. drizzle migrations
 #       run at api boot. NEVER points at DoltGres.
 #   - data plane     = DoltGres (dolthub/doltgresql), env BRIVEN_DATA_PLANE_URL.
@@ -313,7 +313,7 @@ services:
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       BRIVEN_TRUSTED_ORIGINS: https://${BRIVEN_DOMAIN},https://api.${BRIVEN_DOMAIN}
       # Control plane — stock Postgres, postgres.js/drizzle.
-      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_POSTGRES_PASSWORD}@postgres:5432/briven_control?sslmode=disable
+      BRIVEN_DATABASE_URL: postgres://postgres:${BRIVEN_DOLTGRES_PASSWORD}@doltgres:5432/briven_control?sslmode=disable
       # Data plane — DoltGres, `pg` driver, database-per-project. The api
       # connects to the default `postgres` database and CREATEs per-project
       # databases on this server.
