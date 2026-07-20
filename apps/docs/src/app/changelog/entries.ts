@@ -9,6 +9,12 @@ export type ChangelogTag = 'feat' | 'fix' | 'security' | 'docs' | 'infra' | 'cho
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-07-21',
+    tags: ['docs', 'infra'],
+    title: 'Doltgres-first docs + setup/connect split + Auth/S3 handoff accuracy',
+    body: 'Public docs, MCP briven_ask guides, handoff, dashboard connect copy, and CLI help now match production: control + project SQL on Doltgres (not dual-engine forever); files on MinIO S3 (s3.briven.tech); `briven setup` = new project only, `briven connect` = existing (no setup --project); three key families (pk_briven_auth_, brk_, storage brvn, MCP pk_briven_mcp_). Handoff gate remains open for Auth + project S3.',
+  },
+  {
     date: '2026-07-18',
     tags: ['feat', 'security', 'docs'],
     title: 'S6 auth reliability bar — metrics, tests, admin snapshot',

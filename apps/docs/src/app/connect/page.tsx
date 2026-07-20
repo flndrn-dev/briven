@@ -11,11 +11,15 @@ const ONE_SHOT = pmDlx('briven');
 const SETUP = pmExec(
   'briven setup',
   'briven setup --name my-app',
-  'briven setup --project p_01HZ...',
+  'briven setup my-app',
   'briven setup --name my-app --template todo-app --region eu-west',
 );
 const SETUP_THEN = pmExec('briven deploy', 'briven dev');
-const CONNECT = pmExec('briven connect');
+const CONNECT = pmExec(
+  'briven connect',
+  'briven connect p_01HZ...',
+  'briven connect --project p_01HZ...',
+);
 const CONNECT_STATUS = pmExec('briven connect status');
 const PROJECTS_REMOTE = pmExec('briven projects list --remote');
 const PROJECTS_CREATE = pmExec(
@@ -28,7 +32,11 @@ const PROJECTS_USE = pmExec(
 );
 const PROJECTS_UNLINK = pmExec('briven projects unlink p_01HZ...');
 const INIT_LINK = pmExec('briven init', 'briven link --project p_01HZ...', 'briven deploy');
-const LIFECYCLE = pmExec('briven setup', 'briven deploy');
+const LIFECYCLE = pmExec(
+  'briven setup my-app   # new project',
+  'briven connect p_…    # OR existing',
+  'briven deploy',
+);
 
 export default function ConnectPage() {
   return (
@@ -36,27 +44,39 @@ export default function ConnectPage() {
       <h1 className="font-mono text-2xl tracking-tight">connect</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
         how to connect to briven. <strong className="text-[var(--color-text)]">shell first:</strong>{' '}
-        <code>briven setup</code> is the product path (Convex-style: sign in + new or existing
-        project + wire this folder). then the app SDK / HTTP, or an AI agent via MCP.
+        <code>briven setup</code> = brand-new project · <code>briven connect</code> = existing
+        project. both sign you in, mint project S3 keys when possible, and wire this folder. then
+        SDK / HTTP / Auth / MCP.
       </p>
 
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
-        <strong className="text-[var(--color-text)]">beta.</strong> briven runs on DoltGres,
-        which is still pre-1.0 (see{' '}
+        <strong className="text-[var(--color-text)]">doltgres-first + beta engine.</strong> product
+        SQL (control + every project) runs on{' '}
+        <a className="underline" href="/doltgres">
+          Doltgres
+        </a>{' '}
+        (pre-1.0 — see{' '}
         <a className="underline" href="/doltgres/limitations">
-          beta + limitations
+          limitations
         </a>
-        ). the shell + SDK + HTTP paths below are live today. the MCP path is a Pro/Team beta
-        that is still rolling out — treat its details as subject to change.
+        ). files use MinIO S3. shell + SDK + HTTP are live; MCP is Pro/Team and project-scoped.
       </div>
 
       {/* ─── path 0: shell lifecycle ─────────────────────────────────────── */}
       <h2 className="mt-12 font-mono text-lg">path 0 · from the shell (recommended)</h2>
       <p className="mt-3 font-mono text-sm text-[var(--color-text-muted)]">
-        convex-style: one command signs you in, creates a <em>new</em> cloud project or attaches an{' '}
-        <em>existing</em> one, and wires this folder. templates are optional starters — not the
-        product model.
+        two clear commands (do not mix):
       </p>
+      <ul className="mt-2 list-disc pl-5 font-mono text-sm text-[var(--color-text-muted)] space-y-1">
+        <li>
+          <code>briven setup</code> / <code>briven setup my-app</code> — create a{' '}
+          <em>new</em> cloud project + S3 + wire folder
+        </li>
+        <li>
+          <code>briven connect</code> / <code>briven connect p_…</code> — attach an{' '}
+          <em>existing</em> project + S3 + wire folder
+        </li>
+      </ul>
 
       <h3 className="mt-6 font-mono text-sm">install the cli (or run one-off)</h3>
       <div className="mt-2">
@@ -70,39 +90,42 @@ export default function ConnectPage() {
         page. running bare <code>briven</code> with no linked folder also starts setup.
       </p>
 
-      <h3 className="mt-6 font-mono text-sm">one command · briven setup</h3>
+      <h3 className="mt-6 font-mono text-sm">new project · briven setup</h3>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        opens the browser to sign in, asks new vs existing (or takes flags), mints a CLI key, writes{' '}
-        <code>briven.json</code> + scaffold files, and leaves you ready to deploy.
+        opens the browser to sign in, creates a <em>new</em> cloud project, mints CLI + storage
+        keys, writes <code>briven.json</code> + scaffold, ready to deploy.
       </p>
       <PmTabs commands={SETUP} />
       <ul className="mt-3 list-disc pl-5 font-mono text-xs text-[var(--color-text-muted)]">
         <li>
-          <code>briven setup</code> — interactive: (N)ew or (E)xisting, name, region, optional
-          template
+          <code>briven setup</code> — interactive name / region / optional template
         </li>
         <li>
-          <code>--name my-app</code> — create a new cloud project (no prompts if you also pass{' '}
-          <code>--yes</code>)
-        </li>
-        <li>
-          <code>--project p_…</code> — attach an existing project by id or slug
+          <code>--name my-app</code> or positional <code>my-app</code> — create that project
         </li>
         <li>
           <code>--template todo-app</code> — optional starter files only
         </li>
+        <li>
+          to attach an existing id, use <code>briven connect p_…</code> — not setup
+        </li>
       </ul>
       <PmTabs commands={SETUP_THEN} />
+
+      <h3 className="mt-6 font-mono text-sm">existing project · briven connect</h3>
+      <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
+        sign in (if needed), pick or pass a project, mint keys, wire this folder to that project.
+      </p>
+      <PmTabs commands={CONNECT} />
+      <PmTabs commands={CONNECT_STATUS} />
 
       <h3 className="mt-6 font-mono text-sm">full lifecycle (copy-paste)</h3>
       <PmTabs commands={LIFECYCLE} />
 
-      <h3 className="mt-6 font-mono text-sm">step-by-step (when you want the pieces)</h3>
+      <h3 className="mt-6 font-mono text-sm">step-by-step pieces</h3>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        same job, split into smaller commands — useful for scripts or power users.
+        smaller commands for scripts or power users (projects list/create/use, init, link).
       </p>
-      <PmTabs commands={CONNECT} />
-      <PmTabs commands={CONNECT_STATUS} />
       <PmTabs commands={PROJECTS_REMOTE} />
       <PmTabs commands={PROJECTS_CREATE} />
       <PmTabs commands={PROJECTS_USE} />
@@ -110,11 +133,15 @@ export default function ConnectPage() {
       <PmTabs commands={INIT_LINK} />
 
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
-        <strong className="text-[var(--color-text)]">two kinds of credentials.</strong>{' '}
-        <code>setup</code> / <code>connect</code> store a <em>user</em> session (who you are).{' '}
-        setup also mints a <em>project</em> API key (what this machine can do inside one project).{' '}
+        <strong className="text-[var(--color-text)]">credentials.</strong>{' '}
+        <code>setup</code> / <code>connect</code> store a platform <em>user</em> session and mint a{' '}
+        <em>project</em> CLI key (+ storage key into <code>.env.local</code> when possible).{' '}
         <code>briven logout</code> clears everything; <code>briven connect logout</code> clears only
-        the platform session.
+        the platform session. Auth browser keys are separate — see{' '}
+        <a className="underline" href="/auth">
+          auth
+        </a>
+        .
       </div>
 
       <p className="mt-4 font-mono text-sm text-[var(--color-text-muted)]">

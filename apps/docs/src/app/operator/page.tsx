@@ -11,6 +11,14 @@ export default function OperatorPage() {
         access to the host running <code>docker compose</code> for the briven stack.
       </p>
       <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
+        <strong className="text-[var(--color-text)]">Doltgres-first:</strong> production
+        briven.tech stores control + project SQL on <strong>Doltgres</strong> (not stock
+        Postgres as the product engine). files are MinIO S3. see monorepo{' '}
+        <code>DOLTGRES-FIRST.md</code>. self-host compose may still label a service{' '}
+        <code>postgres</code> in older recipes — treat that as “the SQL service,” and prefer
+        Doltgres-native backup (<code>dolt_backup</code>) for real DR once cut over.
+      </p>
+      <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
         the first thing to run before any of the recipes below: <code>briven doctor</code>. it
         prints which sub-system is unhealthy in seconds and rules out half of the diagnostics
         below.
@@ -34,10 +42,10 @@ export default function OperatorPage() {
             rotate without data loss but every active session is invalidated.
           </li>
           <li>
-            <code>BRIVEN_DATABASE_URL: ECONNREFUSED</code> — postgres isn't up yet or isn't
-            reachable on the docker network. <code>docker compose ps postgres</code> and{' '}
-            <code>docker compose logs postgres</code>; usually a stale pid lock, fixed by{' '}
-            <code>docker compose down postgres &amp;&amp; docker compose up -d postgres</code>.
+            <code>BRIVEN_DATABASE_URL: ECONNREFUSED</code> — the SQL engine (Doltgres / compose
+            service) isn&apos;t up or isn&apos;t reachable on the docker network. check{' '}
+            <code>docker compose ps</code> for the db service and its logs; usually a stale
+            pid lock, fixed by restarting that service.
           </li>
         </ul>
       </Section>
@@ -95,36 +103,46 @@ export default function OperatorPage() {
 
       <Section title="restore from backup">
         <p>
-          backups land in MinIO (or S3, B2 — whatever <code>BRIVEN_BACKUP_DESTINATION</code>{' '}
-          points at). list them:
+          <strong className="text-[var(--color-text)]">hosted briven.tech:</strong> prefer
+          Doltgres-native recovery (<code>dolt_backup</code> / recovery points + MCP{' '}
+          <code>db_recover</code> for project DBs). platform off-site vault (R2/B2) is operator
+          work — not the same as project MinIO file storage at <code>s3.briven.tech</code>.
+        </p>
+        <p className="mt-2">
+          <strong className="text-[var(--color-text)]">self-host sql dumps:</strong> if your
+          compose still dumps via <code>pg_dump</code>-style tools into MinIO (or S3/B2 via{' '}
+          <code>BRIVEN_BACKUP_DESTINATION</code>), list them:
         </p>
         <Snippet>{`docker compose exec minio mc ls local/briven-backups/`}</Snippet>
-        <p>restore a single dump (control plane shown — replace with `briven_data` for the data plane):</p>
+        <p>
+          restore a single dump (control plane shown — replace db name for a project DB). service
+          name may be <code>doltgres</code> or <code>postgres</code> depending on compose file:
+        </p>
         <Snippet>{`# 1. download the dump
 docker compose exec minio mc cp local/briven-backups/2026-05-09.sql.gz /tmp/
 
 # 2. stop the api so nothing writes during restore
 docker compose stop api
 
-# 3. drop + recreate the database
-docker compose exec postgres psql -U postgres \\
+# 3. drop + recreate the database (use your compose SQL service name)
+docker compose exec doltgres psql -U postgres \\
   -c "DROP DATABASE briven_control" \\
   -c "CREATE DATABASE briven_control"
 
 # 4. pipe the dump in
-gunzip -c /tmp/2026-05-09.sql.gz | docker compose exec -T postgres psql -U postgres -d briven_control
+gunzip -c /tmp/2026-05-09.sql.gz | docker compose exec -T doltgres psql -U postgres -d briven_control
 
 # 5. start the api back up
 docker compose up -d api`}</Snippet>
         <p>
           monthly restore drill is wired up in <code>infra/backups/restore-drill.sh</code> and
           runs against an ephemeral db so you don't need to take prod down to verify the dumps
-          are valid.
+          are valid. see also monorepo <code>infra/backups/RESTORE.md</code>.
         </p>
       </Section>
 
       <Section title="suspend a project (abuse, billing past-due, customer ask)">
-        <Snippet>{`docker compose exec postgres psql -U postgres -d briven_control \\
+        <Snippet>{`docker compose exec doltgres psql -U postgres -d briven_control \\
   -c "UPDATE projects SET status = 'suspended', suspended_reason = '<reason>' WHERE id = '<p_...>'"`}</Snippet>
         <p>
           suspended projects refuse all api calls (404 from <code>/v1/projects/:id/*</code>) and
@@ -150,9 +168,9 @@ docker compose up -d api`}</Snippet>
             with the customer (upgrade tier or reduce hot-loop traffic).
           </li>
           <li>
-            <strong>postgres saturated</strong> — the <em>postgres health</em> dashboard will
-            show connection pool exhaustion or lock waits. <code>pg_stat_activity</code> tells
-            you which query.
+            <strong>SQL engine saturated</strong> — the database health dashboard will show
+            connection pool exhaustion or lock waits. <code>pg_stat_activity</code> (Postgres
+            wire) tells you which query; remember production is Doltgres.
           </li>
         </ul>
       </Section>
@@ -170,9 +188,9 @@ docker compose up -d api`}</Snippet>
             timeout.
           </li>
           <li>
-            postgres is closing the LISTEN connection because the api went idle. the realtime
-            service auto-reconnects in 1s steps with backoff; if you see hundreds of these in
-            seconds the postgres host needs investigation.
+            the SQL engine is closing the LISTEN connection because the api went idle. the
+            realtime service auto-reconnects in 1s steps with backoff; if you see hundreds of
+            these in seconds the Doltgres host needs investigation.
           </li>
         </ul>
       </Section>

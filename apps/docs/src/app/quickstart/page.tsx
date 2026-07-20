@@ -24,20 +24,28 @@ export default function QuickstartPage() {
       </p>
 
       <ol className="mt-8 flex flex-col gap-6 font-mono text-sm text-[var(--color-text-muted)]">
-        <Step n={1} title="one command: briven setup">
-          Install the CLI (or use <code>npx @briven/cli</code>). Then{' '}
-          <code>briven setup</code> signs you in, creates or attaches a cloud project, and wires
-          this folder — Convex-style. Full detail:{' '}
+        <Step n={1} title="wire a cloud project">
+          Install the CLI (or use <code>npx @briven/cli</code>). Then pick one path:
+          <ul className="mt-2 list-disc pl-5 space-y-1">
+            <li>
+              <strong className="text-[var(--color-text)]">new project:</strong>{' '}
+              <code>briven setup --name my-app</code> (or interactive{' '}
+              <code>briven setup</code>)
+            </li>
+            <li>
+              <strong className="text-[var(--color-text)]">existing project:</strong>{' '}
+              <code>briven connect p_…</code> — never{' '}
+              <code>setup --project</code>
+            </li>
+          </ul>
+          Full detail:{' '}
           <a className="underline" href="/connect">
             connect
           </a>
           .
           <PmTabs commands={SCAFFOLD} />
           <div className="mt-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 text-xs">
-            <strong className="text-[var(--color-text)]">other paths:</strong> interactive{' '}
-            <code>briven setup</code> (pick new vs existing), or{' '}
-            <code>briven setup --project p_…</code> for an existing project. Dashboard-only: sign
-            in at{' '}
+            <strong className="text-[var(--color-text)]">dashboard-only:</strong> sign in at{' '}
             <a className="underline" href="https://briven.tech">
               briven.tech
             </a>

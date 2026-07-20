@@ -70,8 +70,9 @@ export default async function ConnectPage({
       <section className="flex flex-col gap-3">
         <h3 className="font-mono text-sm text-[var(--color-text)]">cli usage</h3>
         <pre className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] p-4 font-mono text-xs text-[var(--color-code-text)]">
-          <code>{`# recommended — attach this project + wire the folder
-briven setup --project ${id}
+          <code>{`# attach this existing project + wire the folder
+briven connect ${id}
+# (new projects use: briven setup my-app — not setup --project)
 
 # then deploy / watch
 briven deploy

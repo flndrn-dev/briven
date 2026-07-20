@@ -130,19 +130,19 @@ export default async function ProjectsPage() {
                   prototyping and small one-off changes.
                 </p>
                 <p className="mt-2 text-[var(--color-text-muted)]">
-                  <strong>cli + git</strong> — one command (Convex-style): sign in, create or
-                  attach a project, wire this folder:
+                  <strong>cli + git</strong> — sign in and wire this folder:
                 </p>
                 <pre className="mt-1 overflow-x-auto rounded-sm border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] px-3 py-2 text-[var(--color-code-text)]">
                   <code>{`mkdir my-app && cd my-app
-npx @briven/cli setup --name my-app
-# or: briven setup --project p_…   (existing)
+npx @briven/cli setup --name my-app   # NEW project
+# or: briven connect p_…              # EXISTING project
 briven deploy`}</code>
                 </pre>
                 <p className="mt-1 text-[var(--color-text-muted)]">
-                  interactive: <code>briven setup</code> asks new vs existing. optional
-                  starter files: <code>--template todo-app|chat|blank</code> (templates are
-                  not the product). studio has <em>copy as schema.ts</em> to graduate to git.
+                  never <code>setup --project</code> — that flag is gone; use{' '}
+                  <code>briven connect</code>. optional starter files:{' '}
+                  <code>--template todo-app|chat|blank</code> (templates are not the product).
+                  studio has <em>copy as schema.ts</em> to graduate to git.
                 </p>
                 <details className="mt-2 text-[10px] text-[var(--color-text-subtle)]">
                   <summary className="cursor-pointer">manual key path (no browser OAuth)</summary>

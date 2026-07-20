@@ -56,21 +56,23 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'schema', 'insert', 'update', 'delete', 'join', 'index', 'postgres', 'doltgres',
     ],
     howBrivenWorksHere:
-      'every project gets its own isolated postgres-compatible database (git-for-data ' +
-      'under the hood: commits, branches, time-travel). you define tables via the schema ' +
-      'DSL or the studio, and read/write through the SDK, HTTP API, or this MCP.',
+      'briven is DOLTGRES-FIRST: every project gets its own isolated Doltgres database ' +
+      '(Postgres wire protocol + git-for-data: commits, branches, time-travel). the ' +
+      'platform control plane also runs on Doltgres. you never get a raw superuser ' +
+      'login to another project. define tables via the schema DSL or studio; read/write ' +
+      'via SDK, HTTP functions, or this MCP.',
     whatOurToolsGiveYou: [
       'MCP: list_tables, describe_table, query (read); create_table, insert, update, delete (write scope).',
       'MCP lifecycle: db_health + db_recovery_points (read); db_restart + db_recover (write scope); db_reprovision (admin keys) — for "database not responding" start with db_health, then db_restart.',
       'SDK: typed queries + mutations from @briven/client and the framework packages.',
-      'versioning: undo/snapshots per the docs /undo page (dolt_log, DOLT_RESET, branches).',
+      'versioning: undo/snapshots per docs /undo and /doltgres (SELECT dolt_commit / dolt_log — not MySQL CALL DOLT_*).',
     ],
     whatYouBuildInYourProject: [
       'your domain model and validation live in YOUR app — briven stores and versions the data, it does not encode your business rules.',
       'batch big imports through the bulk values array on insert to stay under per-minute rate limits.',
-      'some postgres corners differ on the git-for-data engine (e.g. prepared statements, pg_index introspection) — if a query errors oddly, ask this tool with the exact error.',
+      'do NOT stand up a side Postgres "because you want SQL" — use briven tables + functions. if a query fails, ask briven_ask with the exact error (Doltgres beta has some gaps vs stock Postgres).',
     ],
-    docs: `${DOCS_BASE}/schema`,
+    docs: `${DOCS_BASE}/doltgres`,
   },
   {
     id: 'app-data-access',
@@ -110,19 +112,22 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'video', 'presigned', 'public', 'share', 'link', 'quota', 'transform',
     ],
     howBrivenWorksHere:
-      'per-project object storage with presigned upload/download URLs, public-file ' +
-      'toggles, tokenized public share-links, cross-project grants (strict-deny by ' +
-      'default), image transforms, versioned recovery windows, and tiered quotas.',
+      'per-project private S3 buckets on briven MinIO (s3.briven.tech): each project ' +
+      'gets its own bucket (proj-…) and scoped keys. soft-delete with recovery window, ' +
+      'public media URLs on media.briven.tech, image transforms, share-links, tier quotas. ' +
+      'this is NOT the platform database backup vault — it is app file storage only.',
     whatOurToolsGiveYou: [
-      'MCP: storage_upload_url / storage_download_url / storage_list_files / storage_usage / storage_make_public / storage_transform_url, plus grants + share-links tools.',
-      'S3-compatible keys via storage_mint_key for tooling that speaks S3.',
+      'MCP: storage_list_files, storage_usage, storage_upload_url, storage_download_url, storage_delete_file, storage_list_deleted, storage_restore_file, storage_make_public, storage_transform_url.',
+      'MCP keys: storage_mint_key / storage_list_keys / storage_revoke_key (S3-compatible access for external tools).',
+      'MCP sharing: storage_create_link / storage_list_links / storage_revoke_link; grants tools (cross-project read is deny-by-default).',
     ],
     whatYouBuildInYourProject: [
       'upload FROM THE BROWSER with the presigned URL — never proxy file bytes through your own server.',
       'store the returned file id in one of your tables to link files to your domain objects.',
       'check storage_usage before large ingests; quota blocks are tier-dependent.',
+      'use storage_list_deleted + storage_restore_file (or dashboard Recently deleted) to undo accidental deletes within the recovery window.',
     ],
-    docs: `${DOCS_BASE}/api`,
+    docs: `${DOCS_BASE}/storage`,
   },
   {
     id: 'functions',
@@ -176,20 +181,19 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'jwt', 'jwks', 'token', 'verify',
     ],
     howBrivenWorksHere:
-      'managed multi-tenant end-user auth (@briven/auth): email+password, magic link, ' +
-      'OTP, passkeys, OAuth social — all per-project, configured in the dashboard. ' +
-      'sessions live in a cookie (get-session checks them), and every project also ' +
-      'exposes a token endpoint (short-lived signed JWT for the current user) plus a ' +
-      'public JWKS endpoint, so your app can verify "is this user signed in?" locally ' +
-      'without calling briven on every request.',
+      'managed multi-tenant end-user auth (@briven/auth) on the Doltgres control plane: ' +
+      'email+password, magic link, OTP, passkeys, OAuth, 2FA — all per-project in the ' +
+      'dashboard. browser key is pk_briven_auth_… only (never brk_). sessions are httpOnly ' +
+      'cookies; optional short-lived JWT + public JWKS for your own backends.',
     whatOurToolsGiveYou: [
-      'dedicated MCP tools on THIS connection: auth_config_get, sender_domain_status, auth_docs_ask — ask those for anything auth; they return live state + apply-steps.',
-      'for JWT/JWKS local verification specifics, ask auth_docs_ask "verify session locally with tokens" — it returns both endpoints and the apply-steps.',
+      'dedicated MCP tools: auth_config_get, sender_domain_status, auth_docs_ask — live config + apply-steps (read-only).',
+      'CLI: briven auth scaffold after briven setup (new) or briven connect (existing project).',
+      'docs /auth and monorepo examples/auth-pilot + AUTH-GO-LIVE-CHECKLIST.md for human proof.',
     ],
     whatYouBuildInYourProject: [
-      'your sign-in UI (or the prebuilt <BrivenSignIn/>) wired with the browser-safe pk_briven_auth_ key.',
-      'register every origin you serve from under dashboard auth → app domains.',
-      'multi-app or own-backend setups: fetch GET /v1/auth-tenant/token from the signed-in browser and verify it on your server against GET /v1/auth-tenant/jwks with a standard JWT library, instead of a get-session round-trip per request.',
+      'sign-in UI or hosted auth.hostedPageURL / <BrivenSignIn/> with pk_briven_auth_ only.',
+      'register every origin under dashboard auth → app domains.',
+      'do not invent a side auth server or Clerk; wire @briven/auth to this project.',
     ],
     docs: `${DOCS_BASE}/auth`,
   },
@@ -222,17 +226,19 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'ai', 'rag', 'llm', 'pgvector',
     ],
     howBrivenWorksHere:
-      'vector columns + similarity search are built into the database (pgvector): store ' +
-      'embeddings next to your rows and query with ctx.db.vectorSearch from functions.',
+      'briven runs Doltgres (Postgres-wire git-for-data). stock-Postgres pgvector is NOT ' +
+      'available on the product engine today — treat full vector indexes as a capability ' +
+      'gap unless docs say otherwise. you can still store embeddings as bytes/json and ' +
+      'search in YOUR app, or use external vector stores while data lives on briven.',
     whatOurToolsGiveYou: [
-      'schema DSL vector column type; vectorSearch in the function runtime.',
-      'docs /vector-search and /ai pages cover shapes and limits.',
+      'docs /vector-search and /ai describe intended shapes; check /doltgres/limitations for engine gaps.',
+      'MCP create_table/insert for storing embedding payloads your app generates.',
     ],
     whatYouBuildInYourProject: [
       'embedding GENERATION is yours: call your embedding model in an action, store the result.',
-      'chunking strategy and prompt assembly for RAG live in your app — briven is the store + search.',
+      'if you need ANN indexes right now, use an external vector service and keep source-of-truth rows on briven — do not stand up a second app database for core data.',
     ],
-    docs: `${DOCS_BASE}/vector-search`,
+    docs: `${DOCS_BASE}/doltgres/limitations`,
   },
   {
     id: 'hosting-deploy',
@@ -307,17 +313,40 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'time', 'travel', 'diff', 'backup', 'recover',
     ],
     howBrivenWorksHere:
-      'the database is git-for-data: every change is committed, so you get log, diff, ' +
-      'tags, branches, and reset — data history is a first-class feature, not a backup afterthought.',
+      'the database is Doltgres git-for-data: every change can be committed, so you get log, ' +
+      'diff, tags, branches, and reset — data history is a first-class feature, not a backup afterthought. ' +
+      'use Postgres-style SELECT dolt_* / SELECT dolt_commit(...) — not MySQL CALL DOLT_*.',
     whatOurToolsGiveYou: [
-      'SQL surface: dolt_log, dolt_diff, DOLT_COMMIT/TAG/RESET/BRANCH via the query tool.',
-      'docs /undo explains both the plain-language and the SQL versions.',
+      'SQL surface via query: SELECT * FROM dolt_log; SELECT dolt_commit(...); SELECT dolt_diff(...); etc.',
+      'docs /undo and /doltgres explain plain-language undo and the SQL surface.',
     ],
     whatYouBuildInYourProject: [
-      'tag (DOLT_TAG) before risky migrations from your own scripts so rollback is one statement.',
-      'user-facing "undo" in your app: read the history tables and surface the diff — the primitives are all queryable.',
+      'tag or commit before risky migrations from your own scripts so rollback is one statement.',
+      'user-facing "undo" in your app: read history via query and surface the diff — the primitives are all queryable.',
     ],
     docs: `${DOCS_BASE}/undo`,
+  },
+  {
+    id: 'cli-setup-connect',
+    area: 'cli setup / connect / wire a project folder',
+    keywords: [
+      'setup', 'connect', 'cli', 'briven setup', 'briven connect', 'link', 'wire',
+      'folder', 'scaffold', 'npx', 'project', 'existing', 'new project',
+    ],
+    howBrivenWorksHere:
+      'two separate CLI commands (2026-07): `briven setup` creates a BRAND-NEW cloud project ' +
+      'and wires the current folder; `briven connect` / `briven connect p_…` attaches an ' +
+      'EXISTING project. `setup --project` is gone — do not invent it. both mint a project S3 ' +
+      'key into .env.local when possible. auth files: `briven auth scaffold` after the folder is linked.',
+    whatOurToolsGiveYou: [
+      'docs /connect and /cli document the full split; /quickstart walks the happy path.',
+      'MCP cannot replace setup/connect for folder wiring — that is a human/CLI step on the developer machine.',
+    ],
+    whatYouBuildInYourProject: [
+      'run setup OR connect once per app folder; commit briven.json (never secrets).',
+      'if an old tutorial says setup --project, rewrite it to briven connect p_….',
+    ],
+    docs: `${DOCS_BASE}/connect`,
   },
 ] as const;
 
@@ -326,17 +355,21 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
 export const DOCS_INDEX: readonly { slug: string; title: string }[] = [
   { slug: '/', title: 'overview' },
   { slug: '/quickstart', title: 'quickstart' },
+  { slug: '/connect', title: 'connect · setup vs connect, sdk, mcp' },
+  { slug: '/cli', title: 'cli reference' },
+  { slug: '/doltgres', title: 'doltgres engine (control + projects)' },
   { slug: '/schema', title: 'schema dsl reference' },
   { slug: '/functions', title: 'functions reference' },
   { slug: '/realtime', title: 'realtime — reactive queries' },
   { slug: '/sdks', title: 'sdk reference' },
   { slug: '/api', title: 'http api reference' },
   { slug: '/auth', title: 'auth + email sender domain + verifiable tokens (jwt/jwks)' },
-  { slug: '/cli', title: 'cli reference' },
+  { slug: '/storage', title: 'storage (MinIO S3 per project)' },
   { slug: '/undo', title: 'undo + snapshots' },
-  { slug: '/vector-search', title: 'vector search' },
+  { slug: '/vector-search', title: 'vector search (check doltgres limitations)' },
   { slug: '/ai', title: 'ai features' },
   { slug: '/self-host', title: 'self-host' },
+  { slug: '/operator', title: 'operator runbook' },
   { slug: '/migration', title: 'migration playbooks' },
   { slug: '/templates', title: 'project templates' },
   { slug: '/examples', title: 'examples gallery' },

@@ -87,17 +87,19 @@ export default function TemplatesPage() {
       <h1 className="font-mono text-2xl tracking-tight">cli templates</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
         optional starter files only — not the core product. the product path is{' '}
-        <code>briven setup</code> (sign in + new or existing cloud project + wire this folder).
-        pass <code>--template</code> when you want a sample schema/functions layout.
+        <code>briven setup</code> for a <strong>new</strong> cloud project, or{' '}
+        <code>briven connect p_…</code> for an <strong>existing</strong> one. pass{' '}
+        <code>--template</code> on setup when you want a sample schema/functions layout.
       </p>
 
       <pre className="mt-4 overflow-x-auto rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-code-bg)] p-3 font-mono text-xs text-[var(--color-code-text)]">
-        <code>{`# recommended — cloud project + folder in one go
+        <code>{`# new cloud project + sample files
 briven setup --name my-app --template=todo-app
 briven deploy
 
-# local files only (no cloud) — then run setup to wire a project
-briven init --template=todo-app`}</code>
+# existing project — attach first, templates are optional later
+briven connect p_…
+# or local files only: briven init --template=todo-app`}</code>
       </pre>
 
       <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">

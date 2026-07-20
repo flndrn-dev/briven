@@ -50,8 +50,9 @@ function printUsage(): void {
   step('      ensure MinIO bucket for this project + mint S3 key (secret once)');
   step('  briven storage status                 list keys + endpoint (no secrets)');
   blankLine();
-  step('needs a linked project (same as Convex after npx convex dev):');
-  step('  briven setup --project p_…');
+  step('needs a linked project:');
+  step('  briven connect p_…              # existing');
+  step('  # or: briven setup my-app       # brand new');
   step('  # or: briven projects use p_… --link');
   blankLine();
   step('then:');
@@ -85,7 +86,7 @@ async function resolveProjectCred(projectFlag?: string): Promise<{
     Object.keys(creds.projects)[0];
   if (!projectId) {
     throw new Error(
-      'no project linked. run: briven setup --project p_…   (or briven projects use p_… --link)',
+      'no project linked. run: briven connect p_…  (or briven setup <name> for new, or briven projects use p_… --link)',
     );
   }
   const cred = creds.projects[projectId];

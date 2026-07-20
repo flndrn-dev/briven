@@ -331,7 +331,7 @@ function EmptyProjects() {
         </li>
         <li>
           2. or click <em>create your first project</em> here, then{' '}
-          <code>briven setup --project p_…</code> from your app folder.
+          <code>briven connect p_…</code> from your app folder.
         </li>
         <li>
           3. <code>briven deploy</code> (or <code>briven dev</code>) ships schema + functions.
@@ -429,7 +429,7 @@ function OnboardingFlow() {
         <OnboardingStep
           n={3}
           title="deploy a function"
-          body="briven setup signs in, creates or attaches a cloud project, and wires the folder. briven deploy ships it."
+          body="briven setup creates a new cloud project; briven connect attaches an existing one. briven deploy ships schema + functions."
           cta={{ label: 'cli docs', href: 'https://docs.briven.tech/cli', external: true }}
           tone="next"
         />

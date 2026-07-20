@@ -56,7 +56,7 @@ export default function MigrationPage() {
         <Step
           n={2}
           title="set up the briven project"
-          body="install @briven/cli, then briven setup --name my-app (or briven setup --project p_… for an existing project). that signs in, creates/attaches the cloud project, and wires the folder. optional: --template for starter files only."
+          body="install @briven/cli, then briven setup --name my-app for a NEW project, or briven connect p_… for an EXISTING one. setup never attaches; connect never creates. optional: setup --template for starter files only."
         />
         <Step
           n={3}

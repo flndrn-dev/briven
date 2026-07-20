@@ -20,12 +20,14 @@ three surfaces:
 
 ```bash
 mkdir my-app && cd my-app
-npx @briven/cli setup --name my-app   # sign in + create project + wire folder
+npx @briven/cli setup --name my-app   # NEW project + wire folder
+# or existing: npx @briven/cli connect p_…
 briven deploy                         # or: briven dev
 ```
 
-Interactive: `briven setup` (pick new vs existing). Attach existing: `briven setup --project p_…`.  
-Docs: [connect](https://docs.briven.tech/connect) · [quickstart](https://docs.briven.tech/quickstart)
+- **New project:** `briven setup` / `briven setup --name my-app`
+- **Existing project:** `briven connect p_…` (never `setup --project`)
+- Docs: [connect](https://docs.briven.tech/connect) · [quickstart](https://docs.briven.tech/quickstart) · [auth](https://docs.briven.tech/auth) · [storage](https://docs.briven.tech/storage)
 
 ### remotes (maintainers)
 

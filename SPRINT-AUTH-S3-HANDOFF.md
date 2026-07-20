@@ -1,11 +1,13 @@
 # Final sprint: Auth + project S3 solid → handoff OPEN
 
-**Date:** 2026-07-20  
+**Date:** 2026-07-20 (docs/MCP accuracy pass 2026-07-21)  
 **Owner:** flndrn + agent  
 **Goal (plain words):** Make **Briven Auth** and **project S3** solid enough that other apps can safely integrate. Then open the handoff.  
 **Not in this sprint:** Phase 0.1 platform off-site DB backup (deferred).  
 
 **Success = handoff gate OPEN** in `HANDOFF-AUTH-FOR-OTHER-PROJECTS.md`.
+
+**Product DNA (2026-07-21):** control + project SQL = **Doltgres-first** (`DOLTGRES-FIRST.md`). Files = MinIO S3. CLI: `setup` = new, `connect` = existing.
 
 ---
 

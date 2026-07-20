@@ -106,9 +106,10 @@ CLAUDE.md
 CONTRIBUTING.md
 SPEC.md
 SPRINT-PLAN.md
-docs/
-docs/*
-docs/*/*
+# Root-only internal docs (leading /). Do NOT use bare `docs/` — that also
+# hid new pages under apps/docs/ (public site) from git.
+/docs/
+/docs/**
 specs/
 
 # Local operator secrets — never commit

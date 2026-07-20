@@ -196,7 +196,7 @@ If 2FA is off for the pilot, mark this row N/A.
 
 If an AI agent sets up your app, they should follow the **briven-auth** skill and:
 
-1. Run `briven setup --project <p_…>` (or `briven link` if already logged in) then `briven auth scaffold`.
+1. Run `briven connect <p_…>` for an existing project (or `briven setup <name>` for a new one). Never `setup --project`. Then `briven auth scaffold`.
 2. Install `@briven/auth` (and `@briven/auth/react` for React).
 3. Paste project id + `pk_briven_auth_…` into env vars.
 4. Put a sign-in page on screen and a “who am I” check after login.

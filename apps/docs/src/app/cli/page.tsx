@@ -11,12 +11,14 @@ const ONE_SHOT = pmDlx('briven');
 const SETUP = pmExec(
   'briven setup',
   'briven setup --name my-app',
-  'briven setup --project p_xxx',
+  'briven setup my-app',
   'briven setup --name my-app --template todo-app --region eu-west',
 );
 const INIT = pmExec('briven init');
 const CONNECT = pmExec(
   'briven connect',
+  'briven connect p_xxx',
+  'briven connect --project p_xxx',
   'briven connect status',
   'briven connect logout',
   'briven connect --force',
@@ -74,10 +76,11 @@ export default function CliPage() {
         <PmTabs commands={ONE_SHOT} />
       </Section>
 
-      <Section title="setup (recommended)">
+      <Section title="setup · new project">
         <p>
-          Convex-style one command: browser sign-in, create a <em>new</em> cloud project or attach
-          an <em>existing</em> one, scaffold this folder, mint a CLI key. Full walkthrough on the{' '}
+          Create a <em>new</em> cloud project only: browser sign-in, scaffold folder, mint CLI + S3
+          keys. To attach an <em>existing</em> project use <code>briven connect</code> (section
+          below). Full walkthrough on the{' '}
           <a className="underline" href="/connect">
             connect
           </a>{' '}

@@ -111,7 +111,7 @@ Full write-up: **[docs/S6-RELIABILITY.md](./docs/S6-RELIABILITY.md)**
 cp -r examples/auth-pilot ~/Desktop/auth-pilot-dogfood
 cd ~/Desktop/auth-pilot-dogfood
 # Prefer setup once you have CLI credentials for the pilot project:
-briven setup --project <p_YOUR_PILOT>
+briven connect <p_YOUR_PILOT>
 briven auth scaffold
 pnpm add @briven/auth
 # paste pk_briven_auth_… into .env.local (never commit)

@@ -65,13 +65,15 @@ export default function AuthPage() {
             <code>brk_…</code> key in the browser.
           </li>
           <li>
-            in your app folder (with <code>briven.json</code> from{' '}
-            <code>briven setup</code>):
-            <Snippet>{`briven setup --project p_…   # if not wired yet
+            in your app folder, wire the project first:
+            <Snippet>{`# NEW project:   briven setup my-app
+# EXISTING:      briven connect p_…
 briven auth scaffold
 pnpm add @briven/auth`}</Snippet>
             that writes <code>middleware.ts</code>, <code>lib/auth.ts</code>, and a
-            seeded <code>.env.local</code> if missing.
+            seeded <code>.env.local</code> if missing. never use{' '}
+            <code>setup --project</code> to attach — that flag is gone; use{' '}
+            <code>briven connect</code>.
           </li>
           <li>
             paste the public key into <code>NEXT_PUBLIC_BRIVEN_AUTH_KEY</code> (and

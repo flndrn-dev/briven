@@ -9,8 +9,10 @@ export default function DoltgresPage() {
     <DocsShell>
       <h1 className="font-mono text-2xl tracking-tight">doltgres</h1>
       <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">
-        a PostgreSQL database you can branch, commit, diff, merge, and time-travel like Git —
-        &ldquo;Git for your data.&rdquo; It powers Briven&apos;s data plane.
+        a PostgreSQL-wire database you can branch, commit, diff, merge, and time-travel like Git —
+        &ldquo;Git for your data.&rdquo; <strong className="text-[var(--color-text)]">Briven is
+        Doltgres-first:</strong> it powers <em>both</em> the platform control database and every
+        project database (not only “the data plane”).
       </p>
 
       <div className="mt-6 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">

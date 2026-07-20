@@ -79,6 +79,18 @@ describe('briven_ask reception desk — pure helpers', () => {
     );
     expect(ids).toContain('app-data-access');
   });
+
+  test('setup vs connect question matches cli-setup-connect', () => {
+    const ids = matchBrivenGuides(
+      'should I use briven setup or briven connect for an existing project?',
+    ).map((g) => g.id);
+    expect(ids).toContain('cli-setup-connect');
+  });
+
+  test('doltgres database question still matches database guide', () => {
+    const ids = matchBrivenGuides('is the database Doltgres or stock Postgres?').map((g) => g.id);
+    expect(ids).toContain('database');
+  });
 });
 
 describe('briven_ask self-growing KB — helpers', () => {

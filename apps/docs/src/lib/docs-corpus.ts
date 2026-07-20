@@ -26,8 +26,17 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     slug: '/',
     title: 'briven docs · overview',
     summary:
-      'landing page for briven docs. quick orientation: what briven is (open-core reactive postgres backend), who it is for (typescript developers), the four moving parts (api, runtime, realtime, web), and where to start.',
-    keywords: ['overview', 'introduction', 'getting started', 'about', 'what is briven'],
+      'landing page for briven docs. Doltgres-first (Postgres wire + version history for control and project DBs), MinIO S3 for files, Auth, MCP. who it is for (typescript developers), where to start: setup (new) or connect (existing).',
+    keywords: [
+      'overview',
+      'introduction',
+      'getting started',
+      'about',
+      'what is briven',
+      'doltgres',
+      'minio',
+      's3',
+    ],
   },
   {
     slug: '/undo',
@@ -56,11 +65,12 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     slug: '/quickstart',
     title: 'quickstart · five minutes from clone to first invoke',
     summary:
-      'convex-style start: briven setup (sign in + new or existing cloud project + wire this folder), edit schema/functions, deploy, invoke from the app. templates optional. also surfaces the dashboard-only path for studio-first users.',
+      'start: briven setup --name (NEW project) or briven connect p_… (EXISTING), edit schema/functions, deploy, invoke. never setup --project. templates optional. dashboard-only studio path also covered.',
     keywords: [
       'install',
       'setup',
       'briven setup',
+      'briven connect',
       'init',
       'first',
       'cli install',
@@ -74,10 +84,11 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     slug: '/connect',
     title: 'connect · shell setup, sdk, and mcp',
     summary:
-      'how to connect to briven. recommended path 0: briven setup (one command — browser sign-in, create new or attach existing project, wire folder). path a: @briven/client sdk. path b: mcp for ai agents. documents platform session vs project keys.',
+      'how to connect to briven. briven setup = create a NEW cloud project + wire folder. briven connect = attach an EXISTING project (p_…). path a: @briven/client sdk. path b: mcp for ai agents. platform is Doltgres-first; files use MinIO S3. documents platform session vs project keys.',
     keywords: [
       'connect',
       'briven setup',
+      'briven connect',
       'setup',
       'login',
       'oauth',
@@ -89,13 +100,16 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'wire folder',
       'new project',
       'existing project',
+      'doltgres',
+      's3',
+      'minio',
     ],
   },
   {
     slug: '/cli',
     title: 'cli reference',
     summary:
-      'every briven cli command — setup (recommended), connect, projects, init, login, link, deploy, dev, logs, db shell, env, invoke, export, import, doctor, whoami. one section per command with usage and flags.',
+      'every briven cli command — setup (new project only), connect (existing project), projects, init, login, link, deploy, dev, logs, db shell, env, invoke, export, import, doctor, whoami, auth scaffold, storage. one section per command with usage and flags.',
     keywords: [
       'cli',
       'briven setup',
@@ -105,6 +119,8 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'briven logs',
       'briven login',
       'briven connect',
+      'briven auth',
+      'briven storage',
       'commands',
       'terminal',
     ],
@@ -201,7 +217,7 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     slug: '/self-host',
     title: 'self-host',
     summary:
-      'run briven on your own infrastructure. four services (api, runtime, realtime, web) + postgres + redis + minio behind traefik. dokploy template, coolify template, plain docker compose. env vars, observability, licensing.',
+      'run briven on your own infrastructure. four services (api, runtime, realtime, web) + Doltgres SQL engine + redis + minio behind traefik. dokploy template, coolify template, plain docker compose. env vars, observability, licensing. hosted briven.tech is Doltgres-first.',
     keywords: [
       'self-host',
       'self host',
@@ -212,6 +228,7 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'deploy',
       'infrastructure',
       'on-premise',
+      'doltgres',
     ],
   },
   {
@@ -241,7 +258,7 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     slug: '/templates',
     title: 'project templates',
     summary:
-      'optional starter templates via `briven setup --template` or `briven init --template`. not the core product — only sample files. prefer briven setup to create/attach a cloud project.',
+      'optional starter templates via `briven setup --template` or `briven init --template`. not the core product — only sample files. new projects: briven setup; existing: briven connect.',
     keywords: [
       'templates',
       'starter',
@@ -335,10 +352,13 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     slug: '/operator',
     title: 'operator guide',
     summary:
-      'operating a briven deployment: env vars, b2 backup target, restore drills, alerting via discord, observability stack (grafana + loki + prometheus + alertmanager), upgrade procedures.',
+      'operating a briven deployment: Doltgres-first SQL, MinIO file storage vs platform DR vault, env vars, restore drills, alerting, observability (grafana + loki + prometheus + alertmanager), upgrade procedures.',
     keywords: [
       'operator',
       'ops',
+      'doltgres',
+      'backup',
+      'restore',
       'observability',
       'grafana',
       'loki',
@@ -371,9 +391,9 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
   },
   {
     slug: '/vector-search',
-    title: 'vector search · pgvector + ctx.db.vectorSearch',
+    title: 'vector search · embeddings + intended shapes',
     summary:
-      'first-class pgvector support. declare vector(N) on a column, call ctx.db(...).vectorSearch({column, vector, distance, limit}) for nearest-neighbour queries. supports L2 / cosine / inner-product distance. embedding generation is your call (briven proxies nomic-embed-text via the ollama backend).',
+      'intended vector search shapes. product engine is Doltgres — stock Postgres pgvector is NOT assumed available; check /doltgres/limitations. store embeddings as app-managed payloads or use an external ANN service while source-of-truth rows stay on briven.',
     keywords: [
       'vector',
       'pgvector',
@@ -384,6 +404,8 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
       'hnsw',
       'cosine',
       'nomic',
+      'doltgres',
+      'limitations',
     ],
   },
   {
@@ -401,11 +423,47 @@ export const DOCS_CORPUS: readonly DocsCorpusEntry[] = [
     keywords: ['changelog', 'releases', 'updates', 'history', 'whats new'],
   },
   {
+    slug: '/storage',
+    title: 'storage · per-project MinIO S3 buckets',
+    summary:
+      'project file storage on MinIO at s3.briven.tech (proj-… buckets, brvn access keys). not the SQL database (Doltgres) and not platform DR backups. dashboard mint key, CLI setup/connect write env, MCP storage_* tools including soft-delete restore, public media.briven.tech URLs.',
+    keywords: [
+      'storage',
+      's3',
+      'minio',
+      'bucket',
+      'upload',
+      'download',
+      'presigned',
+      'files',
+      'media',
+      'brvn',
+      'restore',
+      'soft delete',
+    ],
+  },
+  {
+    slug: '/doltgres',
+    title: 'doltgres · the sql engine (control + every project)',
+    summary:
+      'briven is Doltgres-first: Postgres wire + git-for-data for the platform control database and every project database. not MySQL Dolt. not stock Postgres as the product engine. links to install, types, version-control, limitations.',
+    keywords: [
+      'doltgres',
+      'doltgresql',
+      'database',
+      'postgres',
+      'git for data',
+      'engine',
+      'version control',
+      'sql',
+    ],
+  },
+  {
     slug: '/auth',
     title:
       'auth · @briven/auth sign-in, 2FA backup codes, testing tokens, sender domain, jwt+jwks',
     summary:
-      'drop-in end-user sign-in: email + password, magic link, email OTP, passkeys, OAuth. install, pk_briven_auth keys, React/Vue/Svelte hooks, BrivenSignIn, two-factor + backup recovery codes, testing tokens for e2e (briven_test_… / signIn.testToken), password policy, new-device alerts, sender domain DNS, and verifiable JWT+JWKS for local session verification. agents: briven auth scaffold + AUTH-GO-LIVE-CHECKLIST.md.',
+      'drop-in end-user sign-in on Doltgres control plane: email + password, magic link, OTP, passkeys, OAuth. wire with briven setup (new) or briven connect (existing) then briven auth scaffold. pk_briven_auth keys only in browser. React/Vue/Svelte hooks, BrivenSignIn, 2FA, testing tokens, sender domain DNS, JWT+JWKS.',
     keywords: [
       'auth',
       'sign in',

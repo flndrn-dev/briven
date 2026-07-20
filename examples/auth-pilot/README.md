@@ -37,7 +37,7 @@ cd ~/Desktop/auth-pilot-dogfood
 
 # 2. Wire to cloud (Convex-style)
 briven setup --name auth-pilot
-#    or: briven setup --project p_YOUR_EXISTING_PILOT
+#    or: briven connect p_YOUR_EXISTING_PILOT
 
 # 3. Auth files + package
 briven auth scaffold

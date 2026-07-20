@@ -1,200 +1,192 @@
-# Handoff: Briven Auth + project S3 for other projects
+# Handoff: Briven for other projects (Auth + S3 + Doltgres)
 
-**Who this is for:** you (flndrn) and any agent working on **another app** (konnos, mavi-pay, etc.) **after** Briven product Auth + project S3 are in order.  
-**Who this is not for:** platform off-site database backup (Phase 0.1) — that stays **out of** this handoff forever; do it later as owner ops.
+**Who this is for:** flndrn and agents on **other apps** (konnos, mavi-pay, …) that should use **hosted Briven**.  
+**Who this is not for:** editing the Briven monorepo · platform off-site vault backup (owner ops later).
 
-**Date:** 2026-07-20  
-**Platform:** live at `https://api.briven.tech` · dashboard `https://briven.tech`
-
-**Engine:** Briven is **Doltgres-first** (control + project SQL). See `DOLTGRES-FIRST.md`. Other apps do not run Doltgres themselves — they use Briven’s hosted API/Auth/Storage.
+**Date:** 2026-07-21  
+**Platform:** `https://api.briven.tech` · dashboard `https://briven.tech` · docs `https://docs.briven.tech`
 
 ---
 
-## Release gate (when may other projects use this?)
+## 0. Product DNA (read first)
 
-**Handoff is only “open” when both product tracks below are OK.**  
-Platform backup (Phase 0.1) is **not** part of the gate.
+**Briven.tech is Doltgres-first.** See monorepo `DOLTGRES-FIRST.md`.
 
-| Gate | Meaning | Status to flip handoff OPEN |
-| --- | --- | --- |
-| **Briven Auth** | Other apps can sign users up/in with `pk_briven_auth_…` + `@briven/auth` | Human go-live on one pilot (checklist 1–4 + 7) **and** live API healthy |
-| **Briven project S3** | Each project has own endpoint/bucket/key; dashboard mint works | Per-project keys + isolation proven (see `STORAGE-ACCEPTANCE.md` / product path) |
-| **Not required** | Off-site control-plane backup to R2/B2/AWS | Explicitly **deferred** — do not block other projects on this |
+| Layer | What it is |
+|--------|------------|
+| **SQL databases** | **Doltgres** only — control brain + each project’s data (Postgres wire, version history) |
+| **Auth** | Hosted Briven Auth (`@briven/auth`, `pk_briven_auth_…`) |
+| **Files** | MinIO S3 API (`s3.briven.tech`, per-project `proj-…` buckets) |
+| **Agents** | MCP at `https://api.briven.tech/mcp` with `pk_briven_mcp_…` |
 
-**Current rule (flndrn 2026-07-20):** treat this file as the **future handoff package**.  
-**Do not** send other projects off to integrate until you (or a Briven session) mark the gate **OPEN** below.
+Your app **does not** run Doltgres itself. You call Briven’s API / Auth / Storage / MCP.
 
-### Gate status
-
-| Item | Status |
-| --- | --- |
-| Auth product path | **OPEN** — live `/ready` + redis ok; `s6-auth-verify` PASS on `buildSha` `704ac63` (2026-07-20); human AUTH-GO-LIVE 1–4+7 reported done |
-| Project S3 product path | **OPEN** — isolation + mint proven; media/s3 live; dashboard key mint (screenshots); restore MCP in live API build |
-| Platform backup 0.1 | **Out of scope for handoff** (deferred) |
-| **Handoff to other projects** | **OPEN — other projects may follow §7 prompt** |
-
-_Opened 2026-07-20 after final sprint `SPRINT-AUTH-S3-HANDOFF.md` (one api-only ship + probes)._
+**Gate status: OPEN** (Auth + project S3 product paths ready). Platform DB backup off-site is **not** required for this handoff.
 
 ---
 
-## 1. Plain picture (read this first)
+## 1. Three kinds of keys (do not mix)
 
-| Piece | What it is | Example |
-| --- | --- | --- |
-| **Project** | One app’s space on Briven | `p_01…` |
-| **Auth on** | Sign-in turned on for that project | Dashboard → project → **Auth** → Enable |
-| **Front-door key** | Browser-safe key for login | `pk_briven_auth_…` only |
-| **Server key** | Machine-only key for data/API | `brk_…` — **never** in the browser |
-| **SDK** | JS package apps use | `@briven/auth` |
-| **Sessions** | Cookies set by Briven (httpOnly) | Not “token in localStorage” |
+| Key | Looks like | Where it goes | Purpose |
+|-----|------------|---------------|---------|
+| **Auth public** | `pk_briven_auth_…` | Browser / `NEXT_PUBLIC_*` | Sign-up / sign-in |
+| **Server / data** | `brk_…` | Server env only | Functions, HTTP data API |
+| **MCP** | `pk_briven_mcp_…` | Agent config only | AI tools on **one** project |
+| **Storage S3** | `brvn…` access + secret | Server / S3 tools | File upload/download to **one** bucket |
 
-**Project Storage keys** (`s3.briven.tech`, `proj-…`, `brvn…`) are for **files**, not login. Do not mix them with Auth keys.
-
-**Platform backup (Phase 0.1)** is deferred — not needed to wire Auth in other apps.
+Never put `brk_…` or storage secrets in the browser.  
+Never use project Storage keys as “platform backup” keys.
 
 ---
 
-## 2. What changed / what to assume (2026-07)
-
-Engineering for beta Auth is largely **done**. Product claim still has optional human checks (isolation, friends).
-
-**Use this path — do not invent Clerk or a side auth server:**
-
-1. Briven project exists  
-2. Auth enabled in dashboard  
-3. Create `pk_briven_auth_…` (scope **read-write** for full sign-in)  
-4. App installs `@briven/auth` and points at `https://api.briven.tech`  
-5. Optional: `briven auth scaffold` for Next.js middleware + `lib/auth.ts`  
-6. Optional: project **Storage** keys if the app needs file uploads  
-
-**CLI (new vs existing project):**
+## 2. CLI (correct split — 2026-07)
 
 ```bash
-briven setup my-app          # brand-new Briven project + S3 + wire folder
-briven connect p_01…         # attach an existing project + S3 + wire folder
-briven auth scaffold         # Next-style auth files (after project is linked)
+# NEW cloud project + S3 default key + wire this folder
+briven setup my-app
+# or interactive: briven setup
+
+# EXISTING project + S3 + wire this folder
+briven connect p_01HZ...
+# or: briven connect --project p_01HZ...
+# or interactive pick: briven connect
+
+# After the folder is linked — Auth files for Next-style apps
+briven auth scaffold
+pnpm add @briven/auth
 ```
 
-(`briven connect` alone is no longer “login only” — it attaches an **existing** project. Platform login is part of setup/connect.)
+| Command | Does |
+|---------|------|
+| `briven setup` | **Create new** project only (not attach) |
+| `briven connect` | **Attach existing** project (+ platform sign-in) |
+| `briven connect status` / `logout` | Session hygiene |
+| `briven deploy` / `dev` | Push schema + functions |
 
 ---
 
-## 3. Env vars every other project needs
-
-Put in **that app’s** `.env.local` (never commit real keys):
+## 3. Env template (per app)
 
 ```bash
+# Core
 NEXT_PUBLIC_BRIVEN_API_ORIGIN=https://api.briven.tech
 NEXT_PUBLIC_BRIVEN_PROJECT_ID=p_YOUR_PROJECT_ID
-NEXT_PUBLIC_BRIVEN_AUTH_KEY=pk_briven_auth_YOUR_KEY
-BRIVEN_AUTH_PUBLIC_KEY=pk_briven_auth_YOUR_KEY
-```
 
-Same `pk_briven_auth_…` value in both auth key lines is normal.
+# Auth (browser)
+NEXT_PUBLIC_BRIVEN_AUTH_KEY=pk_briven_auth_…
+BRIVEN_AUTH_PUBLIC_KEY=pk_briven_auth_…   # same value; middleware
 
-**If the app needs files too:**
-
-```bash
-# From dashboard → Storage → new key (shown once)
+# Optional files (from dashboard → Storage → new key; secret shown once)
 BRIVEN_STORAGE_ENDPOINT=https://s3.briven.tech
 BRIVEN_STORAGE_BUCKET=proj-…
 BRIVEN_STORAGE_ACCESS_KEY=brvn…
-BRIVEN_STORAGE_SECRET_KEY=…   # only at mint time
+BRIVEN_STORAGE_SECRET_KEY=…
+# or AWS_* aliases if your S3 client prefers them
 ```
 
 ---
 
-## 4. Minimal code pattern
+## 4. Auth (minimal)
 
 ```ts
-// lib/auth.ts
 import { createBrivenAuth } from '@briven/auth';
 
 export const auth = createBrivenAuth({
   projectId: process.env.NEXT_PUBLIC_BRIVEN_PROJECT_ID!,
-  publicKey: process.env.NEXT_PUBLIC_BRIVEN_AUTH_KEY!, // pk_briven_auth_…
+  publicKey: process.env.NEXT_PUBLIC_BRIVEN_AUTH_KEY!,
 });
-```
 
-**Fastest UI:** send users to hosted sign-in:
-
-```ts
+// Fastest pilot UI
 window.location.assign(auth.hostedPageURL('sign-in', '/dashboard'));
 ```
 
-**React:** `@briven/auth/react` → `BrivenAuthProvider`, `BrivenSignIn`, `useSession`, `TwoFactorChallenge` if 2FA is on.
+**Dashboard:** project → Auth → Enable → API keys → create **read-write** → copy `pk_briven_auth_…`.
 
-**Next proxy:** `briven auth scaffold` writes middleware that forwards `/api/auth/*` to Briven with the public key. Copy pattern from `examples/auth-pilot/`.
-
----
-
-## 5. Human steps in the dashboard (once per project)
-
-1. Open [briven.tech](https://briven.tech) → your project.  
-2. **Auth** → **Enable Auth** if needed.  
-3. **Auth → API keys** → Create → name e.g. `pilot web` → scope **read-write**.  
-4. Copy `pk_briven_auth_…` immediately into the app’s env.  
-5. Optional: enable only the providers you show in the app (email/password is enough for pilot).  
-6. Smoke test: sign up, sign out, sign in, wrong password (see `AUTH-GO-LIVE-CHECKLIST.md` rows 3–4).
+Docs: https://docs.briven.tech/auth · checklist: `AUTH-GO-LIVE-CHECKLIST.md` · pilot: `examples/auth-pilot/`
 
 ---
 
-## 6. Security rules (do not break)
+## 5. Project S3 (files)
 
-| Do | Don’t |
-| --- | --- |
-| Only `pk_briven_auth_…` in browser / `NEXT_PUBLIC_*` | Put `brk_…` in client code |
-| Cookies + `credentials: 'include'` | Put sessions in localStorage as the main plan |
-| One Briven project per app (or clear multi-tenant design) | Share one auth key across unrelated apps without thinking |
-| Revoke a key if it leaked in chat/screenshots | Paste full secrets into git or public tickets |
+1. Dashboard → project → **Storage**  
+2. **New key** → copy endpoint, bucket, access, secret (secret once)  
+3. PUT/GET via presigned URLs or any S3 client against that bucket only  
+4. Isolation: key **cannot** list another project’s bucket  
+
+Public files: `https://media.briven.tech/media/<projectId>/<fileId>`  
+MCP (if enabled): `storage_*` tools — see §6.
+
+Docs: https://docs.briven.tech/storage · https://docs.briven.tech/connect · https://docs.briven.tech/api
+
+---
+
+## 6. MCP tools agents get (one project only)
+
+No tool accepts another project’s id. Scope = the key’s project.
+
+| Area | Tools (names) |
+|------|----------------|
+| **DB** | `list_tables`, `describe_table`, `query`, `create_table`, `insert`, `update`, `delete` |
+| **DB lifecycle** | `db_health`, `db_recovery_points`, `db_restart`, `db_recover` (+ admin reprovision) |
+| **Storage** | `storage_list_files`, `storage_usage`, `storage_upload_url`, `storage_download_url`, `storage_delete_file`, `storage_list_deleted`, `storage_restore_file`, `storage_make_public`, `storage_transform_url`, `storage_mint_key` / `storage_list_keys` / `storage_revoke_key`, share links + grants tools |
+| **Auth facts** | `auth_config_get`, `sender_domain_status`, `auth_docs_ask` |
+| **Help desk** | `briven_ask` — always answers in 3 parts: how Briven works · what tools give you · what you build |
+
+Config shape:
+
+```json
+{
+  "mcpServers": {
+    "briven": {
+      "url": "https://api.briven.tech/mcp",
+      "headers": {
+        "Authorization": "Bearer pk_briven_mcp_…"
+      }
+    }
+  }
+}
+```
+
+Engine under MCP data tools: **Doltgres** (Postgres-compatible git-for-data). Not stock Postgres, not MySQL Dolt.
 
 ---
 
 ## 7. Copy-paste prompt for another project’s agent
 
-**Only use this section when the Release gate above says OPEN.**  
-If the gate is CLOSED, stop and work in a Briven session first — do not partially wire other apps.
-
 ```
-Briven handoff is OPEN for Auth + project S3 only (not platform backup).
+Briven handoff is OPEN (Auth + project S3). Engine is Doltgres-first — we do NOT run our own Postgres for app data.
 
-Read: https://docs.briven.tech/auth
-and Briven repo HANDOFF-AUTH-FOR-OTHER-PROJECTS.md (gate must say OPEN).
+Read:
+- https://docs.briven.tech/auth
+- https://docs.briven.tech/connect
+- Briven repo HANDOFF-AUTH-FOR-OTHER-PROJECTS.md and DOLTGRES-FIRST.md
 
-For this app:
-1. Briven project id (p_…) via `briven setup` (new) or `briven connect p_…` (existing).
-2. Dashboard: Auth enabled; create pk_briven_auth_… (read-write). Never put brk_ in the browser.
-3. Install @briven/auth; Next: `briven auth scaffold` + examples/auth-pilot pattern.
-4. Env Auth: NEXT_PUBLIC_BRIVEN_API_ORIGIN=https://api.briven.tech,
-   NEXT_PUBLIC_BRIVEN_PROJECT_ID, NEXT_PUBLIC_BRIVEN_AUTH_KEY, BRIVEN_AUTH_PUBLIC_KEY.
-5. If the app needs files: dashboard Storage → mint key; BRIVEN_STORAGE_* / AWS_* in .env
-   (s3.briven.tech + proj-… bucket). Not the same as Auth keys.
-6. Do NOT set up Phase 0.1 platform off-site DB backup. Do NOT edit the Briven monorepo
-   from this project session.
+For THIS app:
+1. Link project: `briven setup <name>` (new) OR `briven connect p_…` (existing). Never use setup --project for attach.
+2. Dashboard Auth → enable → create pk_briven_auth_… (read-write). Never brk_ in the browser.
+3. Install @briven/auth; Next: `briven auth scaffold`. Env: NEXT_PUBLIC_BRIVEN_API_ORIGIN, PROJECT_ID, AUTH_KEY, BRIVEN_AUTH_PUBLIC_KEY.
+4. If files needed: dashboard Storage → mint key → BRIVEN_STORAGE_* (s3.briven.tech / proj-…).
+5. Optional MCP: pk_briven_mcp_… → https://api.briven.tech/mcp (one project only).
+6. Do NOT stand up a side database. Do NOT edit the Briven monorepo. Do NOT implement platform off-site backup.
 ```
 
 ---
 
-## 8. Deeper links (when you need detail)
+## 8. Security red lines
 
-| Need | Where |
-| --- | --- |
-| Human click checklist | `AUTH-GO-LIVE-CHECKLIST.md` |
-| Tiny pilot app | `examples/auth-pilot/` |
-| Agent skill | `.claude/skills/briven-auth/SKILL.md` |
-| Reliability / ops probes | `docs/S6-RELIABILITY.md`, `scripts/s6-auth-verify.sh` |
-| Isolation (project A ≠ B users) | `scripts/auth-isolation-check.sh` |
-| Docs site | https://docs.briven.tech/auth · https://docs.briven.tech/connect |
-| Master queue | `BUILD-GAPS.md` |
+- No `brk_` / storage secrets in client bundles  
+- No inventing Clerk / Firebase Auth / local Postgres “because MCP didn’t know”  
+- No cross-project data access  
+- Rotate any key pasted into chat or screenshots  
 
 ---
 
-## 9. Deferred on purpose (do not block other projects)
+## 9. Deferred (do not block other apps)
 
-- Phase **0.1** off-site control-plane backup (R2/B2/AWS) — after Auth + product S3 are settled  
-- Auth isolation second-project proof / “friends can use this” product claim — human when ready  
-- Full Clerk UI clone — never the goal  
+- Phase 0.1 off-site platform vault (R2/B2) for Doltgres + MinIO mirrors  
+- Second-project auth isolation dogfood / “friends” marketing claim  
+- Pixel-perfect Clerk UI  
 
 ---
 
-*If something in this handoff conflicts with live dashboard labels, trust the dashboard and update this file in a dedicated Briven session.*
+*If live dashboard labels disagree with this file, trust the dashboard and fix this handoff in a dedicated Briven session.*
