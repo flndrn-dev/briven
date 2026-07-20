@@ -6,6 +6,8 @@
 **Date:** 2026-07-20  
 **Platform:** live at `https://api.briven.tech` · dashboard `https://briven.tech`
 
+**Engine:** Briven is **Doltgres-first** (control + project SQL). See `DOLTGRES-FIRST.md`. Other apps do not run Doltgres themselves — they use Briven’s hosted API/Auth/Storage.
+
 ---
 
 ## Release gate (when may other projects use this?)

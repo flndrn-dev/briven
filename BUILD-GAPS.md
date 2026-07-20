@@ -4,7 +4,9 @@
 **Do not re-prove** what is already shipped (Auth day-to-day, project create, SCIM/SSO pack, CLI-auth page fix).  
 **Status is only Done / Not done / Blocked (human).**
 
-**Updated:** 2026-07-20  
+**🔴 DOLTGRES-FIRST:** Briven.tech product DNA is Doltgres (control + project DBs). See `DOLTGRES-FIRST.md`. Do not design stock-Postgres control as the long-term path.
+
+**Updated:** 2026-07-21  
 **Live API tip (check anytime):** `curl -sS https://api.briven.tech/info`
 
 ---

@@ -2,6 +2,12 @@
 
 > the version-controlled backend you own
 
+## 🔴 Doltgres-first (product DNA)
+
+**Briven.tech is built on [Doltgres](https://www.doltgres.com)** — Postgres-wire SQL with git-style branch, commit, and time-travel.  
+Control plane and every project database run on **Doltgres**. Stock Postgres is not the product engine.  
+See **`DOLTGRES-FIRST.md`** (hard rule for all contributors and agents).
+
 briven is an open-core, reactive backend platform for typescript developers. convex-style ergonomics (code-first schema, cli deploys, reactive queries, built-in auth/storage/scheduling) on a git-native sql database — branches, time-travel, commit history. worldwide multi-region. fully self-hostable.
 
 three surfaces:

@@ -7,12 +7,11 @@ import { log } from '../lib/logger.js';
 import * as schema from './schema.js';
 
 /**
- * Control-plane meta-DB pool.
+ * Control-plane meta-DB pool — **Doltgres-first** (see repo `DOLTGRES-FIRST.md`).
  *
- * Uses `pg` (node-postgres), not `postgres` (postgres.js): Doltgres's wire
- * protocol panics on many postgres.js prepared/extended-query paths
- * (`unhandled message "&{}"`). `pg` is proven against Doltgres for control
- * queries (product line: control + data plane both on Doltgres).
+ * Talks to Doltgres database `briven_control` via `pg` (node-postgres).
+ * Never use `postgres` (postgres.js) against Doltgres — wire panics
+ * (`unhandled message "&{}"`). Same rule as the data plane.
  *
  * Lazy-initialised: `/ready` reports not_configured until BRIVEN_DATABASE_URL
  * is set.
