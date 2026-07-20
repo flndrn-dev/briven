@@ -37,12 +37,19 @@ export const dynamic = 'force-dynamic';
 
 // Public files are served from the media edge, not the api or minio origin.
 const MEDIA_BASE = 'https://media.briven.tech';
+const DEFAULT_S3_ENDPOINT = 'https://s3.briven.tech';
 
 // Surfaced from the api/lib/env helper on the server. The browser also
 // needs an origin for direct PUT uploads — we pass it via prop so the
 // client component doesn't read process.env at runtime.
 function publicApiOrigin(): string {
   return process.env.NEXT_PUBLIC_BRIVEN_API_ORIGIN ?? '';
+}
+
+/** Same rule as apps/api minio-admin bucketNameFor — DNS-safe per project. */
+function bucketNameFor(projectId: string): string {
+  const safe = projectId.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return `proj-${safe}`.slice(0, 63);
 }
 
 export default async function StoragePage({ params }: { params: Promise<{ id: string }> }) {
@@ -173,6 +180,80 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
     );
     redirect(result.downloadUrl);
   }
+
+  /**
+   * Mint a bucket-scoped S3 key via server action (forwards session cookies +
+   * Origin the same way file delete does). Secret is flash-stored in an
+   * httpOnly cookie for one page load — never written to the DB by us.
+   */
+  async function mintStorageKey(formData: FormData): Promise<string | null> {
+    'use server';
+    const { id: projectId } = await params;
+    const name = String(formData.get('name') ?? '').trim() || 'default';
+    const res = await apiFetch(`/v1/projects/${projectId}/storage-keys`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        code?: string;
+        message?: string;
+      } | null;
+      if (res.status === 503) {
+        return 'storage is not configured on the api (operator: BRIVEN_MINIO_*)';
+      }
+      return body?.message ?? body?.code ?? `could not create key (http ${res.status})`;
+    }
+    const created = (await res.json()) as {
+      endpoint: string;
+      bucket: string;
+      accessKey: string;
+      secretKey: string;
+      record?: { name?: string };
+    };
+    if (created.secretKey && created.accessKey) {
+      const jar = await cookies();
+      jar.set(
+        `briven_storage_once_${projectId}`,
+        JSON.stringify({
+          endpoint: created.endpoint || DEFAULT_S3_ENDPOINT,
+          bucket: created.bucket,
+          accessKey: created.accessKey,
+          secretKey: created.secretKey,
+          name: created.record?.name ?? name,
+        }),
+        {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 600,
+        },
+      );
+    }
+    revalidatePath(`/dashboard/projects/${projectId}/storage`);
+    return null;
+  }
+
+  async function revokeStorageKey(formData: FormData): Promise<void> {
+    'use server';
+    const { id: projectId } = await params;
+    const keyId = String(formData.get('keyId') ?? '');
+    if (!keyId) return;
+    const res = await apiFetch(`/v1/projects/${projectId}/storage-keys/${keyId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(body?.message || `revoke failed: ${res.status}`);
+    }
+    revalidatePath(`/dashboard/projects/${projectId}/storage`);
+  }
+
+  const projectBucket = bucketNameFor(id);
+  const resolvedEndpoint =
+    storageEndpoint || initialCreated?.endpoint || DEFAULT_S3_ENDPOINT;
 
   return (
     <div className="flex flex-col gap-6">
@@ -329,9 +410,12 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
 
           <StorageKeysPanel
             projectId={id}
-            endpoint={storageEndpoint || initialCreated?.endpoint || ''}
+            endpoint={resolvedEndpoint}
+            bucket={initialCreated?.bucket || storageKeys[0]?.bucket || projectBucket}
             initial={storageKeys}
             initialCreated={initialCreated}
+            mintAction={mintStorageKey}
+            revokeAction={revokeStorageKey}
           />
         </>
       )}
