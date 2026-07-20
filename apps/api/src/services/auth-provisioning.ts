@@ -56,8 +56,10 @@ export const AUTH_JWKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS "_briven_auth_jwk
 export function renderAuthProvisioningSql(): string[] {
   return [
     // _briven_auth_users — Better-Auth user shape (sprint S2.1b).
-    // DoltGres has no `citext`/`CREATE EXTENSION`; case-insensitive email is a
-    // `text` column + a UNIQUE index on `lower(email)` (verified on DoltGres).
+    // DoltGres has no `citext`/`CREATE EXTENSION` and no expression indexes
+    // (`(lower(email))` fails with "two different columns with the same name").
+    // Email is stored `text` + UNIQUE(email); app layer normalizes to lowercase
+    // on write (see auth-security normalizeEmail / Better Auth paths).
     // `email_verified` is BOOLEAN — what Better Auth reads/writes.
     `CREATE TABLE IF NOT EXISTS "_briven_auth_users" (
        id                text        PRIMARY KEY,
@@ -70,7 +72,7 @@ export function renderAuthProvisioningSql(): string[] {
        updated_at        timestamptz NOT NULL DEFAULT now()
      )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_users_email_uniq"
-       ON "_briven_auth_users" (lower(email))`,
+       ON "_briven_auth_users" (email)`,
 
     // _briven_auth_sessions — Better-Auth session shape. `ip_address` exists for
     // compatibility but IP tracking is disabled (privacy), so it stays null.
@@ -289,12 +291,14 @@ export function renderAuthProvisioningSql(): string[] {
        ON "_briven_auth_user_metadata" (user_id)`,
 
     // ─── User Emails (Phase 3 — multiple emails per user) ───────────────────
+    // `"primary"` must be quoted — unquoted PRIMARY is reserved SQL, and
+    // DoltGres errors with: at or near "boolean": syntax error (2026-07-20).
     `CREATE TABLE IF NOT EXISTS "_briven_auth_user_emails" (
        id         text        PRIMARY KEY,
        user_id    text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
        email      text        NOT NULL,
        verified   boolean     NOT NULL DEFAULT false,
-       primary    boolean     NOT NULL DEFAULT false,
+       "primary"  boolean     NOT NULL DEFAULT false,
        created_at timestamptz NOT NULL DEFAULT now(),
        updated_at timestamptz NOT NULL DEFAULT now()
      )`,
@@ -584,7 +588,7 @@ export const AUTH_SCIM_DDL_SQL: readonly string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_users_user_uniq"
      ON "_briven_auth_scim_users" (user_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_users_username_uniq"
-     ON "_briven_auth_scim_users" (lower(user_name))`,
+     ON "_briven_auth_scim_users" (user_name)`,
   `CREATE INDEX IF NOT EXISTS "_briven_auth_scim_users_external_idx"
      ON "_briven_auth_scim_users" (external_id)`,
   `CREATE TABLE IF NOT EXISTS "_briven_auth_scim_groups" (
@@ -597,7 +601,7 @@ export const AUTH_SCIM_DDL_SQL: readonly string[] = [
      updated_at   timestamptz NOT NULL DEFAULT now()
    )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_groups_name_uniq"
-     ON "_briven_auth_scim_groups" (lower(display_name))`,
+     ON "_briven_auth_scim_groups" (display_name)`,
   `CREATE TABLE IF NOT EXISTS "_briven_auth_scim_group_members" (
      group_id   text NOT NULL REFERENCES "_briven_auth_scim_groups"(id) ON DELETE CASCADE,
      member_id  text NOT NULL,
@@ -614,7 +618,7 @@ export const AUTH_SCIM_DDL_SQL: readonly string[] = [
      updated_at    timestamptz NOT NULL DEFAULT now()
    )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "_briven_auth_scim_role_maps_name_uniq"
-     ON "_briven_auth_scim_role_maps" (lower(display_name))`,
+     ON "_briven_auth_scim_role_maps" (display_name)`,
   // OIDC PKCE verifier storage (never ALTER oidc_states — new table)
   `CREATE TABLE IF NOT EXISTS "_briven_auth_oidc_pkce" (
      state          text PRIMARY KEY,

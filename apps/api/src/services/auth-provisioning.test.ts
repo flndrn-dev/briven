@@ -5,8 +5,8 @@ import { AUTH_TABLES, renderAuthProvisioningSql } from './auth-provisioning.js';
 // NOTE: this file previously asserted MySQL DDL (backtick quoting,
 // COLLATE utf8mb4_unicode_ci, JSON_OBJECT()) while the emitter produces
 // Postgres/DoltGres DDL — so it never matched reality. Rewritten to assert the
-// actual output, and to lock the sprint S2.3 change (no citext / no CREATE
-// EXTENSION; email is text with a UNIQUE index on lower(email)).
+// actual output, and to lock DoltGres-safe choices (no citext; no expression
+// indexes; reserved column names quoted).
 describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
   const stmts = renderAuthProvisioningSql();
 
@@ -38,7 +38,7 @@ describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
     }
   });
 
-  test('S2.3: users.email is text with a UNIQUE index on lower(email)', () => {
+  test('S2.3: users.email is text with a UNIQUE index on (email) — no expression indexes', () => {
     const usersTable = stmts.find((s) =>
       s.startsWith('CREATE TABLE IF NOT EXISTS "_briven_auth_users"'),
     );
@@ -48,9 +48,20 @@ describe('auth-provisioning — DDL emitter (Postgres/DoltGres)', () => {
       (s) =>
         s.includes('_briven_auth_users_email_uniq') &&
         s.includes('UNIQUE') &&
-        s.includes('lower(email)'),
+        s.includes('(email)'),
     );
     expect(uniq).toBeDefined();
+    expect(uniq!).not.toContain('lower(email)');
+  });
+
+  test('user_emails."primary" is quoted (reserved keyword on DoltGres)', () => {
+    const emails = stmts.find((s) =>
+      s.startsWith('CREATE TABLE IF NOT EXISTS "_briven_auth_user_emails"'),
+    );
+    expect(emails).toBeDefined();
+    expect(emails!).toContain('"primary"');
+    // bare `primary boolean` is the bug that broke enable-auth (2026-07-20)
+    expect(emails!).not.toMatch(/(?<!")primary\s+boolean/u);
   });
 
   test('S2.1b: user.email_verified is BOOLEAN (Better-Auth shape, not timestamp)', () => {

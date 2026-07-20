@@ -24,7 +24,7 @@
  *
  * The physical DDL is hand-emitted by `services/auth-provisioning.ts` (kept in
  * sync with these models). DoltGres notes: no `citext` (email is text + a
- * UNIQUE index on lower(email)); no `CREATE EXTENSION`.
+ * UNIQUE index on email); no `CREATE EXTENSION`.
  */
 
 import { bigint, boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
@@ -36,7 +36,7 @@ const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' 
 /**
  * Authenticated end-users of a customer's project. One row per unique email
  * within the tenant. `email` is `text`; case-insensitive uniqueness is enforced
- * by a UNIQUE index on `lower(email)` in the provisioning DDL (DoltGres has no
+ * by a UNIQUE index on `email` in the provisioning DDL (DoltGres has no
  * citext). `emailVerified` is a BOOLEAN — what Better Auth expects.
  */
 export const authUsers = pgTable(
@@ -52,7 +52,7 @@ export const authUsers = pgTable(
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => ({
-    // Cosmetic for query typing; the real (lower(email)) unique index lives in
+    // Cosmetic for query typing; the real UNIQUE(email) index lives in
     // the provisioning DDL.
     emailUniq: uniqueIndex('_briven_auth_users_email_uniq').on(t.email),
   }),
