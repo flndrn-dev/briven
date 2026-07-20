@@ -14,6 +14,7 @@ import {
   listFunctionNames,
 } from '../services/function-logs.js';
 import { getDefaultOrgForUser, isOrgMember, listOrgsForUser } from '../services/orgs.js';
+import { env } from '../env.js';
 import {
   createProject,
   getProjectForUser,
@@ -23,6 +24,7 @@ import {
   softDeleteProjectForUser,
   updateProjectForUser,
 } from '../services/projects.js';
+import { ensureDefaultProjectStorage } from '../services/storage-keys.js';
 
 const createSchema = z.object({
   name: z.string().min(1).max(80),
@@ -173,7 +175,32 @@ projectsRouter.post('/v1/projects', async (c) => {
     userAgent: c.req.header('user-agent') ?? null,
     metadata: { slug: project.slug },
   });
-  return c.json({ project }, 201);
+
+  // Standard setup: every new project gets its own S3 bucket + a default
+  // storage key (secret returned once). Never fails project create.
+  const storage = await ensureDefaultProjectStorage({
+    projectId: project.id,
+    createdBy: user.id,
+    publicEndpoint: env.BRIVEN_MINIO_PUBLIC_ENDPOINT ?? env.BRIVEN_MINIO_ENDPOINT ?? '',
+    keyName: 'default',
+  });
+  if (storage) {
+    await audit({
+      actorId: user.id,
+      projectId: project.id,
+      action: 'storage_key.create',
+      ipHash: getIpHash(c),
+      userAgent: c.req.header('user-agent') ?? null,
+      metadata: {
+        keyId: storage.record.id,
+        name: storage.record.name,
+        bucket: storage.bucket,
+        auto: true,
+      },
+    });
+  }
+
+  return c.json({ project, storage: storage ?? null }, 201);
 });
 
 projectsRouter.get('/v1/projects/:id', async (c) => {

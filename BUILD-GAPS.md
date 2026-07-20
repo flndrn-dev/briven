@@ -27,7 +27,7 @@
 | **G0.1** | `briven setup` on your Mac PATH | **Done** | Installed workspace CLI **0.3.2** globally. `briven --help` lists `setup`. |
 | **G0.2** | `briven setup <projectname>` (positional name) | **Done** | Bare arg = new name; `p_…` = attach existing. Tests pass. |
 | **G0.3** | `briven setup --project …` + `briven connect` | **Done** | On PATH after G0.1. |
-| **G0.4** | `briven storage setup` after project linked | **Done** (code) | On PATH; needs a linked folder + live API. |
+| **G0.4** | `briven storage setup` after project linked | **Done** | CLI command + **auto** on project create / `briven setup` (bucket + `default` key). |
 
 **Out of this wave:** re-testing “can create a project in the dashboard” — already proven.
 

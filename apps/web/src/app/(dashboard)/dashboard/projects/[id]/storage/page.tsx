@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson, ApiError } from '../../../../../../lib/api';
@@ -46,6 +47,49 @@ function publicApiOrigin(): string {
 
 export default async function StoragePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  // One-time secret from project create (httpOnly cookie, max 10 min).
+  let initialCreated: {
+    record: StorageKeyRow;
+    endpoint: string;
+    bucket: string;
+    accessKey: string;
+    secretKey: string;
+  } | null = null;
+  try {
+    const jar = await cookies();
+    const raw = jar.get(`briven_storage_once_${id}`)?.value;
+    if (raw) {
+      const parsed = JSON.parse(raw) as {
+        endpoint: string;
+        bucket: string;
+        accessKey: string;
+        secretKey: string;
+        name?: string;
+      };
+      if (parsed.secretKey && parsed.accessKey) {
+        initialCreated = {
+          endpoint: parsed.endpoint,
+          bucket: parsed.bucket,
+          accessKey: parsed.accessKey,
+          secretKey: parsed.secretKey,
+          record: {
+            id: 'pending',
+            name: parsed.name ?? 'default',
+            accessKeyId: parsed.accessKey,
+            suffix: parsed.secretKey.slice(-4),
+            bucket: parsed.bucket,
+            enabled: true,
+            createdAt: new Date().toISOString(),
+            revokedAt: null,
+          },
+        };
+      }
+      jar.delete(`briven_storage_once_${id}`);
+    }
+  } catch {
+    // ignore malformed flash
+  }
 
   let files: ProjectFile[] = [];
   let deleted: ProjectFile[] = [];
@@ -283,7 +327,12 @@ export default async function StoragePage({ params }: { params: Promise<{ id: st
             </section>
           ) : null}
 
-          <StorageKeysPanel projectId={id} endpoint={storageEndpoint} initial={storageKeys} />
+          <StorageKeysPanel
+            projectId={id}
+            endpoint={storageEndpoint || initialCreated?.endpoint || ''}
+            initial={storageKeys}
+            initialCreated={initialCreated}
+          />
         </>
       )}
     </div>

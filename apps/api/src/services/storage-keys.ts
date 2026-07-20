@@ -151,6 +151,46 @@ export async function createStorageKey(input: {
   };
 }
 
+/**
+ * Standard project setup: ensure the project's MinIO bucket exists and mint a
+ * default storage key if the project has none yet. Best-effort for callers that
+ * must not fail project creation when MinIO is down/unconfigured.
+ *
+ * Returns the one-time secret payload when a new key was minted; `null` when
+ * storage is off, a key already exists, or mint failed (logged).
+ */
+export async function ensureDefaultProjectStorage(input: {
+  projectId: string;
+  createdBy: string | null;
+  publicEndpoint: string;
+  keyName?: string;
+}): Promise<CreatedStorageKey | null> {
+  if (!isMinioAdminConfigured()) {
+    log.info('project_storage_skip_not_configured', { projectId: input.projectId });
+    return null;
+  }
+  try {
+    const existing = await listStorageKeys(input.projectId);
+    if (existing.some((k) => !k.revokedAt)) {
+      // Bucket already in use — still ensure it exists (idempotent).
+      await ensureBucket(bucketNameFor(input.projectId));
+      return null;
+    }
+    return await createStorageKey({
+      projectId: input.projectId,
+      name: input.keyName ?? 'default',
+      createdBy: input.createdBy,
+      publicEndpoint: input.publicEndpoint,
+    });
+  } catch (err) {
+    log.warn('project_storage_auto_setup_failed', {
+      projectId: input.projectId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 export async function revokeStorageKey(projectId: string, keyId: string): Promise<void> {
   await ensureTable();
   const db = getDb();

@@ -28,6 +28,8 @@ interface Props {
   projectId: string;
   endpoint: string;
   initial: StorageKey[];
+  /** One-time flash from project create (secret shown once). */
+  initialCreated?: CreatedKey | null;
 }
 
 /**
@@ -35,13 +37,13 @@ interface Props {
  * is shown ONCE on creation (never stored), so the panel surfaces the full
  * connection details right after minting, with a clear "copy it now" warning.
  */
-export function StorageKeysPanel({ projectId, endpoint, initial }: Props) {
+export function StorageKeysPanel({ projectId, endpoint, initial, initialCreated = null }: Props) {
   const router = useRouter();
   const [keys, setKeys] = useState(initial);
   const [name, setName] = useState('');
   const [pending, setPending] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
-  const [created, setCreated] = useState<CreatedKey | null>(null);
+  const [created, setCreated] = useState<CreatedKey | null>(initialCreated);
   const [openId, setOpenId] = useState<string | null>(null);
 
   async function create(): Promise<void> {

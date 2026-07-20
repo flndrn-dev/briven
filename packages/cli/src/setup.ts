@@ -12,6 +12,7 @@ import { createInterface } from 'node:readline';
 import { ApiCallError } from './api-client.js';
 import { generate, type SchemaSnapshot } from './codegen.js';
 import { runInit } from './commands/init.js';
+import { runStorage } from './commands/storage.js';
 import { mergeEnvFile } from './env-file.js';
 import { resolveOrigins, type Origins } from './origins.js';
 import {
@@ -20,6 +21,7 @@ import {
   fetchMe,
   listRemoteProjects,
   mintAndStoreKey,
+  type ProjectStorageBootstrap,
   type RemoteProject,
 } from './platform.js';
 import { readProjectConfig, writeProjectConfig } from './project-config.js';
@@ -325,7 +327,16 @@ async function createNew(
     cwd: args.cwd,
     projectId: created.id,
     apiOrigin: args.origins.apiOrigin,
+    storage: created.storage,
   });
+
+  if (created.storage) {
+    success('S3 bucket + default storage key ready (saved in .env.local)');
+    step(`bucket  ${created.storage.bucket}`);
+  } else {
+    // Fallback if API didn't return storage (MinIO off / older API).
+    await ensureStorageInSetup(created.id);
+  }
 
   blankLine();
   success('folder wired to your new briven project');
@@ -384,10 +395,33 @@ async function finishExisting(
     apiOrigin: args.origins.apiOrigin,
   });
 
+  // If the project has no storage key yet, mint one (new or old projects).
+  await ensureStorageInSetup(project.id);
+
   blankLine();
   success(`folder wired to existing project ${project.slug}`);
   printDone(args, project.id, project.slug);
   return 0;
+}
+
+/** Bucket + default key + write env — never fails setup if storage is off. */
+async function ensureStorageInSetup(projectId: string): Promise<void> {
+  try {
+    step('ensuring S3 bucket + default storage key…');
+    const code = await runStorage([
+      'setup',
+      '--name',
+      'default',
+      '--write-env',
+      '--project',
+      projectId,
+    ]);
+    if (code !== 0) {
+      step('storage setup skipped or failed — run later: briven storage setup --write-env');
+    }
+  } catch {
+    step('storage setup skipped — run later: briven storage setup --write-env');
+  }
 }
 
 function printDone(args: SetupArgs, projectId: string, slug: string): void {
@@ -404,6 +438,7 @@ async function writeEnvLocal(args: {
   cwd: string;
   projectId: string;
   apiOrigin: string;
+  storage?: ProjectStorageBootstrap | null;
 }): Promise<void> {
   const path = join(args.cwd, '.env.local');
   let existing = '';
@@ -413,10 +448,21 @@ async function writeEnvLocal(args: {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     existing = '';
   }
-  const merged = mergeEnvFile(existing, {
+  const vars: Record<string, string> = {
     BRIVEN_DEPLOYMENT: args.projectId,
     NEXT_PUBLIC_BRIVEN_URL: args.apiOrigin,
-  });
+  };
+  if (args.storage) {
+    vars.BRIVEN_STORAGE_ENDPOINT = args.storage.endpoint;
+    vars.BRIVEN_STORAGE_BUCKET = args.storage.bucket;
+    vars.BRIVEN_STORAGE_ACCESS_KEY = args.storage.accessKey;
+    vars.BRIVEN_STORAGE_SECRET_KEY = args.storage.secretKey;
+    vars.AWS_ENDPOINT_URL = args.storage.endpoint;
+    vars.AWS_ACCESS_KEY_ID = args.storage.accessKey;
+    vars.AWS_SECRET_ACCESS_KEY = args.storage.secretKey;
+    vars.S3_BUCKET = args.storage.bucket;
+  }
+  const merged = mergeEnvFile(existing, vars);
   await writeFile(path, merged, 'utf8');
 }
 

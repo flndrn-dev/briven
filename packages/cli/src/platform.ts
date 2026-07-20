@@ -66,12 +66,28 @@ export async function listRemoteProjects(
   return list.projects;
 }
 
+/** One-time storage credentials returned by POST /v1/projects (standard setup). */
+export interface ProjectStorageBootstrap {
+  endpoint: string;
+  bucket: string;
+  accessKey: string;
+  secretKey: string;
+}
+
 export async function createRemoteProject(
   apiOrigin: string,
   token: string,
   input: { name: string; region?: string; slug?: string },
-): Promise<{ id: string; slug: string }> {
-  const created = await apiCall<{ project: { id: string; slug: string } }>('/v1/projects', {
+): Promise<{ id: string; slug: string; storage: ProjectStorageBootstrap | null }> {
+  const created = await apiCall<{
+    project: { id: string; slug: string };
+    storage?: {
+      endpoint: string;
+      bucket: string;
+      accessKey: string;
+      secretKey: string;
+    } | null;
+  }>('/v1/projects', {
     apiOrigin,
     bearer: token,
     method: 'POST',
@@ -81,7 +97,17 @@ export async function createRemoteProject(
       ...(input.slug ? { slug: input.slug } : {}),
     },
   });
-  return created.project;
+  const s = created.storage;
+  const storage =
+    s && s.endpoint && s.bucket && s.accessKey && s.secretKey
+      ? {
+          endpoint: s.endpoint,
+          bucket: s.bucket,
+          accessKey: s.accessKey,
+          secretKey: s.secretKey,
+        }
+      : null;
+  return { id: created.project.id, slug: created.project.slug, storage };
 }
 
 /**

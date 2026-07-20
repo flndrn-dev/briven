@@ -158,7 +158,7 @@ async function storageStatus(argv: readonly string[]): Promise<number> {
 
 async function storageSetup(argv: readonly string[]): Promise<number> {
   const projectFlag = flagValue(argv, '--project');
-  const name = flagValue(argv, '--name') ?? 'cli-default';
+  const name = flagValue(argv, '--name') ?? 'default';
   const writeEnv = hasFlag(argv, '--write-env');
   const envFile = flagValue(argv, '--env-file') ?? '.env.local';
 
@@ -167,6 +167,24 @@ async function storageSetup(argv: readonly string[]): Promise<number> {
     banner('storage setup');
     step(`project  ${projectId}`);
     step(`api      ${apiOrigin}`);
+
+    // If an active key already exists, reuse it (don't mint a new secret each setup).
+    const listed = await apiCall<ListResponse>(`/v1/projects/${projectId}/storage-keys`, {
+      apiOrigin,
+      apiKey,
+    });
+    const active = listed.keys.filter((k) => k.enabled && !k.revokedAt);
+    if (active.length > 0) {
+      const k = active[0]!;
+      success('bucket already set up');
+      step(`bucket    ${k.bucket}`);
+      step(`endpoint  ${listed.endpoint}`);
+      step(`accessKey ${k.accessKeyId}`);
+      step('(active key exists — secret was shown only at first mint)');
+      step('mint another: briven storage setup --name <label>');
+      return 0;
+    }
+
     step('ensuring MinIO bucket + minting bucket-scoped S3 key…');
 
     const created = await apiCall<CreatedStorageKey>(

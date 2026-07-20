@@ -26,7 +26,7 @@ commands:
   ai                generate schema / function / explain code (schema|function|explain)
 
 lifecycle (convex-style):
-  briven setup              # or: briven setup my-app
+  briven setup              # or: briven setup my-app  (wires project + S3 default key)
   briven deploy             # or: briven dev
 
 options:

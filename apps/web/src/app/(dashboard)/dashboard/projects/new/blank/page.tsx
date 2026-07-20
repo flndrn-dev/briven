@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, apiJson } from '../../../../../../lib/api';
@@ -12,6 +13,14 @@ interface Org {
   slug: string;
   name: string;
   personal: boolean;
+}
+
+interface StorageBootstrap {
+  endpoint: string;
+  bucket: string;
+  accessKey: string;
+  secretKey: string;
+  record?: { name: string };
 }
 
 async function createProject(formData: FormData) {
@@ -32,7 +41,34 @@ async function createProject(formData: FormData) {
     throw new Error(`project create failed (${res.status}): ${body}`);
   }
 
-  const data = (await res.json()) as { project: { id: string } };
+  const data = (await res.json()) as {
+    project: { id: string };
+    storage?: StorageBootstrap | null;
+  };
+
+  // One-time flash: secret is only available at mint. Show on S3 page, then drop.
+  if (data.storage?.secretKey) {
+    const jar = await cookies();
+    jar.set(
+      `briven_storage_once_${data.project.id}`,
+      JSON.stringify({
+        endpoint: data.storage.endpoint,
+        bucket: data.storage.bucket,
+        accessKey: data.storage.accessKey,
+        secretKey: data.storage.secretKey,
+        name: data.storage.record?.name ?? 'default',
+      }),
+      {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 600, // 10 minutes
+      },
+    );
+    redirect(`/dashboard/projects/${data.project.id}/storage?new_key=1`);
+  }
+
   redirect(`/dashboard/projects/${data.project.id}`);
 }
 
@@ -55,9 +91,8 @@ export default async function NewProjectPage() {
       <header className="mb-8">
         <h1 className="font-mono text-xl tracking-tight">new project · new database</h1>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          one project = one postgres schema (your database) + one function runtime. name it
-          here, then fill it with tables from the dashboard (studio) or via{' '}
-          <code>briven deploy</code> from the CLI.
+          one project = one database + function runtime + private S3 bucket (with a default
+          storage key). name it here, then use studio or <code>briven deploy</code> for tables.
         </p>
       </header>
 
