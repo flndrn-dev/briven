@@ -10,6 +10,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  APP_AUTH_PROXY_PREFIX,
   assembleTenantPlugins,
   buildAuthDatabaseHooks,
   buildGenericOAuthConfigs,
@@ -17,7 +18,9 @@ import {
   hostedAuthBaseUrl,
   registrableDomainFromHost,
   resetPasswordUrl,
+  resolveAppOriginForAuthEmail,
   resolvePasskeyRpId,
+  rewriteAuthActionUrlToApp,
   type AuthEventDispatcher,
 } from './auth-tenant-pool.js';
 import {
@@ -110,6 +113,31 @@ describe('buildTenantAuthPlugins — config-gated plugin loading', () => {
     expect(registrableDomainFromHost('code.konnos.org')).toBe('konnos.org');
     expect(registrableDomainFromHost('*.mavifinans.sh')).toBe('mavifinans.sh');
     expect(registrableDomainFromHost('localhost')).toBe('localhost');
+  });
+
+  test('resolveAppOriginForAuthEmail prefers callback host over localhost allowlist', () => {
+    expect(
+      resolveAppOriginForAuthEmail('https://pay.mavifinans.sh/dashboard', [
+        'http://localhost:3000',
+        'https://pay.mavifinans.sh',
+      ]),
+    ).toBe('https://pay.mavifinans.sh');
+  });
+
+  test('rewriteAuthActionUrlToApp puts magic-link verify on the project host', () => {
+    const betterAuthUrl =
+      'https://api.briven.tech/v1/auth-tenant/magic-link/verify?token=tok123&callbackURL=' +
+      encodeURIComponent('https://pay.mavifinans.sh/dashboard');
+    const out = rewriteAuthActionUrlToApp(
+      betterAuthUrl,
+      'p_mavi',
+      { customAuthDomain: null },
+      ['https://pay.mavifinans.sh', 'http://localhost:3000'],
+    );
+    expect(out.startsWith('https://pay.mavifinans.sh' + APP_AUTH_PROXY_PREFIX)).toBe(true);
+    expect(out).toContain('/magic-link/verify');
+    expect(out).toContain('token=tok123');
+    expect(out).not.toContain('api.briven.tech');
   });
 
   test('loads the magic-link plugin when enabled alone', () => {

@@ -25,7 +25,10 @@ description: "Clerk-simple Briven end-user login. Use when adding sign-in (magic
    - OTP **send:** `POST /email-otp/send-verification-otp` + `{ email, type: "sign-in" }`
    - OTP **sign-in verify:** `POST /sign-in/email-otp` + `{ email, otp }`
    - OTP **never:** `/sign-in/email-otp/send-verification-otp` (404) or `/sign-in/email-otp/verify` (404)
-   - Magic link body: **`callbackURL`** (SDK maps `redirectTo` → callbackURL)
+   - Magic link body: **`callbackURL`** must be the real app URL (e.g. `https://pay.example.com/dashboard`)
+   - Magic link **email click** opens on the **project host**, not api.briven.tech:
+     `https://YOUR_APP/api/auth/v1/auth-tenant/magic-link/verify?token=…&callbackURL=…`
+     App **must** proxy `/api/auth/v1/auth-tenant/*` → api (scaffold middleware / Konnos pattern).
    - Passkey options: **GET** `/passkey/generate-authenticate-options` (POST = 404 by design)
 
 ---

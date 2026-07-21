@@ -17,18 +17,33 @@ const BRIVEN_PROJECT_ID = process.env.NEXT_PUBLIC_BRIVEN_PROJECT_ID!;
 const BRIVEN_AUTH_KEY =
   process.env.BRIVEN_AUTH_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_BRIVEN_AUTH_KEY!;
 
+/**
+ * First-party proxy: browser + magic-link emails hit YOUR host, not a bare
+ * api.briven.tech page. Magic links look like:
+ *   https://your.app/api/auth/v1/auth-tenant/magic-link/verify?token=…
+ */
 export async function middleware(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith('/api/auth/')) return NextResponse.next();
 
-  const url = new URL(
-    req.nextUrl.pathname.replace('/api/auth', '/v1/auth-tenant'),
-    BRIVEN_API_ORIGIN,
-  );
+  let path = req.nextUrl.pathname;
+  // Canonical (emails + SDK): /api/auth/v1/auth-tenant/foo → /v1/auth-tenant/foo
+  if (path.startsWith('/api/auth/v1/auth-tenant')) {
+    path = path.slice('/api/auth'.length);
+  } else {
+    // Short form: /api/auth/foo → /v1/auth-tenant/foo
+    path = path.replace(/^\\/api\\/auth/, '/v1/auth-tenant');
+  }
+
+  const url = new URL(path, BRIVEN_API_ORIGIN);
   url.search = req.nextUrl.search;
 
   const headers = new Headers(req.headers);
   headers.set('x-briven-project-id', BRIVEN_PROJECT_ID);
   headers.set('authorization', \`Bearer \${BRIVEN_AUTH_KEY}\`);
+  // Pass project id in query for bare GET email clicks (no Authorization header).
+  if (!url.searchParams.has('briven_project_id')) {
+    url.searchParams.set('briven_project_id', BRIVEN_PROJECT_ID);
+  }
 
   return fetch(url, {
     method: req.method,

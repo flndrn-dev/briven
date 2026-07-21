@@ -112,16 +112,22 @@ function authSecret(): string {
 // ─── hosted-pages URL helpers ────────────────────────────────────────────
 
 /**
- * Base URL used in magic-link / verify / reset emails.
+ * First-party proxy path on the **customer app** that forwards to
+ * `/v1/auth-tenant/*` (see `briven auth scaffold` + Konnos).
+ * Magic-link verify must open here so the browser shows the project host
+ * (valid cert on their domain) and the session cookie can be first-party.
+ */
+export const APP_AUTH_PROXY_PREFIX = '/api/auth/v1/auth-tenant';
+
+/**
+ * Base URL used for **hosted pages** (reset password UI) and as last-resort
+ * fallback when no app origin is known.
  *
  * - Custom domain (customer owns DNS+TLS): `https://auth.their.app`
- * - Default production: **API origin** (`https://api.briven.tech`) — has a valid
- *   public cert. Per-tenant `https://<projectId>.auth.briven.tech` needs a
- *   wildcard LE cert (DNS-01). Without it Traefik serves DEFAULT CERT and
- *   browsers block clicks (ERR_CERT_AUTHORITY_INVALID / HSTS). Tenant is
- *   still resolved via `briven_project_id` query (see `tagTenantUrl`) or
- *   `x-briven-project-id`. Affects **all** projects, not one tenant.
- * - Development: API origin / localhost.
+ * - Magic-link / email-verify **action** links prefer the app origin via
+ *   `rewriteAuthActionUrlToApp` — not this host (users must not land on a
+ *   bare api.briven.tech JSON page).
+ * - Fallback: API origin (valid public cert).
  */
 export function hostedAuthBaseUrl(
   projectId: string,
@@ -133,6 +139,112 @@ export function hostedAuthBaseUrl(
   // projectId reserved for future path-style hosted pages if needed
   void projectId;
   return env.BRIVEN_API_ORIGIN;
+}
+
+function isLocalhostOrigin(origin: string): boolean {
+  try {
+    const h = new URL(origin).hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h.endsWith('.localhost');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pick the best absolute https origin for email click-through links.
+ * Prefer callbackURL's origin (where the user asked to land), else the first
+ * non-localhost allowed app domain, else null (caller falls back).
+ */
+export function resolveAppOriginForAuthEmail(
+  callbackOrAbsoluteUrl: string | null | undefined,
+  projectOrigins: string[],
+): string | null {
+  if (callbackOrAbsoluteUrl) {
+    try {
+      const u = new URL(callbackOrAbsoluteUrl);
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        // Prefer real public host over localhost when a prod origin is registered
+        if (!isLocalhostOrigin(u.origin)) return u.origin;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  for (const raw of projectOrigins) {
+    try {
+      const normalised = raw.replace('://*.', '://');
+      const o = new URL(normalised).origin;
+      if (!isLocalhostOrigin(o) && (o.startsWith('https:') || o.startsWith('http:'))) {
+        return o;
+      }
+    } catch {
+      // skip
+    }
+  }
+  // Last resort among allowlist: localhost (dev)
+  for (const raw of projectOrigins) {
+    try {
+      const o = new URL(raw.replace('://*.', '://')).origin;
+      if (isLocalhostOrigin(o)) return o;
+    } catch {
+      // skip
+    }
+  }
+  if (callbackOrAbsoluteUrl) {
+    try {
+      const u = new URL(callbackOrAbsoluteUrl);
+      if (u.protocol === 'http:' || u.protocol === 'https:') return u.origin;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+/**
+ * Rewrite Better Auth action URLs (magic-link verify, email verify) so the
+ * email link opens on the **customer project host**, not api.briven.tech.
+ *
+ * Shape:
+ *   https://pay.example.com/api/auth/v1/auth-tenant/magic-link/verify?token=…&callbackURL=…&briven_project_id=…
+ *
+ * The app must proxy `/api/auth/v1/auth-tenant/*` → api (scaffold + Konnos).
+ * Without a proxy the click 404s — still better than a dead API landing page
+ * if the app follows the one-path setup. Fallback: customAuthDomain, then API.
+ */
+export function rewriteAuthActionUrlToApp(
+  url: string,
+  projectId: string,
+  config?: { customAuthDomain?: string | null },
+  projectOrigins: string[] = [],
+): string {
+  try {
+    const original = new URL(url);
+    const callback = original.searchParams.get('callbackURL');
+    const appOrigin = resolveAppOriginForAuthEmail(callback, projectOrigins);
+
+    if (appOrigin) {
+      // /v1/auth-tenant/magic-link/verify → /api/auth/v1/auth-tenant/magic-link/verify
+      let suffix = original.pathname;
+      const marker = '/v1/auth-tenant';
+      const idx = suffix.indexOf(marker);
+      if (idx >= 0) {
+        suffix = suffix.slice(idx + marker.length) || '/';
+      }
+      if (!suffix.startsWith('/')) suffix = `/${suffix}`;
+      const path = `${APP_AUTH_PROXY_PREFIX}${suffix}`;
+      return new URL(path + original.search, appOrigin).toString();
+    }
+
+    if (config?.customAuthDomain) {
+      return rewriteToHostedUrl(url, projectId, config);
+    }
+    // No app origin registered yet — keep API host (valid TLS) rather than
+    // broken *.auth.briven.tech. Still tag tenant for resolveTenant.
+    return rewriteToHostedUrl(url, projectId, config);
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -315,11 +427,10 @@ export function buildTenantAuthPlugins(
       magicLink({
         expiresIn: p.magicLink.expiryMinutes * 60,
         sendMagicLink: async ({ email, url }) => {
-          // Tag the click-through link with the tenant id — a browser click
-          // can't send the x-briven-project-id header the bridge reads.
-          // Also rewrite to the project's custom auth domain when configured.
-          const hostedUrl = rewriteToHostedUrl(url, projectId, config);
-          await sendBrivenAuthMagicLink(projectId, email, tagTenantUrl(hostedUrl, projectId));
+          // Email must open on the **project URL** (via first-party proxy), not
+          // a bare api.briven.tech page. Tenant id stays in the query string.
+          const appUrl = rewriteAuthActionUrlToApp(url, projectId, config, projectOrigins);
+          await sendBrivenAuthMagicLink(projectId, email, tagTenantUrl(appUrl, projectId));
         },
       }) as unknown as TenantAuthPlugin,
     );
@@ -937,8 +1048,12 @@ async function createAuthInstance(projectId: string) {
       sendOnSignUp: env.BRIVEN_ENV === 'production',
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
-        const hostedUrl = rewriteToHostedUrl(url, projectId, config);
-        await sendBrivenAuthEmailVerification(projectId, user.email, hostedUrl);
+        const appUrl = rewriteAuthActionUrlToApp(url, projectId, config, projectOrigins);
+        await sendBrivenAuthEmailVerification(
+          projectId,
+          user.email,
+          tagTenantUrl(appUrl, projectId),
+        );
       },
     },
     socialProviders,
