@@ -9,7 +9,7 @@ description: "Clerk-simple Briven end-user login. Use when adding sign-in (magic
 **Audience:** agents + flndrn (not a coder). Prefer plain steps.
 
 **Docs:** https://docs.briven.tech/auth  
-**Audit (why this path):** `docs/AUTH-CLERK-SIMPLE-AUDIT.md`  
+**Audit (why this path):** `AUTH-CLERK-SIMPLE-AUDIT.md`  
 **Platform:** `https://api.briven.tech` · bridge `/v1/auth-tenant/*`
 
 ---

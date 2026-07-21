@@ -93,7 +93,7 @@ BRIVEN_STORAGE_SECRET_KEY=…
 Do **not** spend hours re-toggling providers if they already show ON. Do **not** invent Clerk.  
 If the repo is fixed but the live site is broken → **redeploy the app** (GitHub ≠ browser JS).
 
-Full audit: `docs/AUTH-CLERK-SIMPLE-AUDIT.md`. Agent skill: `.claude/skills/briven-auth/SKILL.md`.
+Full audit: `AUTH-CLERK-SIMPLE-AUDIT.md`. Agent skill: `.claude/skills/briven-auth/SKILL.md`.
 
 ```ts
 import { createBrivenAuth } from '@briven/auth';
