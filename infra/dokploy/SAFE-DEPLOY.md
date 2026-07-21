@@ -1,12 +1,21 @@
 # Briven France — safe deploy (O.1)
 
+## Git source of truth (2026-07)
+
+- **Konnos only:** `https://code.konnos.org/flndrn/briven.git`
+- **Not GitHub** for deploys (local `origin` → Konnos; use `./scripts/git-push-konnos.sh`)
+- Dokploy compose **briven-france** `customGitUrl` = that Konnos URL, branch `main`, `autoDeploy` on
+- Push-to-deploy webhook (add under Konnos repo → Webhooks if not already):
+  `POST https://admin.loowii.com/api/deploy/compose/<compose refreshToken>`
+  (token is the compose `refreshToken` in Dokploy; same family as prior Deploy-to-Dokploy secret)
+
 ## Cadence (flndrn hard rule)
 
 1. Finish a **large chunk** of work first (many related changes, local tests).
 2. **One** deploy for that whole chunk — never after every small edit.
 3. **Then** run live testing.
 
-`git push` with `autoDeploy: false` does **not** rebuild France. Deploy only when the batch is ready (or flndrn says “deploy”).
+Prefer batching even when autoDeploy is on — stacked full rebuilds thrash France.
 
 ## Why this exists
 
@@ -32,6 +41,7 @@ On France (`root@187.124.64.116`):
 
 ```bash
 cd /etc/dokploy/compose/briven-brivenfrance-uilsk6/code
+# origin on the server should be Konnos (customGit); pull main
 git fetch origin main && git checkout main && git pull origin main
 
 # Only what you changed — examples:
