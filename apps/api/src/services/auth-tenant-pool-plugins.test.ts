@@ -15,7 +15,9 @@ import {
   buildGenericOAuthConfigs,
   buildTenantAuthPlugins,
   hostedAuthBaseUrl,
+  registrableDomainFromHost,
   resetPasswordUrl,
+  resolvePasskeyRpId,
   type AuthEventDispatcher,
 } from './auth-tenant-pool.js';
 import {
@@ -64,6 +66,30 @@ describe('buildTenantAuthPlugins — config-gated plugin loading', () => {
     expect(ids).toContain('passkey');
     expect(ids).not.toContain('magic-link');
     expect(ids).not.toContain('email-otp');
+  });
+
+  test('resolvePasskeyRpId uses customer allowed origin, not briven.tech', () => {
+    expect(
+      resolvePasskeyRpId(
+        { customAuthDomain: null },
+        ['https://code.konnos.org', 'http://localhost:3000'],
+      ),
+    ).toBe('konnos.org');
+    expect(
+      resolvePasskeyRpId(
+        { customAuthDomain: null },
+        ['https://*.mavifinans.sh', 'https://pay.mavifinans.sh'],
+      ),
+    ).toBe('mavifinans.sh');
+    expect(resolvePasskeyRpId({ customAuthDomain: 'auth.murphus.eu' }, [])).toBe(
+      'murphus.eu',
+    );
+  });
+
+  test('registrableDomainFromHost strips subdomains', () => {
+    expect(registrableDomainFromHost('code.konnos.org')).toBe('konnos.org');
+    expect(registrableDomainFromHost('*.mavifinans.sh')).toBe('mavifinans.sh');
+    expect(registrableDomainFromHost('localhost')).toBe('localhost');
   });
 
   test('loads the magic-link plugin when enabled', () => {

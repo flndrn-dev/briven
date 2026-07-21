@@ -217,6 +217,82 @@ function parentDomainFromAuthSubdomain(domain: string): string | undefined {
 }
 
 /**
+ * Approximate the registrable domain (eTLD+1) for WebAuthn rpID.
+ * WebAuthn requires rpID to be a suffix of the page host — e.g. for
+ * `code.konnos.org` the rpID must be `konnos.org` or `code.konnos.org`,
+ * NEVER `briven.tech` (browsers reject that as a security error).
+ *
+ * Not a full Public Suffix List: last-two labels for normal TLDs, last-three
+ * for a small set of multi-part TLDs (co.uk, com.au, …). Good enough for
+ * customer app domains on the allowlist.
+ */
+export function registrableDomainFromHost(host: string): string | null {
+  const h = host.trim().toLowerCase().replace(/^\*\./, '');
+  if (!h || h.includes('..') || h.startsWith('.') || h.endsWith('.')) return null;
+  if (h === 'localhost' || h.endsWith('.localhost')) return 'localhost';
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return h; // IPv4
+  const parts = h.split('.').filter(Boolean);
+  if (parts.length < 2) return h;
+  const multiPartTlds = new Set([
+    'co.uk',
+    'org.uk',
+    'ac.uk',
+    'gov.uk',
+    'com.au',
+    'net.au',
+    'org.au',
+    'co.nz',
+    'com.br',
+    'co.jp',
+    'com.mx',
+    'co.za',
+  ]);
+  const last2 = parts.slice(-2).join('.');
+  if (multiPartTlds.has(last2) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return last2;
+}
+
+/**
+ * Pick the WebAuthn rpID for a tenant.
+ *
+ * Priority:
+ *   1. customAuthDomain parent (auth.example.com → example.com)
+ *   2. first non-localhost allowed app origin’s registrable domain
+ *   3. briven.tech in production / localhost in dev (hosted apps only)
+ */
+export function resolvePasskeyRpId(
+  config: { customAuthDomain?: string | null },
+  projectOrigins: string[],
+): string {
+  const custom = config.customAuthDomain?.trim() || null;
+  if (custom) {
+    return parentDomainFromAuthSubdomain(custom) ?? custom;
+  }
+
+  const candidates: string[] = [];
+  for (const raw of projectOrigins) {
+    try {
+      // wildcards stored as https://*.example.com
+      const normalised = raw.replace('://*.', '://');
+      const host = new URL(normalised).hostname;
+      const reg = registrableDomainFromHost(host);
+      if (reg && reg !== 'localhost') candidates.push(reg);
+    } catch {
+      // skip malformed
+    }
+  }
+
+  // Prefer the customer's own domain over briven.tech if both appear.
+  const nonBriven = candidates.find((d) => d !== 'briven.tech' && !d.endsWith('.briven.tech'));
+  if (nonBriven) return nonBriven;
+  if (candidates[0]) return candidates[0];
+
+  return env.BRIVEN_ENV === 'production' ? 'briven.tech' : 'localhost';
+}
+
+/**
  * Build the per-tenant Better Auth plugins array from the project's stored
  * auth config. ONLY the passwordless methods the customer has toggled on are
  * loaded — so `POST /v1/auth-tenant/sign-in/magic-link` (and the OTP / passkey
@@ -229,6 +305,7 @@ function parentDomainFromAuthSubdomain(domain: string): string | undefined {
 export function buildTenantAuthPlugins(
   projectId: string,
   config: AuthConfig,
+  projectOrigins: string[] = [],
 ): TenantAuthPlugin[] {
   const plugins: TenantAuthPlugin[] = [];
   const p = config.providers;
@@ -262,17 +339,11 @@ export function buildTenantAuthPlugins(
 
   if (p.passkey.enabled) {
     // rpID must be a registrable domain suffix of the page origin.
-    // - hosted apps on *.briven.tech → briven.tech
-    // - custom auth.example.com → example.com (parent of auth.*)
-    // Do NOT pin `origin` to the hosted auth URL: verify uses the browser's
-    // Origin header (e.g. https://pay.apps.briven.tech). Pinning broke
-    // multi-origin apps (Mavi passkey 2026-07-21).
-    const custom = config.customAuthDomain?.trim() || null;
-    const rpID = custom
-      ? (parentDomainFromAuthSubdomain(custom) ?? custom)
-      : env.BRIVEN_ENV === 'production'
-        ? 'briven.tech'
-        : 'localhost';
+    // Derive from allowed app domains (e.g. code.konnos.org → konnos.org).
+    // Hardcoding briven.tech broke every customer-domain passkey (browser
+    // SecurityError: rpId is not a valid domain for this origin).
+    // Do NOT pin `origin` on the plugin: verify uses the browser Origin header.
+    const rpID = resolvePasskeyRpId(config, projectOrigins);
     plugins.push(
       passkey({
         rpID,
@@ -794,7 +865,7 @@ async function createAuthInstance(projectId: string) {
   // genericOAuth. Without this the instance ignored the config and only ever
   // served email+password (the magic-link 404 bug).
   const config = await getAuthConfig(projectId);
-  const passwordlessPlugins = buildTenantAuthPlugins(projectId, config);
+  const passwordlessPlugins = buildTenantAuthPlugins(projectId, config, projectOrigins);
   const socialProviders = await resolveSocialProviders(projectId, config);
   const oauthSecrets = await resolveOAuthSecrets(projectId, config);
   const genericOAuthConfigs = buildGenericOAuthConfigs(config, oauthSecrets);

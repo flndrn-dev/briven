@@ -585,6 +585,41 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     return (await res.json()) as T;
   }
 
+  /**
+   * POST that surfaces HTTP status. Needed for magic-link / OTP send so a 404
+   * or 500 is not reported as ok:true (Better Auth returns empty/error JSON).
+   */
+  async function postRaw(
+    path: string,
+    body: Record<string, unknown> | null,
+  ): Promise<{ ok: boolean; status: number; json: unknown; message?: string }> {
+    const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'content-type': 'application/json',
+        'x-briven-project-id': opts.projectId,
+        authorization: `Bearer ${opts.publicKey}`,
+      },
+      body: body === null ? undefined : JSON.stringify(body),
+    });
+    let json: unknown = null;
+    try {
+      json = await res.json();
+    } catch {
+      json = null;
+    }
+    const message =
+      json && typeof json === 'object'
+        ? String(
+            (json as { message?: string; error?: { message?: string } }).message ??
+              (json as { error?: { message?: string } }).error?.message ??
+              '',
+          ) || undefined
+        : undefined;
+    return { ok: res.ok, status: res.status, json, message };
+  }
+
   async function get<T>(path: string): Promise<T> {
     const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
       credentials: 'include',
@@ -673,24 +708,64 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async magicLink(input) {
         try {
-          await post<unknown>('/sign-in/magic-link', input as unknown as Record<string, unknown>);
-          return { ok: true };
+          // Better Auth field is `callbackURL` (not redirectTo). Map the SDK name.
+          const body = await postRaw('/sign-in/magic-link', {
+            email: input.email,
+            ...(input.redirectTo ? { callbackURL: input.redirectTo } : {}),
+          });
+          if (!body.ok) {
+            return {
+              ok: false as const,
+              code: body.status === 429 ? ('rate_limited' as const) : ('unknown' as const),
+              message: body.message ?? 'magic link send failed',
+            };
+          }
+          return { ok: true as const };
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }
       },
       async otpRequest(input) {
         try {
-          await post<unknown>('/sign-in/email-otp/send-verification-otp', input as unknown as Record<string, unknown>);
-          return { ok: true };
+          // Better Auth emailOTP: POST /email-otp/send-verification-otp
+          // (NOT /sign-in/email-otp/send-verification-otp — that path is 404).
+          const body = await postRaw('/email-otp/send-verification-otp', {
+            email: input.email,
+            type: 'sign-in',
+          });
+          if (!body.ok) {
+            return {
+              ok: false as const,
+              code: body.status === 429 ? ('rate_limited' as const) : ('unknown' as const),
+              message: body.message ?? 'otp send failed',
+            };
+          }
+          return { ok: true as const };
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }
       },
       async otpVerify(input) {
         try {
-          const body = await post<unknown>('/sign-in/email-otp/verify', input as unknown as Record<string, unknown>);
-          return asSignInResult(body);
+          // Better Auth emailOTP sign-in: POST /sign-in/email-otp with { email, otp }
+          // (NOT /sign-in/email-otp/verify — that path is 404).
+          const body = await postRaw('/sign-in/email-otp', {
+            email: input.email,
+            otp: input.otp,
+          });
+          if (!body.ok) {
+            return {
+              ok: false as const,
+              code:
+                body.status === 429
+                  ? ('rate_limited' as const)
+                  : body.status === 400 || body.status === 401
+                    ? ('invalid_credentials' as const)
+                    : ('unknown' as const),
+              message: body.message ?? 'otp verify failed',
+            };
+          }
+          return asSignInResult(body.json);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }

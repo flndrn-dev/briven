@@ -197,7 +197,8 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleMagic(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      await post('/sign-in/magic-link', { email });
+      // Better Auth expects callbackURL (post-click land), not a bare email-only body.
+      await post('/sign-in/magic-link', { email, callbackURL });
       setMagicSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'magic-link request failed');
@@ -207,7 +208,8 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleOtpRequest(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      await post('/sign-in/email-otp/send-verification-otp', { email });
+      // Better Auth: POST /email-otp/send-verification-otp (NOT under /sign-in/…).
+      await post('/email-otp/send-verification-otp', { email, type: 'sign-in' });
       setOtpRequested(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'otp request failed');
@@ -217,7 +219,8 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleOtpVerify(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      await post('/sign-in/email-otp/verify', { email, otp });
+      // Better Auth: POST /sign-in/email-otp with { email, otp }.
+      await post('/sign-in/email-otp', { email, otp });
       router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'otp verify failed');
