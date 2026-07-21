@@ -112,11 +112,16 @@ function authSecret(): string {
 // ─── hosted-pages URL helpers ────────────────────────────────────────────
 
 /**
- * Base URL of a project's hosted auth pages. Mirrors the `authUrl` the
- * `/auth/enable` endpoint hands back: `https://<projectId>.auth.briven.tech`
- * in production, and the local api origin in development so reset links a
- * developer clicks stay on localhost. Kept as a single source of truth so
- * `resetPasswordUrl` (below) and the hosted-pages deploy agree on the shape.
+ * Base URL used in magic-link / verify / reset emails.
+ *
+ * - Custom domain (customer owns DNS+TLS): `https://auth.their.app`
+ * - Default production: **API origin** (`https://api.briven.tech`) — has a valid
+ *   public cert. Per-tenant `https://<projectId>.auth.briven.tech` needs a
+ *   wildcard LE cert (DNS-01). Without it Traefik serves DEFAULT CERT and
+ *   browsers block clicks (ERR_CERT_AUTHORITY_INVALID / HSTS). Tenant is
+ *   still resolved via `briven_project_id` query (see `tagTenantUrl`) or
+ *   `x-briven-project-id`. Affects **all** projects, not one tenant.
+ * - Development: API origin / localhost.
  */
 export function hostedAuthBaseUrl(
   projectId: string,
@@ -125,9 +130,8 @@ export function hostedAuthBaseUrl(
   if (config?.customAuthDomain) {
     return `https://${config.customAuthDomain}`;
   }
-  if (env.BRIVEN_ENV === 'production') {
-    return `https://${projectId}.auth.briven.tech`;
-  }
+  // projectId reserved for future path-style hosted pages if needed
+  void projectId;
   return env.BRIVEN_API_ORIGIN;
 }
 

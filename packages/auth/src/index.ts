@@ -51,9 +51,10 @@ export interface CreateBrivenAuthOptions {
    */
   readonly apiOrigin?: string;
   /**
-   * Override for the hosted-pages base URL. Defaults to
-   * `https://<projectId>.auth.briven.tech`. Used by `signIn.social()` to
-   * build redirect URLs that survive the OAuth handshake.
+   * Override for the hosted-pages base URL. Defaults to the API origin
+   * (`https://api.briven.tech`) so magic-link / hosted flows use a host
+   * with a valid public TLS cert. Per-project `*.auth.briven.tech` needs
+   * a wildcard cert; without it browsers block the link.
    */
   readonly authUrl?: string;
   /**
@@ -566,7 +567,8 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
   if (!opts.projectId) throw new Error('@briven/auth: projectId is required');
   if (!opts.publicKey) throw new Error('@briven/auth: publicKey is required');
   const apiOrigin = opts.apiOrigin ?? DEFAULT_API_ORIGIN;
-  const authUrl = opts.authUrl ?? `https://${opts.projectId}.auth.briven.tech`;
+  // Prefer API host (valid TLS) over p_….auth.briven.tech until wildcard cert is live.
+  const authUrl = opts.authUrl ?? apiOrigin;
   const fetchImpl = opts.fetch ?? globalThis.fetch.bind(globalThis);
 
   async function post<T>(path: string, body: Record<string, unknown> | null): Promise<T> {
@@ -1702,8 +1704,10 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       }
     },
     hostedPageURL(flow, callbackURL, locale) {
-      const u = new URL(`https://${opts.projectId}.auth.briven.tech`);
-      u.pathname = `/${flow}`;
+      // Hosted flows on API origin (valid cert). Tenant via query + path.
+      const u = new URL(authUrl);
+      u.pathname = `/auth/${opts.projectId}/${flow}`;
+      u.searchParams.set('briven_project_id', opts.projectId);
       if (callbackURL) {
         u.searchParams.set('callbackURL', callbackURL);
       }

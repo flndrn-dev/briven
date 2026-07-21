@@ -533,7 +533,10 @@ authServiceRouter.post(
     return c.json({
       ok: true,
       tables: statements.filter((s) => s.startsWith('CREATE TABLE')).length,
-      authUrl: `https://${projectId}.auth.briven.tech`,
+      // Public API host (valid TLS). Per-project *.auth.briven.tech only when
+      // wildcard cert + router are live; until then magic-link emails must not
+      // use the broken Traefik-default host (2026-07-21).
+      authUrl: env.BRIVEN_API_ORIGIN,
       basePath: '/v1/auth-tenant',
     });
   },

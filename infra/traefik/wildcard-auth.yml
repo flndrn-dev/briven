@@ -1,0 +1,37 @@
+# Wildcard hosted auth: https://<projectId>.auth.briven.tech → API
+# Requires Traefik certificatesResolvers.cloudflare (DNS-01) + CF_DNS_API_TOKEN
+# with Zone:DNS:Edit on briven.tech. Until the token can see zone briven.tech,
+# magic-link emails use api.briven.tech (valid HTTP-01 cert) via hostedAuthBaseUrl.
+#
+# Deploy:
+#   scp infra/traefik/wildcard-auth.yml root@host:/etc/dokploy/traefik/dynamic/wildcard-auth.yml
+#   # ensure traefik.yml has cloudflare resolver + container has CF_DNS_API_TOKEN
+
+http:
+  routers:
+    briven-auth-http:
+      rule: "HostRegexp(`^.+\\.auth\\.briven\\.tech$`)"
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https
+      service: briven-auth-api
+
+    briven-auth-https:
+      rule: "HostRegexp(`^.+\\.auth\\.briven\\.tech$`)"
+      entryPoints:
+        - websecure
+      service: briven-auth-api
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: "auth.briven.tech"
+            sans:
+              - "*.auth.briven.tech"
+
+  services:
+    briven-auth-api:
+      loadBalancer:
+        servers:
+          - url: "http://briven-brivenfrance-uilsk6-api-1:3001"
+        passHostHeader: true
