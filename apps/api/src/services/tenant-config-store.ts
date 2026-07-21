@@ -262,12 +262,20 @@ function deepFreeze<T>(obj: T): T {
   return obj;
 }
 
+/**
+ * Starter pack after Enable Auth — **passwordless ON by default** (Clerk-simple).
+ * Email+password stays on. OAuth stays off until secrets exist.
+ * Turning providers off is still a dashboard/API choice; new projects must
+ * work with magic link / OTP / passkey without a second "toggle providers" step
+ * (fleet pain 2026-07 — agents and owners re-toggled forever while defaults
+ * left passwordless OFF).
+ */
 export const DEFAULT_AUTH_CONFIG: AuthConfig = deepFreeze({
   providers: {
     emailPassword: { enabled: true },
-    magicLink: { enabled: false, expiryMinutes: 15 },
-    emailOtp: { enabled: false, codeLength: 6, expiryMinutes: 5 },
-    passkey: { enabled: false },
+    magicLink: { enabled: true, expiryMinutes: 15 },
+    emailOtp: { enabled: true, codeLength: 6, expiryMinutes: 5 },
+    passkey: { enabled: true },
     google: { enabled: false, clientId: null },
     github: { enabled: false, clientId: null },
     discord: { enabled: false, clientId: null },

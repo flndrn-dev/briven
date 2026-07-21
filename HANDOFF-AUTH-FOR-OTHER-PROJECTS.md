@@ -86,7 +86,14 @@ BRIVEN_STORAGE_SECRET_KEY=…
 
 ---
 
-## 4. Auth (minimal)
+## 4. Auth (minimal — Clerk-simple)
+
+**One path:** Enable Auth once → starter pack turns **magic + OTP + passkey ON** → mint `pk_briven_auth_…` → Allowed Domains → scaffold → deploy the **app**.
+
+Do **not** spend hours re-toggling providers if they already show ON. Do **not** invent Clerk.  
+If the repo is fixed but the live site is broken → **redeploy the app** (GitHub ≠ browser JS).
+
+Full audit: `docs/AUTH-CLERK-SIMPLE-AUDIT.md`. Agent skill: `.claude/skills/briven-auth/SKILL.md`.
 
 ```ts
 import { createBrivenAuth } from '@briven/auth';
@@ -99,6 +106,10 @@ export const auth = createBrivenAuth({
 // Fastest pilot UI
 window.location.assign(auth.hostedPageURL('sign-in', '/dashboard'));
 ```
+
+**OTP wire paths (do not invent):**
+- send: `POST /v1/auth-tenant/email-otp/send-verification-otp` `{ email, type: "sign-in" }`
+- verify sign-in: `POST /v1/auth-tenant/sign-in/email-otp` `{ email, otp }`
 
 **Dashboard:** project → Auth → Enable → API keys → create **read-write** → copy `pk_briven_auth_…`.
 

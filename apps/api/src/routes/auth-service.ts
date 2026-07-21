@@ -515,6 +515,39 @@ authServiceRouter.post(
       );
     }
 
+    // Clerk-simple starter pack: persist passwordless ON so first login works
+    // without a second "toggle providers" step. Defaults alone only apply when
+    // no config row exists; write explicitly so re-enable also heals OFF fleets.
+    try {
+      await updateAuthConfig(projectId, {
+        providers: {
+          emailPassword: { enabled: true },
+          magicLink: { enabled: true, expiryMinutes: 15 },
+          emailOtp: { enabled: true, codeLength: 6, expiryMinutes: 5 },
+          passkey: { enabled: true },
+        },
+      });
+      await invalidateAuthInstance(projectId);
+    } catch (err) {
+      log.warn('briven_auth_enable_starter_pack_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Dev-friendly guest list so localhost sign-in works without a dashboard hop.
+    try {
+      await addOrigin({
+        projectId,
+        origin: 'http://localhost:3000',
+        isWildcard: false,
+        createdBy: actorId,
+        unlimited: false,
+      });
+    } catch {
+      // already present or cap — non-fatal
+    }
+
     const cfIp = c.req.header('cf-connecting-ip') ?? null;
     await audit({
       actorId,
@@ -525,6 +558,7 @@ authServiceRouter.post(
       metadata: {
         statements: statements.length,
         via: c.get('apiKeyId') ? 'api_key' : 'session',
+        starterPack: ['emailPassword', 'magicLink', 'emailOtp', 'passkey'],
       },
     });
 
@@ -538,6 +572,18 @@ authServiceRouter.post(
       // use the broken Traefik-default host (2026-07-21).
       authUrl: env.BRIVEN_API_ORIGIN,
       basePath: '/v1/auth-tenant',
+      // What is live after this call — agents must not re-ask the owner to toggle.
+      providers: {
+        emailPassword: true,
+        magicLink: true,
+        emailOtp: true,
+        passkey: true,
+      },
+      next: [
+        'mint pk_briven_auth_… (dashboard Auth → API keys, or MCP auth_mint_public_key)',
+        'add production Origin under Auth → Allowed Domains (localhost:3000 pre-seeded)',
+        'wire @briven/auth or briven auth scaffold — only offer UI for enabled providers',
+      ],
     });
   },
 );

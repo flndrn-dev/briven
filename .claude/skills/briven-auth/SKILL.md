@@ -1,135 +1,167 @@
 ---
 name: briven-auth
-description: "Wire Briven end-user sign-in into a client app (@briven/auth, hosted pages, scaffold). Use when the user names Briven and wants login/signup/sessions — not admin brk_ API keys alone."
+description: "Clerk-simple Briven end-user login. Use when adding sign-in (magic link, OTP, passkey, password) to ANY app on Briven — Konnos, Mavi, future projects. Never invent Clerk/Firebase."
 ---
 
-# Briven — User Authentication (agent playbook)
+# Briven Auth — one path that works (Clerk-simple)
 
-End-user auth for apps on Briven. Sessions are **httpOnly cookies** set by the Briven API. The browser-safe key is `pk_briven_auth_…` (not `brk_…`).
+**Goal:** first login works without an 8-hour agent war.  
+**Audience:** agents + flndrn (not a coder). Prefer plain steps.
 
 **Docs:** https://docs.briven.tech/auth  
-**Manual go-live checklist (human):** `AUTH-GO-LIVE-CHECKLIST.md` in the Briven repo.  
-**Pilot:** `examples/auth-pilot/`
+**Audit (why this path):** `docs/AUTH-CLERK-SIMPLE-AUDIT.md`  
+**Platform:** `https://api.briven.tech` · bridge `/v1/auth-tenant/*`
 
-## When to use
+---
 
-- “Add Briven auth / login / sign-up to this app”
-- Protect routes with a signed-in user
-- Scaffold Next.js middleware proxy to Briven auth
-- 2FA / backup codes / testing tokens for e2e
+## Hard rules (never break)
 
-## When NOT to use
+1. **Browser key only:** `pk_briven_auth_…` in the app. **Never** `brk_…` or MCP keys in the browser.
+2. **Do not invent Clerk / Firebase / Auth0** when Briven Auth is the product.
+3. **This MCP’s project ≠ every project.** Call `auth_config_get` for the project you are fixing. Cyberbear OFF does not mean Mavi OFF.
+4. **GitHub green ≠ live app.** After code fixes, **redeploy the app** (Mavi/Konnos). Repos in sync is not enough if pay.mavifinans.sh still serves old JS.
+5. **If passwordless is OFF and you have write MCP / brk_ admin:** call `auth_enable_passwordless` or PATCH config — do not nag the owner to re-toggle if they already did.
+6. **Wrong paths are still wrong** even if a comment says “proven”:
+   - OTP **send:** `POST /email-otp/send-verification-otp` + `{ email, type: "sign-in" }`
+   - OTP **sign-in verify:** `POST /sign-in/email-otp` + `{ email, otp }`
+   - OTP **never:** `/sign-in/email-otp/send-verification-otp` (404) or `/sign-in/email-otp/verify` (404)
+   - Magic link body: **`callbackURL`** (SDK maps `redirectTo` → callbackURL)
+   - Passkey options: **GET** `/passkey/generate-authenticate-options` (POST = 404 by design)
 
-- Only needs server-to-server data (`brk_` keys) → `briven-connect` / MCP data tools
-- Briven project not created yet → `briven-setup`
-- Third-party IdP with **no** Briven tenant in the middle
+---
 
-## Auth model (facts — not TODOs)
+## The only setup order (do this)
 
-| Piece | Reality |
-| --- | --- |
-| Protocol | Briven hosted Better Auth, per project |
-| Browser key | `pk_briven_auth_…` from dashboard **Auth → API keys** (scopes: `read` \| `read-write` \| `admin`) |
-| Server key | `brk_…` — never in client bundles |
-| Session | Cookie; SDK uses `credentials: 'include'` |
-| Client package | `@briven/auth` (+ `/react`, `/server`, `/svelte`, `/vue`) |
-| API bridge | `https://api.briven.tech/v1/auth-tenant/*` + `x-briven-project-id` + `Authorization: Bearer <publicKey>` |
-| Hosted UI | `auth.hostedPageURL(flow, callbackURL)` — flows include `sign-in`, `sign-up`, `two-factor`, … |
-| 2FA | `signIn` may return `{ ok: true, twoFactorRequired: true }` → `twoFactor.verify` or `verifyBackupCode` |
-| Testing | `auth.signIn.testToken('briven_test_…')` for e2e (admin-minted, short-lived) |
-| JWT for backends | Project JWKS + short-lived JWT (docs “verify users with tokens”) |
-| Rate limits | Per-project; Redis when `BRIVEN_REDIS_URL` set (`/ready` → `redis: ok`) |
-| Password policy | Complexity + optional max age + force-reset (admin API) |
-| Devices | New-device email on first UA fingerprint; admin can list/revoke sessions |
+### A. Project exists
 
-## Trusted setup path (do this order)
-
-1. **Confirm project** — `briven.json` with `projectId` (`briven link` if missing).
-2. **Human enables Auth** in dashboard.
-3. **Human creates** `pk_briven_auth_…` (scope **`read-write`** for full sign-in). Agent never invents keys.
-4. **Scaffold (Next.js):** `briven auth scaffold`  
-   Writes `middleware.ts`, `lib/auth.ts`, env seeds, sign-in example.
-5. **Install** `pnpm add @briven/auth` (optional react/vue/svelte subpaths).
-6. **Wire client**
-
-```ts
-// lib/auth.ts
-import { createBrivenAuth } from '@briven/auth';
-
-export const auth = createBrivenAuth({
-  projectId: process.env.NEXT_PUBLIC_BRIVEN_PROJECT_ID!,
-  publicKey: process.env.NEXT_PUBLIC_BRIVEN_AUTH_KEY!, // pk_briven_auth_…
-});
+```bash
+briven connect p_…     # existing
+# or
+briven setup my-app    # brand new
 ```
 
-7. **UI**
+### B. Turn Auth on once (platform)
 
-```tsx
-// Hosted (fastest pilot)
-window.location.assign(auth.hostedPageURL('sign-in', '/dashboard'));
+- Dashboard → project → **Auth → Enable**, **or**
+- `POST /v1/projects/{id}/auth/enable` with admin `brk_`
 
-// Embedded React
-import { BrivenAuthProvider, BrivenSignIn, TwoFactorChallenge, useSession } from '@briven/auth/react';
+**After enable (platform starter pack):**
+
+- email + password **ON**
+- magic link **ON**
+- email OTP **ON**
+- passkey **ON**
+- `http://localhost:3000` added to Allowed Domains when possible
+
+**Do NOT** spend hours re-toggling if `auth_config_get` already shows `enabled: true` for magic/OTP/passkey.
+
+### C. Public key
+
+- Dashboard → Auth → API keys → create `pk_briven_auth_…` (read-write), **or**
+- MCP (write scope): `auth_mint_public_key`
+
+### D. Scaffold + install
+
+```bash
+briven auth scaffold
+pnpm add @briven/auth
 ```
 
-8. **Handle 2FA** after password:
-
-```ts
-const r = await auth.signIn.email({ email, password });
-if (r.ok && 'twoFactorRequired' in r) {
-  // show TwoFactorChallenge or hosted /auth/<id>/two-factor
-}
-if (r.ok && 'userId' in r) {
-  // fully signed in
-}
-```
-
-9. **Providers** — only enable in dashboard what the app shows (Google needs client id **and** secret).
-10. **Verify** with `AUTH-GO-LIVE-CHECKLIST.md` (sign-up, wrong password, refresh, optional 2FA backup row 9b).
-
-## MCP tools (read-only helpers)
-
-- `auth_config_get` — what is enabled (no secrets in clear)
-- `sender_domain_status` — email From domain / DNS status
-- `auth_docs_ask` — plain-language auth Q&A (includes 2FA, test tokens, policy, scaffold)
-
-**No** MCP write for full auth config. Do not invent off-platform auth.
-
-## Env vars (canonical)
+Env (required):
 
 ```bash
 NEXT_PUBLIC_BRIVEN_API_ORIGIN=https://api.briven.tech
 NEXT_PUBLIC_BRIVEN_PROJECT_ID=p_…
 NEXT_PUBLIC_BRIVEN_AUTH_KEY=pk_briven_auth_…
-BRIVEN_AUTH_PUBLIC_KEY=pk_briven_auth_…   # same value; middleware
-# CI only:
-# BRIVEN_AUTH_TEST_TOKEN=briven_test_…
+BRIVEN_AUTH_PUBLIC_KEY=pk_briven_auth_…   # same value
 ```
 
-## Framework notes
+### E. Production domain
 
-| Surface | Import |
-| --- | --- |
-| Vanilla | `@briven/auth` — `createBrivenAuth` |
-| React | `@briven/auth/react` — `BrivenSignIn`, `useSession`, `useUser`, `useUserMetadata`, `useUserEmails`, `TwoFactorSetup`, `TwoFactorChallenge` |
-| Vue | `@briven/auth/vue` — matching composables + sign-in panel |
-| Svelte | `@briven/auth/svelte` — stores + helpers |
-| Server (Next) | `@briven/auth/server` |
+Dashboard → Auth → **Allowed Domains** → add the real app origin  
+(e.g. `https://pay.mavifinans.sh`, `https://code.konnos.org`).
+
+Without this: CORS / `INVALID_CALLBACK_URL` / invalid origin.
+
+### F. Wire login (pick ONE)
+
+**Fastest (hosted):**
+
+```ts
+import { createBrivenAuth } from '@briven/auth';
+export const auth = createBrivenAuth({
+  projectId: process.env.NEXT_PUBLIC_BRIVEN_PROJECT_ID!,
+  publicKey: process.env.NEXT_PUBLIC_BRIVEN_AUTH_KEY!,
+});
+// button:
+window.location.assign(auth.hostedPageURL('sign-in', '/dashboard'));
+```
+
+**Embedded:** use `auth.signIn.magicLink`, `otpRequest` / `otpVerify`, `passkey.signIn` from **current** `@briven/auth` (paths fixed in monorepo 2026-07).
+
+### G. Deploy the **app** after any auth code change
+
+Then prove in the browser on the **Allowed Domain**, not only against the API with curl.
+
+---
+
+## MCP tools
+
+| Tool | When |
+|------|------|
+| `auth_config_get` | First. See what is ON for **this** project |
+| `auth_enable_passwordless` | Write key + magic/OTP/passkey OFF → turn ON once |
+| `auth_mint_public_key` | Need `pk_briven_auth_…` |
+| `sender_domain_status` | Branded From: address |
+| `auth_docs_ask` | Free-form how-to |
+
+---
+
+## Functional proof (agents must run)
+
+With `pk_briven_auth_…`, `x-briven-project-id`, and **allowed** `Origin`:
+
+| Call | Expect |
+|------|--------|
+| `POST …/sign-in/magic-link` `{ email, callbackURL }` | **200** `{ status: true }` |
+| `POST …/email-otp/send-verification-otp` `{ email, type: "sign-in" }` | **200** `{ success: true }` |
+| `GET …/passkey/generate-authenticate-options` | **200** + `rpId` = customer domain (e.g. `mavifinans.sh`), **not** always `briven.tech` |
+| `POST …/sign-in/email-otp` wrong code | **400** `INVALID_OTP` |
+
+If send is 200 but the **browser** still fails → check **app deploy** + Allowed Domains + redeploy, not more toggles.
+
+---
+
+## Passkey notes
+
+- Register passkey **after** a normal session (OTP/magic/password).
+- `rpId` comes from Allowed Domains parent domain.
+- Testing Face ID on `localhost` while `rpId` is `mavifinans.sh` **will fail** — test on the real domain.
+
+---
+
+## When NOT to use this skill
+
+- Only server data API (`brk_`) with no end-user login  
+- Project does not exist yet → `briven-setup` / `briven-connect` first  
+
+---
 
 ## Security red flags
 
-- `brk_` or DB passwords in client / `NEXT_PUBLIC_*`
-- Tokens in `localStorage` when cookies already work
-- Logging email / full session / full keys
-- Inventing OAuth secrets in repo instead of dashboard
-- Client-only route guards for sensitive data
-- Hand-rolling JWT verify ignoring JWKS docs
-- Using testing tokens for real customers
-- Calling wrong 2FA path (`/two-factor/verify` — use SDK `twoFactor.verify` → verify-totp)
+- `brk_` in `NEXT_PUBLIC_*` or client bundle  
+- Logging emails, full cookies, full keys  
+- Inventing OAuth secrets in git  
+- Claiming “passkey broken” after POST on generate-options  
 
-## Pilot (minimum trustworthy demo)
+---
 
-1. Copy `examples/auth-pilot/` or run `briven auth scaffold`  
-2. Email+password only  
-3. Private page via `useSession()` / `getSession()`  
-4. Owner runs checklist rows 0–4 + 7 (and 9b if 2FA is on)
+## Pilot success (minimum)
+
+1. Enable Auth once → passwordless already ON  
+2. `pk_briven_auth_…` in env  
+3. Allowed Domain = app origin  
+4. OTP or magic link signs in to a protected page  
+5. Optional: passkey on the **same** production host  
+
+If that fails, fix platform or deploy — **do not** start a third auth product.

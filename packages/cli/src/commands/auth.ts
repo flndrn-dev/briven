@@ -160,14 +160,15 @@ async function runScaffold(): Promise<number> {
   step('  lib/auth.sign-in.example.tsx.txt');
   step('  .env.local (if it was missing)');
   blankLine();
-  step('next:');
-  step('  1. pnpm add @briven/auth   (or npm i @briven/auth)');
-  step('  2. dashboard → Auth → API keys → create key (pk_briven_auth_…, scope read-write)');
-  step('  3. paste key into NEXT_PUBLIC_BRIVEN_AUTH_KEY (+ BRIVEN_AUTH_PUBLIC_KEY)');
-  step('  4. copy the sign-in example into a real page');
-  step('  5. if 2FA is on: handle twoFactorRequired (hosted /two-factor or TwoFactorChallenge)');
-  step('  6. run AUTH-GO-LIVE-CHECKLIST.md in a browser before real users');
-  step('  7. e2e only: Auth → testing tokens → auth.signIn.testToken(…)');
+  step('Clerk-simple next steps (do in order):');
+  step('  1. Dashboard → Auth → Enable (once). Starter pack turns magic+OTP+passkey ON.');
+  step('  2. Auth → API keys → create pk_briven_auth_… (read-write) — paste into .env.local');
+  step('  3. Auth → Allowed Domains → add your real site (localhost:3000 often pre-seeded)');
+  step('  4. pnpm add @briven/auth   (or npm i @briven/auth)');
+  step('  5. Copy lib/auth.sign-in.example into a real page (or hostedPageURL sign-in)');
+  step('  6. Deploy THIS app after any auth code change — GitHub green ≠ live site');
+  step('  7. Prove: email code or magic link works on the Allowed Domain');
+  step('  Tip: if agents say "providers OFF", re-check THIS project — not another MCP binding.');
   link('https://docs.briven.tech/auth');
   return 0;
 }

@@ -15,11 +15,13 @@ describe('tenant-config-store — pure helpers (BUILD_PLAN.md §6)', () => {
     expect(parsed.success).toBe(true);
   });
 
-  test('DEFAULT_AUTH_CONFIG enables emailPassword and disables every other provider', () => {
+  test('DEFAULT_AUTH_CONFIG enables emailPassword + passwordless starter pack', () => {
+    // Clerk-simple: magic / OTP / passkey ON so login works without a second toggle.
     expect(DEFAULT_AUTH_CONFIG.providers.emailPassword.enabled).toBe(true);
-    expect(DEFAULT_AUTH_CONFIG.providers.magicLink.enabled).toBe(false);
-    expect(DEFAULT_AUTH_CONFIG.providers.emailOtp.enabled).toBe(false);
-    expect(DEFAULT_AUTH_CONFIG.providers.passkey.enabled).toBe(false);
+    expect(DEFAULT_AUTH_CONFIG.providers.magicLink.enabled).toBe(true);
+    expect(DEFAULT_AUTH_CONFIG.providers.emailOtp.enabled).toBe(true);
+    expect(DEFAULT_AUTH_CONFIG.providers.passkey.enabled).toBe(true);
+    // OAuth stays off until client id + secret exist.
     expect(DEFAULT_AUTH_CONFIG.providers.google.enabled).toBe(false);
     expect(DEFAULT_AUTH_CONFIG.providers.github.enabled).toBe(false);
     expect(DEFAULT_AUTH_CONFIG.providers.discord.enabled).toBe(false);

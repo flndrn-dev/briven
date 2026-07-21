@@ -35,6 +35,15 @@ function configWith(overrides: Partial<AuthConfig['providers']>): AuthConfig {
   };
 }
 
+/** Explicit all-passwordless-off (starter pack defaults are ON now). */
+function passwordlessOff(): AuthConfig {
+  return configWith({
+    magicLink: { enabled: false, expiryMinutes: 15 },
+    emailOtp: { enabled: false, codeLength: 6, expiryMinutes: 5 },
+    passkey: { enabled: false },
+  });
+}
+
 // A tiny recording dispatcher so we can assert what the hooks fire.
 function recorder(): {
   dispatch: AuthEventDispatcher;
@@ -52,16 +61,27 @@ function recorder(): {
 }
 
 describe('buildTenantAuthPlugins — config-gated plugin loading', () => {
-  test('loads no extra plugins when magic-link + email-OTP + passkey are disabled', () => {
-    const plugins = buildTenantAuthPlugins(PROJECT_ID, DEFAULT_AUTH_CONFIG);
+  test('DEFAULT starter pack loads magic + OTP + passkey', () => {
+    const ids = buildTenantAuthPlugins(PROJECT_ID, DEFAULT_AUTH_CONFIG).map((p) => p.id);
+    expect(ids).toContain('magic-link');
+    expect(ids).toContain('email-otp');
+    expect(ids).toContain('passkey');
+  });
+
+  test('loads no passwordless plugins when all three are disabled', () => {
+    const plugins = buildTenantAuthPlugins(PROJECT_ID, passwordlessOff());
     const ids = plugins.map((p) => p.id);
     expect(ids).not.toContain('magic-link');
     expect(ids).not.toContain('email-otp');
     expect(ids).not.toContain('passkey');
   });
 
-  test('loads the passkey plugin when enabled', () => {
-    const config = configWith({ passkey: { enabled: true } });
+  test('loads the passkey plugin when enabled alone', () => {
+    const config = configWith({
+      magicLink: { enabled: false, expiryMinutes: 15 },
+      emailOtp: { enabled: false, codeLength: 6, expiryMinutes: 5 },
+      passkey: { enabled: true },
+    });
     const ids = buildTenantAuthPlugins(PROJECT_ID, config).map((p) => p.id);
     expect(ids).toContain('passkey');
     expect(ids).not.toContain('magic-link');
@@ -92,30 +112,40 @@ describe('buildTenantAuthPlugins — config-gated plugin loading', () => {
     expect(registrableDomainFromHost('localhost')).toBe('localhost');
   });
 
-  test('loads the magic-link plugin when enabled', () => {
-    const config = configWith({ magicLink: { enabled: true, expiryMinutes: 15 } });
+  test('loads the magic-link plugin when enabled alone', () => {
+    const config = configWith({
+      magicLink: { enabled: true, expiryMinutes: 15 },
+      emailOtp: { enabled: false, codeLength: 6, expiryMinutes: 5 },
+      passkey: { enabled: false },
+    });
     const ids = buildTenantAuthPlugins(PROJECT_ID, config).map((p) => p.id);
     expect(ids).toContain('magic-link');
     expect(ids).not.toContain('email-otp');
+    expect(ids).not.toContain('passkey');
   });
 
-  test('loads the email-OTP plugin when enabled', () => {
+  test('loads the email-OTP plugin when enabled alone', () => {
     const config = configWith({
+      magicLink: { enabled: false, expiryMinutes: 15 },
       emailOtp: { enabled: true, codeLength: 6, expiryMinutes: 5 },
+      passkey: { enabled: false },
     });
     const ids = buildTenantAuthPlugins(PROJECT_ID, config).map((p) => p.id);
     expect(ids).toContain('email-otp');
     expect(ids).not.toContain('magic-link');
+    expect(ids).not.toContain('passkey');
   });
 
-  test('loads both plugins when both are enabled', () => {
+  test('loads magic + OTP when both are enabled', () => {
     const config = configWith({
       magicLink: { enabled: true, expiryMinutes: 15 },
       emailOtp: { enabled: true, codeLength: 6, expiryMinutes: 5 },
+      passkey: { enabled: false },
     });
     const ids = buildTenantAuthPlugins(PROJECT_ID, config).map((p) => p.id);
     expect(ids).toContain('magic-link');
     expect(ids).toContain('email-otp');
+    expect(ids).not.toContain('passkey');
   });
 });
 
@@ -125,8 +155,8 @@ describe('assembleTenantPlugins — unconditional core plugins', () => {
     expect(ids).toContain('jwt');
   });
 
-  test('jwt rides along with the default config (no toggles enabled)', () => {
-    const passwordless = buildTenantAuthPlugins(PROJECT_ID, DEFAULT_AUTH_CONFIG);
+  test('jwt rides along with passwordless-off config', () => {
+    const passwordless = buildTenantAuthPlugins(PROJECT_ID, passwordlessOff());
     const ids = assembleTenantPlugins(passwordless, []).map((p) => p.id);
     expect(ids).toContain('jwt');
     expect(ids).not.toContain('magic-link');
@@ -134,7 +164,11 @@ describe('assembleTenantPlugins — unconditional core plugins', () => {
   });
 
   test('jwt comes first, then the config-gated plugins in order', () => {
-    const config = configWith({ magicLink: { enabled: true, expiryMinutes: 15 } });
+    const config = configWith({
+      magicLink: { enabled: true, expiryMinutes: 15 },
+      emailOtp: { enabled: false, codeLength: 6, expiryMinutes: 5 },
+      passkey: { enabled: false },
+    });
     const passwordless = buildTenantAuthPlugins(PROJECT_ID, config);
     const ids = assembleTenantPlugins(passwordless, []).map((p) => p.id);
     expect(ids[0]).toBe('jwt');
