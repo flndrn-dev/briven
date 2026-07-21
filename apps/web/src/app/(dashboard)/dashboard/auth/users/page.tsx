@@ -1,12 +1,22 @@
-import { AuthBlankPanel } from '../blank-panel';
+import { AuthUsersClient } from './users-client';
+import { loadAuthV2Workspace } from '../lib/load-workspace';
 
 export const metadata = { title: 'Briven Auth · users' };
+export const dynamic = 'force-dynamic';
 
-export default function AuthUsersPage() {
+export default async function AuthUsersPage() {
+  const projects = await loadAuthV2Workspace();
+
   return (
-    <AuthBlankPanel
-      title="users"
-      body="search, ban, verify email, and manage end-users for each project — SuperTokens-style user admin inside Briven Auth."
-    />
+    <section className="flex flex-col gap-4">
+      <header>
+        <h2 className="font-mono text-sm text-[var(--color-text)]">users</h2>
+        <p className="mt-1 max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+          end-users who signed into each project. emails are hidden for privacy —
+          you see domain hints and ids only.
+        </p>
+      </header>
+      <AuthUsersClient projects={projects} />
+    </section>
   );
 }

@@ -1,6 +1,6 @@
 # Handoff: New Briven Auth (v2) — for all projects
 
-**Status:** UNDER CONSTRUCTION (2026-07-22)  
+**Status:** PHASE 1 DASHBOARD LIVE (2026-07-22) — app wiring still WAIT  
 **Who for:** Konnos, Mavi Pay, Cyberbear, future apps, agents  
 **Who not for:** building a side auth system (Clerk/Firebase/Auth0)
 
@@ -8,13 +8,14 @@
 
 ## What changed (plain)
 
-Briven is **rebuilding Auth from a blank page**.
+Briven is **rebuilding Auth** into its own yellow product area.
 
 - Old project tab **Auth** (providers, keys, domains inside the project) is **closed**.  
 - New home: dashboard sidebar → **Briven Auth** (yellow area).  
+- **Phase 1 live:** enable Auth, providers (save with live proof), keys, domains, users, sessions (last-seen).  
 - Product goal: SuperTokens-quality login (sessions, passwordless, social, MFA later) on **Briven Doltgres**.
 
-Until this handoff says **OPEN / READY**, do **not** spend days wiring new login features against the old dashboard. Prefer email/OTP paths that already work on live if your app is production-critical, or wait for v2 ready.
+Until this handoff says **OPEN / READY**, do **not** invent a new app setup path. Prefer email/OTP paths that already work on live if your app is production-critical, or wait for full READY.
 
 ---
 
@@ -40,9 +41,9 @@ Until this handoff says **OPEN / READY**, do **not** spend days wiring new login
 ## Status line for agents
 
 ```
-BRIVEN_AUTH_V2=BUILDING
+BRIVEN_AUTH_V2=PHASE1_DASHBOARD
 OLD_AUTH_DASHBOARD=RETIRED
 APP_SETUP=WAIT_FOR_READY
 ```
 
-Update this block when v2 is live.
+Yellow dashboard config is live in code; full engine + app handoff still building. Update this block when v2 is fully READY.

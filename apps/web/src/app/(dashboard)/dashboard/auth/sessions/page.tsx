@@ -1,12 +1,22 @@
-import { AuthBlankPanel } from '../blank-panel';
+import { AuthSessionsClient } from './sessions-client';
+import { loadAuthV2Workspace } from '../lib/load-workspace';
 
 export const metadata = { title: 'Briven Auth · sessions' };
+export const dynamic = 'force-dynamic';
 
-export default function AuthSessionsPage() {
+export default async function AuthSessionsPage() {
+  const projects = await loadAuthV2Workspace();
+
   return (
-    <AuthBlankPanel
-      title="sessions"
-      body="list devices, revoke logins, and refresh tokens — first-class session management like SuperTokens."
-    />
+    <section className="flex flex-col gap-4">
+      <header>
+        <h2 className="font-mono text-sm text-[var(--color-text)]">sessions</h2>
+        <p className="mt-1 max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+          who signed in recently (last-seen per user). full device revoke lands
+          in a later phase; for now open users for the list.
+        </p>
+      </header>
+      <AuthSessionsClient projects={projects} />
+    </section>
   );
 }
