@@ -69,6 +69,35 @@ describe('mcp auth bridge — pure helpers', () => {
     expect(ids).toContain('scaffold-setup');
   });
 
+  test('passkey 404 / Face ID question hits passkey-webauthn guidance', () => {
+    const ids = matchAuthGuidance(
+      'passkey generate authenticate options returns 404 is Face ID waiting on platform',
+    ).map((m) => m.id);
+    expect(ids).toContain('passkey-webauthn');
+  });
+
+  test('magic link HTTP 500 empty body hits magic-otp-500 guidance', () => {
+    const ids = matchAuthGuidance(
+      'POST magic link returns HTTP 500 empty body what is broken',
+    ).map((m) => m.id);
+    expect(ids).toContain('magic-otp-500');
+  });
+
+  test('OAuth toggle without secrets hits providers-config', () => {
+    const ids = matchAuthGuidance(
+      'google provider enabled but oauth needs client id and secret',
+    ).map((m) => m.id);
+    expect(ids).toContain('providers-config');
+  });
+
+  test('passkey guidance teaches GET options and real Face ID on device', () => {
+    const entry = AUTH_GUIDANCE.find((e) => e.id === 'passkey-webauthn')!;
+    const a = entry.answer.toLowerCase();
+    expect(a).toContain('get /passkey/generate-authenticate-options');
+    expect(a).toContain('404 by design');
+    expect(a).toContain('device');
+  });
+
   test('unrelated question returns no matches', () => {
     expect(matchAuthGuidance('kubernetes ingress annotations')).toEqual([]);
   });

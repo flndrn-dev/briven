@@ -91,6 +91,19 @@ describe('briven_ask reception desk — pure helpers', () => {
     const ids = matchBrivenGuides('is the database Doltgres or stock Postgres?').map((g) => g.id);
     expect(ids).toContain('database');
   });
+
+  test('passkey / Face ID auth question matches auth guide', () => {
+    const ids = matchBrivenGuides(
+      'passkey Face ID returns 404 on generate authenticate options',
+    ).map((g) => g.id);
+    expect(ids).toContain('auth');
+  });
+
+  test('auth guide documents GET passkey options not POST', () => {
+    const auth = BRIVEN_AREA_GUIDES.find((g) => g.id === 'auth')!;
+    expect(auth.howBrivenWorksHere).toContain('generate-authenticate-options');
+    expect(auth.howBrivenWorksHere.toLowerCase()).toContain('post = 404');
+  });
 });
 
 describe('briven_ask self-growing KB — helpers', () => {

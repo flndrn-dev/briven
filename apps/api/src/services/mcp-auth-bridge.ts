@@ -206,10 +206,31 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
     answer:
       'first check spam. then dashboard → auth → usage for delivery status. a recipient who ' +
       'previously hard-bounced or complained is suppressed and will not be re-sent. note the ' +
-      'auth SDK returns ok:true when the API answered at all — it is not delivery proof.',
+      'auth SDK returns ok:true when the API answered at all — it is not delivery proof. ' +
+      'an unverified custom senderDomain falls back to noreply@briven.tech automatically — that is success, not a failure.',
     applyInYourProject: [
-      'verify the send really returned HTTP 200 by probing the raw endpoint (POST /v1/auth-tenant/sign-in/magic-link with your x-briven-project-id header) instead of trusting the SDK result.',
+      'verify the send really returned HTTP 200 by probing POST /v1/auth-tenant/sign-in/magic-link (or email-otp/send-verification-otp) with origin + x-briven-project-id + Bearer pk_briven_auth_… — empty HTTP 500 is a platform schema issue (report with x-request-id), not "re-toggle providers".',
       'surface a "check your spam folder" hint in your sign-in UI after a magic-link send.',
+    ],
+    docs: DOCS.flows,
+  },
+  {
+    id: 'magic-otp-500',
+    topic: 'magic link or email OTP returns HTTP 500 empty body',
+    keywords: [
+      '500', 'empty', 'body', 'magic', 'otp', 'send', 'fail', 'failed', 'error',
+      'server', 'broken', 'schema', 'templates',
+    ],
+    answer:
+      'platform root cause (fixed fleet-wide 2026-07-21): older Enable Auth DBs were missing ' +
+      '_briven_auth_email_templates and/or two_factor_enabled — magic-link / email-OTP send then ' +
+      'threw empty 500s. all auth-enabled project DBs were healed; new boots self-heal; re-Enable Auth runs ensure. ' +
+      'CORS allow-origin on a 500 means Allowed Domains already worked — do NOT close with "add domains". ' +
+      'unverified senderDomain is NOT a 500 cause (fallback From is used).',
+    applyInYourProject: [
+      're-probe POST /v1/auth-tenant/sign-in/magic-link and POST /v1/auth-tenant/email-otp/send-verification-otp with your project id + pk_briven_auth_ + Origin; expect 200 {status:true} / {success:true}.',
+      'if still 500 after fleet heal: capture x-request-id + origin + path and file a Briven platform handoff — do not invent Clerk or a side mailer.',
+      'if HTTP 200 but no inbox: check spam; From may be "your brand" <noreply@briven.tech> until sender domain verifies.',
     ],
     docs: DOCS.flows,
   },
@@ -218,14 +239,28 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
     topic: 'integrate magic-link sign-in',
     keywords: ['magic', 'link', 'sign', 'in', 'login', 'passwordless', 'integrate', 'sdk'],
     answer:
-      'enable the magic-link provider under dashboard → auth → providers, then call ' +
-      'auth.signIn.magicLink({ email, redirectTo }) from @briven/auth. the emailed link ' +
-      'carries the tenant id, so it works from any domain you registered under auth → app ' +
-      'domains (apex AND wildcard both, they are separate entries).',
+      'call auth_config_get first — only wire magic link if providers.magicLink.enabled is true ' +
+      '(do not re-ask the owner to toggle if already true). then auth.signIn.magicLink({ email, redirectTo }) ' +
+      'from @briven/auth. the emailed link carries the tenant id. every app origin must be under ' +
+      'auth → allowed domains / app domains. path: POST /v1/auth-tenant/sign-in/magic-link.',
     applyInYourProject: [
       'create the client with createBrivenAuth({ projectId, publicKey: "pk_briven_auth_..." }) — the pk_ key is browser-safe, brk_ keys are not.',
-      'register every origin your app serves from (https://yourdomain.com and https://*.yourdomain.com) under auth → app domains, or sends will be rejected.',
-      'set redirectTo to the page in YOUR app where a signed-in user should land.',
+      'register every origin your app serves from under auth → allowed domains, or CORS/origin gate rejects.',
+      'set redirectTo to the page in YOUR app where a signed-in user should land; treat HTTP 200 as send accepted, not inbox proof.',
+    ],
+    docs: DOCS.flows,
+  },
+  {
+    id: 'email-otp-integration',
+    topic: 'integrate email OTP sign-in',
+    keywords: ['otp', 'code', 'one', 'time', 'email', 'verification', 'sign-in'],
+    answer:
+      'when emailOtp.enabled is true (auth_config_get), send with POST /v1/auth-tenant/email-otp/send-verification-otp ' +
+      'body { email, type: "sign-in" }, then verify the 6-digit code with the Better Auth / @briven/auth OTP verify path. ' +
+      'codeLength and expiryMinutes come from config.',
+    applyInYourProject: [
+      'use @briven/auth OTP helpers or the documented HTTP paths; never invent a local OTP table.',
+      'same Allowed Domains + pk_briven_auth_ rules as magic link.',
     ],
     docs: DOCS.flows,
   },
@@ -246,14 +281,43 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
   {
     id: 'providers-config',
     topic: 'enable or configure sign-in providers',
-    keywords: ['provider', 'providers', 'enable', 'otp', 'passkey', 'oauth', 'google', 'github', 'toggle'],
+    keywords: [
+      'provider', 'providers', 'enable', 'otp', 'passkey', 'oauth', 'google', 'github',
+      'toggle', 'konnos', 'clientid', 'secret',
+    ],
     answer:
-      'providers are per-project toggles under dashboard → auth → providers: email+password, ' +
-      'magic link (expiry), email OTP (code length + expiry), passkeys, and OAuth social ' +
-      '(each needs client id AND secret before it activates). auth_config_get shows the live state.',
+      'ALWAYS call auth_config_get first. Magic link / email OTP / passkey / password only need ' +
+      'enabled:true (no secrets). OAuth (google, github, konnos, …) needs enabled:true AND clientIdSet:true ' +
+      'AND a stored client secret — toggle alone does NOT activate the button. ' +
+      'If magicLink/emailOtp/passkey already show enabled:true, do NOT re-nag the owner to toggle them; ' +
+      'wire the app. provider edits are dashboard-only (this MCP is read-only).',
     applyInYourProject: [
-      'call auth_config_get first — build your sign-in UI to offer exactly the providers that are enabled.',
-      'provider changes are dashboard-only by design; this MCP cannot toggle them. ask the project owner.',
+      'offer UI only for providers with enabled:true; for OAuth also require clientIdSet:true or ask owner for Client ID+secret once.',
+      'never invent Clerk/Firebase Auth because a toggle is on but OAuth secrets are missing.',
+    ],
+    docs: DOCS.auth,
+  },
+  {
+    id: 'passkey-webauthn',
+    topic: 'passkey / Face ID / WebAuthn routes and integration',
+    keywords: [
+      'passkey', 'passkeys', 'webauthn', 'face', 'touch', 'biometric', '404',
+      'generate', 'authenticate', 'register', 'options', 'fido',
+    ],
+    answer:
+      'when passkey.enabled is true, WebAuthn is live. Face ID/Touch ID is the device — NOT a "wait for platform update". ' +
+      'Better Auth routes (base /v1/auth-tenant): ' +
+      'GET /passkey/generate-authenticate-options (sign-in options — POST on this path is 404 BY DESIGN), ' +
+      'POST /passkey/verify-authentication, ' +
+      'GET /passkey/generate-register-options (needs signed-in session), ' +
+      'POST /passkey/verify-registration, ' +
+      'GET /passkey/list-user-passkeys. ' +
+      'Use @briven/auth auth.passkey.signIn() / register() (full ceremony) or those exact methods. ' +
+      'rpID is the parent domain (e.g. briven.tech for *.briven.tech apps). Allowed Domains must include the app origin.',
+    applyInYourProject: [
+      'never probe generate-*-options with POST and claim "passkey broken" — use GET, expect 200 + challenge.',
+      'register passkey only after a normal session (magic link/OTP/password); then signIn with Face ID.',
+      'if GET options returns 200 but browser fails: check HTTPS, Allowed Domains, and that rpId is a parent of your host.',
     ],
     docs: DOCS.auth,
   },
@@ -375,17 +439,39 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
   {
     id: 'scaffold-setup',
     topic: 'scaffold briven auth into a next app',
-    keywords: ['scaffold', 'setup', 'middleware', 'next', 'briven auth scaffold', 'pilot'],
+    keywords: [
+      'scaffold', 'setup', 'middleware', 'next', 'briven auth scaffold', 'pilot',
+      'connect', 'link',
+    ],
     answer:
-      'from a linked project (briven.json present), run `briven auth scaffold` then install ' +
-      '@briven/auth. that writes middleware.ts, lib/auth.ts, and .env.local seeds. paste the ' +
-      'pk_briven_auth_… key, then use hostedPageURL or BrivenSignIn. prove with AUTH-GO-LIVE-CHECKLIST.md.',
+      'wire the folder first: briven setup <name> for a NEW cloud project, or briven connect p_… ' +
+      'for an EXISTING one (never setup --project). then briven auth scaffold + install @briven/auth. ' +
+      'that writes middleware.ts, lib/auth.ts, and .env.local seeds. paste pk_briven_auth_…, then ' +
+      'hostedPageURL or BrivenSignIn. prove with AUTH-GO-LIVE-CHECKLIST.md.',
     applyInYourProject: [
-      'run briven link if briven.json is missing, then briven auth scaffold.',
-      'set NEXT_PUBLIC_BRIVEN_PROJECT_ID and NEXT_PUBLIC_BRIVEN_AUTH_KEY (and BRIVEN_AUTH_PUBLIC_KEY to the same value for middleware).',
+      'briven setup OR briven connect, then briven auth scaffold — do not invent setup --project.',
+      'set NEXT_PUBLIC_BRIVEN_API_ORIGIN, NEXT_PUBLIC_BRIVEN_PROJECT_ID, NEXT_PUBLIC_BRIVEN_AUTH_KEY, BRIVEN_AUTH_PUBLIC_KEY (same pk value for middleware).',
       'copy examples/auth-pilot/ for a minimal hosted sign-in button pattern.',
     ],
     docs: DOCS.setup,
+  },
+  {
+    id: 'allowed-domains-cors',
+    topic: 'allowed domains / CORS / origin rejected',
+    keywords: [
+      'allowed', 'domains', 'domain', 'cors', 'origin', 'access-control', 'forbidden',
+      'app', 'domains',
+    ],
+    answer:
+      'every browser Origin that calls /v1/auth-tenant/* must be listed under the project ' +
+      'Auth → Allowed Domains (exact scheme+host, e.g. https://pay.apps.briven.tech and ' +
+      'http://localhost:3000 separately). when CORS returns access-control-allow-origin for your ' +
+      'origin, domains are fine — a later 500 is not a domains problem.',
+    applyInYourProject: [
+      'add every production + local origin the human uses; retest with Origin header matching the list.',
+      'do not tell the owner to "re-add domains" if the failing response already shows the correct allow-origin.',
+    ],
+    docs: DOCS.auth,
   },
 ] as const;
 
@@ -440,16 +526,21 @@ export function registerAuthBridgeTools(
     async () => {
       await auditCall('auth_config_get', {});
       const config = await getAuthConfig(ctx.projectId);
+      const sanitized = sanitizeAuthConfig(config);
       return jsonResult({
-        config: sanitizeAuthConfig(config),
+        config: sanitized,
         guidance: {
           summary:
-            'build your sign-in UI to match the enabled providers above. changing this ' +
-            'config is a dashboard action (auth → providers / auth → branding) — this MCP ' +
-            'is read-only by design.',
+            'build your sign-in UI from this live config. dashboard-only for changes ' +
+            '(auth → providers / branding / allowed domains). this MCP is read-only.',
           applyInYourProject: [
-            'offer exactly the providers with enabled:true in your login screen.',
-            'for email flows, the sender identity above is what your users will see in their inbox.',
+            'if magicLink/emailOtp/passkey show enabled:true, do NOT re-ask the owner to toggle them — wire the app.',
+            'OAuth (google/konnos/…): needs enabled:true AND clientIdSet:true AND a secret in the dashboard; toggle alone is not enough.',
+            'magic link: POST /v1/auth-tenant/sign-in/magic-link — expect 200 (not empty 500).',
+            'email OTP send: POST /v1/auth-tenant/email-otp/send-verification-otp with type:"sign-in".',
+            'passkey: GET /v1/auth-tenant/passkey/generate-authenticate-options (POST on that path is 404 by design); then WebAuthn; then POST …/verify-authentication. use @briven/auth passkey.signIn()/register(). Face ID is the device, not a missing platform feature.',
+            'every Origin must be under Auth → Allowed Domains; if CORS already allows your origin, do not blame domains for other errors.',
+            'keys: pk_briven_auth_… in the browser only; never brk_.',
           ],
           docs: DOCS.auth,
         },

@@ -178,22 +178,28 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
     keywords: [
       'auth', 'login', 'signin', 'signup', 'magic', 'otp', 'passkey', 'oauth',
       'session', 'sender', 'email', 'domain', 'user', 'users', 'password',
-      'jwt', 'jwks', 'token', 'verify',
+      'jwt', 'jwks', 'token', 'verify', 'webauthn', 'face', '500', 'cors',
+      'google', 'konnos',
     ],
     howBrivenWorksHere:
-      'managed multi-tenant end-user auth (@briven/auth) on the Doltgres control plane: ' +
-      'email+password, magic link, OTP, passkeys, OAuth, 2FA — all per-project in the ' +
-      'dashboard. browser key is pk_briven_auth_… only (never brk_). sessions are httpOnly ' +
-      'cookies; optional short-lived JWT + public JWKS for your own backends.',
+      'managed multi-tenant end-user auth (@briven/auth) on Doltgres: email+password, magic link, ' +
+      'email OTP, passkeys (WebAuthn), OAuth, 2FA — per project in the dashboard. ' +
+      'ALWAYS call auth_config_get first. Magic/OTP/passkey only need enabled:true; OAuth also needs ' +
+      'clientIdSet:true + secret. Unverified senderDomain falls back to noreply@briven.tech (sign-in still works). ' +
+      'Passkey options are GET /v1/auth-tenant/passkey/generate-authenticate-options (POST = 404 by design). ' +
+      'Magic/OTP empty 500s from old schema drift were healed fleet-wide 2026-07; if still 500, file platform with x-request-id. ' +
+      'Browser key: pk_briven_auth_… only (never brk_).',
     whatOurToolsGiveYou: [
-      'dedicated MCP tools: auth_config_get, sender_domain_status, auth_docs_ask — live config + apply-steps (read-only).',
-      'CLI: briven auth scaffold after briven setup (new) or briven connect (existing project).',
-      'docs /auth and monorepo examples/auth-pilot + AUTH-GO-LIVE-CHECKLIST.md for human proof.',
+      'MCP: auth_config_get (live toggles + clientIdSet booleans), sender_domain_status, auth_docs_ask (passkey/magic/OTP/providers cards).',
+      'CLI: briven setup (new) OR briven connect p_… (existing) then briven auth scaffold — never setup --project.',
+      'HTTP: POST …/sign-in/magic-link, POST …/email-otp/send-verification-otp, GET …/passkey/generate-authenticate-options, POST …/passkey/verify-authentication.',
+      'docs /auth + examples/auth-pilot + AUTH-GO-LIVE-CHECKLIST.md.',
     ],
     whatYouBuildInYourProject: [
-      'sign-in UI or hosted auth.hostedPageURL / <BrivenSignIn/> with pk_briven_auth_ only.',
-      'register every origin under dashboard auth → app domains.',
-      'do not invent a side auth server or Clerk; wire @briven/auth to this project.',
+      'if auth_config_get already shows magic/otp/passkey enabled:true — stop asking the owner to re-toggle; wire UI + env.',
+      'use @briven/auth passkey.signIn()/register() or correct GET+WebAuthn+verify paths; do not claim Face ID waits on a platform update.',
+      'register every Origin under Auth → Allowed Domains; if CORS already allows the origin, do not blame domains for other failures.',
+      'do not invent Clerk/Firebase or a side auth server; do not edit the Briven monorepo from an app session.',
     ],
     docs: `${DOCS_BASE}/auth`,
   },
