@@ -439,7 +439,8 @@ export interface BrivenAuthClient {
     verifyBackupCode(code: string): Promise<SignInResult>;
   };
   readonly passkey: {
-    register(): Promise<SimpleResult>;
+    /** Enrol a passkey (requires active session). Optional display name. */
+    register(name?: string): Promise<SimpleResult>;
     list(): Promise<{ ok: true; passkeys: Passkey[] } | { ok: false; code: SignInErrorCode; message: string }>;
     signIn(): Promise<SignInResult>;
   };
@@ -485,6 +486,76 @@ export interface BrivenAuthClient {
 
 const DEFAULT_API_ORIGIN = 'https://api.briven.tech';
 const BRIDGE_PREFIX = '/v1/auth-tenant';
+
+/* ── WebAuthn helpers (Better Auth returns PublicKeyCredential*OptionsJSON) ─ */
+
+function bufferToBase64Url(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 1) s += String.fromCharCode(bytes[i]!);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBuffer(b64url: string): ArrayBuffer {
+  const pad = '='.repeat((4 - (b64url.length % 4)) % 4);
+  const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function publicKeyRequestOptionsFromJson(
+  options: Record<string, unknown>,
+): PublicKeyCredentialRequestOptions {
+  const allow = Array.isArray(options.allowCredentials)
+    ? (options.allowCredentials as Array<Record<string, unknown>>).map((c) => ({
+        type: (c.type as PublicKeyCredentialType) ?? 'public-key',
+        id: typeof c.id === 'string' ? base64UrlToBuffer(c.id) : (c.id as ArrayBuffer),
+        transports: c.transports as AuthenticatorTransport[] | undefined,
+      }))
+    : undefined;
+  return {
+    challenge: base64UrlToBuffer(String(options.challenge)),
+    timeout: typeof options.timeout === 'number' ? options.timeout : undefined,
+    rpId: typeof options.rpId === 'string' ? options.rpId : undefined,
+    allowCredentials: allow,
+    userVerification: options.userVerification as UserVerificationRequirement | undefined,
+  };
+}
+
+function publicKeyCreateOptionsFromJson(
+  options: Record<string, unknown>,
+): PublicKeyCredentialCreationOptions {
+  const rp = (options.rp ?? {}) as { name?: string; id?: string };
+  const user = (options.user ?? {}) as { id?: string; name?: string; displayName?: string };
+  const exclude = Array.isArray(options.excludeCredentials)
+    ? (options.excludeCredentials as Array<Record<string, unknown>>).map((c) => ({
+        type: (c.type as PublicKeyCredentialType) ?? 'public-key',
+        id: typeof c.id === 'string' ? base64UrlToBuffer(c.id) : (c.id as ArrayBuffer),
+        transports: c.transports as AuthenticatorTransport[] | undefined,
+      }))
+    : undefined;
+  const pubKeyCredParams = Array.isArray(options.pubKeyCredParams)
+    ? (options.pubKeyCredParams as PublicKeyCredentialParameters[])
+    : [{ type: 'public-key' as const, alg: -7 }];
+  const userIdRaw = typeof user.id === 'string' && user.id.length > 0 ? user.id : 'user';
+  return {
+    rp: { name: rp.name ?? 'briven', id: rp.id },
+    user: {
+      id: base64UrlToBuffer(userIdRaw),
+      name: user.name ?? 'user',
+      displayName: user.displayName ?? user.name ?? 'user',
+    },
+    challenge: base64UrlToBuffer(String(options.challenge)),
+    pubKeyCredParams,
+    timeout: typeof options.timeout === 'number' ? options.timeout : undefined,
+    excludeCredentials: exclude,
+    authenticatorSelection:
+      options.authenticatorSelection as AuthenticatorSelectionCriteria | undefined,
+    attestation: options.attestation as AttestationConveyancePreference | undefined,
+  };
+}
 
 /**
  * Construct the SDK client. Stateless — all auth state lives in the
@@ -1369,33 +1440,162 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
     },
     passkey: {
-      async register() {
+      /**
+       * Register a passkey for the *currently signed-in* user.
+       * Better Auth: GET /passkey/generate-register-options → WebAuthn create
+       * → POST /passkey/verify-registration. Not a single POST /passkey/register.
+       */
+      async register(name?: string) {
+        if (typeof globalThis.PublicKeyCredential === 'undefined') {
+          return {
+            ok: false as const,
+            code: 'unknown' as const,
+            message: 'passkeys require a browser with WebAuthn (HTTPS or localhost)',
+          };
+        }
         try {
-          const body = await post<unknown>('/passkey/register', {});
+          const options = await get<Record<string, unknown>>(
+            '/passkey/generate-register-options',
+          );
+          if (options && typeof options === 'object' && (options as { error?: unknown }).error) {
+            const err = (options as { error?: { code?: string; message?: string }; message?: string })
+              .error;
+            return {
+              ok: false as const,
+              code: knownCode(err?.code ?? 'unknown'),
+              message: err?.message ?? (options as { message?: string }).message ?? 'register options failed',
+            };
+          }
+          if (!(options as { challenge?: string }).challenge) {
+            return {
+              ok: false as const,
+              code: 'unknown' as const,
+              message:
+                'passkey register needs an active session — sign in first, then enrol from account settings',
+            };
+          }
+          const publicKey = publicKeyCreateOptionsFromJson(options);
+          const cred = (await navigator.credentials.create({
+            publicKey,
+          })) as PublicKeyCredential | null;
+          if (!cred) {
+            return { ok: false as const, code: 'unknown' as const, message: 'passkey registration cancelled' };
+          }
+          const att = cred.response as AuthenticatorAttestationResponse;
+          const responseBody = {
+            id: cred.id,
+            rawId: bufferToBase64Url(cred.rawId),
+            type: cred.type,
+            clientExtensionResults:
+              typeof cred.getClientExtensionResults === 'function'
+                ? cred.getClientExtensionResults()
+                : {},
+            response: {
+              clientDataJSON: bufferToBase64Url(att.clientDataJSON),
+              attestationObject: bufferToBase64Url(att.attestationObject),
+              transports:
+                typeof att.getTransports === 'function' ? att.getTransports() : undefined,
+            },
+          };
+          const body = await post<unknown>('/passkey/verify-registration', {
+            response: responseBody,
+            ...(name ? { name } : {}),
+          });
           return asSimpleResult(body);
-        } catch {
-          return { ok: false, code: 'network_error', message: 'network error' };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (/cancel|not allowed|abort/i.test(msg)) {
+            return { ok: false as const, code: 'unknown' as const, message: 'passkey registration cancelled' };
+          }
+          return { ok: false as const, code: 'network_error' as const, message: msg || 'network error' };
         }
       },
       async list() {
         try {
-          const body = await get<unknown>('/passkey/list-passkeys');
+          // Better Auth: GET /passkey/list-user-passkeys → Passkey[]
+          const body = await get<unknown>('/passkey/list-user-passkeys');
+          if (Array.isArray(body)) return { ok: true, passkeys: body as Passkey[] };
           if (body && typeof body === 'object') {
             const b = body as { passkeys?: Passkey[]; error?: { code?: string; message?: string } };
             if (Array.isArray(b.passkeys)) return { ok: true, passkeys: b.passkeys };
-            return { ok: false, code: knownCode(b.error?.code ?? 'unknown'), message: b.error?.message ?? 'list failed' };
+            return {
+              ok: false,
+              code: knownCode(b.error?.code ?? 'unknown'),
+              message: b.error?.message ?? 'list failed',
+            };
           }
           return { ok: false, code: 'unknown', message: 'list failed' };
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }
       },
+      /**
+       * Sign in with an existing passkey.
+       * Better Auth: GET /passkey/generate-authenticate-options → WebAuthn get
+       * → POST /passkey/verify-authentication. POST on generate-* is 404 by design.
+       */
       async signIn() {
+        if (typeof globalThis.PublicKeyCredential === 'undefined') {
+          return {
+            ok: false as const,
+            code: 'unknown' as const,
+            message: 'passkeys require a browser with WebAuthn (HTTPS or localhost)',
+          };
+        }
         try {
-          const body = await post<unknown>('/passkey/authenticate', {});
+          const options = await get<Record<string, unknown>>(
+            '/passkey/generate-authenticate-options',
+          );
+          if (options && typeof options === 'object' && (options as { error?: unknown }).error) {
+            const err = (options as { error?: { code?: string; message?: string } }).error;
+            return {
+              ok: false as const,
+              code: knownCode(err?.code ?? 'unknown'),
+              message: err?.message ?? 'passkey options failed',
+            };
+          }
+          if (!(options as { challenge?: string }).challenge) {
+            return {
+              ok: false as const,
+              code: 'unknown' as const,
+              message: 'passkey options missing challenge — is passkey enabled for this project?',
+            };
+          }
+          const publicKey = publicKeyRequestOptionsFromJson(options);
+          const cred = (await navigator.credentials.get({
+            publicKey,
+          })) as PublicKeyCredential | null;
+          if (!cred) {
+            return { ok: false as const, code: 'unknown' as const, message: 'passkey cancelled' };
+          }
+          const assertion = cred.response as AuthenticatorAssertionResponse;
+          const responseBody = {
+            id: cred.id,
+            rawId: bufferToBase64Url(cred.rawId),
+            type: cred.type,
+            clientExtensionResults:
+              typeof cred.getClientExtensionResults === 'function'
+                ? cred.getClientExtensionResults()
+                : {},
+            response: {
+              clientDataJSON: bufferToBase64Url(assertion.clientDataJSON),
+              authenticatorData: bufferToBase64Url(assertion.authenticatorData),
+              signature: bufferToBase64Url(assertion.signature),
+              userHandle: assertion.userHandle
+                ? bufferToBase64Url(assertion.userHandle)
+                : null,
+            },
+          };
+          const body = await post<unknown>('/passkey/verify-authentication', {
+            response: responseBody,
+          });
           return asSignInResult(body);
-        } catch {
-          return { ok: false, code: 'network_error', message: 'network error' };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (/cancel|not allowed|abort/i.test(msg)) {
+            return { ok: false as const, code: 'unknown' as const, message: 'passkey cancelled' };
+          }
+          return { ok: false as const, code: 'network_error' as const, message: msg || 'network error' };
         }
       },
     },

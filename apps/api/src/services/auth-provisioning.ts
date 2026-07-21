@@ -86,12 +86,36 @@ export const AUTH_SELF_HEAL_TABLE_SQL: readonly string[] = [
      user_id text NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
      credential_id text NOT NULL,
      counter bigint NOT NULL DEFAULT 0,
+     device_type text NOT NULL DEFAULT 'unknown',
+     backed_up boolean NOT NULL DEFAULT false,
+     transports text,
+     aaguid text,
      created_at timestamptz NOT NULL DEFAULT now(),
      updated_at timestamptz NOT NULL DEFAULT now()
    )`,
   `CREATE INDEX IF NOT EXISTS "_briven_auth_passkeys_user_idx"
      ON "_briven_auth_passkeys" (user_id)`,
 ].map((stmt) => stmt.replace(/\s+/g, ' ').trim());
+
+/** Columns Better Auth passkey plugin requires that older tables may lack. */
+const PASSKEY_COLUMN_HEALS: readonly { column: string; sql: string }[] = [
+  {
+    column: 'device_type',
+    sql: `ALTER TABLE "_briven_auth_passkeys" ADD COLUMN device_type text NOT NULL DEFAULT 'unknown'`,
+  },
+  {
+    column: 'backed_up',
+    sql: `ALTER TABLE "_briven_auth_passkeys" ADD COLUMN backed_up boolean NOT NULL DEFAULT false`,
+  },
+  {
+    column: 'transports',
+    sql: `ALTER TABLE "_briven_auth_passkeys" ADD COLUMN transports text`,
+  },
+  {
+    column: 'aaguid',
+    sql: `ALTER TABLE "_briven_auth_passkeys" ADD COLUMN aaguid text`,
+  },
+];
 
 /**
  * Minimal pg-like client for self-heal (pool or client with `.query`).
@@ -140,6 +164,27 @@ export async function ensureTenantAuthSchema(
     }
   } catch {
     // users table missing entirely (auth not provisioned) — skip
+  }
+
+  // Passkey plugin fields (deviceType / backedUp / transports / aaguid)
+  for (const heal of PASSKEY_COLUMN_HEALS) {
+    try {
+      const probe = (await client.query(
+        `SELECT 1 AS ok FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = '_briven_auth_passkeys'
+           AND column_name = $1
+         LIMIT 1`,
+        [heal.column],
+      )) as { rows?: Array<{ ok: number }> };
+      const hasCol = Array.isArray(probe?.rows) && probe.rows.length > 0;
+      if (!hasCol) {
+        await client.query(heal.sql);
+        columnAdded = true;
+      }
+    } catch {
+      // passkeys table missing — CREATE TABLE above should have created it
+    }
   }
 
   return { tablesOk, columnAdded };
@@ -312,6 +357,10 @@ export function renderAuthProvisioningSql(): string[] {
        user_id       text        NOT NULL REFERENCES "_briven_auth_users"(id) ON DELETE CASCADE,
        credential_id text        NOT NULL,
        counter       bigint      NOT NULL DEFAULT 0,
+       device_type   text        NOT NULL DEFAULT 'unknown',
+       backed_up     boolean     NOT NULL DEFAULT false,
+       transports    text,
+       aaguid        text,
        created_at    timestamptz NOT NULL DEFAULT now(),
        updated_at    timestamptz NOT NULL DEFAULT now()
      )`,

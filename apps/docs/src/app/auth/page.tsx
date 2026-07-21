@@ -317,14 +317,16 @@ if (result.ok) {
   console.error(result.message);
 }`}</Snippet>
         <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
-          passkeys are <strong>per-tenant</strong>: the project owner enables them under{' '}
-          <em>Auth → providers</em> (the <code>passkey</code> provider) and a passkey registered in
-          your project only works in your project. one caveat to know:{' '}
-          <code>auth.passkey.register()</code> needs an active session, and the credential is bound
-          to the <strong>rpID</strong> — which is the web origin (host) your app runs on. a passkey
-          registered on <code>app.example.com</code> can&apos;t be used from a different host, so
-          pin your production origin before you ask users to enrol. WebAuthn also requires a secure
-          context (https, or <code>localhost</code> in dev).
+          passkeys are <strong>per-tenant</strong>: enable under <em>Auth → providers</em>.{' '}
+          <code>auth.passkey.register()</code> needs an active session first (magic link / OTP /
+          password), then Face ID / Touch ID runs in the browser. platform routes:{' '}
+          <code>GET /v1/auth-tenant/passkey/generate-authenticate-options</code> (sign-in) and{' '}
+          <code>GET …/generate-register-options</code> (enrol) — <strong>not</strong> POST on those
+          paths (POST returns 404 by design). verify is{' '}
+          <code>POST …/verify-authentication</code> / <code>POST …/verify-registration</code>. rpID
+          is the parent domain (e.g. <code>briven.tech</code> for apps on{' '}
+          <code>*.briven.tech</code>). WebAuthn needs https or localhost; add every app origin under{' '}
+          <em>Auth → Allowed Domains</em>.
         </p>
 
         <section className="mt-5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-xs text-[var(--color-text-muted)]">

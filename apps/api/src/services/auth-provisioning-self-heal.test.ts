@@ -48,4 +48,23 @@ describe('ensureTenantAuthSchema', () => {
     expect(result.columnAdded).toBe(false);
     expect(executed.some((s) => s.includes('ADD COLUMN two_factor_enabled'))).toBe(false);
   });
+
+  test('heals passkey device_type when missing', async () => {
+    const executed: string[] = [];
+    const client: AuthSchemaQueryClient = {
+      async query(sql: string, params?: unknown[]) {
+        executed.push(sql.replace(/\s+/g, ' ').trim());
+        if (sql.includes('information_schema.columns') && params?.[0] === 'device_type') {
+          return { rows: [] };
+        }
+        if (sql.includes('information_schema.columns')) {
+          return { rows: [{ ok: 1 }] };
+        }
+        return { rows: [] };
+      },
+    };
+    const result = await ensureTenantAuthSchema(client);
+    expect(result.columnAdded).toBe(true);
+    expect(executed.some((s) => s.includes('ADD COLUMN device_type'))).toBe(true);
+  });
 });

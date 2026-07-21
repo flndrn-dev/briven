@@ -283,6 +283,12 @@ export const authPasskeys = pgTable(
       .references(() => authUsers.id, { onDelete: 'cascade' }),
     credentialID: text('credential_id').notNull(),
     counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    /** Better Auth passkey plugin — device class (platform / cross-platform). */
+    deviceType: text('device_type').notNull().default('unknown'),
+    /** Better Auth — whether the credential is backed up / multi-device. */
+    backedUp: boolean('backed_up').notNull().default(false),
+    transports: text('transports'),
+    aaguid: text('aaguid'),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },

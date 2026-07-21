@@ -257,17 +257,22 @@ export function buildTenantAuthPlugins(
   }
 
   if (p.passkey.enabled) {
-    // Derive rpID from the tenant's custom auth domain when configured,
-    // otherwise fall back to the default hosted domain. This ensures
-    // passkeys work on custom auth domains (e.g. auth.murphus.eu).
-    const rpID =
-      config.customAuthDomain ??
-      (env.BRIVEN_ENV === 'production' ? 'briven.tech' : 'localhost');
+    // rpID must be a registrable domain suffix of the page origin.
+    // - hosted apps on *.briven.tech → briven.tech
+    // - custom auth.example.com → example.com (parent of auth.*)
+    // Do NOT pin `origin` to the hosted auth URL: verify uses the browser's
+    // Origin header (e.g. https://pay.apps.briven.tech). Pinning broke
+    // multi-origin apps (Mavi passkey 2026-07-21).
+    const custom = config.customAuthDomain?.trim() || null;
+    const rpID = custom
+      ? (parentDomainFromAuthSubdomain(custom) ?? custom)
+      : env.BRIVEN_ENV === 'production'
+        ? 'briven.tech'
+        : 'localhost';
     plugins.push(
       passkey({
         rpID,
         rpName: config.branding.senderName,
-        origin: hostedAuthBaseUrl(projectId, config),
       }) as unknown as TenantAuthPlugin,
     );
   }
