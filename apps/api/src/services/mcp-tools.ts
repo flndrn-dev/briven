@@ -5,7 +5,11 @@ import { runInProjectDatabase } from '../db/data-plane.js';
 import type { McpKeyScope } from '../db/schema.js';
 import { env } from '../env.js';
 import { audit } from './audit.js';
-import { AUTH_BRIDGE_TOOLS, registerAuthBridgeTools } from './mcp-auth-bridge.js';
+import {
+  AUTH_BRIDGE_TOOLS,
+  AUTH_BRIDGE_WRITE_TOOLS,
+  registerAuthBridgeTools,
+} from './mcp-auth-bridge.js';
 import { BRIVEN_ASK_TOOLS, registerBrivenAskTool } from './mcp-briven-ask.js';
 import {
   DB_LIFECYCLE_ADMIN_TOOLS,
@@ -643,7 +647,9 @@ export function buildMcpServer(ctx: McpToolContext): McpServer {
 
   /* ── auth bridge — read + guidance tools (every scope) ──────────────── */
 
-  registerAuthBridgeTools(server, ctx, auditCall, jsonResult);
+  registerAuthBridgeTools(server, ctx, auditCall, jsonResult, {
+    allowWrites: ctx.scope === 'read-write' || ctx.scope === 'admin',
+  });
 
   /* ── briven_ask — the general reception desk (every scope) ──────────── */
 
@@ -1007,6 +1013,8 @@ export const WRITE_TOOLS = [
   // public share-link writes (M5 — read-write / admin only)
   'storage_create_link',
   'storage_revoke_link',
+  // auth bridge writes (mcp-auth-bridge.ts) — passwordless + mint pk_briven_auth_
+  ...AUTH_BRIDGE_WRITE_TOOLS,
   // database lifecycle writes (mcp-db-lifecycle.ts)
   ...DB_LIFECYCLE_WRITE_TOOLS,
 ] as const;

@@ -106,6 +106,12 @@ projectsRouter.use('/v1/projects/:id/storage-keys/*', requireProjectAuth());
 // File uploads / list (session or brk_ after same carve-out pattern)
 projectsRouter.use('/v1/projects/:id/files', requireProjectAuth());
 projectsRouter.use('/v1/projects/:id/files/*', requireProjectAuth());
+// Auth admin (enable, config patch, mint pk_briven_auth_, allowed domains).
+// Same carve-out: without it, Bearer brk_ hits session requireAuth first and
+// 401s as "invalid cli token" (Konnos agent handoff 2026-07-21). Handlers live
+// in authServiceRouter; role gates stay there.
+projectsRouter.use('/v1/projects/:id/auth', requireProjectAuth());
+projectsRouter.use('/v1/projects/:id/auth/*', requireProjectAuth());
 
 projectsRouter.use('/v1/projects', requireAuth());
 projectsRouter.use('/v1/projects/*', requireAuth());

@@ -227,6 +227,21 @@ import { exportUserData } from '../services/auth-gdpr-export.js';
  */
 export const authServiceRouter = new Hono<AppEnv>();
 
+/**
+ * Resolve an actor id for audit + createdBy when the caller may be either
+ * a dashboard session user OR a project API key (brk_). Without this, every
+ * "if (!actor) 401" after requireProjectAuth blocks agents that use brk_
+ * even though they already passed admin role via requireProjectRole.
+ */
+function resolveAuthActorId(c: {
+  get: (k: 'user' | 'apiKeyId') => { id: string } | string | null | undefined;
+}): string | null {
+  const user = c.get('user') as { id: string } | null | undefined;
+  if (user && typeof user === 'object' && typeof user.id === 'string') return user.id;
+  const keyId = c.get('apiKeyId');
+  return typeof keyId === 'string' && keyId.length > 0 ? keyId : null;
+}
+
 // ─── operational ────────────────────────────────────────────────────────
 
 /**
@@ -452,9 +467,8 @@ authServiceRouter.post(
       return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
     }
 
-    const actor = c.get('user');
-    if (!actor) {
-      // requireProjectAuth would 401 before this — defensive only.
+    const actorId = resolveAuthActorId(c);
+    if (!actorId) {
       return c.json({ code: 'unauthorized' }, 401);
     }
 
@@ -503,15 +517,18 @@ authServiceRouter.post(
 
     const cfIp = c.req.header('cf-connecting-ip') ?? null;
     await audit({
-      actorId: actor.id,
+      actorId,
       projectId,
       action: 'auth.enable',
       ipHash: cfIp ? hashIp(cfIp) : null,
       userAgent: c.req.header('user-agent') ?? null,
-      metadata: { statements: statements.length },
+      metadata: {
+        statements: statements.length,
+        via: c.get('apiKeyId') ? 'api_key' : 'session',
+      },
     });
 
-    log.info('briven_auth_enabled', { projectId, actorId: actor.id });
+    log.info('briven_auth_enabled', { projectId, actorId });
 
     return c.json({
       ok: true,
@@ -573,8 +590,8 @@ authServiceRouter.patch(
     if (!projectId) {
       return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
     }
-    const actor = c.get('user');
-    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const actorId = resolveAuthActorId(c);
+    if (!actorId) return c.json({ code: 'unauthorized' }, 401);
 
     const body = await c.req.json().catch(() => null);
     if (body === null) {
@@ -622,7 +639,7 @@ authServiceRouter.patch(
 
     const cfIp = c.req.header('cf-connecting-ip') ?? null;
     await audit({
-      actorId: actor.id,
+      actorId,
       projectId,
       action: 'auth.config.updated',
       ipHash: cfIp ? hashIp(cfIp) : null,
@@ -630,7 +647,10 @@ authServiceRouter.patch(
       // Don't log the full patch — provider toggles + branding may include
       // client ids that are public but still noisy. Just count the keys
       // touched so operators can correlate "who patched what when".
-      metadata: { keys: Object.keys(body as Record<string, unknown>) },
+      metadata: {
+        keys: Object.keys(body as Record<string, unknown>),
+        via: c.get('apiKeyId') ? 'api_key' : 'session',
+      },
     });
 
     return c.json({ config: next });
@@ -736,8 +756,8 @@ authServiceRouter.post(
     if (!projectId) {
       return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
     }
-    const actor = c.get('user');
-    if (!actor) return c.json({ code: 'unauthorized' }, 401);
+    const actorId = resolveAuthActorId(c);
+    if (!actorId) return c.json({ code: 'unauthorized' }, 401);
 
     const body = (await c.req.json().catch(() => null)) as
       | { origin?: unknown; isWildcard?: unknown }
@@ -749,25 +769,40 @@ authServiceRouter.post(
     }
 
     // Founder/superadmin (isAdmin + env allowlist) has no per-project cap.
-    const [urow] = await getDb()
-      .select({ email: users.email, isAdmin: users.isAdmin })
-      .from(users)
-      .where(eq(users.id, actor.id))
-      .limit(1);
-    const unlimited = Boolean(urow?.isAdmin) && isSuperadminEmail(urow?.email);
+    // API-key callers never get unlimited (no user row).
+    let unlimited = false;
+    const user = c.get('user') as { id: string } | null;
+    if (user?.id) {
+      const [urow] = await getDb()
+        .select({ email: users.email, isAdmin: users.isAdmin })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      unlimited = Boolean(urow?.isAdmin) && isSuperadminEmail(urow?.email);
+    }
 
     try {
-      const domain = await addOrigin({ projectId, origin, isWildcard, createdBy: actor.id, unlimited });
+      const domain = await addOrigin({
+        projectId,
+        origin,
+        isWildcard,
+        createdBy: actorId,
+        unlimited,
+      });
       await invalidateAuthInstance(projectId);
       await audit({
-        actorId: actor.id,
+        actorId,
         projectId,
         action: 'auth.allowed_domain.added',
         ipHash: hashIp(
           c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
         ),
         userAgent: c.req.header('user-agent') ?? null,
-        metadata: { origin: domain.origin, isWildcard: domain.isWildcard },
+        metadata: {
+          origin: domain.origin,
+          isWildcard: domain.isWildcard,
+          via: c.get('apiKeyId') ? 'api_key' : 'session',
+        },
       });
       return c.json({ domain });
     } catch (err) {
@@ -1168,8 +1203,8 @@ authServiceRouter.post(
     if (!projectId) {
       return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
     }
-    const actor = c.get('user');
-    if (!actor) {
+    const actorId = resolveAuthActorId(c);
+    if (!actorId) {
       return c.json({ code: 'unauthorized' }, 401);
     }
     const body = (await c.req.json().catch(() => null)) as
@@ -1191,17 +1226,21 @@ authServiceRouter.post(
     try {
       const created = await createAuthSdkKey({
         projectId,
-        createdBy: actor.id,
+        createdBy: actorId,
         name: body.name,
         scope: scopeRaw,
       });
       await audit({
-        actorId: actor.id,
+        actorId,
         projectId,
         action: 'briven_auth.api_key.created',
         ipHash: hashIp(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null),
         userAgent: c.req.header('user-agent') ?? null,
-        metadata: { keyId: created.record.id, scope: scopeRaw },
+        metadata: {
+          keyId: created.record.id,
+          scope: scopeRaw,
+          via: c.get('apiKeyId') ? 'api_key' : 'session',
+        },
       });
       return c.json(
         {

@@ -1,34 +1,37 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import { runInProjectDatabase } from '../db/data-plane.js';
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
 import { resolveFallbackFromAddress, resolveFromAddress } from './auth-mailer.js';
-import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
+import {
+  ensureTenantAuthSchema,
+  renderAuthProvisioningSql,
+} from './auth-provisioning.js';
+import { createAuthSdkKey } from './auth-sdk-keys.js';
+import { invalidateAuthInstance } from './auth-tenant-pool.js';
+import {
+  getAuthConfig,
+  isAuthEnabled,
+  updateAuthConfig,
+  type AuthConfig,
+} from './tenant-config-store.js';
 
 /**
- * MCP auth bridge (v1) — the "reception desk" for other projects' agents.
+ * MCP auth bridge — reception desk + agent write tools for THIS project only.
  *
- * Three READ+GUIDANCE tools on the per-project MCP so an agent building ON
- * briven (konnos, videodj, …) can ask auth/email questions directly instead
- * of a human relaying between sessions:
+ * READ (every MCP scope):
+ *   auth_config_get, sender_domain_status, auth_docs_ask
  *
- *   auth_config_get      — your own auth setup, sanitized
- *   sender_domain_status — is my sender domain verified? which DNS records?
- *   auth_docs_ask        — free-form auth question → curated guidance
+ * WRITE (read-write / admin MCP keys only — 2026-07-21):
+ *   auth_enable_passwordless — turn on magic link + email OTP + passkey
+ *   auth_mint_public_key — mint pk_briven_auth_… (plaintext once)
  *
- * Contract (owner-approved 2026-07-07):
- *   - READ + GUIDANCE ONLY. No config writes through the MCP — changing auth
- *     settings stays a dashboard action so nothing can silently reconfigure
- *     a tenant.
- *   - One-project scope: everything derives from the verified key binding,
- *     same isolation contract as every other tool in mcp-tools.ts.
- *   - Every answer carries an `applyInYourProject` guidance block written for
- *     the REQUESTING agent to convert into work in ITS OWN codebase, and
- *     cites the public docs page so agents learn the official path.
- *   - Vendor-silent prose: the email infrastructure is described as briven's,
- *     never by vendor name. Raw DNS record values are relayed as-is (they are
- *     technical values a registrar needs verbatim).
+ * Contract:
+ *   - One-project scope from the MCP key binding.
+ *   - Writes only passwordless toggles + mint public key (not OAuth secrets).
+ *   - Vendor-silent prose for email infra.
  */
 
 const DOCS = {
@@ -289,11 +292,14 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
       'ALWAYS call auth_config_get first. Magic link / email OTP / passkey / password only need ' +
       'enabled:true (no secrets). OAuth (google, github, konnos, …) needs enabled:true AND clientIdSet:true ' +
       'AND a stored client secret — toggle alone does NOT activate the button. ' +
-      'If magicLink/emailOtp/passkey already show enabled:true, do NOT re-nag the owner to toggle them; ' +
-      'wire the app. provider edits are dashboard-only (this MCP is read-only).',
+      'If magic/OTP/passkey are OFF and your MCP key is read-write or admin: call auth_enable_passwordless once ' +
+      '(or PATCH /v1/projects/:id/auth/config with Bearer brk_ admin key). ' +
+      'If they already show enabled:true, do NOT re-nag the owner — wire the app.',
     applyInYourProject: [
-      'offer UI only for providers with enabled:true; for OAuth also require clientIdSet:true or ask owner for Client ID+secret once.',
-      'never invent Clerk/Firebase Auth because a toggle is on but OAuth secrets are missing.',
+      'write-scope MCP: auth_enable_passwordless then auth_mint_public_key if you lack pk_briven_auth_….',
+      'HTTP (admin brk_): PATCH /v1/projects/{id}/auth/config with providers.magicLink/emailOtp/passkey enabled true.',
+      'offer UI only for providers with enabled:true; for OAuth also require clientIdSet:true.',
+      'never invent Clerk/Firebase Auth.',
     ],
     docs: DOCS.auth,
   },
@@ -502,15 +508,15 @@ export function matchAuthGuidance(question: string, limit = 3): AuthGuidanceEntr
 /* ── registration ────────────────────────────────────────────────────── */
 
 /**
- * Register the three auth-bridge tools. Read-tools: available to EVERY key
- * scope. `auditCall` is the same audit helper mcp-tools.ts builds for the
- * data tools, so auth-bridge calls appear in the same `mcp.tool.*` stream.
+ * Register auth-bridge tools. Read tools: every MCP scope. Write tools:
+ * only when `opts.allowWrites` (read-write / admin MCP keys).
  */
 export function registerAuthBridgeTools(
   server: McpServer,
   ctx: { projectId: string },
   auditCall: (tool: string, metadata: Record<string, unknown>) => Promise<void>,
   jsonResult: (payload: unknown) => { content: { type: 'text'; text: string }[] },
+  opts?: { allowWrites?: boolean },
 ): void {
   server.registerTool(
     'auth_config_get',
@@ -519,26 +525,31 @@ export function registerAuthBridgeTools(
       description:
         'Read YOUR project\'s auth configuration: which sign-in providers are enabled ' +
         '(with settings), and the email branding (sender name, sender domain, colors). ' +
-        'Secrets and OAuth client ids are never returned. Includes guidance on how to ' +
-        'apply the config in your own app. Config changes are dashboard-only.',
+        'Secrets and OAuth client ids are never returned. ' +
+        'To turn on magic/OTP/passkey with a write-scope MCP key, use auth_enable_passwordless. ' +
+        'To mint pk_briven_auth_… use auth_mint_public_key.',
       annotations: { readOnlyHint: true },
     },
     async () => {
       await auditCall('auth_config_get', {});
       const config = await getAuthConfig(ctx.projectId);
       const sanitized = sanitizeAuthConfig(config);
+      const enabled = await isAuthEnabled(ctx.projectId).catch(() => false);
       return jsonResult({
+        authEnabled: enabled,
         config: sanitized,
         guidance: {
           summary:
-            'build your sign-in UI from this live config. dashboard-only for changes ' +
-            '(auth → providers / branding / allowed domains). this MCP is read-only.',
+            'build your sign-in UI from this live config. with a read-write/admin MCP key ' +
+            'call auth_enable_passwordless to turn on magic+OTP+passkey, and auth_mint_public_key ' +
+            'for a browser pk_briven_auth_… key.',
           applyInYourProject: [
             'if magicLink/emailOtp/passkey show enabled:true, do NOT re-ask the owner to toggle them — wire the app.',
+            'if they are false and your MCP key is write-scope: call auth_enable_passwordless once, then auth_config_get again.',
             'OAuth (google/konnos/…): needs enabled:true AND clientIdSet:true AND a secret in the dashboard; toggle alone is not enough.',
             'magic link: POST /v1/auth-tenant/sign-in/magic-link — expect 200 (not empty 500).',
             'email OTP send: POST /v1/auth-tenant/email-otp/send-verification-otp with type:"sign-in".',
-            'passkey: GET /v1/auth-tenant/passkey/generate-authenticate-options (POST on that path is 404 by design); then WebAuthn; then POST …/verify-authentication. use @briven/auth passkey.signIn()/register(). Face ID is the device, not a missing platform feature.',
+            'passkey: GET /v1/auth-tenant/passkey/generate-authenticate-options (POST on that path is 404 by design); then WebAuthn; then POST …/verify-authentication.',
             'every Origin must be under Auth → Allowed Domains; if CORS already allows your origin, do not blame domains for other errors.',
             'keys: pk_briven_auth_… in the browser only; never brk_.',
           ],
@@ -655,15 +666,142 @@ export function registerAuthBridgeTools(
         })),
         note:
           'answers are curated and cite the official docs. for live state, combine with ' +
-          'auth_config_get and sender_domain_status.',
+          'auth_config_get and sender_domain_status. write-scope keys may call ' +
+          'auth_enable_passwordless and auth_mint_public_key.',
       });
     },
   );
+
+  if (opts?.allowWrites) {
+    server.registerTool(
+      'auth_enable_passwordless',
+      {
+        title: 'Enable magic link + email OTP + passkey',
+        description:
+          'Enable passwordless sign-in for THIS project: magic link, email OTP, and passkey. ' +
+          'Also ensures Auth is provisioned (tables + auth_enabled). Does NOT set OAuth secrets. ' +
+          'Write-scope MCP keys only. Call auth_config_get after to verify.',
+        annotations: { readOnlyHint: false },
+      },
+      async () => {
+        await auditCall('auth_enable_passwordless', {});
+        const projectId = ctx.projectId;
+        // Provision tables if needed (idempotent).
+        const statements = renderAuthProvisioningSql();
+        await runInProjectDatabase(projectId, async (tx) => {
+          for (const stmt of statements) {
+            await tx.unsafe(stmt);
+          }
+          const txClient = {
+            query: async (sql: string, params?: unknown[]) => {
+              const rows = await tx.unsafe(sql, (params ?? []) as never);
+              return { rows: Array.isArray(rows) ? rows : [] };
+            },
+          };
+          await ensureTenantAuthSchema(txClient);
+          await tx.unsafe(
+            `INSERT INTO "_briven_meta" (key, value)
+             VALUES ('auth_enabled', 'true'::jsonb)
+             ON CONFLICT (key) DO NOTHING`,
+          );
+          await tx.unsafe(
+            `UPDATE "_briven_meta" SET value = 'true'::jsonb WHERE key = 'auth_enabled'`,
+          );
+        });
+        const next = await updateAuthConfig(projectId, {
+          providers: {
+            magicLink: { enabled: true },
+            emailOtp: { enabled: true },
+            passkey: { enabled: true },
+          },
+        });
+        await invalidateAuthInstance(projectId);
+        return jsonResult({
+          ok: true,
+          authEnabled: true,
+          providers: {
+            magicLink: next.providers.magicLink,
+            emailOtp: next.providers.emailOtp,
+            passkey: next.providers.passkey,
+          },
+          guidance: {
+            summary:
+              'passwordless providers are ON. mint a browser key with auth_mint_public_key if ' +
+              'you do not already have pk_briven_auth_…, register Allowed Domains, then wire @briven/auth.',
+            applyInYourProject: [
+              'set NEXT_PUBLIC_BRIVEN_AUTH_KEY / BRIVEN_AUTH_PUBLIC_KEY to a read-write pk_briven_auth_… key.',
+              'passkey: use GET generate-authenticate-options (not POST).',
+            ],
+            docs: DOCS.auth,
+          },
+        });
+      },
+    );
+
+    server.registerTool(
+      'auth_mint_public_key',
+      {
+        title: 'Mint pk_briven_auth_ public key',
+        description:
+          'Create a browser-safe Auth public key (pk_briven_auth_…) for THIS project. ' +
+          'Returns the plaintext ONCE — store it in the app env immediately. Write-scope only. ' +
+          'Default scope is read-write (sign-in surface).',
+        inputSchema: {
+          name: z
+            .string()
+            .min(1)
+            .max(64)
+            .default('mcp-minted')
+            .describe('Label for the key in the dashboard'),
+          scope: z
+            .enum(['read', 'read-write', 'admin'])
+            .default('read-write')
+            .describe('Auth SDK key scope'),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ name, scope }) => {
+        await auditCall('auth_mint_public_key', { name, scope });
+        const created = await createAuthSdkKey({
+          projectId: ctx.projectId,
+          createdBy: `mcp:${ctx.projectId}`,
+          name,
+          scope,
+        });
+        return jsonResult({
+          ok: true,
+          key: {
+            id: created.record.id,
+            name: created.record.name,
+            prefix: created.record.prefix,
+            suffix: created.record.suffix,
+            scope: created.record.scope,
+            createdAt: created.record.createdAt.toISOString(),
+          },
+          plaintext: created.plaintext,
+          guidance: {
+            summary:
+              'copy plaintext into NEXT_PUBLIC_BRIVEN_AUTH_KEY and BRIVEN_AUTH_PUBLIC_KEY now — it is not shown again.',
+            applyInYourProject: [
+              'never put brk_ or MCP keys in the browser; only this pk_briven_auth_… value.',
+            ],
+            docs: DOCS.keys,
+          },
+        });
+      },
+    );
+  }
 }
 
-/** Tool names this module registers — kept in lock-step with READ_TOOLS. */
+/** Read tools — every MCP scope. */
 export const AUTH_BRIDGE_TOOLS = [
   'auth_config_get',
   'sender_domain_status',
   'auth_docs_ask',
+] as const;
+
+/** Write tools — read-write / admin MCP keys only. */
+export const AUTH_BRIDGE_WRITE_TOOLS = [
+  'auth_enable_passwordless',
+  'auth_mint_public_key',
 ] as const;

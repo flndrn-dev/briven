@@ -120,11 +120,19 @@ describe('mcp auth bridge — pure helpers', () => {
     expect(tokeniseQuestion('Why DO x emails FAIL?')).toEqual(['why', 'do', 'emails', 'fail']);
   });
 
-  test('AUTH_BRIDGE_TOOLS lists exactly the three v1 tools', () => {
+  test('AUTH_BRIDGE_TOOLS lists exactly the three read tools', () => {
     expect([...AUTH_BRIDGE_TOOLS].sort()).toEqual([
       'auth_config_get',
       'auth_docs_ask',
       'sender_domain_status',
+    ]);
+  });
+
+  test('AUTH_BRIDGE_WRITE_TOOLS lists passwordless enable + mint key', async () => {
+    const { AUTH_BRIDGE_WRITE_TOOLS } = await import('./mcp-auth-bridge.js');
+    expect([...AUTH_BRIDGE_WRITE_TOOLS].sort()).toEqual([
+      'auth_enable_passwordless',
+      'auth_mint_public_key',
     ]);
   });
 });
