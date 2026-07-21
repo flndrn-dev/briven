@@ -11,7 +11,7 @@ const TABS = [
   { href: '', label: 'overview', dev: false },
   { href: '/studio', label: 'studio', dev: false },
   { href: '/snapshots', label: 'snapshots', dev: false },
-  { href: '/auth', label: 'auth', dev: false },
+  // Auth is no longer a project tab — independent yellow Briven Auth section.
   { href: '/storage', label: 'S3 bucket', dev: false },
   // Agent access (MCP keys) — always visible: agents are first-class users
   // of Briven, so the door to them can't hide behind developer mode.

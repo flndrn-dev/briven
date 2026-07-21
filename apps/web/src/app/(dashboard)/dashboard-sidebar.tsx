@@ -11,10 +11,13 @@ import { CreditCardIcon, type CreditCardIconHandle } from '../../components/ui/c
 import { DatabaseIcon, type DatabaseIconHandle } from '../../components/ui/database';
 import { FoldersIcon, type FoldersIconHandle } from '../../components/ui/folders';
 import { LayoutGridIcon, type LayoutGridIconHandle } from '../../components/ui/layout-grid';
-import { type ShieldCheckIconHandle } from '../../components/ui/shield-check';
+import { ShieldCheckIcon, type ShieldCheckIconHandle } from '../../components/ui/shield-check';
 import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
 const STORAGE_KEY = 'briven.sidebar.collapsed';
+
+/** Yellow Auth product — independent from Project/DB. */
+const AUTH_ACCENT = '#e6b800';
 
 interface NavItem {
   href: string;
@@ -28,6 +31,8 @@ interface NavItem {
   }) => ReactNode;
   match: (pathname: string) => boolean;
   adminOnly?: boolean;
+  /** Highlight as Briven Auth (yellow) when active */
+  authProduct?: boolean;
 }
 
 const NAV: NavItem[] = [
@@ -44,6 +49,13 @@ const NAV: NavItem[] = [
     label: 'projects',
     Icon: FoldersIcon as never,
     match: (p) => p.startsWith('/dashboard/projects'),
+  },
+  {
+    href: '/dashboard/auth',
+    label: 'Briven Auth',
+    Icon: ShieldCheckIcon as never,
+    match: (p) => p.startsWith('/dashboard/auth'),
+    authProduct: true,
   },
   {
     href: '/dashboard/s3',
@@ -150,6 +162,7 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
             active={item.match(pathname)}
             iconPixels={iconPixels}
             collapsed={isCollapsed}
+            authProduct={item.authProduct === true}
           />
         ))}
       </ul>
@@ -200,11 +213,13 @@ function SidebarLink({
   active,
   iconPixels,
   collapsed,
+  authProduct,
 }: {
   item: NavItem;
   active: boolean;
   iconPixels: number;
   collapsed: boolean;
+  authProduct: boolean;
 }) {
   const iconRef = useRef<IconHandle>(null);
   const [hovering, setHovering] = useState(false);
@@ -220,6 +235,9 @@ function SidebarLink({
     else iconRef.current.stopAnimation();
   }, [hovering]);
 
+  const activeAuth = active && authProduct;
+  const idleAuth = !active && authProduct;
+
   return (
     <li>
       <Link
@@ -231,10 +249,24 @@ function SidebarLink({
         onFocus={() => setHovering(true)}
         onBlur={() => setHovering(false)}
         className={`flex items-center gap-3 rounded-md px-3 py-2 font-mono text-sm transition-colors ${
-          active
-            ? 'bg-[var(--color-surface)] text-[var(--color-primary)]'
-            : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]'
+          activeAuth
+            ? 'text-black'
+            : active
+              ? 'bg-[var(--color-surface)] text-[var(--color-primary)]'
+              : idleAuth
+                ? 'text-[var(--color-text-muted)] hover:bg-[color-mix(in_srgb,#e6b800_12%,transparent)] hover:text-[var(--color-text)]'
+                : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]'
         } ${collapsed ? 'justify-center px-0' : ''}`}
+        style={
+          activeAuth
+            ? {
+                background: AUTH_ACCENT,
+                boxShadow: `inset 3px 0 0 color-mix(in srgb, ${AUTH_ACCENT} 100%, black)`,
+              }
+            : idleAuth
+              ? { borderLeft: `3px solid color-mix(in srgb, ${AUTH_ACCENT} 55%, transparent)` }
+              : undefined
+        }
       >
         {/* pointer-events-none on the icon's own mouse surface so its
             internal onMouseEnter doesn't compete with the Link's. The
