@@ -16,7 +16,7 @@ import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 
 const STORAGE_KEY = 'briven.sidebar.collapsed';
 
-/** Yellow Auth product — independent from Project/DB. */
+/** Auth section accent — used only for icon + label when that row is active. */
 const AUTH_ACCENT = '#e6b800';
 
 interface NavItem {
@@ -31,7 +31,10 @@ interface NavItem {
   }) => ReactNode;
   match: (pathname: string) => boolean;
   adminOnly?: boolean;
-  /** Highlight as Briven Auth (yellow) when active */
+  /**
+   * When active, icon + label use the Auth yellow (same shape as other
+   * rows — no solid pill, no side bar). Idle state matches every other link.
+   */
   authProduct?: boolean;
 }
 
@@ -52,7 +55,7 @@ const NAV: NavItem[] = [
   },
   {
     href: '/dashboard/auth',
-    label: 'Briven Auth',
+    label: 'Authentication',
     Icon: ShieldCheckIcon as never,
     match: (p) => p.startsWith('/dashboard/auth'),
     authProduct: true,
@@ -235,8 +238,9 @@ function SidebarLink({
     else iconRef.current.stopAnimation();
   }, [hovering]);
 
+  // Same row chrome as every other nav item. Auth only recolors icon +
+  // label yellow when active (mirrors how projects uses green primary).
   const activeAuth = active && authProduct;
-  const idleAuth = !active && authProduct;
 
   return (
     <li>
@@ -249,30 +253,23 @@ function SidebarLink({
         onFocus={() => setHovering(true)}
         onBlur={() => setHovering(false)}
         className={`flex items-center gap-3 rounded-md px-3 py-2 font-mono text-sm transition-colors ${
-          activeAuth
-            ? 'text-black'
-            : active
-              ? 'bg-[var(--color-surface)] text-[var(--color-primary)]'
-              : idleAuth
-                ? 'text-[var(--color-text-muted)] hover:bg-[color-mix(in_srgb,#e6b800_12%,transparent)] hover:text-[var(--color-text)]'
-                : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]'
+          active
+            ? 'bg-[var(--color-surface)]'
+            : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]'
         } ${collapsed ? 'justify-center px-0' : ''}`}
         style={
-          activeAuth
-            ? {
-                background: AUTH_ACCENT,
-                boxShadow: `inset 3px 0 0 color-mix(in srgb, ${AUTH_ACCENT} 100%, black)`,
-              }
-            : idleAuth
-              ? { borderLeft: `3px solid color-mix(in srgb, ${AUTH_ACCENT} 55%, transparent)` }
-              : undefined
+          active
+            ? activeAuth
+              ? { color: AUTH_ACCENT }
+              : { color: 'var(--color-primary)' }
+            : undefined
         }
       >
         {/* pointer-events-none on the icon's own mouse surface so its
             internal onMouseEnter doesn't compete with the Link's. The
             animation is driven via the ref from the Link's hover state
             above. */}
-        <span className="pointer-events-none">
+        <span className="pointer-events-none" style={activeAuth ? { color: AUTH_ACCENT } : undefined}>
           <Icon ref={iconRef as never} size={iconPixels} />
         </span>
         {collapsed ? (

@@ -10,10 +10,12 @@ import { usePathname } from 'next/navigation';
  * takes over. Lives as a separate component so the icon-bearing
  * sidebar doesn't need to grow a responsive branch.
  */
+const AUTH_ACCENT = '#e6b800';
+
 const NAV = [
   { href: '/dashboard', label: 'overview' },
   { href: '/dashboard/projects', label: 'projects' },
-  { href: '/dashboard/auth', label: 'Briven Auth', auth: true },
+  { href: '/dashboard/auth', label: 'Authentication', auth: true },
   { href: '/dashboard/s3', label: 'S3 bucket' },
   { href: '/dashboard/teams', label: 'teams' },
   { href: '/dashboard/billing', label: 'billing' },
@@ -40,13 +42,17 @@ export function DashboardMobileNav() {
             key={item.href}
             href={item.href}
             className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 font-mono text-xs transition ${
-              active && isAuth
-                ? 'text-black'
-                : active
-                  ? 'bg-[var(--color-surface-raised)] text-[var(--color-text)]'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              active
+                ? 'bg-[var(--color-surface-raised)]'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
             }`}
-            style={active && isAuth ? { background: '#e6b800' } : undefined}
+            style={
+              active
+                ? isAuth
+                  ? { color: AUTH_ACCENT }
+                  : { color: 'var(--color-text)' }
+                : undefined
+            }
           >
             {item.label}
           </Link>
