@@ -4,10 +4,10 @@ export const metadata = { title: 'Auth' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Phase 1 (Option B) Auth shell — briven-engine version + not ready for app login.
- * Same dashboard design language as projects/overview. Butter yellow via layout.
+ * Phase 2 (Option B) Auth overview — briven-engine on Doltgres.
+ * Password + sessions live; other methods later. Same dashboard design language.
  */
-export default async function BrivenAuthPhase1Page() {
+export default async function BrivenAuthPhase2Page() {
   const info = await fetchAuthCoreInfo();
 
   const engine = info?.engine ?? 'briven-engine';
@@ -15,7 +15,12 @@ export default async function BrivenAuthPhase1Page() {
   const storage = info?.storage ?? 'doltgres';
   const database = info?.database ?? 'briven_engine';
   const engineOk = info?.ok === true;
-  const schemaReady = info?.schemaReady === true;
+  const appLoginReady = info?.appLoginReady === true;
+  const methods = Array.isArray(info?.loginMethods)
+    ? info!.loginMethods!
+    : appLoginReady
+      ? ['emailpassword']
+      : [];
   const message =
     info?.message ??
     (info
@@ -44,15 +49,19 @@ export default async function BrivenAuthPhase1Page() {
           className="font-mono text-[10px] uppercase tracking-widest"
           style={{ color: 'var(--auth-accent, #FFFD74)' }}
         >
-          Phase 1 shell
+          Phase 2 · password + sessions
         </p>
 
         <h2 className="mt-3 font-mono text-sm text-[var(--color-text)]">
-          not ready for app login yet
+          {appLoginReady
+            ? 'email + password login is on (Doltgres)'
+            : 'engine not ready yet'}
         </h2>
         <p className="mt-2 max-w-lg font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          Briven Auth is live as a shell only. Apps (mavi, handlr, konnos, …)
-          cannot sign users in yet. Platform login to briven.tech is unchanged.
+          Apps can sign users up and in with email and password. Sessions are
+          stored in Doltgres next to Briven DB and Briven Pay. Magic link, SMS,
+          and Google come in later phases. Platform login to briven.tech is
+          separate and unchanged.
         </p>
 
         <dl className="mt-6 grid gap-3 font-mono text-xs sm:grid-cols-2">
@@ -71,10 +80,10 @@ export default async function BrivenAuthPhase1Page() {
             </dd>
           </div>
           <div className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3">
-            <dt className="text-[var(--color-text-muted)]">engine health</dt>
+            <dt className="text-[var(--color-text-muted)]">app login</dt>
             <dd className="mt-1 text-[var(--color-text)]">
-              {engineOk ? 'ok' : 'not ready'}
-              {schemaReady ? ' · schema ready' : ''}
+              {appLoginReady ? 'open (password)' : engineOk ? 'partial' : 'closed'}
+              {methods.length > 0 ? ` · ${methods.join(', ')}` : ''}
             </dd>
           </div>
         </dl>
@@ -82,9 +91,23 @@ export default async function BrivenAuthPhase1Page() {
         <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-text-muted)]">
           {message}
           {info?.buildSha && info.buildSha !== 'dev' ? (
-            <span className="mt-1 block opacity-70">build {info.buildSha.slice(0, 7)}</span>
+            <span className="mt-1 block opacity-70">
+              build {info.buildSha.slice(0, 7)}
+            </span>
           ) : null}
         </p>
+
+        <div className="mt-6 rounded border border-dashed border-[var(--color-border)] p-4 font-mono text-[11px] text-[var(--color-text-muted)]">
+          <p className="text-[var(--color-text)]">For apps (first-party proxy)</p>
+          <p className="mt-2">
+            POST /v1/auth-core/fdi/signup · /signin · /signout
+          </p>
+          <p>GET /v1/auth-core/session/me</p>
+          <p className="mt-2">
+            Send header <code className="text-[var(--color-text)]">x-briven-project-id</code>{' '}
+            so each app keeps its own users.
+          </p>
+        </div>
       </div>
     </section>
   );

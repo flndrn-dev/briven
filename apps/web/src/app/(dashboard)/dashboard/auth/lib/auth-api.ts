@@ -16,6 +16,7 @@ export type AuthCoreInfo = {
   schemaReady?: boolean;
   poolReady?: boolean;
   appLoginReady?: boolean;
+  loginMethods?: string[];
   productStatus?: string;
   notice?: string;
   buildSha?: string;

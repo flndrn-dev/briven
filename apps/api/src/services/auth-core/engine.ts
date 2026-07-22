@@ -23,7 +23,7 @@ import { getEnginePool, isEnginePoolReady } from './db.js';
 
 export const BRIVEN_ENGINE_ID = 'briven-engine' as const;
 /** Product engine version shown on yellow Auth shell (Option B Phase 1). */
-export const BRIVEN_ENGINE_VERSION = '0.1.0-phase1' as const;
+export const BRIVEN_ENGINE_VERSION = '0.2.0-phase2' as const;
 
 export type AuthCoreStatus = {
   enabled: boolean;
@@ -35,10 +35,11 @@ export type AuthCoreStatus = {
   schemaReady: boolean;
   poolReady: boolean;
   phase: number;
-  /** Always false in Phase 1 — customer apps must not log in yet. */
-  appLoginReady: false;
+  /** Phase 2: email/password + sessions open for apps (via FDI). */
+  appLoginReady: boolean;
+  loginMethods: string[];
   message: string;
-  deployGate: 'phase1-shell';
+  deployGate: 'phase2-password-sessions';
   recipeNames: string[];
   sdkInitialized: boolean;
   recipePhase: number | null;
@@ -69,11 +70,12 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
     engineVersion: BRIVEN_ENGINE_VERSION,
     storage: 'doltgres' as const,
     database: 'briven_engine' as const,
-    appLoginReady: false as const,
-    deployGate: 'phase1-shell' as const,
+    appLoginReady: false,
+    loginMethods: [] as string[],
+    deployGate: 'phase2-password-sessions' as const,
     recipeNames: [...LOADED_RECIPES],
     sdkInitialized: bootstrapped && schemaReady,
-    recipePhase: bootstrapped ? 1 : null,
+    recipePhase: bootstrapped ? 2 : null,
     // Redact credentials — this object is returned on public /info.
     connectionUri: redactConnectionUri(env.BRIVEN_ENGINE_DATABASE_URL),
     hello: null as string | null,
@@ -87,7 +89,7 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       ok: false,
       schemaReady: false,
       poolReady: false,
-      phase: 1,
+      phase: 2,
       message: 'BRIVEN_AUTH_CORE_ENABLED is false',
     };
   }
@@ -108,17 +110,22 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
     const pool = getEnginePool();
     const r = await pool.query('SELECT 1 AS ok');
     const ok = r.rows[0]?.ok === 1 || r.rows[0]?.ok === '1';
+    const ready = ok && schemaReady && bootstrapped;
     return {
       ...base,
       enabled: true,
-      ok: ok && schemaReady,
+      ok: ready,
       schemaReady,
       poolReady: true,
-      phase: 1,
+      phase: 2,
+      appLoginReady: ready,
+      loginMethods: ready ? ['emailpassword'] : [],
       hello: ok ? 'Hello' : null,
-      message: schemaReady
-        ? 'briven-engine shell on Doltgres — not ready for app login yet'
-        : 'Doltgres reachable; schema not bootstrapped',
+      message: ready
+        ? 'briven-engine password + sessions live on Doltgres (Phase 2)'
+        : schemaReady
+          ? 'Doltgres reachable; engine not fully bootstrapped'
+          : 'Doltgres reachable; schema not bootstrapped',
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -175,8 +182,9 @@ export async function initAuthCoreSdk(): Promise<boolean> {
       storage: 'doltgres',
       database: 'briven_engine',
       recipes: LOADED_RECIPES,
-      deployGate: 'phase1-shell',
-      appLoginReady: false,
+      deployGate: 'phase2-password-sessions',
+      appLoginReady: true,
+      loginMethods: ['emailpassword'],
     });
     return true;
   } catch (err) {

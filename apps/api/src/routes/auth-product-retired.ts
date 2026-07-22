@@ -25,9 +25,8 @@ authProductRetiredRouter.all('/v1/auth-v2/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/projects/:id/auth/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/projects/:id/scim/*', (c) => c.json(GONE, 410));
 
-// Full briven-engine product APIs stay closed until later phases
-// (status routes are mounted on authCoreStatusRouter, not here).
-authProductRetiredRouter.all('/v1/auth-core/fdi/*', (c) => c.json(GONE, 410));
+// Phase 2 opens: /v1/auth-core/fdi/* (password login) + /v1/auth-core/session/me
+// Still closed: dashboard product, users list, MFA admin, keys, migration, …
 authProductRetiredRouter.all('/v1/auth-core/dashboard', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/dashboard/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/users', (c) => c.json(GONE, 410));
@@ -42,6 +41,6 @@ authProductRetiredRouter.all('/v1/auth-core/roles', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/roles/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/mfa/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/passkeys/*', (c) => c.json(GONE, 410));
-authProductRetiredRouter.all('/v1/auth-core/session/*', (c) => c.json(GONE, 410));
+// session list/revoke stay dashboard-gated on the session router; no blanket 410 on /session/*
 authProductRetiredRouter.all('/v1/auth-core/keys/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/migration/*', (c) => c.json(GONE, 410));

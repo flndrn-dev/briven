@@ -50,7 +50,10 @@ export type IdPrefix =
   | 'sg' // storage grant (cross-project sharing grant — granter→grantee resource)
   | 'sl' // storage share-link (tokenized public download link — time-limited, revocable)
   | 'kans' // known-answer (briven_ask self-growing knowledge-base row)
-  | 'tsec'; // tenant secret (per-project encrypted credential, e.g. provider keys)
+  | 'tsec' // tenant secret (per-project encrypted credential, e.g. provider keys)
+  | 'beu' // briven-engine end-user (Auth product, Doltgres vault)
+  | 'btp' // briven-engine third-party link
+  | 'bwc' // briven-engine webauthn credential
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

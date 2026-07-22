@@ -1,35 +1,38 @@
-# Briven Auth — state (Option B Phase 1)
+# Briven Auth — state (Option B Phase 2)
 
 **Updated:** 2026-07-22  
 **Decision:** Phase 0 Option **B** — native briven-engine on Doltgres (no SuperTokens Core product).
 
-## What is live (Phase 1 shell)
+## What is live (Phase 2)
 
-1. **Dashboard Auth** (`/dashboard/auth`) shows:
-   - engine name **briven-engine**
-   - engine **version**
-   - storage **doltgres** / DB `briven_engine`
-   - clear line: **not ready for app login yet**
-2. **API status (open for shell):**
-   - `GET /v1/auth-core/info`
-   - `GET /v1/auth-core/ready`
-   - `GET /v1/auth-core/map/:projectId`
-3. **API closed (410):** old customer Auth + full engine product (FDI, users, dashboard data, enable, …)
-4. **Boot:** `initAuthCoreSdk()` ensures Doltgres DB + schema when `BRIVEN_AUTH_CORE_ENABLED=true`
-5. **Defaults:** `BRIVEN_AUTH_ENABLED=false` (old Better Auth customer product), `BRIVEN_AUTH_CORE_ENABLED=true` (engine shell)
+1. **Dashboard Auth** — engine version, storage doltgres, **password login open**.
+2. **App login APIs (briven-engine on Doltgres):**
+   - `POST /v1/auth-core/fdi/signup` — email + password
+   - `POST /v1/auth-core/fdi/signin`
+   - `POST /v1/auth-core/fdi/signout`
+   - `GET /v1/auth-core/session/me` — verify session
+3. **Status:**
+   - `GET /v1/auth-core/info` · `ready` · `map/:projectId`
+4. **Still 410 / closed:** old Better Auth customer product, full dashboard Auth data, MFA admin, keys UI APIs, migration, etc.
+5. **How apps call it:** first-party proxy  
+   `https://your-app.com/api/auth/*` → `https://api.briven.tech/v1/auth-core/fdi/*`  
+   Header: `x-briven-project-id: <project id>`
 
-## What stays (on purpose)
+## How it fits with Pay + DB
 
-- **Platform operator login** on briven.tech: Better Auth via `/v1/auth/*`
-- Sidebar **Auth** link → Phase 1 shell page (butter yellow accent)
+| Product | Job | Doltgres |
+|---------|-----|----------|
+| Briven DB | App tables | `proj_<id>` |
+| Briven Auth | Who is logged in | `briven_engine` |
+| Briven Pay | Money | Pay path (same platform family) |
 
-## What we will not do (locked)
+Same project id ties them together for mavi-pay and others.
 
-1. SuperTokens branding / Core container for product Auth  
-2. Different visual system for Auth  
-3. Open app login before flndrn OK on later phases  
-4. Fork SuperTokens  
+## Platform login
+
+briven.tech dashboard login is **unchanged** (Better Auth on control plane).  
+That is **not** the same door as app end-users.
 
 ## Next
 
-Phase 2+ (sessions, recipes, …) only after flndrn says start — see `BRIVEN-AUTH-100-PERCENT-BUILD-PLAN.md`.
+Phase 3+ (passwordless, social, MFA, …) only after flndrn says start.

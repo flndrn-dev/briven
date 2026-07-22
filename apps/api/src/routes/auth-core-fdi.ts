@@ -35,6 +35,28 @@ export const authCoreFdiRouter = new Hono<AppEnv>();
 
 const FDI = '/v1/auth-core/fdi';
 
+/** Cookie holds session handle (Doltgres lookup key). Secure in production. */
+function setSessionCookies(
+  c: { header: (n: string, v: string, o?: { append?: boolean }) => void },
+  session: { sessionHandle: string; refreshToken: string; expiresAt: Date },
+) {
+  const secure = env.BRIVEN_ENV === 'production' ? '; Secure' : '';
+  const maxAge = Math.max(
+    60,
+    Math.floor((session.expiresAt.getTime() - Date.now()) / 1000),
+  );
+  c.header(
+    'Set-Cookie',
+    `sAccessToken=${encodeURIComponent(session.sessionHandle)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`,
+    { append: true },
+  );
+  c.header(
+    'Set-Cookie',
+    `sRefreshToken=${encodeURIComponent(session.refreshToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`,
+    { append: true },
+  );
+}
+
 async function captchaGate(
   body: Record<string, unknown>,
 ): Promise<Response | null> {
@@ -98,17 +120,10 @@ authCoreFdiRouter.post(`${FDI}/signup`, async (c) => {
     userId: result.user.id,
     tenantId: result.user.tenantId,
   });
-  c.header(
-    'Set-Cookie',
-    `sAccessToken=${session.accessToken}; Path=/; HttpOnly; SameSite=Lax`,
-    { append: true },
-  );
-  c.header(
-    'Set-Cookie',
-    `sRefreshToken=${session.refreshToken}; Path=/; HttpOnly; SameSite=Lax`,
-    { append: true },
-  );
+  // Phase 2: cookie value = session handle (lookup key on Doltgres).
+  setSessionCookies(c, session);
   c.header('x-briven-engine', 'briven-engine');
+  c.header('x-briven-session-handle', session.sessionHandle);
   if (tenant) c.header('x-briven-tenant-id', tenant.tenantId);
   return c.json({
     status: 'OK',
@@ -117,6 +132,8 @@ authCoreFdiRouter.post(`${FDI}/signup`, async (c) => {
       handle: session.sessionHandle,
       userId: session.userId,
     },
+    engine: 'briven-engine',
+    storage: 'doltgres',
   });
 });
 
@@ -157,28 +174,39 @@ authCoreFdiRouter.post(`${FDI}/signin`, async (c) => {
     userId: result.user.id,
     tenantId: result.user.tenantId,
   });
-  c.header(
-    'Set-Cookie',
-    `sAccessToken=${session.accessToken}; Path=/; HttpOnly; SameSite=Lax`,
-    { append: true },
-  );
-  c.header(
-    'Set-Cookie',
-    `sRefreshToken=${session.refreshToken}; Path=/; HttpOnly; SameSite=Lax`,
-    { append: true },
-  );
+  setSessionCookies(c, session);
+  c.header('x-briven-engine', 'briven-engine');
+  c.header('x-briven-session-handle', session.sessionHandle);
   return c.json({
     status: 'OK',
     user: { id: result.user.id, emails: [result.user.email] },
     session: { handle: session.sessionHandle, userId: session.userId },
+    engine: 'briven-engine',
+    storage: 'doltgres',
   });
 });
 
 authCoreFdiRouter.post(`${FDI}/signout`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const handle = c.req.header('x-briven-session-handle');
+  const handle =
+    c.req.header('x-briven-session-handle') ??
+    (() => {
+      const cookie = c.req.header('cookie') ?? '';
+      const m = /(?:^|;\s*)sAccessToken=([^;]+)/.exec(cookie);
+      return m?.[1] ? decodeURIComponent(m[1]) : undefined;
+    })();
   if (handle) await revokeEngineSession(handle);
-  return c.json({ status: 'OK' });
+  c.header(
+    'Set-Cookie',
+    'sAccessToken=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    { append: true },
+  );
+  c.header(
+    'Set-Cookie',
+    'sRefreshToken=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    { append: true },
+  );
+  return c.json({ status: 'OK', engine: 'briven-engine' });
 });
 
 /** Passwordless: create email/SMS code (magic link + OTP). */

@@ -1,13 +1,11 @@
 /**
- * Phase 1 (Option B) — briven-engine status only.
+ * Option B — briven-engine status surface.
  *
- * Mounted product surface for Auth shell:
  *  - GET /v1/auth-core/info
  *  - GET /v1/auth-core/ready
  *  - GET /v1/auth-core/map/:projectId
  *
- * Does NOT open app login (no FDI signup/signin, no enable, no dashboard data).
- * Platform operator login stays on /v1/auth/* (Better Auth).
+ * App login (password) is on auth-core-fdi (Phase 2). Platform login stays /v1/auth/*.
  */
 
 import { Hono } from 'hono';
@@ -30,9 +28,9 @@ authCoreStatusRouter.get('/v1/auth-core/info', async (c) => {
     product: 'Briven Auth',
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
-    productStatus: 'phase1-shell',
-    appLoginReady: false,
-    notice: 'not ready for app login yet',
+    productStatus: 'phase2-password-sessions',
+    notice:
+      'email/password signup + signin + sessions on Doltgres; other methods later',
     buildSha: BUILD_SHA,
     buildAt: BUILD_AT,
     ...core,
@@ -47,19 +45,17 @@ authCoreStatusRouter.get('/v1/auth-core/ready', async (c) => {
         status: 'not_ready',
         engine: BRIVEN_ENGINE_ID,
         engineVersion: BRIVEN_ENGINE_VERSION,
-        appLoginReady: false,
         ...core,
       },
       503,
     );
   }
-  // Schema/pool ready ≠ app login open (Phase 1 shell only).
   return c.json({
     status: 'ready',
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
-    appLoginReady: false,
-    notice: 'not ready for app login yet',
+    notice:
+      'email/password signup + signin + sessions on Doltgres; other methods later',
     ...core,
   });
 });
