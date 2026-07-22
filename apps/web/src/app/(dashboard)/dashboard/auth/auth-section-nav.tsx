@@ -7,6 +7,7 @@ const TABS = [
   { href: '/dashboard/auth', label: 'overview', exact: true },
   { href: '/dashboard/auth/projects', label: 'projects' },
   { href: '/dashboard/auth/providers', label: 'providers' },
+  { href: '/dashboard/auth/security', label: 'security' },
   { href: '/dashboard/auth/users', label: 'users' },
   { href: '/dashboard/auth/sessions', label: 'sessions' },
   { href: '/dashboard/auth/keys', label: 'keys' },

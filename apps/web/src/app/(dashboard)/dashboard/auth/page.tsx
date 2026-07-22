@@ -97,6 +97,19 @@ export default async function BrivenAuthHomePage() {
           </li>
           <li>
             <Link
+              href="/dashboard/auth/security"
+              className="underline"
+              style={{ color: 'var(--auth-accent)' }}
+            >
+              security
+            </Link>
+            <span className="text-[var(--color-text-muted)]">
+              {' '}
+              — 2FA + 10 backup codes, password rules
+            </span>
+          </li>
+          <li>
+            <Link
               href="/dashboard/auth/keys"
               className="underline"
               style={{ color: 'var(--auth-accent)' }}

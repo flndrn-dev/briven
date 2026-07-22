@@ -4,6 +4,8 @@ import { DEFAULT_AUTH_CONFIG, type AuthConfig } from './tenant-config-store.js';
 import {
   flagsFromConfig,
   hasAtLeastOneProvider,
+  normalizeTwoFactorFlags,
+  twoFactorFromConfig,
   type AuthV2ProviderFlags,
 } from './auth-v2-workspace.js';
 
@@ -47,5 +49,38 @@ describe('auth-v2-workspace — provider proof helpers', () => {
       passkey: false,
     };
     expect(hasAtLeastOneProvider(allOff)).toBe(false);
+  });
+});
+
+describe('auth-v2-workspace — Phase 8.1 two-factor / backup codes', () => {
+  test('default config has 2FA off and zero backup codes', () => {
+    const tf = twoFactorFromConfig(DEFAULT_AUTH_CONFIG);
+    expect(tf.enabled).toBe(false);
+    expect(tf.required).toBe(false);
+    expect(tf.backupCodeCount).toBe(0);
+  });
+
+  test('when 2FA is on, backupCodeCount is 10 (Better Auth amount)', () => {
+    const config = {
+      ...DEFAULT_AUTH_CONFIG,
+      twoFactor: { enabled: true, issuer: 'Acme', required: false },
+    } as AuthConfig;
+    const tf = twoFactorFromConfig(config);
+    expect(tf.enabled).toBe(true);
+    expect(tf.backupCodeCount).toBe(10);
+  });
+
+  test('normalizeTwoFactorFlags clears required when 2FA is off', () => {
+    const tf = normalizeTwoFactorFlags({ enabled: false, required: true });
+    expect(tf.enabled).toBe(false);
+    expect(tf.required).toBe(false);
+    expect(tf.backupCodeCount).toBe(0);
+  });
+
+  test('normalizeTwoFactorFlags keeps required only when enabled', () => {
+    const tf = normalizeTwoFactorFlags({ enabled: true, required: true });
+    expect(tf.enabled).toBe(true);
+    expect(tf.required).toBe(true);
+    expect(tf.backupCodeCount).toBe(10);
   });
 });

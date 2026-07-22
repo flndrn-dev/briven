@@ -17,7 +17,9 @@ import {
   getAuthV2ProjectSnapshot,
   hasAtLeastOneProvider,
   listAuthV2Workspace,
+  saveAuthV2PasswordPolicy,
   saveAuthV2Providers,
+  saveAuthV2TwoFactor,
 } from '../services/auth-v2-workspace.js';
 import type { AppEnv } from '../types/app-env.js';
 
@@ -123,6 +125,109 @@ authV2Router.put(
             code: 'auth_not_enabled',
             message: 'enable Auth for this project first',
           },
+          400,
+        );
+      }
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      return c.json({ code: 'save_failed', message: msg }, 500);
+    }
+  },
+);
+
+/**
+ * PUT /v1/auth-v2/projects/:id/two-factor
+ * Body: { enabled, required }. When enabled, end-users get TOTP + 10 backup codes.
+ */
+authV2Router.put(
+  '/v1/auth-v2/projects/:id/two-factor',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') {
+      return c.json({ code: 'validation_failed', message: 'body must be JSON' }, 400);
+    }
+
+    try {
+      const result = await saveAuthV2TwoFactor(projectId, {
+        enabled: body.enabled === true,
+        required: body.required === true,
+      });
+      return c.json({
+        ok: true,
+        projectId,
+        saved: true,
+        savedAt: new Date().toISOString(),
+        twoFactor: result.twoFactor,
+        proof: result.twoFactor,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'auth_not_enabled') {
+        return c.json(
+          { code: 'auth_not_enabled', message: 'enable Auth for this project first' },
+          400,
+        );
+      }
+      if (err instanceof ValidationError) {
+        return c.json({ code: 'validation_failed', message: err.message }, 400);
+      }
+      return c.json({ code: 'save_failed', message: msg }, 500);
+    }
+  },
+);
+
+/**
+ * PUT /v1/auth-v2/projects/:id/password-policy
+ * Body: PasswordPolicy partial. Returns live policy after save.
+ */
+authV2Router.put(
+  '/v1/auth-v2/projects/:id/password-policy',
+  requireProjectRole('admin'),
+  async (c) => {
+    const projectId = c.req.param('id');
+    if (!projectId) return c.json({ code: 'validation_failed', message: 'missing :id' }, 400);
+
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') {
+      return c.json({ code: 'validation_failed', message: 'body must be JSON' }, 400);
+    }
+
+    try {
+      const result = await saveAuthV2PasswordPolicy(projectId, {
+        minLength: typeof body.minLength === 'number' ? body.minLength : undefined,
+        requireUppercase:
+          typeof body.requireUppercase === 'boolean' ? body.requireUppercase : undefined,
+        requireLowercase:
+          typeof body.requireLowercase === 'boolean' ? body.requireLowercase : undefined,
+        requireNumber: typeof body.requireNumber === 'boolean' ? body.requireNumber : undefined,
+        requireSpecial:
+          typeof body.requireSpecial === 'boolean' ? body.requireSpecial : undefined,
+        maxAgeDays:
+          body.maxAgeDays === null
+            ? null
+            : typeof body.maxAgeDays === 'number'
+              ? body.maxAgeDays
+              : undefined,
+        preventReuse: typeof body.preventReuse === 'number' ? body.preventReuse : undefined,
+      });
+      return c.json({
+        ok: true,
+        projectId,
+        saved: true,
+        savedAt: new Date().toISOString(),
+        passwordPolicy: result.passwordPolicy,
+        proof: result.passwordPolicy,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'auth_not_enabled') {
+        return c.json(
+          { code: 'auth_not_enabled', message: 'enable Auth for this project first' },
           400,
         );
       }

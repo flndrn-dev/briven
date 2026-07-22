@@ -2,7 +2,7 @@
 
 **Goal:** Close the competitive gap with Clerk.com and make Briven Auth a production-grade, professional authentication service for the briven.tech platform.
 
-**Status:** In Progress — Phase 7 Complete
+**Status:** In Progress — Phase 8 started (8.1 + 8.4 dashboard surface live)
 
 ---
 
@@ -55,10 +55,10 @@
 | Username authentication | Yes — username + password sign-in | No — deferred from Phase 4 | **Phase 7.3** |
 | Testing tokens (E2E) | Yes — bypass bot/MFA for test suites | No | **Phase 7.4** |
 | Email template customization | Yes — per-tenant HTML/template overrides | No — hardcoded templates only | **Phase 7.5** |
-| 2FA backup / recovery codes | Yes — 10 single-use backup codes | No — user can get locked out if TOTP device lost | **Phase 8.1** |
-| Device tracking & new-device alerts | Yes — tracks devices, emails on new login | No | **Phase 8.2** |
-| Account linking (multi-OAuth → 1 user) | Yes — automatic + manual linking | No — each OAuth creates separate account | **Phase 8.3** |
-| Password reset policy | Yes — forced reset, expiration | No — only breach detection | **Phase 8.4** |
+| 2FA backup / recovery codes | Yes — 10 single-use backup codes | Yes — Better Auth twoFactor + dashboard Security toggle | **Phase 8.1** |
+| Device tracking & new-device alerts | Yes — tracks devices, emails on new login | Yes — backend (API + email); dashboard polish later | **Phase 8.2** |
+| Account linking (multi-OAuth → 1 user) | Yes — automatic + manual linking | Yes — auto-link on matching email (API) | **Phase 8.3** |
+| Password reset policy | Yes — forced reset, expiration | Yes — policy table + Security UI + force-reset admin | **Phase 8.4** |
 | SCIM 2.0 provisioning | Enterprise only | No | **Phase 9** |
 | SMS OTP | Yes | Explicitly excluded per project requirements | — |
 
@@ -77,7 +77,7 @@
 | **Phase 5** | Enterprise SSO | 3–4 weeks | **Complete** |
 | **Phase 6** | Dashboard & Compliance | 2–3 weeks | **Complete** |
 | **Phase 7** | Developer Experience & Polish | 2 weeks | **Complete** |
-| **Phase 8** | Security Hardening & Account Management | 2 weeks | **Planned** |
+| **Phase 8** | Security Hardening & Account Management | 2 weeks | **In Progress** |
 | **Phase 9** | Enterprise SCIM Provisioning | 2–3 weeks | **Planned** |
 
 ---
@@ -204,10 +204,10 @@
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 8.1 2FA backup / recovery codes | **Pending** | `_briven_auth_backup_codes` table; 10 single-use codes; regenerate flow |
-| 8.2 Device tracking & new-device alerts | **Pending** | `_briven_auth_devices` table; fingerprint + geo; email alert on unrecognized device |
-| 8.3 Account linking (multi-OAuth → 1 user) | **Pending** | `_briven_auth_account_links` table; manual + automatic linking flows |
-| 8.4 Password reset policy | **Pending** | `_briven_auth_password_policy` table; forced reset, expiration, history |
+| 8.1 2FA backup / recovery codes | **Done** (2026-07-22) | Better Auth `twoFactor` + `backupCodeOptions.amount: 10`; SDK `verifyBackupCode` / `generateBackupCodes`; yellow **Authentication → security** toggle with save-proof |
+| 8.2 Device tracking & new-device alerts | **Backend done** | `_briven_auth_devices`; `maybeAlertNewDevice` on sign-in; admin list devices API |
+| 8.3 Account linking (multi-OAuth → 1 user) | **Backend done** | `maybeAutoLinkOAuthAccount` on matching email; list/unlink admin routes |
+| 8.4 Password reset policy | **Done** (2026-07-22) | `_briven_auth_password_policy` + force-reset; yellow **security** password rules form |
 
 ---
 
@@ -274,7 +274,9 @@
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 8.1 2FA backup / recovery codes | **Pending** | `_briven_auth_backup_codes` table; 10 single-use codes; regenerate flow |
-| 8.2 Device tracking & new-device alerts | **Pending** | `_briven_auth_devices` table; fingerprint + geo; email alert on unrecognized device |
-| 8.3 Account linking (multi-OAuth → 1 user) | **Pending** | `_briven_auth_account_links` table; manual + automatic linking flows |
-| 8.4 Password reset policy | **Pending** | `_briven_auth_password_policy` table; forced reset, expiration, history |
+| 8.1 2FA backup / recovery codes | **Done** | Dashboard Security + runtime twoFactor plugin (10 codes) |
+| 8.2 Device tracking & new-device alerts | **Backend done** | Wire richer UI under sessions/users later if needed |
+| 8.3 Account linking (multi-OAuth → 1 user) | **Backend done** | Auto-link on email; manual unlink API exists |
+| 8.4 Password reset policy | **Done** | Security page password rules + force-reset admin route |
+
+**Next after this ship:** Phase 8 wrap (optional UI for devices/linking) or Phase 9 polish if SCIM already shipped.

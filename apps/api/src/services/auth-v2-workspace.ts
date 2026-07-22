@@ -1,9 +1,10 @@
 /**
- * Briven Auth v2 — workspace helpers (Phase 1).
+ * Briven Auth v2 — workspace helpers (Phase 1 + Phase 8 security surface).
  *
  * SuperTokens-shaped product packaging on top of Briven multi-project Doltgres:
  * list every project the operator can manage, with Auth enabled flag + live
  * provider toggles (read-after-write proof for "save sticks").
+ * Phase 8: 2FA / backup-code gate + password policy via the yellow Security page.
  */
 
 import { listProjectsForUser } from './projects.js';
@@ -14,12 +15,25 @@ import {
   type AuthConfig,
 } from './tenant-config-store.js';
 import { invalidateAuthInstance } from './auth-tenant-pool.js';
+import {
+  getPasswordPolicy,
+  setPasswordPolicy,
+  type PasswordPolicy,
+} from './auth-password-policy.js';
 
 export interface AuthV2ProviderFlags {
   emailPassword: boolean;
   magicLink: boolean;
   emailOtp: boolean;
   passkey: boolean;
+}
+
+/** Phase 8.1 — tenant 2FA switch (backup codes ship with the twoFactor plugin). */
+export interface AuthV2TwoFactorFlags {
+  enabled: boolean;
+  required: boolean;
+  /** Always 10 when twoFactor is on — Better Auth backupCodeOptions.amount */
+  backupCodeCount: number;
 }
 
 export interface AuthV2ProjectRow {
@@ -45,6 +59,31 @@ export function flagsFromConfig(config: AuthConfig): AuthV2ProviderFlags {
 /** At least one core method must stay on (Phase 1 product rule). */
 export function hasAtLeastOneProvider(flags: AuthV2ProviderFlags): boolean {
   return flags.emailPassword || flags.magicLink || flags.emailOtp || flags.passkey;
+}
+
+export function twoFactorFromConfig(config: AuthConfig): AuthV2TwoFactorFlags {
+  return {
+    enabled: config.twoFactor.enabled,
+    required: config.twoFactor.required,
+    // Better Auth twoFactor plugin: backupCodeOptions.amount = 10
+    backupCodeCount: config.twoFactor.enabled ? 10 : 0,
+  };
+}
+
+/**
+ * Required cannot stay on if 2FA is off (would lock everyone out of enroll).
+ */
+export function normalizeTwoFactorFlags(input: {
+  enabled: boolean;
+  required: boolean;
+}): AuthV2TwoFactorFlags {
+  const enabled = input.enabled === true;
+  const required = enabled && input.required === true;
+  return {
+    enabled,
+    required,
+    backupCodeCount: enabled ? 10 : 0,
+  };
 }
 
 /**
@@ -137,12 +176,71 @@ export async function saveAuthV2Providers(
 export async function getAuthV2ProjectSnapshot(projectId: string): Promise<{
   enabled: boolean;
   providers: AuthV2ProviderFlags | null;
+  twoFactor: AuthV2TwoFactorFlags | null;
+  passwordPolicy: PasswordPolicy | null;
   config: AuthConfig | null;
 }> {
   const enabled = await isAuthEnabled(projectId);
   if (!enabled) {
-    return { enabled: false, providers: null, config: null };
+    return {
+      enabled: false,
+      providers: null,
+      twoFactor: null,
+      passwordPolicy: null,
+      config: null,
+    };
   }
   const config = await getAuthConfig(projectId);
-  return { enabled: true, providers: flagsFromConfig(config), config };
+  let passwordPolicy: PasswordPolicy | null = null;
+  try {
+    passwordPolicy = await getPasswordPolicy(projectId);
+  } catch {
+    passwordPolicy = null;
+  }
+  return {
+    enabled: true,
+    providers: flagsFromConfig(config),
+    twoFactor: twoFactorFromConfig(config),
+    passwordPolicy,
+    config,
+  };
+}
+
+/**
+ * Phase 8.1 — save 2FA toggles (enables Better Auth twoFactor + 10 backup codes).
+ * Returns live flags after invalidate + re-read.
+ */
+export async function saveAuthV2TwoFactor(
+  projectId: string,
+  input: { enabled: boolean; required: boolean },
+): Promise<{ enabled: boolean; twoFactor: AuthV2TwoFactorFlags }> {
+  const authOn = await isAuthEnabled(projectId);
+  if (!authOn) throw new Error('auth_not_enabled');
+
+  const flags = normalizeTwoFactorFlags(input);
+  await updateAuthConfig(projectId, {
+    twoFactor: {
+      enabled: flags.enabled,
+      required: flags.required,
+      issuer: null,
+    },
+  });
+  await invalidateAuthInstance(projectId);
+
+  const config = await getAuthConfig(projectId);
+  return { enabled: true, twoFactor: twoFactorFromConfig(config) };
+}
+
+/**
+ * Phase 8.4 surface — password policy with read-back proof.
+ */
+export async function saveAuthV2PasswordPolicy(
+  projectId: string,
+  patch: Partial<PasswordPolicy>,
+): Promise<{ enabled: boolean; passwordPolicy: PasswordPolicy }> {
+  const authOn = await isAuthEnabled(projectId);
+  if (!authOn) throw new Error('auth_not_enabled');
+
+  const passwordPolicy = await setPasswordPolicy(projectId, patch);
+  return { enabled: true, passwordPolicy };
 }
