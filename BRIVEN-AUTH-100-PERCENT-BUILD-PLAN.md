@@ -18,7 +18,8 @@ You want **Briven Auth** to do **everything SuperTokens does as a product**, run
 This plan is **honest**:
 - **100% feature-to-feature** means walking SuperTokens’ published surface (recipes + FDI/CDI + plugins + integrations) against a **live** Briven Auth — not “similar vibes.”
 - Doltgres is **Postgres-family** (same wire family). If SuperTokens works on Postgres, we **make it work on Doltgres** using official Doltgres docs — we do **not** quit after one SQL error and rewrite in silence.
-- Previous failure: Core hit `SET SESSION CHARACTERISTICS` → path abandoned without your clear OK → native reimplementation. **That is forbidden under this plan.**
+- Previous failure: Core hit `SET SESSION CHARACTERISTICS` → path abandoned without your clear OK → native reimplementation. **That is forbidden under this plan.**  
+- **We do not fork SuperTokens.** Host + multi-tenant + brand Briven Auth on top of **official** SuperTokens.
 
 ---
 
@@ -35,6 +36,7 @@ This plan is **honest**:
 | R7 | Branding = **Briven Auth** — not SuperTokens logo. Accent = butter yellow **`#FFFD74`**. |
 | R8 | Every phase maps to SuperTokens URLs in `knowledge-base.md` **and** Doltgres constraints. |
 | R9 | **UI = same Briven dashboard design language** as overview + projects (see §1b). No foreign “control room” skin. |
+| R10 | **NO FORKING SUPERTOKENS.** Use SuperTokens Core + official SDKs as upstream products. Briven **hosts, multi-tenants, brands, and wires** them — we do **not** fork SuperTokens source into a Briven fork, reimplement Core as “briven-engine,” or maintain a divergent SuperTokens codebase. Workarounds for Doltgres = config/compat/bridge reported to flndrn — not a fork. |
 
 ---
 
@@ -64,6 +66,13 @@ Auth is a **section of the same product**, not a different app.
 | Butter yellow **`#FFFD74`** as Auth accent only | SuperTokens branding, random golds, rainbow |
 | Short lowercase product copy | “Phase 1 · Live”, rebuild essays, internal plan names |
 | Same header hierarchy as projects/overview | One-off hero banners that break layout rhythm |
+
+### What we will **not** do (product + engineering)
+
+1. **SuperTokens branding** in the Briven UI (product name stays Briven Auth).  
+2. **A different visual system** only for Auth (must match dashboard/overview/projects).  
+3. **Engineer “phase / rebuild” text** in user-facing UI.  
+4. **MOST IMPORTANT: forking SuperTokens** — no fork of Core/SDKs; no home-grown “briven-engine” standing in for SuperTokens; no divergent SuperTokens source tree under Briven.
 
 ### Blank-page phase (before SuperTokens product UI)
 

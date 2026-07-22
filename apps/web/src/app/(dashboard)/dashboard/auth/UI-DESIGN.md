@@ -23,6 +23,14 @@
 - Yellow “control room / phase” banners  
 - A different layout language than projects/overview  
 - Walls of internal rebuild text for users  
+- **Fork SuperTokens** (or reimplement Core as a Briven fork named “engine”) — UI is Briven; Auth brain stays official SuperTokens  
+
+## What we will not do (locked)
+
+1. SuperTokens branding in the product UI  
+2. A different visual system only for Auth  
+3. Engineer “phase / rebuild” text in the UI  
+4. **Forking SuperTokens** (most important)
 
 ## Blank phase (until SuperTokens product is ready)
 
