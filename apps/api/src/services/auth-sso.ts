@@ -147,7 +147,7 @@ export async function createSsoConnection(
     throw new ValidationError('providerType must be saml or oidc');
   }
 
-  return runInProjectDatabase<SsoConnectionOutput>(projectId, async (tx) => {
+  const created = await runInProjectDatabase<SsoConnectionOutput>(projectId, async (tx) => {
     const rows = (await tx.unsafe(
       `INSERT INTO "_briven_auth_sso_connections"
          (name, provider_type, config, domains, jit_enabled)
@@ -176,6 +176,9 @@ export async function createSsoConnection(
       createdAt: row.created_at.toISOString(),
     };
   });
+  // Phase 5.7 — meter active connection count after commit.
+  void import('./auth-sso-pricing.js').then((m) => m.recordSsoConnectionGauge(projectId));
+  return created;
 }
 
 export async function updateSsoConnection(
@@ -449,6 +452,11 @@ export async function createSsoSession(
       [randomBytes(16).toString('hex'), sessionId, connectionId] as never,
     );
   });
+
+  // Phase 5.7 — billable SSO sign-in event (must not break login).
+  void import('./auth-sso-pricing.js').then((m) =>
+    m.recordSsoSignInUsage(projectId, connectionId),
+  );
 
   return { sessionToken, expiresAt };
 }

@@ -39,8 +39,10 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
     backupCodeCount: 0,
   });
   const [policy, setPolicy] = useState<PasswordPolicyState>(DEFAULT_POLICY);
+  const [inactivityMinutes, setInactivityMinutes] = useState(0);
   const [pendingTf, setPendingTf] = useState(false);
   const [pendingPolicy, setPendingPolicy] = useState(false);
+  const [pendingSession, setPendingSession] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [proof, setProof] = useState<string | null>(null);
 
@@ -48,15 +50,16 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
     if (!id) return;
     setErr(null);
     setProof(null);
-    const res = await fetch(`/api/v1/auth-v2/projects/${id}/snapshot`, {
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string };
-      setErr(body.message ?? `could not load (${res.status})`);
+    const [snapRes, cfgRes] = await Promise.all([
+      fetch(`/api/v1/auth-v2/projects/${id}/snapshot`, { credentials: 'include' }),
+      fetch(`/api/v1/projects/${id}/auth/config`, { credentials: 'include' }),
+    ]);
+    if (!snapRes.ok) {
+      const body = (await snapRes.json().catch(() => ({}))) as { message?: string };
+      setErr(body.message ?? `could not load (${snapRes.status})`);
       return;
     }
-    const body = (await res.json()) as {
+    const body = (await snapRes.json()) as {
       twoFactor?: TwoFactorState | null;
       passwordPolicy?: PasswordPolicyState | null;
     };
@@ -64,11 +67,50 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
     else setTwoFactor({ enabled: false, required: false, backupCodeCount: 0 });
     if (body.passwordPolicy) setPolicy(body.passwordPolicy);
     else setPolicy(DEFAULT_POLICY);
+    if (cfgRes.ok) {
+      const cfg = (await cfgRes.json()) as {
+        config?: { session?: { inactivityTimeoutMinutes?: number } };
+      };
+      setInactivityMinutes(cfg.config?.session?.inactivityTimeoutMinutes ?? 0);
+    }
   }, []);
 
   useEffect(() => {
     if (projectId) void load(projectId);
   }, [projectId, load]);
+
+  async function saveSession(): Promise<void> {
+    if (!projectId) return;
+    setPendingSession(true);
+    setErr(null);
+    setProof(null);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/auth/config`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          session: { inactivityTimeoutMinutes: inactivityMinutes },
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        config?: { session?: { inactivityTimeoutMinutes?: number } };
+      };
+      if (!res.ok) throw new Error(body.message ?? `http ${res.status}`);
+      const mins = body.config?.session?.inactivityTimeoutMinutes ?? inactivityMinutes;
+      setInactivityMinutes(mins);
+      setProof(
+        mins > 0
+          ? `session timeout saved — ${mins} minute${mins === 1 ? '' : 's'} of idle`
+          : 'session timeout saved — never expire for idle',
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'session save failed');
+    } finally {
+      setPendingSession(false);
+    }
+  }
 
   async function saveTwoFactor(): Promise<void> {
     if (!projectId) return;
@@ -208,6 +250,38 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
           style={{ background: '#e6b800' }}
         >
           {pendingTf ? 'saving…' : 'save 2FA (with live proof)'}
+        </button>
+      </section>
+
+      {/* Session inactivity (gap fix #1 polish in UI) */}
+      <section className="flex flex-col gap-3">
+        <div>
+          <h3 className="font-mono text-sm text-[var(--color-text)]">session timeout</h3>
+          <p className="mt-1 font-mono text-[10px] leading-relaxed text-[var(--color-text-muted)]">
+            kick users after this many minutes of no activity. 0 = never. checked on every
+            authenticated request.
+          </p>
+        </div>
+        <label className="flex flex-col gap-1 font-mono text-xs">
+          <span className="text-[var(--color-text-muted)]">inactivity minutes</span>
+          <input
+            type="number"
+            min={0}
+            max={1440}
+            value={inactivityMinutes}
+            onChange={(e) => setInactivityMinutes(Number(e.target.value) || 0)}
+            className="w-28 rounded-md border bg-[var(--color-surface)] px-3 py-2"
+            style={{ borderColor: 'var(--auth-accent-border)' }}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={pendingSession}
+          onClick={() => void saveSession()}
+          className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
+          style={{ background: '#e6b800' }}
+        >
+          {pendingSession ? 'saving…' : 'save session timeout'}
         </button>
       </section>
 

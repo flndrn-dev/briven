@@ -696,6 +696,11 @@ export const usageMetric = [
   // Gauge sample (not a delta) snapshotted by the hourly aggregator and
   // pushed to Polar's `briven_auth_mau` meter for overage billing.
   'auth_mau',
+  // Phase 5.7 — enterprise SSO per-connection pricing.
+  // auth_sso_connections: gauge of active (non-deactivated) SSO connections.
+  // auth_sso_signins: hourly delta of successful IdP logins.
+  'auth_sso_connections',
+  'auth_sso_signins',
 ] as const;
 export type UsageMetric = (typeof usageMetric)[number];
 

@@ -22,30 +22,25 @@ Old Better Auth dashboard UI: **gone** (blank / redirect only).
 
 ## Phases
 
-### Phase 0 — Blank slate UI (this PR)
-- Sidebar + mobile: **Briven Auth** entry (yellow when active).  
-- `/dashboard/auth/*` shell pages (blank / “building”).  
-- Old `/dashboard/projects/[id]/auth/*` → single “moved” notice.  
-- Project tab **auth** removed or points to new section.  
-- API may still exist for now so existing apps don’t hard-crash overnight; **dashboard config of old Auth is closed**.
+### Phase 0 — Blank slate UI — **Done**
+- Sidebar + mobile: **Authentication** entry.  
+- Old project Auth UI retired / moved notice.  
 
-### Phase 1 — Core engine (new)
-- SuperTokens-shaped layers: frontend contract + backend routes + core logic.  
-- Data in **project Doltgres** (or dedicated auth schema per project — decide in implement).  
-- Recipes v1: email+password, magic link, email OTP, passkeys, sessions.  
-- Provider save that **always** persists + reloads live instance (proof tests).
+### Phase 1 — Core packaging — **Done**
+- Recipes v1 on project Doltgres via auth-tenant: email+password, magic link, OTP, passkeys, sessions.  
+- Provider save with read-back proof (`/v1/auth-v2/*`).  
 
-### Phase 2 — Auth sub-dashboard
-- Yellow shell filled: overview, enable status per project, providers, users, sessions, keys, domains, branding.  
-- Config only here (not buried only under project tabs).
+### Phase 2 — Auth sub-dashboard — **Done**
+- Yellow shell: overview, projects, providers, security, branding, enterprise, users, sessions & devices, keys, domains.  
 
-### Phase 3 — App path + handoff
-- Scaffold: first-party proxy on app domain.  
-- Magic links open on **project URL**.  
-- One `HANDOFF-BRIVEN-AUTH-V2.md` for Konnos / Mavi / all.
+### Phase 3 — App path + handoff — **Done (docs)**
+- Magic links open on project URL.  
+- `HANDOFF-BRIVEN-AUTH-V2.md` marked DASHBOARD_READY.  
+- First-party proxy remains app-side (scaffold / existing Konnos pattern).  
 
-### Phase 4 — SuperTokens depth (later)
-- MFA, roles, multi-tenant enterprise, M2M, attack protection — pull from knowledge-base recipes.
+### Phase 4 — SuperTokens depth — **Done (packaged)**
+- MFA + backup codes, SSO, SCIM, device tracking, account linking, rate limits, attack-adjacent hardening from gap-fix — all on Briven Doltgres.  
+- Full Java SuperTokens Core self-host remains a non-goal.
 
 ---
 

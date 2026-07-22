@@ -8,6 +8,8 @@ const TABS = [
   { href: '/dashboard/auth/projects', label: 'projects' },
   { href: '/dashboard/auth/providers', label: 'providers' },
   { href: '/dashboard/auth/security', label: 'security' },
+  { href: '/dashboard/auth/branding', label: 'branding' },
+  { href: '/dashboard/auth/enterprise', label: 'enterprise' },
   { href: '/dashboard/auth/users', label: 'users' },
   { href: '/dashboard/auth/sessions', label: 'sessions & devices' },
   { href: '/dashboard/auth/keys', label: 'keys' },

@@ -83,6 +83,9 @@ const envSchema = z.object({
   // Unset means skip; rows mark 'skipped' and the operator can flip them
   // back to 'pending' once the meter is provisioned.
   BRIVEN_POLAR_METER_AUTH_MAU_ID: z.string().optional(),
+  // Phase 5.7 — SSO connection count + sign-in volume meters (optional).
+  BRIVEN_POLAR_METER_AUTH_SSO_CONNECTIONS_ID: z.string().optional(),
+  BRIVEN_POLAR_METER_AUTH_SSO_SIGNINS_ID: z.string().optional(),
 
   // mittera.eu transactional email. Outbound sends authenticate with
   // the API key; inbound webhooks (delivery / bounce / complaint) are

@@ -1,49 +1,56 @@
-# Handoff: New Briven Auth (v2) — for all projects
+# Handoff: Briven Auth (v2 product surface)
 
-**Status:** PHASE 1 DASHBOARD LIVE (2026-07-22) — app wiring still WAIT  
+**Status:** DASHBOARD READY (2026-07-22) — use yellow **Authentication** for config  
 **Who for:** Konnos, Mavi Pay, Cyberbear, future apps, agents  
-**Who not for:** building a side auth system (Clerk/Firebase/Auth0)
+**Who not for:** inventing Clerk/Firebase/Auth0 side systems
 
 ---
 
-## What changed (plain)
+## Plain picture
 
-Briven is **rebuilding Auth** into its own yellow product area.
+1. Briven dashboard → **Authentication** (sidebar).  
+2. **projects** → enable Auth on the project you need.  
+3. **providers / security / branding / enterprise / keys / domains / users**.  
+4. Put `pk_briven_auth_…` in the app.  
+5. Login traffic still hits Briven’s auth-tenant path (Better Auth pool) with project context — do not stand up a second auth DB.
 
-- Old project tab **Auth** (providers, keys, domains inside the project) is **closed**.  
-- New home: dashboard sidebar → **Briven Auth** (yellow area).  
-- **Phase 1 live:** enable Auth, providers (save with live proof), keys, domains, users, sessions (last-seen).  
-- Product goal: SuperTokens-quality login (sessions, passwordless, social, MFA later) on **Briven Doltgres**.
-
-Until this handoff says **OPEN / READY**, do **not** invent a new app setup path. Prefer email/OTP paths that already work on live if your app is production-critical, or wait for full READY.
-
----
-
-## How setup will work (target)
-
-1. Briven dashboard → open your **project** → **Enable Auth** (connects this project’s DB).  
-2. Sidebar → **Briven Auth** (yellow) → choose methods, domains, keys.  
-3. Copy `pk_briven_auth_…` into the app env.  
-4. Install `@briven/auth` (v2 when published) + first-party proxy on your domain.  
-5. Sign-in: magic link / OTP / password / passkey as enabled.
+```
+BRIVEN_AUTH_V2=DASHBOARD_READY
+OLD_AUTH_DASHBOARD=RETIRED
+APP_SETUP=USE_EXISTING_@briven/auth_OR_PROXY
+ENGINE=auth-tenant_(Better_Auth)_+yellow_config
+```
 
 ---
 
-## Agent rules (now)
+## Agent rules
 
 1. Do **not** invent Clerk/Firebase.  
-2. Do **not** “fix” old `/dashboard/projects/…/auth/providers` UI — it is intentionally blanked.  
-3. Use `knowledge-base.md` (SuperTokens doc URLs) only while **building platform Auth**, not as a reason to leave Briven.  
-4. When handoff status becomes **READY**, follow this file only for app wiring.
+2. Do **not** rebuild old `/dashboard/projects/…/auth/*` panels — use **Authentication**.  
+3. SuperTokens `knowledge-base.md` is for platform recipes only.  
+4. Prefer `pk_briven_auth_…` in browsers; never `brk_` in the browser.  
+5. Magic links should open on the **app URL** (project origin + first-party proxy), not a bare API page.
 
 ---
 
-## Status line for agents
+## What shipped (engine + gaps)
 
-```
-BRIVEN_AUTH_V2=PHASE1_DASHBOARD
-OLD_AUTH_DASHBOARD=RETIRED
-APP_SETUP=WAIT_FOR_READY
-```
+- Passwordless defaults ON after Enable Auth  
+- Provider save with live re-read proof  
+- 2FA + 10 backup codes, password rules, session inactivity  
+- Device tracking + new-device email  
+- OAuth auto-link same email; admin unlink  
+- SSO SAML/OIDC; SCIM; compliance pack  
+- Per-connection SSO usage meters (`auth_sso_connections`, `auth_sso_signins`) when Polar meters are configured  
+- GDPR export, rate limits (Redis optional), passkey rpID from app domains  
 
-Yellow dashboard config is live in code; full engine + app handoff still building. Update this block when v2 is fully READY.
+---
+
+## App wiring (short)
+
+1. Enable Auth + domains + methods in **Authentication**.  
+2. Mint **keys**.  
+3. Use `@briven/auth` with `publicKey` + project id (existing package).  
+4. First-party proxy on the app domain so cookies and magic links stay on your site.  
+
+Full deep engine rewrite (replace Better Auth core) is **not** required for product use; config is ready now.

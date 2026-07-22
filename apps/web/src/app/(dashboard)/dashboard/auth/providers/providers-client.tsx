@@ -182,6 +182,12 @@ export function AuthProvidersClient({ projects }: { projects: AuthV2ProjectRow[]
         {pending ? 'saving…' : 'save methods (with live proof)'}
       </button>
 
+      <p className="font-mono text-[10px] leading-relaxed text-[var(--color-text-muted)]">
+        social logins (Google, GitHub, …) stay off until you add client secrets via the Auth config
+        API or a future secrets panel — enabling them without secrets would break sign-in. company
+        SSO is under <strong className="text-[var(--color-text)]">enterprise</strong>.
+      </p>
+
       {proof ? (
         <p className="font-mono text-xs" style={{ color: 'var(--auth-accent)' }}>
           {proof}

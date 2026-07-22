@@ -49,6 +49,10 @@ function unitFor(metric: string): string {
       return 'second';
     case 'auth_mau':
       return 'monthly-active-user';
+    case 'auth_sso_connections':
+      return 'sso-connection';
+    case 'auth_sso_signins':
+      return 'sso-sign-in';
     default:
       return 'unit';
   }

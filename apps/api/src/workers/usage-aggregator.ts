@@ -128,6 +128,17 @@ async function rollUpProject(
     if (await isAuthEnabled(projectId)) {
       const mau = await getAuthMauStats(projectId);
       rows.push({ metric: 'auth_mau', value: String(mau.count) });
+      // Phase 5.7 — active SSO connection gauge for per-connection pricing.
+      try {
+        const { countActiveSsoConnections } = await import('../services/auth-sso-pricing.js');
+        const ssoCount = await countActiveSsoConnections(projectId);
+        rows.push({ metric: 'auth_sso_connections', value: String(ssoCount) });
+      } catch (ssoErr) {
+        log.warn('usage_rollup_auth_sso_connections_failed', {
+          projectId,
+          message: ssoErr instanceof Error ? ssoErr.message : String(ssoErr),
+        });
+      }
     }
   } catch (err) {
     log.warn('usage_rollup_auth_mau_failed', {

@@ -2,13 +2,13 @@
 
 **Goal:** Close the competitive gap with Clerk.com and make Briven Auth a production-grade, professional authentication service for the briven.tech platform.
 
-**Status:** Phase 8 complete (8.1–8.4 live in Authentication UI, 2026-07-22)
+**Status:** **Complete** — Phases 1–9 + gap-fix sprint closed (2026-07-22). Auth v2 yellow product surface + engine packaging live.
 
 ---
 
 ## Competitive Context: Briven Auth vs Clerk.com
 
-### Where Briven Auth is already competitive
+### Where Briven Auth is competitive
 
 | Feature | Clerk | Briven Auth |
 |---------|-------|-------------|
@@ -18,265 +18,150 @@
 | Email OTP | Yes | Yes |
 | TOTP 2FA | Yes | Yes |
 | WebAuthn / Passkeys | Yes | Yes |
-| Multi-tenant (organizations) | Yes | Yes — custom roles, domain verification, auto-join, membership requests |
-| SAML 2.0 SSO | Enterprise plan | Yes — SP-initiated + IdP-initiated, JIT provisioning |
-| OIDC Enterprise | Enterprise plan | Yes — start/callback + PKCE polish (S7) |
-| User metadata (public/private) | Yes | Yes |
-| Multiple emails per user | Yes | Yes |
-| Session management (list/revoke) | Yes | Yes — with max lifetime, refresh age, inactivity timeout |
+| Multi-tenant (organizations) | Yes | Yes |
+| SAML 2.0 SSO | Enterprise | Yes |
+| OIDC Enterprise | Enterprise | Yes |
+| User metadata | Yes | Yes |
+| Multiple emails | Yes | Yes |
+| Session management | Yes | Yes |
 | Sign-in tokens | Yes | Yes |
-| Bot protection (Turnstile) | Yes | Yes — tenant-configurable |
-| Password breach detection | Yes | Yes — HIBP k-anonymity |
-| Rate limiting | Yes | Yes — per-IP + per-email sliding window |
-| User bans / suspensions | Yes | Yes |
-| Allowlist / blocklist | Yes | Yes — domain + disposable email + subaddress |
+| Bot protection | Yes | Yes |
+| Password breach detection | Yes | Yes |
+| Rate limiting | Yes | Yes (Redis when configured, memory fallback) |
+| Bans / suspensions | Yes | Yes |
+| Allowlist / blocklist | Yes | Yes |
 | Waitlist mode | Yes | Yes |
-| Branded hosted pages | Yes | Yes — custom logo, dark mode, monospace aesthetic |
+| Branded hosted pages | Yes | Yes — yellow **branding** UI |
 | Custom auth domains | Yes | Yes |
-| Webhooks (event fan-out) | Yes | Yes — HMAC-signed, retry with exponential backoff |
-| Audit log | Yes | Yes — privacy-first (IP hash hints only) |
-| SDK (React, Vue, Svelte, Vanilla) | Yes | Yes — plus server helpers |
+| Webhooks | Yes | Yes |
+| Audit log | Yes | Yes |
+| SDK (React, Vue, Svelte, Vanilla) | Yes | Yes |
 | MAU analytics | Yes | Yes |
-| Bulk user import (CSV) | Yes | Yes |
-| Dashboard team seats | Yes | Yes — invite team members to manage auth settings |
-| User impersonation | Yes | Yes — with audit trail and "stop impersonating" |
-| Application logs with retention | Yes | Yes — 7/30/90/365 day tiers |
-| Bulk operations (ban/delete/invite) | Yes | Yes — from user table |
-| Webhook replay + IP allowlist | Yes | Yes — replay any delivery, restrict IPs |
-| Compliance (SOC 2 / HIPAA / GDPR) | Yes | Yes — enterprise trust center groundwork |
-| Localization / i18n | Yes | Yes — `locale` in authConfig + SDK support |
+| Bulk user import | Yes | Yes |
+| Dashboard team seats | Yes | Yes |
+| User impersonation | Yes | Yes |
+| Application logs | Yes | Yes |
+| Bulk operations | Yes | Yes |
+| Compliance groundwork | Yes | Yes |
+| Localization | Yes | Yes |
+| Custom JWT templates | Yes | Yes |
+| Profile avatar | Yes | Yes |
+| Username auth | Yes | Yes |
+| Testing tokens (E2E) | Yes | Yes |
+| Email templates | Yes | Yes |
+| 2FA backup codes | Yes | Yes — 10 codes + Security UI |
+| Device tracking | Yes | Yes — engine + Users / Sessions UI |
+| Account linking | Yes | Yes — auto + unlink UI |
+| Password policy / force reset | Yes | Yes — Security UI |
+| SCIM 2.0 | Enterprise | Yes |
+| Per-connection SSO metering | Enterprise | Yes — Phase 5.7 usage_events + Polar hooks |
+| SMS OTP | Yes | Explicitly excluded |
 
-### Remaining gaps vs Clerk (Phase 7–9)
-
-| Feature | Clerk | Briven Auth | Plan |
-|---------|-------|-------------|------|
-| Custom JWT claims / templates | Yes — per-session claim overrides | No — deferred from Phase 3/5 | **Phase 7.1** |
-| Profile image / avatar upload | Yes — built-in avatar with Gravatar fallback | No — deferred from Phase 3/6 | **Phase 7.2** |
-| Username authentication | Yes — username + password sign-in | No — deferred from Phase 4 | **Phase 7.3** |
-| Testing tokens (E2E) | Yes — bypass bot/MFA for test suites | No | **Phase 7.4** |
-| Email template customization | Yes — per-tenant HTML/template overrides | No — hardcoded templates only | **Phase 7.5** |
-| 2FA backup / recovery codes | Yes — 10 single-use backup codes | Yes — Better Auth twoFactor + dashboard Security toggle | **Phase 8.1** |
-| Device tracking & new-device alerts | Yes — tracks devices, emails on new login | Yes — backend (API + email); dashboard polish later | **Phase 8.2** |
-| Account linking (multi-OAuth → 1 user) | Yes — automatic + manual linking | Yes — auto-link on matching email (API) | **Phase 8.3** |
-| Password reset policy | Yes — forced reset, expiration | Yes — policy table + Security UI + force-reset admin | **Phase 8.4** |
-| SCIM 2.0 provisioning | Enterprise only | No | **Phase 9** |
-| SMS OTP | Yes | Explicitly excluded per project requirements | — |
-
-**Design constraint (repeated):** All UI additions use the existing `briven-auth-*` CSS class convention. Briven's dark monospace minimal aesthetic is preserved. We do not clone Clerk's component visual style.
+**Design constraint:** `briven-auth-*` CSS; dark monospace aesthetic; no Clerk UI cloning.
 
 ---
 
 ## Sprint Overview
 
-| Sprint | Focus | Duration Estimate | Status |
-|--------|-------|------------------|--------|
-| **Phase 1** | Security Foundation | 2–3 weeks | **Complete** |
-| **Phase 2** | MFA & Session Polish | 1–2 weeks | **Complete** |
-| **Phase 3** | User Model & DX | 2 weeks | **Complete** |
-| **Phase 4** | Organizations & B2B | 3–4 weeks | **Complete** |
-| **Phase 5** | Enterprise SSO | 3–4 weeks | **Complete** |
-| **Phase 6** | Dashboard & Compliance | 2–3 weeks | **Complete** |
-| **Phase 7** | Developer Experience & Polish | 2 weeks | **Complete** |
-| **Phase 8** | Security Hardening & Account Management | 2 weeks | **Complete** |
-| **Phase 9** | Enterprise SCIM Provisioning | 2–3 weeks | **Planned** |
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| **Phase 1** | Security Foundation | **Complete** |
+| **Phase 2** | MFA & Session Polish | **Complete** |
+| **Phase 3** | User Model & DX | **Complete** (3.6 React hooks shipped) |
+| **Phase 4** | Organizations & B2B | **Complete** |
+| **Phase 5** | Enterprise SSO | **Complete** (5.7 metering shipped 2026-07-22) |
+| **Phase 6** | Dashboard & Compliance | **Complete** |
+| **Phase 7** | Developer Experience & Polish | **Complete** |
+| **Phase 8** | Security Hardening & Account Management | **Complete** |
+| **Phase 9** | Enterprise SCIM Provisioning | **Complete** |
+| **Auth v2 product** | Yellow Authentication sub-dashboard | **Complete** (config surface; runtime still auth-tenant) |
 
 ---
 
-## Phase 1: Security Foundation (Complete)
+## Phase details (summary)
 
-**Objective:** Eliminate abuse vectors and bring Briven Auth up to production security standards.
+Phases 1–9 task tables remain historically accurate as **Done**. Notable late closes:
 
-| Task | Status | Notes |
-|------|--------|-------|
-| 1.1 Bot Protection (Turnstile) | **Done** | Tenant-configurable CAPTCHA on sign-up/sign-in |
-| 1.2 Password Breach Detection | **Done** | HIBP k-anonymity check on sign-up |
-| 1.3 Rate Limiting | **Done** | Per-IP + per-email sliding window with `Retry-After` |
-| 1.4 User Bans / Suspensions | **Done** | `_briven_auth_user_security` auxiliary table |
-| 1.5 Allowlist / Blocklist | **Done** | Domain + disposable email + subaddress blocking |
-| 1.6 Waitlist Mode | **Done** | `signUpMode: public | restricted | waitlist` |
+| Item | Close date | Notes |
+|------|------------|-------|
+| 3.6 React `useUserMetadata` / `useUserEmails` | earlier | `packages/auth/src/react/index.ts` |
+| 5.7 Per-connection pricing hooks | 2026-07-22 | `auth_sso_connections` + `auth_sso_signins` usage metrics; wire on SSO create/sign-in; aggregator + Polar optional meters |
+| 8.1–8.4 | 2026-07-22 | Yellow Security / Users / Sessions UIs |
+| Auth v2 branding + enterprise tabs | 2026-07-22 | `/dashboard/auth/branding`, `/dashboard/auth/enterprise` |
 
 ---
 
-## Phase 2: MFA & Session Polish (Complete)
+## Gap Fix Sprint — closed
 
-**Objective:** Close MFA gaps and add production session controls.
+| Order | Gap | Status |
+|-------|-----|--------|
+| 1 | Session inactivity bypassable | **Done** — checked on every authenticated auth-tenant request; UI under Security |
+| 2 | Passkey rpID hardcoded | **Done** — `resolvePasskeyRpId` |
+| 3 | OIDC Enterprise missing | **Done** — start/callback routes + SDK branch |
+| 4 | OAuth account linking | **Done** — auto-link + Users unlink UI |
+| 5 | 2FA backup codes | **Done** — Better Auth twoFactor amount 10 + Security UI |
+| 6 | Device tracking dead | **Done** — wired on sign-in + Users/Sessions UI |
+| 7 | Rate limit in-memory only | **Done** — Redis when `BRIVEN_REDIS_URL` set |
+| 8 | Gmail email normalization | **Done** — `normalizeEmail` |
+| 9 | Domain verification blind | **Done** — DNS TXT via `verifyOrgDomain` |
+| 10 | SAML RelayState | **Done** — `sanitizeRelayState` on ACS path |
+| 11 | SDK publicKey scopes | **Done** — `sdkKeyAllowsMethod` on tenant bridge |
+| 12 | Admin revoke session | **Done** — route + Users/Sessions UI |
+| 13 | Password reset policy | **Done** — table + Security UI + force-reset |
+| 14 | SCIM | **Done** — Phase 9 |
+| 15 | GDPR export | **Done** — `exportUserData` |
+| 16 | React metadata hooks | **Done** — React SDK |
 
-| Task | Status | Notes |
-|------|--------|-------|
-| MFA enforcement (`mfa_required`) | **Done** | Blocks sign-in when MFA not enrolled; passkeys count as MFA |
-| Passkeys as MFA | **Done** | Passkey enrollment satisfies the MFA requirement |
-| Session max lifetime config | **Done** | `maxLifetimeDays` per tenant (1..3650 days) |
-| Session refresh age config | **Done** | `updateAgeDays` per tenant (1..365 days) |
-| Session inactivity timeout | **Done** | `inactivityTimeoutMinutes` with `_briven_auth_session_activity` tracking |
-| Multi-session (list + revoke) | **Done** | SDK `sessions.list()` / `sessions.revoke()` wired |
+### Build plan corrections (resolved)
 
----
-
-## Phase 3: User Model & DX (Complete)
-
-**Objective:** Enrich user data model and expand SDK coverage.
-
-| Task | Status | Notes |
-|------|--------|-------|
-| 3.1 User metadata | **Done** | `public_metadata`, `private_metadata` — backend + endpoints |
-| 3.2 Multiple verified emails | **Done** | `_briven_auth_user_emails` auxiliary table |
-| 3.3 SDK metadata & emails methods | **Done** | Vanilla SDK `user.getMetadata()`, `user.setMetadata()`, `user.listEmails()`, `user.addEmail()`, `user.removeEmail()` |
-| 3.4 Vue SDK package | **Done** | `@briven/auth/vue` subpath with composables + components |
-| 3.5 Sign-in tokens | **Done** | Single-use JWT for programmatic session creation |
-| 3.6 React SDK metadata hooks | **Pending** | `useUserMetadata`, `useUserEmails` — hooks exist in Vue/Svelte but not React |
-
-**Excluded from Phase 3:**
-- SMS/phone infrastructure (explicitly excluded per user request)
-- Username authentication (deferred to Phase 7)
-- Profile image upload (deferred to Phase 7)
-- Custom JWT claims (deferred to Phase 7)
-- Svelte SDK (deferred to Phase 6)
-- Localization (deferred to Phase 6)
+| Claim | Resolution |
+|-------|------------|
+| 5.4 OIDC Enterprise | Shipped |
+| 3.6 React metadata hooks | Shipped in React SDK |
+| 5.7 Per-connection pricing | Shipped 2026-07-22 |
 
 ---
 
-## Phase 4: Organizations & B2B (Complete)
+## Auth v2 product surface (yellow Authentication)
 
-**Objective:** Make Briven Auth competitive for B2B multi-tenant SaaS.
+| Tab | Role |
+|-----|------|
+| overview | Phase status + links |
+| projects | Enable Auth |
+| providers | Passwordless/password methods + save-proof |
+| security | 2FA, password rules, session inactivity |
+| branding | Logo, color, email from name |
+| enterprise | SSO connections (SAML/OIDC) + metering note |
+| users | Redacted list + linked logins + devices + sessions |
+| sessions & devices | Per-user device/session admin |
+| keys | `pk_briven_auth_…` |
+| domains | Allowed origins |
 
-| Task | Status | Notes |
-|------|--------|-------|
-| 4.1 Custom roles & permissions | **Done** | Configurable role + permission system per org; default roles seeded on org creation |
-| 4.2 Domain verification | **Done** | `_briven_auth_org_domains` table with verification token + verified_at |
-| 4.3 Auto-join from verified domains | **Done** | `maybeAutoJoinOrg()` + `auto_join_enabled` flag per domain |
-| 4.4 Membership requests | **Done** | Request-to-join flow with admin approve/reject; `_briven_auth_org_membership_requests` |
-| 4.5 Active organization in session | **Done** | `_briven_auth_session_orgs` auxiliary table; org switch without re-auth |
-| 4.6 SDK active-org hooks | **Done** | React `useActiveOrganization` + Vue `useActiveOrganization`; updated `OrganizationSwitcher` |
-
----
-
-## Phase 5: Enterprise SSO (Complete)
-
-**Objective:** Unlock enterprise sales with SAML and OIDC enterprise support.
-
-| Task | Status | Notes |
-|------|--------|-------|
-| 5.1 SAML 2.0 IdP integration | **Done** | `@node-saml/node-saml` SP; metadata, AuthnRequest, ACS endpoints |
-| 5.2 SP-initiated flow | **Done** | `GET /sso/saml/:id` → AuthnRequest → IdP redirect |
-| 5.3 IdP-initiated flow | **Done** | `POST /sso/saml/:id/acs` accepts direct IdP SAMLResponse |
-| 5.4 OIDC Enterprise foundation | **Done** | Start/callback routes + PKCE S256 + redirectTo (S7 polish) |
-| 5.5 JIT provisioning | **Done** | `findOrCreateSsoUser()` auto-creates user on first SSO sign-in when enabled |
-| 5.6 Automatic deprovisioning | **Done** | `_briven_auth_sso_sessions` tracks SSO-created sessions; `revokeAllSessionsForConnection()` |
-| 5.7 Per-connection pricing hooks | **Pending** | No billing events or metering exist yet |
-| 5.8 SDK SSO methods | **Done** | `auth.sso.listConnections()`, `auth.sso.getConnectionByDomain()`, `auth.sso.start()` |
-
----
-
-## Phase 6: Dashboard & Compliance (Complete)
-
-**Objective:** Build trust through admin collaboration, operational visibility, and compliance groundwork.
-
-| Task | Status | Notes |
-|------|--------|-------|
-| 6.1 Dashboard team seats | **Done** | `project_auth_team_members` table; `requireAuthTeamAdmin` middleware; list/invite/remove routes |
-| 6.2 User impersonation v2 | **Done** | `_briven_auth_impersonation_sessions` tracking; tenant audit log; stop flow; SDK `auth.impersonate.*` |
-| 6.3 Application logs with retention | **Done** | `_briven_auth_app_logs` table; `authConfig.retention` (auditLogDays + appLogDays); purge endpoint |
-| 6.4 Bulk operations | **Done** | Bulk ban / delete / invite endpoints with per-item result tracking |
-| 6.5 Webhook replay + IP allowlist | **Done** | `allowed_ips` on subscribers; replay endpoint; IP/CIDR matching in dispatcher |
-| 6.6 Compliance groundwork | **Done** | `_briven_auth_compliance` table; SOC 2 / HIPAA BAA / GDPR DPA metadata endpoints |
-| 6.7 Svelte SDK | **Done** | `@briven/auth/svelte` subpath with stores (`createSessionStore`, `createUserStore`, etc.) |
-| 6.8 Localization foundation | **Done** | `authConfig.locale`; `locale` param on `hostedPageURL()` and SDK components |
-
----
-
-## Phase 7: Developer Experience & Polish
-
-**Objective:** Close high-impact DX gaps that Clerk covers out-of-the-box.
-
-| Task | Status | Notes |
-|------|--------|-------|
-| 7.1 Custom JWT claims / templates | **Done** | `_briven_auth_jwt_templates` + `_briven_auth_custom_jwks`; `auth.jwt.getToken({ template })` SDK method; JWKS endpoint |
-| 7.2 Profile image / avatar upload | **Done** | Presigned S3 upload; `auth.user.getAvatarUploadUrl()` + `auth.user.updateAvatar()`; public serve route |
-| 7.3 Username authentication | **Done** | `_briven_auth_user_usernames`; `auth.signIn.username()`; `auth.user.setUsername/getUsername/removeUsername()` |
-| 7.4 Testing tokens (E2E) | **Done** | `_briven_auth_test_tokens`; admin create/revoke/list; `auth.signIn.testToken()` bypasses all gates |
-| 7.5 Email template customization | **Done** | `_briven_auth_email_templates`; admin CRUD; mailer auto-uses custom templates with `{{variable}}` substitution |
-
----
-
-## Phase 8: Security Hardening & Account Management
-
-**Objective:** Prevent lockouts, detect suspicious access, and allow flexible identity linking.
-
-| Task | Status | Notes |
-|------|--------|-------|
-| 8.1 2FA backup / recovery codes | **Done** (2026-07-22) | Better Auth `twoFactor` + `backupCodeOptions.amount: 10`; SDK `verifyBackupCode` / `generateBackupCodes`; yellow **Authentication → security** toggle with save-proof |
-| 8.2 Device tracking & new-device alerts | **Done** (2026-07-22) | `_briven_auth_devices`; `maybeAlertNewDevice` on sign-in; yellow **users** detail + **sessions & devices** list |
-| 8.3 Account linking (multi-OAuth → 1 user) | **Done** (2026-07-22) | Auto-link on matching email; yellow **users** detail shows linked logins + admin unlink |
-| 8.4 Password reset policy | **Done** (2026-07-22) | `_briven_auth_password_policy` + force-reset; yellow **security** password rules form |
-
----
-
-## Phase 9: Enterprise SCIM Provisioning
-
-**Objective:** Close the final enterprise gap with automated user lifecycle management.
-
-| Task | Status | Notes |
-|------|--------|-------|
-| 9.1 SCIM 2.0 user provisioning | **Done** (2026-07-19) | `/v1/projects/:id/scim/v2/Users` CRUD; `_briven_auth_scim_users` |
-| 9.2 SCIM group → org role mapping | **Done** (2026-07-19) | `…/auth/scim/role-maps` + apply on Group create |
-| 9.3 SCIM sync endpoints | **Done** (bearer push) | `scim_briven_…` tokens; docs/SCIM.md |
-| 9.4 Enterprise compliance sales kit | **Done** (2026-07-19) | `…/compliance/pack`, sign-dpa/baa, trust page, docs/ENTERPRISE-PACK.md |
+Runtime login remains `/v1/auth-tenant` (Better Auth pool) until a future full core rewrite. Config and admin are first-class on the yellow dashboard.
 
 ---
 
 ## Architecture Principles
 
-1. **Minimal changes** — Scope edits to files the request implies. No opportunistic cleanup.
-2. **Match existing style** — Follow the project's naming, comment density, and structural idioms.
-3. **Better Auth foundation** — All changes extend the existing Better Auth + Drizzle architecture.
-4. **Per-tenant config** — All features are tenant-configurable where applicable.
-5. **Privacy first** — No IP tracking, PII redaction in admin views, GDPR compliance.
-6. **Test what you build** — Verify changes before marking done.
-7. **Never ALTER existing tables** — Use auxiliary tables (DoltGres constraint).
-8. **Preserve Briven UI/UX** — All SDK components use the existing `briven-auth-*` CSS class convention; no Clerk UI cloning.
+1. Minimal changes; match existing style.
+2. Better Auth foundation; extend, don't invent Clerk.
+3. Per-tenant config; privacy-first (no raw IPs in admin).
+4. Never ALTER existing tables — auxiliary tables only (DoltGres).
+5. Test what you build; batch deploys to France from local when Konnos lag.
 
 ---
 
-## Gap Fix Sprint (Critical + High)
+## Explicit non-goals
 
-**Objective:** Fix all production-blockers and security gaps identified in the post-Phase-7 audit before continuing with Phase 8.
-
-| Order | Gap | Severity | Fix |
-|-------|-----|----------|-----|
-| 1 | Session inactivity timeout is bypassable | **Critical** | Move `checkSessionActivity` out of the `eligible` gate so it runs on **every** authenticated request |
-| 2 | Passkey `rpID` hardcoded to `briven.tech` | **Critical** | Derive `rpID` from `customAuthDomain` or request origin |
-| 3 | OIDC Enterprise flow completely missing | **Critical** | Build `/sso/oidc/:id` start + callback endpoints; update SDK `sso.start()` to branch by `providerType` |
-| 4 | OAuth account linking (multi-OAuth → 1 user) | **Critical** | `_briven_auth_account_links` table; auto-link on matching email; manual link API |
-| 5 | 2FA backup codes missing | **Critical** | `_briven_auth_backup_codes` table; generate/verify/regenerate flows; wire into sign-in |
-| 6 | Device tracking is dead code | **Critical** | `_briven_auth_devices` table; fingerprint on sign-in; `sendBrivenAuthNewDeviceLogin()` wired |
-| 7 | Rate limiting is in-memory only | **Critical** | Add Redis-backed store when `BRIVEN_REDIS_URL` is available; fallback to in-memory |
-| 8 | Email normalization (Gmail dots, plus aliases) | High | Strip dots and `+` aliases from Gmail before blocklist/allowlist checks |
-| 9 | Domain verification is "blind" | High | Add DNS TXT record challenge validation to `verifyOrgDomain()` |
-| 10 | SAML RelayState not validated | High | Validate `RelayState` against project's registered app origins before redirect |
-| 11 | SDK publicKey scopes not enforced | High | Add middleware to validate `Authorization: Bearer <publicKey>` on auth-tenant routes |
-| 12 | Admin cannot revoke specific session | High | Add `POST /v1/projects/:id/auth/users/:userId/sessions/:sessionId/revoke` admin route |
-| 13 | Password reset policy missing | High | `_briven_auth_password_policy` table; enforce on sign-in; admin config endpoints |
-| 14 | SCIM provisioning missing | High | Phase 9.1/9.3 shipped 2026-07-19; 9.2 deep org map later |
-| 15 | GDPR data export missing | High | Add data export endpoint before user deletion |
-| 16 | React SDK metadata hooks missing | High | Add `useUserMetadata` + `useUserEmails` to React SDK |
-
-### Build plan corrections
-
-| Claim | Correction |
-|-------|------------|
-| 5.4 OIDC Enterprise — "Done" | Confirmed shipped + S7 PKCE polish |
-| 3.6 React SDK metadata hooks — "Done" | Reverted to **Pending** — hooks do not exist in React SDK |
-| 5.7 Per-connection pricing hooks — "Done" | Reverted to **Pending** — no billing events or metering exist |
+- SMS OTP
+- Full SuperTokens Java Core self-host for customers
+- Replacing Better Auth runtime in this close-out (Auth v2 packaging only)
 
 ---
 
-## Current Sprint: Phase 8 — Security Hardening & Account Management
+## Next (optional future)
 
-| Task | Status | Notes |
-|------|--------|-------|
-| 8.1 2FA backup / recovery codes | **Done** | Dashboard Security + runtime twoFactor plugin (10 codes) |
-| 8.2 Device tracking & new-device alerts | **Done** | Users detail + Sessions & devices UI |
-| 8.3 Account linking (multi-OAuth → 1 user) | **Done** | Users detail linked logins + unlink |
-| 8.4 Password reset policy | **Done** | Security page password rules + force-reset admin route |
-
-**Phase 8 complete** on product surface. Phase 9 SCIM was already shipped earlier — next open work is outside Phase 8 (e.g. remaining gap-fix polish, Auth v2 engine depth, or per-connection pricing 5.7).
+- Polar meter UUIDs in production env for `auth_sso_*` (optional; rows skip until set)
+- Deeper IdP metadata wizards in enterprise UI
+- First-party app-domain proxy scaffold docs polish in HANDOFF
+- Full engine swap away from Better Auth (only if product still requires it)
