@@ -57,11 +57,11 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
 
-  // Former native briven-engine product API — OFF during blank Auth page.
-  // SuperTokens Core product will use a new mount path after flndrn Phase 0 OK.
+  // briven-engine (Option B) — Phase 1 status shell on Doltgres.
+  // true = ensure DB/schema + /v1/auth-core/info|ready. App login still closed.
   BRIVEN_AUTH_CORE_ENABLED: z
     .enum(['true', 'false'])
-    .default('false')
+    .default('true')
     .transform((v) => v === 'true'),
   /** Doltgres URL for Auth vault DB (must host=doltgres or local doltgres port). */
   BRIVEN_ENGINE_DATABASE_URL: z.string().optional(),

@@ -22,18 +22,23 @@ import { bootstrapBrivenEngineSchema } from './schema.js';
 import { getEnginePool, isEnginePoolReady } from './db.js';
 
 export const BRIVEN_ENGINE_ID = 'briven-engine' as const;
+/** Product engine version shown on yellow Auth shell (Option B Phase 1). */
+export const BRIVEN_ENGINE_VERSION = '0.1.0-phase1' as const;
 
 export type AuthCoreStatus = {
   enabled: boolean;
   engine: typeof BRIVEN_ENGINE_ID;
+  engineVersion: typeof BRIVEN_ENGINE_VERSION;
   storage: 'doltgres';
   database: 'briven_engine';
   ok: boolean;
   schemaReady: boolean;
   poolReady: boolean;
   phase: number;
+  /** Always false in Phase 1 — customer apps must not log in yet. */
+  appLoginReady: false;
   message: string;
-  deployGate: 'local-build-only-until-complete';
+  deployGate: 'phase1-shell';
   recipeNames: string[];
   sdkInitialized: boolean;
   recipePhase: number | null;
@@ -61,13 +66,16 @@ const LOADED_RECIPES = [
 export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
   const base = {
     engine: BRIVEN_ENGINE_ID,
+    engineVersion: BRIVEN_ENGINE_VERSION,
     storage: 'doltgres' as const,
     database: 'briven_engine' as const,
-    deployGate: 'local-build-only-until-complete' as const,
+    appLoginReady: false as const,
+    deployGate: 'phase1-shell' as const,
     recipeNames: [...LOADED_RECIPES],
     sdkInitialized: bootstrapped && schemaReady,
-    recipePhase: bootstrapped ? 3 : null,
-    connectionUri: env.BRIVEN_ENGINE_DATABASE_URL ?? '(unset)',
+    recipePhase: bootstrapped ? 1 : null,
+    // Redact credentials — this object is returned on public /info.
+    connectionUri: redactConnectionUri(env.BRIVEN_ENGINE_DATABASE_URL),
     hello: null as string | null,
     apiVersion: null as string | null,
   };
@@ -106,10 +114,10 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       ok: ok && schemaReady,
       schemaReady,
       poolReady: true,
-      phase: schemaReady ? 3 : 1,
+      phase: 1,
       hello: ok ? 'Hello' : null,
       message: schemaReady
-        ? 'briven-engine ready on Doltgres'
+        ? 'briven-engine shell on Doltgres — not ready for app login yet'
         : 'Doltgres reachable; schema not bootstrapped',
     };
   } catch (err) {
@@ -124,6 +132,17 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       phase: 1,
       message: `Doltgres unreachable: ${message}`,
     };
+  }
+}
+
+function redactConnectionUri(raw: string | undefined): string {
+  if (!raw) return '(unset)';
+  try {
+    const u = new URL(raw);
+    if (u.password) u.password = '***';
+    return u.toString();
+  } catch {
+    return '(set)';
   }
 }
 
@@ -152,10 +171,12 @@ export async function initAuthCoreSdk(): Promise<boolean> {
 
     log.info('briven_engine_initialized', {
       engine: BRIVEN_ENGINE_ID,
+      engineVersion: BRIVEN_ENGINE_VERSION,
       storage: 'doltgres',
       database: 'briven_engine',
       recipes: LOADED_RECIPES,
-      deployGate: 'local-build-only-until-complete',
+      deployGate: 'phase1-shell',
+      appLoginReady: false,
     });
     return true;
   } catch (err) {

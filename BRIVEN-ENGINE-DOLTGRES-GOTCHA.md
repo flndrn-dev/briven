@@ -21,8 +21,14 @@ That does **not** change when we add Auth or any other new part.
 - SuperTokens Core container (`supertokens-postgresql` service) from product compose  
 - Any plan to put Auth on stock Postgres so Core can boot  
 
-**Why Core is gone:** Core crashes on Doltgres (`SET SESSION CHARACTERISTICS`).  
-We do **not** “fix” that by leaving Doltgres. We build **briven-engine native on Doltgres**.
+**Why Core is gone (Phase 0 proof + flndrn Option B, 2026-07-22):**  
+
+1. Core hard-codes SQL Doltgres rejects (`SET SESSION CHARACTERISTICS`).  
+2. Even with a SQL rewrite proxy: Core can **boot** and create 52 tables, but **login/hello still fail** (Doltgres error codes ≠ Postgres).  
+3. flndrn chose **Option B**: product path = **briven-engine native on Doltgres**, not Core + permanent translator.  
+
+Full matrix: `BRIVEN-AUTH-DOLTGRES-COMPAT.md`.  
+We do **not** “fix” Core by leaving Doltgres. We build **briven-engine native on Doltgres**.
 
 ---
 

@@ -8,12 +8,18 @@ import { apiFetch } from '@/lib/api';
 export type AuthCoreInfo = {
   ok?: boolean;
   engine?: string;
+  engineVersion?: string;
   storage?: string;
   database?: string;
   message?: string;
   hello?: string | null;
   schemaReady?: boolean;
+  poolReady?: boolean;
+  appLoginReady?: boolean;
+  productStatus?: string;
+  notice?: string;
   buildSha?: string;
+  buildAt?: string;
 };
 
 export type AuthDashboard = {

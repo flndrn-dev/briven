@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 /**
- * Auth product shell — blank rebuild phase.
+ * Auth product shell — Option B Phase 1.
  * Same dashboard tokens; butter yellow accent only.
- * No feature tabs until SuperTokens product is live-OK.
+ * App login still closed; status shell only.
  */
 const AUTH_SHELL_VARS = {
   ['--auth-accent' as string]: '#FFFD74',

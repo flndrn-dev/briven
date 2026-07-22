@@ -2,10 +2,11 @@
 
 **Owner:** flndrn  
 **Filed:** 2026-07-22  
-**Status:** PLAN ONLY — **no SuperTokens phase starts until flndrn says OK**  
+**Status:** Phase 0 **CLOSED** (2026-07-22) — flndrn chose **Option B** (native briven-engine). Phase 1+ wait for **START PHASE 1**.  
 **Blank + clean:** **DONE 2026-07-22** — see `AUTH-BLANK-STATE.md` (customer Auth blank; platform login kept)  
+**Phase 0 report:** `BRIVEN-AUTH-DOLTGRES-COMPAT.md`  
 **Libraries (mandatory):**
-1. `knowledge-base.md` → SuperTokens section (**492** official URLs)  
+1. `knowledge-base.md` → SuperTokens section (**492** official URLs) — **feature checklist only** under Option B  
 2. `knowledge-base.md` → Official DoltGres section (**51** `www.doltgres.com` URLs)  
 3. `AI_DOCS/dolt-reference/00-doltgres-truth.md` + siblings  
 4. `DOLTGRES-FIRST.md`  
@@ -18,9 +19,9 @@ You want **Briven Auth** to do **everything SuperTokens does as a product**, run
 
 This plan is **honest**:
 - **100% feature-to-feature** means walking SuperTokens’ published surface (recipes + FDI/CDI + plugins + integrations) against a **live** Briven Auth — not “similar vibes.”
-- Doltgres is **Postgres-family** (same wire family). If SuperTokens works on Postgres, we **make it work on Doltgres** using official Doltgres docs — we do **not** quit after one SQL error and rewrite in silence.
-- Previous failure: Core hit `SET SESSION CHARACTERISTICS` → path abandoned without your clear OK → native reimplementation. **That is forbidden under this plan.**  
-- **We do not fork SuperTokens.** Host + multi-tenant + brand Briven Auth on top of **official** SuperTokens.
+- Doltgres is **Postgres-family** (same wire family). Phase 0 tried SuperTokens Core on Doltgres; **Core is not product-ready** without a permanent SQL translator (and even then login errors remain).  
+- **flndrn Option B (2026-07-22):** product engine = **briven-engine native on Doltgres**. SuperTokens docs = checklist of features to match, not a Core dependency.  
+- **We do not fork SuperTokens** and we do **not** ship SuperTokens Core Docker for customer Auth under B.
 
 ---
 
@@ -29,15 +30,15 @@ This plan is **honest**:
 | # | Rule |
 |---|------|
 | R1 | **Notify flndrn before every phase start, architecture change, wipe, or deploy.** No quiet pivots. |
-| R2 | **Primary engine path = SuperTokens Core + Briven product layer**, on Doltgres (or a documented, flndrn-approved temporary bridge if Core cannot run). |
-| R3 | On any Doltgres/SQL error: open `knowledge-base.md` Doltgres URLs + `00-doltgres-truth.md` → try workarounds → **report options A/B/C to flndrn** → wait for OK. |
+| R2 | **Primary engine path (Option B, flndrn 2026-07-22) = briven-engine on Doltgres.** SuperTokens Core is **not** the product vault. SuperTokens docs = 100% feature checklist. |
+| R3 | On any Doltgres/SQL error: open `knowledge-base.md` Doltgres URLs + `00-doltgres-truth.md` → try workarounds → **report options to flndrn** → wait for OK. Phase 0 already closed with B. |
 | R4 | Phase is **not done** until: (a) code, (b) **live** proof, (c) **security smoke**, (d) **you say OK**. |
 | R5 | Local scripts alone ≠ done. |
 | R6 | Old Better Auth **customer** Auth product stays retired for product login; do not rebuild on it. Platform operator login (briven.tech) can stay Better Auth until you say otherwise. |
 | R7 | Branding = **Briven Auth** — not SuperTokens logo. Accent = butter yellow **`#FFFD74`**. |
 | R8 | Every phase maps to SuperTokens URLs in `knowledge-base.md` **and** Doltgres constraints. |
 | R9 | **UI = same Briven dashboard design language** as overview + projects (see §1b). No foreign “control room” skin. |
-| R10 | **NO FORKING SUPERTOKENS.** Use SuperTokens Core + official SDKs as upstream products. Briven **hosts, multi-tenants, brands, and wires** them — we do **not** fork SuperTokens source into a Briven fork, reimplement Core as “briven-engine,” or maintain a divergent SuperTokens codebase. Workarounds for Doltgres = config/compat/bridge reported to flndrn — not a fork. |
+| R10 | **NO FORKING SUPERTOKENS source.** Under Option B we do **not** ship Core or claim to be SuperTokens. We build **briven-engine** (Briven-owned) that matches SuperTokens **features** from the knowledge base. No SuperTokens logo; no pretending Core is running. |
 
 ---
 
@@ -165,39 +166,36 @@ Phases 1–8 = SuperTokens product.
 
 ---
 
-### PHASE 0 — Doltgres ↔ SuperTokens Core compatibility (MANDATORY FIRST)
+### PHASE 0 — Doltgres ↔ SuperTokens Core compatibility (MANDATORY FIRST) — **DONE**
 
-**Why:** SuperTokens is Postgres-shaped; Briven is Doltgres-first. Same family → workarounds first.
+**Why:** SuperTokens is Postgres-shaped; Briven is Doltgres-first. Same family → try Core first, then decide.
 
-| ID | Work | Knowledge-base / docs |
-|----|------|------------------------|
-| 0.1 | Install Core against **Doltgres** (not stock Postgres product line) | doltgres intro/install/getting-started; Core self-host docs |
-| 0.2 | Reproduce any SQL errors (e.g. `SET SESSION CHARACTERISTICS`) | doltgres `supported-commands`, `supported-functions`, `system-catalog-schema`, `server/troubleshooting` |
-| 0.3 | For each error: try config, version, init SQL, proxy/session bootstrap, driver, Core flags | `00-doltgres-truth.md` + sql-support refs |
-| 0.4 | Write **compat matrix** (works / workaround / blocked) | `BRIVEN-AUTH-DOLTGRES-COMPAT.md` (create when phase starts) |
-| 0.5 | **Report to flndrn** with options: A Core on Doltgres ready · B needs X days more · C needs flndrn decision | — |
-| 0.6 | Live: Core hello/version/health on France | deployment + live |
+| ID | Work | Status |
+|----|------|--------|
+| 0.1–0.4 | Spike Core on Doltgres + compat matrix | **Done** — `BRIVEN-AUTH-DOLTGRES-COMPAT.md` |
+| 0.5 | Report A/B/C to flndrn | **Done** |
+| 0.6 | Live Core boot (with translator only) | Boot + 52 tables + apiversion; hello/signup still fail |
+| **Decision** | flndrn **Option B** | **2026-07-22** — product = briven-engine on Doltgres |
 
-**Done when:** Core **healthy on Doltgres** **or** you approve a written exception.  
-**Days (focused):** **3–5**  
-**Forbidden:** silent switch to native-only.
+**Done when:** Core healthy **or** flndrn written decision — **met via Option B**.
 
 ---
 
-### PHASE 1 — Blank product shell + Core online + wipe old customer Auth
+### PHASE 1 — Blank product shell + briven-engine online (Option B)
 
-**SuperTokens KB:** platform-configuration, deployment, CDI core hello/version/config  
+**SuperTokens KB (checklist only):** platform-configuration, deployment, hello/version/config shapes  
 
 | ID | Work |
 |----|------|
-| 1.1 | Core multi-instance on Briven (Doltgres-backed) |
-| 1.2 | API keys, base path, SSL/Traefik, IP policy |
-| 1.3 | ProjectId → ST appId/tenantId map (hyphen-safe ids) |
-| 1.4 | Retire old Better Auth **customer** routes permanently (no dual product) |
-| 1.5 | Yellow Auth UI: Core version + “not ready for app login yet” only |
+| 1.1 | briven-engine multi-tenant map on Doltgres (`briven_engine`) live on France |
+| 1.2 | Engine health / version APIs (Briven-branded; **no** SuperTokens Core container) |
+| 1.3 | ProjectId → tenant map (hyphen-safe ids) |
+| 1.4 | Keep old Better Auth **customer** routes retired (410) |
+| 1.5 | Yellow Auth UI: **briven-engine version** + “not ready for app login yet” only |
 | 1.6 | G-LIVE + G-SEC (no open customer Auth holes) + G-OK |
 
-**Days:** **2–3** after Phase 0 green  
+**Days:** **2–3** after flndrn **START PHASE 1**  
+**Forbidden under B:** adding SuperTokens Core to product compose without a new flndrn decision.
 
 ---
 
