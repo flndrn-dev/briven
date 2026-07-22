@@ -2,7 +2,12 @@ import type { NextConfig } from 'next';
 
 const config: NextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@briven/ui', '@briven/shared', '@briven/config'],
+  transpilePackages: [
+    '@briven/ui',
+    '@briven/shared',
+    '@briven/config',
+    '@briven/auth',
+  ],
   experimental: {
     typedRoutes: true,
   },
