@@ -1,14 +1,23 @@
-export const metadata = { title: 'Briven Auth · enterprise' };
+export const metadata = { title: 'Auth · enterprise' };
 export const dynamic = 'force-dynamic';
 
+type RecipesPayload = {
+  loaded?: string[];
+  catalog?: Array<{ id: string; loaded: boolean; title: string }>;
+};
+
+type TenantsPayload = {
+  tenantIds?: string[];
+  ok?: boolean;
+  message?: string;
+};
+
 /**
- * Enterprise — multitenancy / OAuth2 IdP / SAML status for briven-engine.
+ * Enterprise — multi-project, SAML, company login options.
  */
 export default async function EnterprisePage() {
-  let recipes: { loaded?: string[]; catalog?: Array<{ id: string; loaded: boolean; title: string }> } | null =
-    null;
-  let tenants: { tenantIds?: string[]; ok?: boolean; message?: string } | null =
-    null;
+  let recipes: RecipesPayload | null = null;
+  let tenants: TenantsPayload | null = null;
 
   try {
     const origin =
@@ -25,9 +34,9 @@ export default async function EnterprisePage() {
         signal: AbortSignal.timeout(4000),
       }),
     ]);
-    if (rRes.ok) recipes = (await rRes.json()) as typeof recipes;
+    if (rRes.ok) recipes = (await rRes.json()) as RecipesPayload;
     if (tRes.ok || tRes.status === 503) {
-      tenants = (await tRes.json()) as typeof tenants;
+      tenants = (await tRes.json()) as TenantsPayload;
     }
   } catch {
     /* offline */
@@ -42,21 +51,17 @@ export default async function EnterprisePage() {
   ];
 
   return (
-    <section className="flex flex-col gap-4">
-      <p
-        className="font-mono text-[10px] uppercase tracking-widest"
-        style={{ color: 'var(--auth-accent, #e6b800)' }}
-      >
-        briven-engine · enterprise
-      </p>
-      <h2 className="font-mono text-sm text-[var(--color-text)]">
-        Multi-project, SAML, login-as-IdP
-      </h2>
-      <p className="max-w-xl font-mono text-xs text-[var(--color-text-muted)]">
-        Enterprise pieces of briven-engine. Each Briven project maps to its own
-        engine tenant so users never mix.
-      </p>
-      <ul className="grid gap-2 sm:grid-cols-2">
+    <section className="flex flex-col gap-8">
+      <header className="flex flex-col gap-1">
+        <h1 className="font-sans text-2xl font-medium tracking-[-0.02em] text-[var(--color-text)]">
+          enterprise
+        </h1>
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          company login, SAML, multi-project islands
+        </p>
+      </header>
+
+      <ul className="grid gap-3 sm:grid-cols-2">
         {enterpriseIds.map((id) => {
           const loaded = recipes?.loaded?.includes(id) ?? false;
           const title =
@@ -64,32 +69,29 @@ export default async function EnterprisePage() {
           return (
             <li
               key={id}
-              className="rounded-md border p-3 font-mono text-xs"
-              style={{
-                borderColor: 'var(--auth-accent-border, var(--color-border))',
-                opacity: loaded ? 1 : 0.55,
-              }}
+              className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4"
+              style={{ opacity: loaded ? 1 : 0.55 }}
             >
-              <div className="text-[var(--color-text)]">{title}</div>
-              <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
-                {id} · {loaded ? 'loaded' : 'catalog only'}
-              </div>
+              <p className="font-mono text-sm text-[var(--color-text)]">{title}</p>
+              <p className="mt-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+                {loaded ? 'available' : 'coming soon'}
+              </p>
             </li>
           );
         })}
       </ul>
-      <div
-        className="rounded-md border p-3 font-mono text-xs"
-        style={{ borderColor: 'var(--auth-accent-border, var(--color-border))' }}
-      >
-        <div className="text-[var(--color-text)]">Tenants in briven-engine</div>
-        <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+
+      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+        <p className="font-mono text-sm text-[var(--color-text)]">
+          project islands
+        </p>
+        <p className="mt-1 font-mono text-xs text-[var(--color-text-muted)]">
           {!tenants
-            ? 'could not query'
+            ? 'could not load right now'
             : tenants.ok
-              ? `${(tenants.tenantIds ?? []).length} tenant(s): ${(tenants.tenantIds ?? []).slice(0, 8).join(', ') || 'none'}`
+              ? `${(tenants.tenantIds ?? []).length} island${(tenants.tenantIds ?? []).length === 1 ? '' : 's'} active`
               : tenants.message ?? 'not ready'}
-        </div>
+        </p>
       </div>
     </section>
   );

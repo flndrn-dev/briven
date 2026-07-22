@@ -55,7 +55,7 @@ const NAV: NavItem[] = [
   },
   {
     href: '/dashboard/auth',
-    label: 'Authentication',
+    label: 'Auth',
     Icon: ShieldCheckIcon as never,
     match: (p) => p.startsWith('/dashboard/auth'),
     authProduct: true,
@@ -158,16 +158,37 @@ export function DashboardSidebar({ isAdmin, user }: { isAdmin: boolean; user: Si
       }`}
     >
       <ul className="flex flex-col gap-1">
-        {items.map((item) => (
-          <SidebarLink
-            key={item.href}
-            item={item}
-            active={item.match(pathname)}
-            iconPixels={iconPixels}
-            collapsed={isCollapsed}
-            authProduct={item.authProduct === true}
-          />
-        ))}
+        {items.map((item) => {
+          const isAuth = item.authProduct === true;
+          return (
+            <li key={item.href} className="list-none">
+              {/* Separators frame the Auth product row (above + below). */}
+              {isAuth ? (
+                <div
+                  aria-hidden
+                  className={`my-1 border-t border-[var(--color-border-subtle)] ${
+                    isCollapsed ? 'mx-2' : 'mx-3'
+                  }`}
+                />
+              ) : null}
+              <SidebarLink
+                item={item}
+                active={item.match(pathname)}
+                iconPixels={iconPixels}
+                collapsed={isCollapsed}
+                authProduct={isAuth}
+              />
+              {isAuth ? (
+                <div
+                  aria-hidden
+                  className={`my-1 border-t border-[var(--color-border-subtle)] ${
+                    isCollapsed ? 'mx-2' : 'mx-3'
+                  }`}
+                />
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
 
       {/*
@@ -238,46 +259,46 @@ function SidebarLink({
     else iconRef.current.stopAnimation();
   }, [hovering]);
 
-  // Same row chrome as every other nav item. Auth only recolors icon +
-  // label yellow when active (mirrors how projects uses green primary).
-  const activeAuth = active && authProduct;
+  // Auth product: yellow when active OR hovered (same #e6b800).
+  // Other rows: green primary when active; green-ish hover via CSS vars.
+  const showAuthYellow = authProduct && (active || hovering);
 
   return (
-    <li>
-      <Link
-        href={item.href}
-        aria-current={active ? 'page' : undefined}
-        title={collapsed ? item.label : undefined}
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
-        onFocus={() => setHovering(true)}
-        onBlur={() => setHovering(false)}
-        className={`flex items-center gap-3 rounded-md px-3 py-2 font-mono text-sm transition-colors ${
-          active
-            ? 'bg-[var(--color-surface)]'
+    <Link
+      href={item.href}
+      aria-current={active ? 'page' : undefined}
+      title={collapsed ? item.label : undefined}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+      onFocus={() => setHovering(true)}
+      onBlur={() => setHovering(false)}
+      className={`flex items-center gap-3 rounded-md px-3 py-2 font-mono text-sm transition-colors ${
+        active
+          ? 'bg-[var(--color-surface)]'
+          : authProduct
+            ? 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)]'
             : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]'
-        } ${collapsed ? 'justify-center px-0' : ''}`}
-        style={
-          active
-            ? activeAuth
-              ? { color: AUTH_ACCENT }
-              : { color: 'var(--color-primary)' }
+      } ${collapsed ? 'justify-center px-0' : ''}`}
+      style={
+        showAuthYellow
+          ? { color: AUTH_ACCENT }
+          : active
+            ? { color: 'var(--color-primary)' }
             : undefined
-        }
+      }
+    >
+      {/* pointer-events-none on the icon so Link hover drives animation. */}
+      <span
+        className="pointer-events-none"
+        style={showAuthYellow ? { color: AUTH_ACCENT } : undefined}
       >
-        {/* pointer-events-none on the icon's own mouse surface so its
-            internal onMouseEnter doesn't compete with the Link's. The
-            animation is driven via the ref from the Link's hover state
-            above. */}
-        <span className="pointer-events-none" style={activeAuth ? { color: AUTH_ACCENT } : undefined}>
-          <Icon ref={iconRef as never} size={iconPixels} />
-        </span>
-        {collapsed ? (
-          <span className="sr-only">{item.label}</span>
-        ) : (
-          <span className="truncate">{item.label}</span>
-        )}
-      </Link>
-    </li>
+        <Icon ref={iconRef as never} size={iconPixels} />
+      </span>
+      {collapsed ? (
+        <span className="sr-only">{item.label}</span>
+      ) : (
+        <span className="truncate">{item.label}</span>
+      )}
+    </Link>
   );
 }

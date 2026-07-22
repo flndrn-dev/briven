@@ -1,48 +1,30 @@
-export const metadata = { title: 'Briven Auth · projects' };
+export const metadata = { title: 'Auth · projects' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Projects — how Briven projects map to briven-engine tenants.
+ * Projects — each Briven project gets its own login island.
  */
 export default function ProjectsPage() {
   return (
-    <section className="flex flex-col gap-4">
-      <p
-        className="font-mono text-[10px] uppercase tracking-widest"
-        style={{ color: 'var(--auth-accent, #e6b800)' }}
-      >
-        briven-engine · projects
-      </p>
-      <h2 className="font-mono text-sm text-[var(--color-text)]">
-        One project = one login island
-      </h2>
-      <p className="max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-        Each Briven project gets its own briven-engine tenant (like a separate
-        apartment in the same building). Users in project A cannot see users in
-        project B.
-      </p>
-      <div
-        className="rounded-md border p-4 font-mono text-xs text-[var(--color-text-muted)]"
-        style={{ borderColor: 'var(--auth-accent-border, var(--color-border))' }}
-      >
-        Mapping rule:
-        <br />
-        <code className="text-[var(--color-text)]">
-          projectId → tenantId = proj_&lt;projectId&gt;
-        </code>
-        <br />
-        <br />
-        API: <code className="text-[var(--color-text)]">GET /v1/auth-core/map/:projectId</code>
-        <br />
-        Ensure tenant:{' '}
-        <code className="text-[var(--color-text)]">
-          POST /v1/auth-core/projects/:projectId/tenant
-        </code>
-        <br />
-        Config:{' '}
-        <code className="text-[var(--color-text)]">
-          GET /v1/auth-core/projects/:projectId/config
-        </code>
+    <section className="flex flex-col gap-8">
+      <header className="flex flex-col gap-1">
+        <h1 className="font-sans text-2xl font-medium tracking-[-0.02em] text-[var(--color-text)]">
+          projects
+        </h1>
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          each project has its own sign-in island
+        </p>
+      </header>
+
+      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+        <p className="font-mono text-sm text-[var(--color-text)]">
+          one project = one login island
+        </p>
+        <p className="mt-2 max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+          Users in project A cannot see users in project B — like separate
+          apartments in the same building. Turn Auth on for a project from the
+          project settings, then manage users, keys, and providers here.
+        </p>
       </div>
     </section>
   );

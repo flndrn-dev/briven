@@ -207,7 +207,7 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
         </select>
       </label>
 
-      {/* ── Phase 8.1: 2FA + backup codes ── */}
+      {/* 2FA + backup codes */}
       <section className="flex flex-col gap-3">
         <div>
           <h3 className="font-mono text-sm text-[var(--color-text)]">two-factor (2FA)</h3>
@@ -285,7 +285,7 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
         </button>
       </section>
 
-      {/* ── Phase 8.4: password policy ── */}
+      {/* password policy */}
       <section className="flex flex-col gap-3">
         <div>
           <h3 className="font-mono text-sm text-[var(--color-text)]">password rules</h3>

@@ -97,9 +97,7 @@ export function BrivenEngineProvidersForm() {
             `Save failed (${res.status}). Sign in as project admin.`,
         );
       } else {
-        setStatus(
-          `Saved ${thirdPartyId} on ${body.engine ?? 'briven-engine'} (Doltgres secrets).`,
-        );
+        setStatus(`Saved ${thirdPartyId} secrets for this project.`);
         setClientSecret('');
         if (body.config?.providers) setProviders(body.config.providers);
         else await loadConfig(projectId);
@@ -118,15 +116,12 @@ export function BrivenEngineProvidersForm() {
         className="flex max-w-lg flex-col gap-3 rounded-md border p-4"
         style={{ borderColor: 'var(--auth-accent-border, var(--color-border))' }}
       >
-        <p
-          className="font-mono text-[10px] uppercase tracking-widest"
-          style={{ color: 'var(--auth-accent, #e6b800)' }}
-        >
-          briven-engine · save social secrets
+        <p className="font-mono text-sm text-[var(--color-text)]">
+          social sign-in secrets
         </p>
         <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
-          Real Google/GitHub client id + secret for this project. Stored encrypted
-          (Doltgres control plane secrets). Used when users click “Sign in with…”.
+          Google / GitHub client id + secret for this project. Stored encrypted.
+          Used when users click “Sign in with…”.
         </p>
         <label className="flex flex-col gap-1 font-mono text-xs text-[var(--color-text-muted)]">
           Project id
@@ -186,7 +181,7 @@ export function BrivenEngineProvidersForm() {
           className="rounded px-3 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
           style={{ background: 'var(--auth-accent, #e6b800)' }}
         >
-          {busy ? 'Saving…' : 'Save to briven-engine'}
+          {busy ? 'Saving…' : 'Save secrets'}
         </button>
         {status ? (
           <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
@@ -253,7 +248,7 @@ export function BrivenEngineSmsForm() {
       if (!res.ok) {
         setStatus(body.message ?? `Save failed (${res.status})`);
       } else {
-        setStatus(`SMS secrets saved on ${body.engine ?? 'briven-engine'}.`);
+        setStatus('SMS secrets saved.');
         setAuthToken('');
       }
     } catch (err) {
@@ -269,12 +264,7 @@ export function BrivenEngineSmsForm() {
       className="flex max-w-lg flex-col gap-3 rounded-md border p-4"
       style={{ borderColor: 'var(--auth-accent-border, var(--color-border))' }}
     >
-      <p
-        className="font-mono text-[10px] uppercase tracking-widest"
-        style={{ color: 'var(--auth-accent, #e6b800)' }}
-      >
-        briven-engine · SMS (included)
-      </p>
+      <p className="font-mono text-sm text-[var(--color-text)]">SMS codes</p>
       <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
         Twilio-compatible: account SID, auth token, from number (E.164).
       </p>
@@ -323,7 +313,7 @@ export function BrivenEngineSmsForm() {
         className="rounded px-3 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
         style={{ background: 'var(--auth-accent, #e6b800)' }}
       >
-        {busy ? 'Saving…' : 'Save SMS to briven-engine'}
+        {busy ? 'Saving…' : 'Save SMS'}
       </button>
       {status ? (
         <p className="font-mono text-[10px] text-[var(--color-text-muted)]">{status}</p>

@@ -270,7 +270,7 @@ export function AuthUsersClient({ projects }: { projects: AuthV2ProjectRow[] }) 
                     <p className="text-[var(--color-text-muted)]">loading…</p>
                   ) : (
                     <div className="flex flex-col gap-5">
-                      {/* Phase 8.3 — linked accounts */}
+                      {/* linked accounts */}
                       <section>
                         <h4 className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
                           linked logins (account linking)
@@ -314,7 +314,7 @@ export function AuthUsersClient({ projects }: { projects: AuthV2ProjectRow[] }) 
                         )}
                       </section>
 
-                      {/* Phase 8.2 — devices */}
+                      {/* devices */}
                       <section>
                         <h4 className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
                           known devices

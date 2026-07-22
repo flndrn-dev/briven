@@ -36,7 +36,7 @@ function shortTime(iso: string | null | undefined): string {
 }
 
 /**
- * Phase 8.2 surface — pick a user, see known devices + live sessions.
+ * Pick a user, see known devices + live sessions.
  * Full manage (unlink accounts) lives under users.
  */
 export function AuthSessionsClient({ projects }: { projects: AuthV2ProjectRow[] }) {
@@ -175,7 +175,7 @@ export function AuthSessionsClient({ projects }: { projects: AuthV2ProjectRow[] 
               known devices ({devices.length})
             </h3>
             <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
-              phase 8.2 — first time a browser signs in, we remember a fingerprint and email the
+              first time a browser signs in, we remember a fingerprint and email the
               user. no raw IP stored.
             </p>
             {devices.length === 0 ? (

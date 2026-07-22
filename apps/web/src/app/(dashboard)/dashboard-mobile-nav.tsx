@@ -15,7 +15,7 @@ const AUTH_ACCENT = '#e6b800';
 const NAV = [
   { href: '/dashboard', label: 'overview' },
   { href: '/dashboard/projects', label: 'projects' },
-  { href: '/dashboard/auth', label: 'Authentication', auth: true },
+  { href: '/dashboard/auth', label: 'Auth', auth: true },
   { href: '/dashboard/s3', label: 'S3 bucket' },
   { href: '/dashboard/teams', label: 'teams' },
   { href: '/dashboard/billing', label: 'billing' },
@@ -44,15 +44,28 @@ export function DashboardMobileNav() {
             className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 font-mono text-xs transition ${
               active
                 ? 'bg-[var(--color-surface-raised)]'
-                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                : isAuth
+                  ? 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)]'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
             }`}
             style={
-              active
-                ? isAuth
-                  ? { color: AUTH_ACCENT }
-                  : { color: 'var(--color-text)' }
-                : undefined
+              active && isAuth
+                ? { color: AUTH_ACCENT }
+                : active
+                  ? { color: 'var(--color-text)' }
+                  : undefined
             }
+            // Auth hover uses same yellow as active (group via CSS variable)
+            onMouseEnter={(e) => {
+              if (isAuth && !active) {
+                (e.currentTarget as HTMLElement).style.color = AUTH_ACCENT;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (isAuth && !active) {
+                (e.currentTarget as HTMLElement).style.color = '';
+              }
+            }}
           >
             {item.label}
           </Link>

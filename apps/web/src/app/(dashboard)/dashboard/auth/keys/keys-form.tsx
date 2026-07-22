@@ -55,12 +55,7 @@ export function BrivenEngineKeysForm() {
       className="flex max-w-lg flex-col gap-3 rounded-md border p-4"
       style={{ borderColor: 'var(--auth-accent-border, var(--color-border))' }}
     >
-      <p
-        className="font-mono text-[10px] uppercase tracking-widest"
-        style={{ color: 'var(--auth-accent, #e6b800)' }}
-      >
-        briven-engine · create SDK key
-      </p>
+      <p className="font-mono text-sm text-[var(--color-text)]">create API key</p>
       <label className="flex flex-col gap-1 font-mono text-xs text-[var(--color-text-muted)]">
         Project id
         <input

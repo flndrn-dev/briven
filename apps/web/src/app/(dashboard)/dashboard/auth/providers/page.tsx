@@ -3,11 +3,11 @@ import {
   BrivenEngineSmsForm,
 } from './providers-form';
 
-export const metadata = { title: 'Briven Auth · providers' };
+export const metadata = { title: 'Auth · providers' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Providers + SMS secrets for briven-engine.
+ * Providers + SMS secrets for Auth sign-in methods.
  */
 export default async function ProvidersPage() {
   let providers: Array<{ thirdPartyId: string; name: string; help: string }> =
@@ -31,45 +31,33 @@ export default async function ProvidersPage() {
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <div>
-        <p
-          className="font-mono text-[10px] uppercase tracking-widest"
-          style={{ color: 'var(--auth-accent, #e6b800)' }}
-        >
-          briven-engine · providers + SMS
+    <section className="flex flex-col gap-8">
+      <header className="flex flex-col gap-1">
+        <h1 className="font-sans text-2xl font-medium tracking-[-0.02em] text-[var(--color-text)]">
+          providers
+        </h1>
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          how people sign in — Google, GitHub, SMS, and more
         </p>
-        <h2 className="mt-1 font-mono text-sm text-[var(--color-text)]">
-          Sign-in methods
-        </h2>
-        <p className="mt-2 max-w-xl font-mono text-xs text-[var(--color-text-muted)]">
-          Save Google/GitHub (and friends) secrets, and SMS for phone codes.
-          Secrets are locked per project. Engine name: briven-engine.
-        </p>
-      </div>
+      </header>
 
       {providers.length > 0 ? (
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid gap-3 sm:grid-cols-2">
           {providers.map((p) => (
             <li
               key={p.thirdPartyId}
-              className="rounded-md border p-3"
-              style={{
-                borderColor: 'var(--auth-accent-border, var(--color-border))',
-              }}
+              className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4"
             >
-              <div className="font-mono text-sm text-[var(--color-text)]">
-                {p.name}
-              </div>
-              <div className="mt-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+              <p className="font-mono text-sm text-[var(--color-text)]">{p.name}</p>
+              <p className="mt-1 font-mono text-[10px] text-[var(--color-text-muted)]">
                 {p.thirdPartyId}
-              </div>
+              </p>
             </li>
           ))}
         </ul>
       ) : (
         <p className="font-mono text-xs text-[var(--color-text-muted)]">
-          Catalog offline — forms still work when API is local.
+          provider list unavailable — you can still save secrets below.
         </p>
       )}
 

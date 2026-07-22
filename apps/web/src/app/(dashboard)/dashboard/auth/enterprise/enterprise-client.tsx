@@ -70,7 +70,7 @@ export function AuthEnterpriseClient({ projects }: { projects: AuthV2ProjectRow[
       setName('');
       setDomains('');
       setNote(
-        'SSO connection created — billable as an active connection (Phase 5.7 metering). Add IdP metadata via API or a follow-up config pass.',
+        'SSO connection created. Add identity provider details next if needed.',
       );
       await load(projectId);
     } catch (e) {

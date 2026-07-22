@@ -1,65 +1,46 @@
-import { fetchAuthDashboard, fetchAuthRecipes } from '../lib/auth-api';
+import { fetchAuthDashboard } from '../lib/auth-api';
 
-export const metadata = { title: 'Briven Auth · security' };
+export const metadata = { title: 'Auth · security' };
 export const dynamic = 'force-dynamic';
 
-/**
- * Security — MFA / TOTP / passkeys status (Doltgres-native engine).
- */
 export default async function SecurityPage() {
-  const [dash, recipes] = await Promise.all([
-    fetchAuthDashboard(),
-    fetchAuthRecipes(),
-  ]);
-
-  const mfa = recipes?.loaded?.includes('multifactorauth') ?? false;
-  const webauthn = recipes?.loaded?.includes('webauthn') ?? false;
+  const dash = await fetchAuthDashboard();
 
   return (
-    <section className="flex flex-col gap-4">
-      <p
-        className="font-mono text-[10px] uppercase tracking-widest"
-        style={{ color: 'var(--auth-accent, #e6b800)' }}
-      >
-        briven-engine · security · doltgres
-      </p>
-      <h2 className="font-mono text-sm text-[var(--color-text)]">
-        MFA, passkeys, delivery
-      </h2>
-      <p className="max-w-xl font-mono text-xs text-[var(--color-text-muted)]">
-        Authenticator-app codes (TOTP) and passkeys are stored in Doltgres tables{' '}
-        <code className="text-[var(--color-text)]">be_totp_devices</code> and{' '}
-        <code className="text-[var(--color-text)]">be_webauthn_credentials</code>.
-      </p>
+    <section className="flex flex-col gap-8">
+      <header className="flex flex-col gap-1">
+        <h1 className="font-sans text-2xl font-medium tracking-[-0.02em] text-[var(--color-text)]">
+          security
+        </h1>
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          extra protection for sign-in
+        </p>
+      </header>
 
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <ul className="grid gap-3 sm:grid-cols-2">
         <Card
-          title="Authenticator app (TOTP)"
-          body={
-            mfa
-              ? 'API ready: POST /v1/auth-core/mfa/totp · verify · check'
-              : 'not loaded'
-          }
+          title="authenticator app"
+          body="users can turn on time-based codes (TOTP) for a second step at sign-in."
         />
         <Card
-          title="Passkeys (WebAuthn)"
-          body={
-            webauthn
-              ? 'API ready: /v1/auth-core/passkeys/register/* · authenticate/*'
-              : 'not loaded'
-          }
+          title="passkeys"
+          body="device biometrics and security keys for passwordless sign-in."
         />
         <Card
-          title="SMS OTP"
+          title="SMS codes"
           body={
             dash.ok && dash.data.methods.passwordlessSms
-              ? 'included · passwordless on Doltgres'
-              : 'passwordless path'
+              ? 'phone one-time codes are available.'
+              : 'phone one-time codes can be enabled for a project.'
           }
         />
         <Card
-          title="Active sessions"
-          body={dash.ok ? String(dash.data.counts.sessions) : 'sign in to load'}
+          title="sessions"
+          body={
+            dash.ok
+              ? `${dash.data.counts.sessions} active session${dash.data.counts.sessions === 1 ? '' : 's'} right now.`
+              : 'see who is signed in from the sessions tab.'
+          }
         />
       </ul>
     </section>
@@ -68,12 +49,11 @@ export default async function SecurityPage() {
 
 function Card({ title, body }: { title: string; body: string }) {
   return (
-    <li
-      className="rounded-md border p-3 font-mono text-xs"
-      style={{ borderColor: 'var(--auth-accent-border, var(--color-border))' }}
-    >
-      <div className="text-[var(--color-text)]">{title}</div>
-      <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">{body}</div>
+    <li className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4">
+      <p className="font-mono text-sm text-[var(--color-text)]">{title}</p>
+      <p className="mt-2 font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+        {body}
+      </p>
     </li>
   );
 }
