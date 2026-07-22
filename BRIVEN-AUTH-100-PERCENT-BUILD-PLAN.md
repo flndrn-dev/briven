@@ -32,8 +32,58 @@ This plan is **honest**:
 | R4 | Phase is **not done** until: (a) code, (b) **live** proof, (c) **security smoke**, (d) **you say OK**. |
 | R5 | Local scripts alone ≠ done. |
 | R6 | Old Better Auth **customer** Auth product stays retired for product login; do not rebuild on it. Platform operator login (briven.tech) can stay Better Auth until you say otherwise. |
-| R7 | Branding = **Briven Auth** / yellow Auth UI — not SuperTokens logo. |
+| R7 | Branding = **Briven Auth** — not SuperTokens logo. Accent = butter yellow **`#FFFD74`**. |
 | R8 | Every phase maps to SuperTokens URLs in `knowledge-base.md` **and** Doltgres constraints. |
+| R9 | **UI = same Briven dashboard design language** as overview + projects (see §1b). No foreign “control room” skin. |
+
+---
+
+## 1b. UI design law (Briven dashboard — mandatory)
+
+**flndrn 2026-07-22:** Keep the **existing Briven dashboard UI design** for the whole Auth rebuild.  
+Auth is a **section of the same product**, not a different app.
+
+### What to match (live references in code)
+
+| Pattern | Reference | Auth must follow |
+|---------|-----------|------------------|
+| Overview home | `apps/web/.../dashboard/page.tsx` | Greeting/muted mono line + big sans title; card grid + quick actions + list sections |
+| Projects list | `apps/web/.../dashboard/projects/page.tsx` + `projects-list.tsx` | `font-mono` page title + count; filter; **card grid**; primary CTA button style |
+| Project tabs | `project-tabs.tsx` | Compact tabs + **developer mode** for advanced tools; active underline |
+| Sidebar | `dashboard-sidebar.tsx` | Auth row uses butter yellow **`#FFFD74`** when active/hover — same shape as other nav rows |
+| Empty states | projects empty | Dashed border card, plain mono copy, one clear next step |
+| Tokens | CSS vars | `var(--color-surface)`, `border-subtle`, `text-muted`, `primary` (green for platform CTAs) |
+
+### Visual rules (do / don’t)
+
+| Do | Don’t |
+|----|--------|
+| Dark dashboard surfaces + mono labels | New fonts or light “docs” chrome for Auth only |
+| Card grids like projects | Dense engineer “control room” dumps |
+| Developer mode for advanced Auth tools | Dump every ST admin screen in default tabs |
+| Butter yellow **`#FFFD74`** as Auth accent only | SuperTokens branding, random golds, rainbow |
+| Short lowercase product copy | “Phase 1 · Live”, rebuild essays, internal plan names |
+| Same header hierarchy as projects/overview | One-off hero banners that break layout rhythm |
+
+### Blank-page phase (before SuperTokens product UI)
+
+When Auth is wiped / waiting on Core:
+
+- **One blank page** under `/dashboard/auth` inside the **same** dashboard shell (sidebar, layout gap, tokens).
+- Title style like projects: **Auth** + one muted line (e.g. “sign-in product — building”).
+- **No** fake feature tabs until a phase is live-OK.
+- No leftover Better Auth or half-built engine screens.
+
+### When features ship
+
+Rebuild UI **feature-by-feature** still using:
+
+1. Overview-style pages for “at a glance”  
+2. Projects-style cards for “projects with Auth on”  
+3. Project-tabs pattern (simple + developer mode) for Auth sub-nav  
+4. Butter yellow only as Auth identity accent  
+
+Detail notes also live in: `apps/web/src/app/(dashboard)/dashboard/auth/UI-DESIGN.md`
 
 ---
 
