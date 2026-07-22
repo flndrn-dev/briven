@@ -370,10 +370,9 @@ services:
       BRIVEN_BETTER_AUTH_SECRET: ${BRIVEN_BETTER_AUTH_SECRET}
       BRIVEN_AUDIT_IP_PEPPER: ${BRIVEN_AUDIT_IP_PEPPER}
       BRIVEN_ENCRYPTION_KEY: ${BRIVEN_ENCRYPTION_KEY}
-      # Auth product kill-switch + per-tenant secret-store master key
-      # (ARCHITECTURE.md §4/§9). Values live in the Dokploy env panel;
-      # empty interpolation is treated as unset by loadEnv.
-      BRIVEN_AUTH_ENABLED: ${BRIVEN_AUTH_ENABLED:-false}
+      # Per-tenant secret-store master key (ARCHITECTURE.md §4/§9).
+      # BRIVEN_AUTH_ENABLED is set once above with the engine env block.
+      # Values live in the Dokploy env panel; empty = unset in loadEnv.
       BRIVEN_AUTH_MASTER_KEY: ${BRIVEN_AUTH_MASTER_KEY:-}
       BRIVEN_MITTERA_API_URL: ${BRIVEN_MITTERA_API_URL:-}
       BRIVEN_MITTERA_API_KEY: ${BRIVEN_MITTERA_API_KEY:-}
