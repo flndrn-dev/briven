@@ -557,7 +557,7 @@ Briven Auth stays **Briven-branded**, multi-tenant on **Briven Doltgres**, not a
 # Briven database — Doltgres / Dolt official knowledge base
 
 **Purpose:** Library cabinet for EVERY Briven build that touches SQL, Auth, backups, or Postgres-family compatibility.
-**Source:** URLs extracted from `AI_DOCS/dolt-reference/*` (already in this repo). Agents must open these — do not guess.
+**Source:** (1) **flndrn official www.doltgres.com list** (PRIMARY, complete set below) + (2) URLs from `AI_DOCS/dolt-reference/*` (local notes + often dolthub.com MySQL-Dolt siblings) (already in this repo). Agents must open these — do not guess.
 **HARD RULE:** On any Doltgres / Postgres-wire error (including SuperTokens Core or any tool built for Postgres), search **this section** + `AI_DOCS/dolt-reference/00-doltgres-truth.md` **before** changing architecture. Never quit after one SQL error without reading these and **notifying flndrn** with options.
 
 ## Local distilled files (always read first)
@@ -572,15 +572,91 @@ Briven Auth stays **Briven-branded**, multi-tenant on **Briven Doltgres**, not a
 - `AI_DOCS/dolt-reference/07-sqlref-version-control.md`
 - `DOLTGRES-FIRST.md` — Briven hard product rule
 
-## Official DoltGres (Postgres-flavored) — PRIMARY for Briven
+## Official DoltGres docs (www.doltgres.com) — PRIMARY for Briven
 
+**Filed from flndrn full URL list (2026-07-22).** These are the **real DoltGres product docs** (Postgres-flavored). Prefer these over dolthub.com MySQL-Dolt pages when they overlap.
+**Count:** 51 URLs
+
+### Introduction
+
+- https://www.doltgres.com/docs/introduction/
+- https://www.doltgres.com/docs/introduction/getting-started/
+- https://www.doltgres.com/docs/introduction/installation/
+
+### Concepts — git / version control
+
+- https://www.doltgres.com/docs/concepts/git/branch/
+- https://www.doltgres.com/docs/concepts/git/commits/
+- https://www.doltgres.com/docs/concepts/git/conflicts/
+- https://www.doltgres.com/docs/concepts/git/diff/
+- https://www.doltgres.com/docs/concepts/git/log/
+- https://www.doltgres.com/docs/concepts/git/merge/
+- https://www.doltgres.com/docs/concepts/git/remotes/
+- https://www.doltgres.com/docs/concepts/git/working-set/
+
+### Concepts — SQL
+
+- https://www.doltgres.com/docs/concepts/sql/constraints/
+- https://www.doltgres.com/docs/concepts/sql/databases/
+- https://www.doltgres.com/docs/concepts/sql/functions/
+- https://www.doltgres.com/docs/concepts/sql/indexes/
+- https://www.doltgres.com/docs/concepts/sql/primary-key/
+- https://www.doltgres.com/docs/concepts/sql/procedures/
+- https://www.doltgres.com/docs/concepts/sql/schema/
+- https://www.doltgres.com/docs/concepts/sql/system-variables/
+- https://www.doltgres.com/docs/concepts/sql/table/
+- https://www.doltgres.com/docs/concepts/sql/transaction/
+- https://www.doltgres.com/docs/concepts/sql/triggers/
+- https://www.doltgres.com/docs/concepts/sql/types/
+- https://www.doltgres.com/docs/concepts/sql/users-grants/
+- https://www.doltgres.com/docs/concepts/sql/views/
+
+### Concepts — RDBMS
+
+- https://www.doltgres.com/docs/concepts/rdbms/backups/
+- https://www.doltgres.com/docs/concepts/rdbms/replication/
+- https://www.doltgres.com/docs/concepts/rdbms/server/
+
+### Guides
+
+- https://www.doltgres.com/docs/guides/cheat-sheet/
+- https://www.doltgres.com/docs/guides/replication-from-postgres/
+
+### Reference — server
+
+- https://www.doltgres.com/docs/reference/server/access-management/
+- https://www.doltgres.com/docs/reference/server/backups/
+- https://www.doltgres.com/docs/reference/server/branch-permissions/
+- https://www.doltgres.com/docs/reference/server/configuration/
+- https://www.doltgres.com/docs/reference/server/garbage-collection/
+- https://www.doltgres.com/docs/reference/server/troubleshooting/
+
+### Reference — version control
+
+- https://www.doltgres.com/docs/reference/version-control/branches/
+- https://www.doltgres.com/docs/reference/version-control/dolt-sql-functions/
+- https://www.doltgres.com/docs/reference/version-control/dolt-system-tables/
+- https://www.doltgres.com/docs/reference/version-control/dolt-sysvars/
+- https://www.doltgres.com/docs/reference/version-control/merges/
+- https://www.doltgres.com/docs/reference/version-control/querying-history/
+- https://www.doltgres.com/docs/reference/version-control/remotes/
+- https://www.doltgres.com/docs/reference/version-control/sql-extensions/
+
+### Reference — SQL support (Postgres-family gaps live here)
+
+- https://www.doltgres.com/docs/reference/sql-support/supported-commands/
+- https://www.doltgres.com/docs/reference/sql-support/supported-functions/
 - https://www.doltgres.com/docs/reference/sql-support/supported-types/
-- https://www.doltgres.com/docs/reference/version-control/dolt-sql-functions
-- https://www.doltgres.com/docs/reference/version-control/dolt-system-tables
-- https://www.doltgres.com/docs/reference/version-control/querying-history
-- https://github.com/dolthub/doltgresql/releases/latest/download/install.sh
-- https://raw.githubusercontent.com/dolthub/doltgresql/main/README.md
+- https://www.doltgres.com/docs/reference/sql-support/system-catalog-schema/
 
+### Reference — clients
+
+- https://www.doltgres.com/docs/reference/supported-clients/clients/
+
+### Reference — benchmarks
+
+- https://www.doltgres.com/docs/reference/benchmarks/correctness/
+- https://www.doltgres.com/docs/reference/benchmarks/latency/
 ## Official DoltHub docs (Dolt often MySQL-flavored; translate to DoltGres Postgres)
 
 ### Introduction / install
