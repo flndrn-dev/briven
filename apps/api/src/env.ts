@@ -50,13 +50,27 @@ const envSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{64}$/i)
     .optional(),
-  // Kill-switch envs for the per-service routers (ARCHITECTURE.md §9).
-  // Default disabled — set BRIVEN_AUTH_ENABLED=true in Dokploy when the
-  // briven auth router is ready to serve customer traffic.
+  // OLD Briven Auth (Better Auth multi-tenant product) — RETIRED.
+  // Must stay false. Path A rebuild uses briven-engine instead.
   BRIVEN_AUTH_ENABLED: z
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+
+  // briven-engine = API + Doltgres DB `briven_engine` (COMPLETE Briven = Doltgres).
+  // No SuperTokens Core container. No stock Postgres for Auth.
+  BRIVEN_AUTH_CORE_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** Doltgres URL for Auth vault DB (must host=doltgres or local doltgres port). */
+  BRIVEN_ENGINE_DATABASE_URL: z.string().optional(),
+  // Legacy unused HTTP Core URI — ignored by Doltgres-native engine.
+  BRIVEN_ENGINE_CONNECTION_URI: z.string().optional(),
+  BRIVEN_ENGINE_API_KEY: z.string().optional(),
+  BRIVEN_ENGINE_LICENSE_KEY: z.string().optional(),
+  BRIVEN_SUPERTOKENS_CONNECTION_URI: z.string().optional(),
+  BRIVEN_SUPERTOKENS_API_KEY: z.string().optional(),
 
   // Polar.sh billing — Phase 3.
   // Sandbox vs production: set BRIVEN_POLAR_API_BASE to

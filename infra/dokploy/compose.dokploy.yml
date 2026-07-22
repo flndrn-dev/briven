@@ -214,6 +214,40 @@ services:
     labels:
       - 'briven_logs=true'
 
+  # ─── briven-engine Auth DB (DOLTGRES ONLY — non-negotiable) ───────────
+  # HARD RULE: the COMPLETE Briven project is Doltgres. New parts do not get
+  # a separate stock-Postgres brain. SuperTokens Core Docker is REMOVED —
+  # it is incompatible with Doltgres (SET SESSION CHARACTERISTICS).
+  # briven-engine = Briven API code + tables in Doltgres DB `briven_engine`.
+  # Create/migrate: API `ensureBrivenEngineDatabase` + schema bootstrap.
+  briven-engine-db-init:
+    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
+    restart: 'no'
+    logging: *briven-logging
+    depends_on:
+      doltgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${BRIVEN_DOLTGRES_PASSWORD}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        echo "briven-engine-db-init: ensuring briven_engine on DOLTGRES only…"
+        exists=$$(psql -h doltgres -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='briven_engine'" || true)
+        if [ "$$exists" = "1" ]; then
+          echo "briven_engine already exists on doltgres"
+        else
+          psql -h doltgres -U postgres -d postgres -c 'CREATE DATABASE briven_engine'
+          echo "created briven_engine on doltgres"
+        fi
+    networks:
+      - briven
+    labels:
+      - 'briven.service=briven-engine-db-init'
+      - 'briven.db=doltgres'
+
   # ─── shared infra ─────────────────────────────────────────────────────
   redis:
     image: redis:7.4-alpine
@@ -298,12 +332,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      briven-engine-db-init:
+        condition: service_completed_successfully
     environment:
       BRIVEN_ENV: production
       BRIVEN_API_PORT: '3001'
       BRIVEN_API_ORIGIN: https://api.${BRIVEN_DOMAIN}
       BRIVEN_WEB_ORIGIN: https://${BRIVEN_DOMAIN}
       BRIVEN_ADMIN_ORIGIN: https://admin.${BRIVEN_DOMAIN}
+      # briven-engine = API + Doltgres only (NO SuperTokens Core container).
+      BRIVEN_AUTH_CORE_ENABLED: ${BRIVEN_AUTH_CORE_ENABLED:-true}
+      # SQL for Auth vault — ALWAYS Doltgres DB briven_engine (DOLTGRES-FIRST).
+      BRIVEN_ENGINE_DATABASE_URL: postgres://postgres:${BRIVEN_DOLTGRES_PASSWORD}@doltgres:5432/briven_engine?sslmode=disable
+      BRIVEN_AUTH_ENABLED: ${BRIVEN_AUTH_ENABLED:-false}
       # Observability stack (host-managed compose at /root/briven-observability
       # on the France box, same dokploy-network) — powers admin host gauges,
       # the live cpu chart, and /v1/admin/timeseries prom-backed series.

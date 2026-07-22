@@ -25,6 +25,7 @@
     "@hono/mcp": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@node-saml/node-saml": "^5.1.0",
+    "@simplewebauthn/server": "^13.3.2",
     "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.14",
@@ -35,6 +36,7 @@
     "pg": "^8.13.0",
     "postgres": "^3.4.9",
     "standardwebhooks": "^1.0.0",
+    "supertokens-node": "^24.0.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {

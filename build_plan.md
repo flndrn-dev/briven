@@ -13,7 +13,7 @@
 | Feature | Clerk | Briven Auth |
 |---------|-------|-------------|
 | Email + password auth | Yes | Yes |
-| Social OAuth (12+ providers) | Yes | Yes |
+| Social OAuth (12+ providers) | Yes | Yes — SuperTokens-style ThirdParty UI in Authentication → providers |
 | Magic links | Yes | Yes |
 | Email OTP | Yes | Yes |
 | TOTP 2FA | Yes | Yes |
@@ -88,6 +88,7 @@ Phases 1–9 task tables remain historically accurate as **Done**. Notable late 
 | 5.7 Per-connection pricing hooks | 2026-07-22 | `auth_sso_connections` + `auth_sso_signins` usage metrics; wire on SSO create/sign-in; aggregator + Polar optional meters |
 | 8.1–8.4 | 2026-07-22 | Yellow Security / Users / Sessions UIs |
 | Auth v2 branding + enterprise tabs | 2026-07-22 | `/dashboard/auth/branding`, `/dashboard/auth/enterprise` |
+| SuperTokens-style third-party OAuth UI | 2026-07-22 | Authentication → providers: catalog, clientId/secret, callback URI, save-proof |
 
 ---
 

@@ -1,23 +1,49 @@
-import { AuthProjectsClient } from './projects-client';
-import { loadAuthV2Workspace } from '../lib/load-workspace';
-
 export const metadata = { title: 'Briven Auth · projects' };
 export const dynamic = 'force-dynamic';
 
-export default async function AuthProjectsPage() {
-  const projects = await loadAuthV2Workspace();
-
+/**
+ * Projects — how Briven projects map to briven-engine tenants.
+ */
+export default function ProjectsPage() {
   return (
     <section className="flex flex-col gap-4">
-      <header>
-        <h2 className="font-mono text-sm text-[var(--color-text)]">projects</h2>
-        <p className="mt-1 max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          every Briven project you can manage. turn Auth on here — that connects
-          the project&apos;s own database to login. then configure methods under
-          providers.
-        </p>
-      </header>
-      <AuthProjectsClient initial={projects} />
+      <p
+        className="font-mono text-[10px] uppercase tracking-widest"
+        style={{ color: 'var(--auth-accent, #e6b800)' }}
+      >
+        briven-engine · projects
+      </p>
+      <h2 className="font-mono text-sm text-[var(--color-text)]">
+        One project = one login island
+      </h2>
+      <p className="max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+        Each Briven project gets its own briven-engine tenant (like a separate
+        apartment in the same building). Users in project A cannot see users in
+        project B.
+      </p>
+      <div
+        className="rounded-md border p-4 font-mono text-xs text-[var(--color-text-muted)]"
+        style={{ borderColor: 'var(--auth-accent-border, var(--color-border))' }}
+      >
+        Mapping rule:
+        <br />
+        <code className="text-[var(--color-text)]">
+          projectId → tenantId = proj_&lt;projectId&gt;
+        </code>
+        <br />
+        <br />
+        API: <code className="text-[var(--color-text)]">GET /v1/auth-core/map/:projectId</code>
+        <br />
+        Ensure tenant:{' '}
+        <code className="text-[var(--color-text)]">
+          POST /v1/auth-core/projects/:projectId/tenant
+        </code>
+        <br />
+        Config:{' '}
+        <code className="text-[var(--color-text)]">
+          GET /v1/auth-core/projects/:projectId/config
+        </code>
+      </div>
     </section>
   );
 }

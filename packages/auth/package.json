@@ -24,6 +24,18 @@
     "./server": {
       "types": "./src/server/index.ts",
       "default": "./src/server/index.ts"
+    },
+    "./engine": {
+      "types": "./src/engine/index.ts",
+      "default": "./src/engine/index.ts"
+    },
+    "./engine/server": {
+      "types": "./src/engine/server.ts",
+      "default": "./src/engine/server.ts"
+    },
+    "./engine/proxy": {
+      "types": "./src/engine/proxy.ts",
+      "default": "./src/engine/proxy.ts"
     }
   },
   "files": [
@@ -77,7 +89,9 @@
     "magic-link",
     "passkey",
     "webauthn",
-    "better-auth"
+    "briven-engine",
+    "passwordless",
+    "sms-otp"
   ],
   "homepage": "https://briven.tech/auth",
   "repository": {

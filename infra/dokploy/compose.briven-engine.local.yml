@@ -1,0 +1,54 @@
+# Local Doltgres only for briven-engine Auth DB (NO SuperTokens Core, NO stock Postgres).
+#
+#   export BRIVEN_DOLTGRES_PASSWORD=devpass
+#   docker-compose -f infra/dokploy/compose.briven-engine.local.yml up -d
+#
+# API:
+#   BRIVEN_ENGINE_DATABASE_URL=postgres://postgres:devpass@127.0.0.1:5434/briven_engine?sslmode=disable
+#   BRIVEN_DATA_PLANE_URL=postgres://postgres:devpass@127.0.0.1:5434/postgres?sslmode=disable
+
+services:
+  doltgres:
+    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
+    environment:
+      DOLTGRES_USER: postgres
+      DOLTGRES_PASSWORD: ${BRIVEN_DOLTGRES_PASSWORD:-devpass}
+    ports:
+      - '5434:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 5432 -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 20s
+    networks:
+      - briven-engine-local
+    labels:
+      - 'briven.db=doltgres'
+
+  briven-engine-db-init:
+    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
+    restart: 'no'
+    depends_on:
+      doltgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${BRIVEN_DOLTGRES_PASSWORD:-devpass}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        exists=$$(psql -h doltgres -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='briven_engine'" || true)
+        if [ "$$exists" = "1" ]; then
+          echo "briven_engine exists on doltgres"
+        else
+          psql -h doltgres -U postgres -d postgres -c 'CREATE DATABASE briven_engine'
+          echo "created briven_engine on doltgres"
+        fi
+    networks:
+      - briven-engine-local
+
+networks:
+  briven-engine-local:
+    name: briven-engine-local
