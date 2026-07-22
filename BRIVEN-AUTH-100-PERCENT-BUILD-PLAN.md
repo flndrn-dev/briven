@@ -2,7 +2,8 @@
 
 **Owner:** flndrn  
 **Filed:** 2026-07-22  
-**Status:** PLAN ONLY — **no build starts until flndrn says OK for a named phase**  
+**Status:** PLAN ONLY — **no SuperTokens phase starts until flndrn says OK**  
+**Blank + clean:** **DONE 2026-07-22** — see `AUTH-BLANK-STATE.md` (customer Auth blank; platform login kept)  
 **Libraries (mandatory):**
 1. `knowledge-base.md` → SuperTokens section (**492** official URLs)  
 2. `knowledge-base.md` → Official DoltGres section (**51** `www.doltgres.com` URLs)  

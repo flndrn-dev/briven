@@ -24,23 +24,14 @@ import { aiRouter } from './routes/ai.js';
 import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
 import { authCliRouter } from './routes/auth-cli.js';
-import { authServiceRouter } from './routes/auth-service.js';
-import { authV2Router } from './routes/auth-v2.js';
-import { authScimRouter } from './routes/auth-scim.js';
-import { authCoreRouter } from './routes/auth-core.js';
-import { authCoreFdiRouter } from './routes/auth-core-fdi.js';
-import { authCoreSessionRouter } from './routes/auth-core-session.js';
-import { authCoreRecipesRouter } from './routes/auth-core-recipes.js';
-import { authCoreUsersRouter } from './routes/auth-core-users.js';
-import { authCoreProjectRouter } from './routes/auth-core-project.js';
-import { authCoreMigrationRouter } from './routes/auth-core-migration.js';
-import { authCoreKeysRouter } from './routes/auth-core-keys.js';
-import { authCoreLoginMethodsRouter } from './routes/auth-core-loginmethods.js';
-import { authCoreDashboardRouter } from './routes/auth-core-dashboard.js';
-import { authCoreOauthRouter } from './routes/auth-core-oauth.js';
-import { initAuthCoreSdk } from './services/auth-core/engine.js';
-import { ensureBrivenEngineDatabase } from './services/auth-core/ensure-db.js';
-import { brivenEngineFdiRateLimit } from './services/auth-core/abuse.js';
+import { authProductRetiredRouter } from './routes/auth-product-retired.js';
+// Legacy Better Auth customer product + native briven-engine product: NOT mounted
+// during blank Auth phase. SuperTokens-on-Doltgres rebuild mounts later (flndrn OK).
+// import { authServiceRouter } from './routes/auth-service.js';
+// import { authV2Router } from './routes/auth-v2.js';
+// import { authScimRouter } from './routes/auth-scim.js';
+// import { authCoreRouter } from './routes/auth-core.js';
+// … auth-core-* routers intentionally unmounted for blank product
 import { billingRouter } from './routes/billing.js';
 import { brandingPublicRouter } from './routes/branding-public.js';
 import { dbRouter } from './routes/db.js';
@@ -171,34 +162,14 @@ app.route('/', healthRouter);
 app.route('/', authRouter);
 app.route('/', authCliRouter);
 app.route('/', meRouter);
-// Briven Auth Core (SuperTokens Path A) — mount early so 410s win over legacy.
-// DEPLOY GATE: do not ship to production until complete Briven Auth is built.
-// SDK init is awaited later (async recipe load); routes mount regardless.
-if (env.BRIVEN_AUTH_CORE_ENABLED) {
-  app.use('/v1/auth-core/fdi/*', brivenEngineFdiRateLimit());
-  app.route('/', authCoreRouter);
-  app.route('/', authCoreFdiRouter);
-  app.route('/', authCoreOauthRouter);
-  app.route('/', authCoreSessionRouter);
-  app.route('/', authCoreRecipesRouter);
-  app.route('/', authCoreUsersRouter);
-  app.route('/', authCoreProjectRouter);
-  app.route('/', authCoreMigrationRouter);
-  app.route('/', authCoreKeysRouter);
-  app.route('/', authCoreLoginMethodsRouter);
-  app.route('/', authCoreDashboardRouter);
-  log.info('auth_core_routes_mounted', {
-    engine: 'briven-engine',
-    storage: 'doltgres',
-    database: 'briven_engine',
-    abuse: 'fdi-rate-limit+optional-turnstile',
-    deployGate: 'local-build-only-until-complete',
-  });
-}
-// SCIM — legacy Better Auth product only (must stay off during rebuild).
-if (env.BRIVEN_AUTH_ENABLED) {
-  app.route('/', authScimRouter);
-}
+// Briven Auth product BLANK — all customer Auth product paths return 410.
+// Platform operator login stays on authRouter (/v1/auth/* Better Auth for briven.tech only).
+// SuperTokens Core product mounts only after flndrn phase OK (not here).
+app.route('/', authProductRetiredRouter);
+log.info('auth_product_blank', {
+  note: 'customer Auth surfaces 410; no Better Auth multi-tenant product; no briven-engine product API',
+  platformLogin: '/v1/auth/*',
+});
 app.route('/', projectsRouter);
 app.route('/', apiKeysRouter);
 app.route('/', membersRouter);
@@ -241,32 +212,12 @@ app.route('/', outboundWebhooksRouter);
 // Bearer carve-out lets the server-to-server POST through.
 app.route('/', mcpServerRouter);
 
-// Legacy Better Auth multi-tenant product — must stay OFF (BRIVEN_AUTH_ENABLED=false).
-if (env.BRIVEN_AUTH_ENABLED) {
-  app.route('/', authServiceRouter);
-  app.route('/', authV2Router);
-  log.warn('auth_service_legacy_mounted', {
-    note: 'LEGACY — disable BRIVEN_AUTH_ENABLED; use briven-engine path',
-  });
-}
+// No legacy authServiceRouter / authV2Router / auth-core product mounts.
 
 app.notFound((c) => c.json({ code: 'not_found', message: 'route not found' }, 404));
 app.onError(errorHandler);
 
 log.info('api_boot', { port: env.BRIVEN_API_PORT, origin: env.BRIVEN_API_ORIGIN });
-
-// Briven Auth Core SDK. DOLTGRES-FIRST: ensure briven_engine DB on Doltgres,
-// then init recipes. DEPLOY GATE: local build only until complete product.
-if (env.BRIVEN_AUTH_CORE_ENABLED) {
-  const dbEnsure = await ensureBrivenEngineDatabase();
-  log.info('briven_engine_db_boot', dbEnsure);
-  const sdkOk = await initAuthCoreSdk();
-  log.info('auth_core_sdk_boot', {
-    sdkInitialized: sdkOk,
-    db: dbEnsure,
-    deployGate: 'local-build-only-until-complete',
-  });
-}
 
 // Warm the per-project allowed-origin allowlist into memory (best-effort;
 // the CORS/CSRF gates fall back to briven-own origins until it loads).

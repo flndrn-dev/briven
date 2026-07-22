@@ -2,8 +2,6 @@ import Link from 'next/link';
 
 import { apiJson } from '../../../lib/api';
 import { requireUser } from '../../../lib/session';
-import type { AuthV2ProjectRow } from './auth/lib/auth-v2-types';
-import { loadAuthV2Workspace } from './auth/lib/load-workspace';
 
 interface Project {
   id: string;
@@ -63,7 +61,7 @@ const TIER_LABEL: Record<Project['tier'], string> = {
 export default async function DashboardHome() {
   const user = await requireUser();
 
-  const [projectsResult, invitesResult, orgInvitesResult, migrationsResult, authProjects] =
+  const [projectsResult, invitesResult, orgInvitesResult, migrationsResult] =
     await Promise.all([
       apiJson<{ projects: Project[] }>('/v1/projects').catch(() => ({
         projects: [] as Project[],
@@ -79,7 +77,6 @@ export default async function DashboardHome() {
       apiJson<{ requests: MigrationCard[] }>(
         '/v1/migration-requests',
       ).catch(() => ({ requests: [] as MigrationCard[] })),
-      loadAuthV2Workspace().catch(() => [] as AuthV2ProjectRow[]),
     ]);
 
   const projects = projectsResult.projects;
@@ -88,7 +85,6 @@ export default async function DashboardHome() {
   const openMigrations = migrationsResult.requests.filter(
     (r) => r.status !== 'completed' && r.status !== 'cancelled',
   );
-  const authOnCount = authProjects.filter((p) => p.authEnabled).length;
 
   // Cross-project activity rollup: fan-out to the three most recently
   // created projects only. Bounded N+1 keeps the dashboard root cheap.
@@ -261,7 +257,6 @@ export default async function DashboardHome() {
           </h2>
           <div className="flex flex-col gap-2">
             <QuickLink href="/dashboard/projects/new" label="new project" />
-            <QuickLink href="/dashboard/auth" label="Auth" />
             <QuickLink href="https://docs.briven.tech/quickstart" label="quickstart" external />
             <QuickLink href="https://docs.briven.tech/cli" label="cli reference" external />
             <QuickLink href="/dashboard/settings" label="account settings" />
@@ -270,95 +265,6 @@ export default async function DashboardHome() {
           </div>
         </aside>
       </div>
-
-      {/* Auth strip — same card language as "your projects", yellow accent */}
-      <section className="flex flex-col gap-4">
-        <header className="flex items-center justify-between">
-          <h2 className="font-mono text-xs uppercase tracking-wider text-[var(--color-text-subtle)]">
-            Auth
-          </h2>
-          <Link
-            href="/dashboard/auth"
-            className="font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
-            open Auth →
-          </Link>
-        </header>
-
-        {authProjects.length === 0 && projects.length === 0 ? (
-          <p className="font-mono text-xs text-[var(--color-text-muted)]">
-            create a project first, then turn on Auth for sign-in.
-          </p>
-        ) : authProjects.length === 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-3">
-            <p className="font-mono text-xs text-[var(--color-text-muted)]">
-              Auth status unavailable right now. Open Auth to manage sign-in for your projects.
-            </p>
-            <Link
-              href="/dashboard/auth"
-              className="font-mono text-xs"
-              style={{ color: '#FFFD74' }}
-            >
-              open Auth →
-            </Link>
-          </div>
-        ) : (
-          <>
-            <p className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-              {authOnCount} of {authProjects.length} project
-              {authProjects.length === 1 ? '' : 's'} with Auth on
-            </p>
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {authProjects.slice(0, 6).map((p) => (
-                <li key={p.id}>
-                  <Link
-                    href="/dashboard/auth"
-                    className="flex flex-col gap-1.5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-border-strong)]"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-sans text-sm text-[var(--color-text)]">
-                        {p.name}
-                      </span>
-                      <span
-                        className="font-mono text-[10px] uppercase tracking-wider"
-                        style={{
-                          color: p.authEnabled
-                            ? '#FFFD74'
-                            : 'var(--color-text-subtle)',
-                        }}
-                      >
-                        {p.error ? '—' : p.authEnabled ? 'on' : 'off'}
-                      </span>
-                    </div>
-                    <p className="font-mono text-xs text-[var(--color-text-muted)]">
-                      {p.slug}
-                      {p.authEnabled && p.providers
-                        ? ` · ${[
-                            p.providers.emailPassword ? 'pwd' : null,
-                            p.providers.magicLink ? 'magic' : null,
-                            p.providers.emailOtp ? 'otp' : null,
-                            p.providers.passkey ? 'passkey' : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}`
-                        : p.authEnabled
-                          ? ' · Auth on'
-                          : ' · Auth off'}
-                    </p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/dashboard/auth"
-              className="self-start font-mono text-xs hover:underline"
-              style={{ color: '#FFFD74' }}
-            >
-              manage Auth →
-            </Link>
-          </>
-        )}
-      </section>
 
       <section className="flex flex-col gap-4">
         <header className="flex items-center justify-between">

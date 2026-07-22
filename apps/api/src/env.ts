@@ -50,18 +50,18 @@ const envSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{64}$/i)
     .optional(),
-  // OLD Briven Auth (Better Auth multi-tenant product) — RETIRED.
-  // Must stay false. Path A rebuild uses briven-engine instead.
+  // OLD Briven Auth (Better Auth multi-tenant customer product) — RETIRED / blank.
+  // Must stay false until SuperTokens-on-Doltgres product is live-OK.
   BRIVEN_AUTH_ENABLED: z
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
 
-  // briven-engine = API + Doltgres DB `briven_engine` (COMPLETE Briven = Doltgres).
-  // No SuperTokens Core container. No stock Postgres for Auth.
+  // Former native briven-engine product API — OFF during blank Auth page.
+  // SuperTokens Core product will use a new mount path after flndrn Phase 0 OK.
   BRIVEN_AUTH_CORE_ENABLED: z
     .enum(['true', 'false'])
-    .default('true')
+    .default('false')
     .transform((v) => v === 'true'),
   /** Doltgres URL for Auth vault DB (must host=doltgres or local doltgres port). */
   BRIVEN_ENGINE_DATABASE_URL: z.string().optional(),
