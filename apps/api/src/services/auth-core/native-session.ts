@@ -29,7 +29,9 @@ export async function createEngineSession(input: {
   ttlDays?: number;
 }): Promise<EngineSession> {
   const sessionHandle = `sh_${randomBytes(16).toString('hex')}`;
-  const accessToken = newToken();
+  // Phase 2: access cookie value IS the session handle (Doltgres PK lookup).
+  // Keep field name accessToken for FDI/cookie compatibility.
+  const accessToken = sessionHandle;
   const refreshToken = newToken();
   const days = input.ttlDays ?? 30;
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);

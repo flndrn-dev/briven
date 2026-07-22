@@ -1,5 +1,5 @@
 /**
- * Step 1 proof: password sign-up + sign-in on Doltgres only.
+ * Phase 2 local proof: password sign-up + sign-in + session on Doltgres.
  *
  *   cd apps/api
  *   BRIVEN_ENGINE_DATABASE_URL=postgres://postgres:devpass@127.0.0.1:5434/briven_engine?sslmode=disable \
@@ -116,11 +116,28 @@ const session = await createEngineSession({
   tenantId: signin.user.tenantId,
 });
 console.log('session handle', session.sessionHandle);
+// Phase 2: cookie value (accessToken) must equal handle for /session/me
+if (session.accessToken !== session.sessionHandle) {
+  console.error('FAIL: accessToken must equal sessionHandle for cookie lookup');
+  process.exit(1);
+}
 
 const loaded = await getSessionByHandle(session.sessionHandle);
 console.log('session loaded', loaded);
 if (!loaded || loaded.userId !== signin.user.id) {
   console.error('FAIL session not in Doltgres');
+  process.exit(1);
+}
+
+// Cookie-style extract + verify (no HTTP server)
+const { extractSessionHandle } = await import(
+  '../src/services/auth-core/session.ts'
+);
+const fromCookie = extractSessionHandle({
+  cookieHeader: `sAccessToken=${encodeURIComponent(session.sessionHandle)}`,
+});
+if (fromCookie !== session.sessionHandle) {
+  console.error('FAIL cookie extract', fromCookie);
   process.exit(1);
 }
 
@@ -145,12 +162,13 @@ if (host === 'postgres') {
 }
 
 console.log('');
-console.log('✔ STEP 1 PROOF OK');
+console.log('✔ PHASE 2 LOCAL PROOF OK');
 console.log('  storage: Doltgres (briven_engine)');
 console.log('  sign-up: OK');
 console.log('  sign-in: OK');
 console.log('  wrong password rejected: OK');
 console.log('  session row: OK');
+console.log('  cookie handle = session handle: OK');
 console.log('  userId:', signin.user.id);
 console.log('  tenantId:', signin.user.tenantId);
 process.exit(0);

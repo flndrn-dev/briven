@@ -33,6 +33,25 @@ Same project id ties them together for mavi-pay and others.
 briven.tech dashboard login is **unchanged** (Better Auth on control plane).  
 That is **not** the same door as app end-users.
 
+## Local Phase 2 verification (ship-ready quality)
+
+```bash
+# Unit tests (20 pass)
+bun test apps/api/src/services/auth-core/emailpassword.test.ts \
+  apps/api/src/services/auth-core/session.test.ts \
+  apps/api/src/services/auth-core/project-map.test.ts \
+  apps/api/src/routes/auth-core-fdi.phase2.test.ts \
+  packages/auth/src/engine/proxy.test.ts
+
+# Doltgres proof (local port 5434)
+cd apps/api && \
+BRIVEN_ENGINE_DATABASE_URL=postgres://postgres:devpass@127.0.0.1:5434/briven_engine?sslmode=disable \
+BRIVEN_DATA_PLANE_URL=postgres://postgres:devpass@127.0.0.1:5434/postgres?sslmode=disable \
+BRIVEN_AUTH_CORE_ENABLED=true \
+bun scripts/step1-password-proof.mjs
+```
+
 ## Next
 
-Phase 3+ (passwordless, social, MFA, …) only after flndrn says start.
+Phase 3+ (passwordless, social, MFA, …) only after flndrn says start.  
+Ship (commit/push/deploy) only when flndrn explicitly asks.

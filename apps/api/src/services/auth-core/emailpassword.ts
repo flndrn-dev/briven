@@ -9,13 +9,18 @@ import { newId } from '@briven/shared';
 import { getEnginePool } from './db.js';
 import { projectIdToTenantId } from './project-map.js';
 
-function hashPassword(password: string, salt?: string): { hash: string; salt: string } {
+/** Exported for unit tests. Format: saltHex:scryptHex */
+export function hashPassword(
+  password: string,
+  salt?: string,
+): { hash: string; salt: string } {
   const s = salt ?? randomBytes(16).toString('hex');
   const derived = scryptSync(password, s, 64).toString('hex');
   return { hash: `${s}:${derived}`, salt: s };
 }
 
-function verifyPassword(password: string, stored: string): boolean {
+/** Exported for unit tests. Constant-time compare. */
+export function verifyPassword(password: string, stored: string): boolean {
   const [salt, hash] = stored.split(':');
   if (!salt || !hash) return false;
   const derived = scryptSync(password, salt, 64);
