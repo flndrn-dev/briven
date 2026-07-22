@@ -297,7 +297,7 @@ export default async function DashboardHome() {
             <Link
               href="/dashboard/auth"
               className="font-mono text-xs"
-              style={{ color: '#e6b800' }}
+              style={{ color: '#FFFD74' }}
             >
               open Auth →
             </Link>
@@ -323,7 +323,7 @@ export default async function DashboardHome() {
                         className="font-mono text-[10px] uppercase tracking-wider"
                         style={{
                           color: p.authEnabled
-                            ? '#e6b800'
+                            ? '#FFFD74'
                             : 'var(--color-text-subtle)',
                         }}
                       >
@@ -352,7 +352,7 @@ export default async function DashboardHome() {
             <Link
               href="/dashboard/auth"
               className="self-start font-mono text-xs hover:underline"
-              style={{ color: '#e6b800' }}
+              style={{ color: '#FFFD74' }}
             >
               manage Auth →
             </Link>

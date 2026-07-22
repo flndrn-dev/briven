@@ -37,7 +37,7 @@ export default async function BrivenAuthHomePage() {
         <Link
           href="/dashboard/auth/keys"
           className="rounded-md px-4 py-2 font-mono text-sm font-medium text-black transition"
-          style={{ background: 'var(--auth-accent, #e6b800)' }}
+          style={{ background: 'var(--auth-accent, #FFFD74)' }}
         >
           keys
         </Link>
@@ -80,7 +80,7 @@ function StatTile({
       <p
         className="mt-2 font-sans text-2xl font-medium tracking-tight text-[var(--color-text)]"
         style={
-          highlight ? { color: 'var(--auth-accent, #e6b800)' } : undefined
+          highlight ? { color: 'var(--auth-accent, #FFFD74)' } : undefined
         }
       >
         {value}

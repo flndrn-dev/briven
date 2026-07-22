@@ -80,7 +80,7 @@ function GoogleCallbackInner() {
         maxWidth: 480,
       }}
     >
-      <p style={{ fontSize: 12, letterSpacing: '0.15em', color: '#e6b800' }}>
+      <p style={{ fontSize: 12, letterSpacing: '0.15em', color: '#FFFD74' }}>
         Auth · Google
       </p>
       <p style={{ marginTop: 12 }}>{msg}</p>

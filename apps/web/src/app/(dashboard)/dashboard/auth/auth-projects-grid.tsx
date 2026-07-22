@@ -121,7 +121,7 @@ export function AuthProjectsGrid({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="filter by name / slug / id"
-            className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 font-mono text-xs outline-none focus:border-[var(--auth-accent,#e6b800)]"
+            className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 font-mono text-xs outline-none focus:border-[var(--auth-accent,#FFFD74)]"
           />
           {q ? (
             <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">
@@ -180,7 +180,7 @@ export function AuthProjectsGrid({
                     <Link
                       href={`/dashboard/auth/users`}
                       className="font-mono text-xs transition"
-                      style={{ color: 'var(--auth-accent, #e6b800)' }}
+                      style={{ color: 'var(--auth-accent, #FFFD74)' }}
                     >
                       manage →
                     </Link>
@@ -190,7 +190,7 @@ export function AuthProjectsGrid({
                       disabled={busyId === p.id}
                       onClick={() => void enable(p.id)}
                       className="rounded-md px-2.5 py-1 font-mono text-[10px] font-medium text-black disabled:opacity-50"
-                      style={{ background: 'var(--auth-accent, #e6b800)' }}
+                      style={{ background: 'var(--auth-accent, #FFFD74)' }}
                     >
                       {busyId === p.id ? 'enabling…' : 'enable Auth'}
                     </button>
@@ -217,7 +217,7 @@ function AuthBadge({ row }: { row: AuthV2ProjectRow }) {
     return (
       <span
         className="shrink-0 font-mono text-[10px] uppercase tracking-wider"
-        style={{ color: 'var(--auth-accent, #e6b800)' }}
+        style={{ color: 'var(--auth-accent, #FFFD74)' }}
       >
         on
       </span>

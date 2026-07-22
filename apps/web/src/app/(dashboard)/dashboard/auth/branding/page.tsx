@@ -27,7 +27,7 @@ export default function BrandingPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div
             className="h-12 w-12 rounded-md"
-            style={{ background: 'var(--auth-accent, #e6b800)' }}
+            style={{ background: 'var(--auth-accent, #FFFD74)' }}
             title="accent"
           />
           <p className="font-mono text-xs text-[var(--color-text-muted)]">

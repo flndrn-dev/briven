@@ -17,7 +17,7 @@ import { UsersIcon, type UsersIconHandle } from '../../components/ui/users';
 const STORAGE_KEY = 'briven.sidebar.collapsed';
 
 /** Auth section accent — used only for icon + label when that row is active. */
-const AUTH_ACCENT = '#e6b800';
+const AUTH_ACCENT = '#FFFD74';
 
 interface NavItem {
   href: string;
@@ -259,7 +259,7 @@ function SidebarLink({
     else iconRef.current.stopAnimation();
   }, [hovering]);
 
-  // Auth product: yellow when active OR hovered (same #e6b800).
+  // Auth product: yellow when active OR hovered (same #FFFD74).
   // Other rows: green primary when active; green-ish hover via CSS vars.
   const showAuthYellow = authProduct && (active || hovering);
 

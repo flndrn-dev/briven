@@ -22,7 +22,7 @@ const TABS = [
   { href: '/dashboard/auth/domains', label: 'domains', dev: true },
 ] as const;
 
-const AUTH_ACCENT = '#e6b800';
+const AUTH_ACCENT = '#FFFD74';
 const COOKIE = 'briven_auth_dev';
 
 function readDevCookie(): boolean {

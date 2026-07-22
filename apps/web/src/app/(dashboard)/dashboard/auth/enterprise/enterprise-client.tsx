@@ -144,7 +144,7 @@ export function AuthEnterpriseClient({ projects }: { projects: AuthV2ProjectRow[
           disabled={pending || !name.trim()}
           onClick={() => void create()}
           className="self-start rounded-md px-3 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-          style={{ background: '#e6b800' }}
+          style={{ background: '#FFFD74' }}
         >
           {pending ? 'creating…' : 'create connection'}
         </button>

@@ -19,7 +19,7 @@ export function AuthBlankPanel({
       </p>
       <p
         className="mt-4 font-mono text-[10px] uppercase tracking-widest"
-        style={{ color: 'var(--auth-accent, #e6b800)' }}
+        style={{ color: 'var(--auth-accent, #FFFD74)' }}
       >
         coming with Auth v2
       </p>

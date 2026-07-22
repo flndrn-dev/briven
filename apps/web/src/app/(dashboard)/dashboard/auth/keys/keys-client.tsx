@@ -117,7 +117,7 @@ export function AuthKeysClient({ projects }: { projects: AuthV2ProjectRow[] }) {
           disabled={pending}
           onClick={() => void mint()}
           className="rounded-md px-3 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-          style={{ background: '#e6b800' }}
+          style={{ background: '#FFFD74' }}
         >
           {pending ? 'minting…' : 'mint pk_briven_auth_…'}
         </button>

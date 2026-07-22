@@ -79,7 +79,7 @@ export function BrivenEngineKeysForm() {
         type="submit"
         disabled={busy}
         className="rounded px-3 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-        style={{ background: 'var(--auth-accent, #e6b800)' }}
+        style={{ background: 'var(--auth-accent, #FFFD74)' }}
       >
         {busy ? 'Creating…' : 'Create key'}
       </button>

@@ -3,9 +3,9 @@ import type { CSSProperties, ReactNode } from 'react';
 import { AuthSectionNav } from './auth-section-nav';
 
 const AUTH_SHELL_VARS = {
-  ['--auth-accent' as string]: '#e6b800',
-  ['--auth-accent-soft' as string]: 'color-mix(in srgb, #e6b800 18%, transparent)',
-  ['--auth-accent-border' as string]: 'color-mix(in srgb, #e6b800 45%, var(--color-border))',
+  ['--auth-accent' as string]: '#FFFD74',
+  ['--auth-accent-soft' as string]: 'color-mix(in srgb, #FFFD74 18%, transparent)',
+  ['--auth-accent-border' as string]: 'color-mix(in srgb, #FFFD74 45%, var(--color-border))',
 } as CSSProperties;
 
 /**

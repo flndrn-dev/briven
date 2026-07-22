@@ -247,7 +247,7 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
           disabled={pendingTf}
           onClick={() => void saveTwoFactor()}
           className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-          style={{ background: '#e6b800' }}
+          style={{ background: '#FFFD74' }}
         >
           {pendingTf ? 'saving…' : 'save 2FA (with live proof)'}
         </button>
@@ -279,7 +279,7 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
           disabled={pendingSession}
           onClick={() => void saveSession()}
           className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-          style={{ background: '#e6b800' }}
+          style={{ background: '#FFFD74' }}
         >
           {pendingSession ? 'saving…' : 'save session timeout'}
         </button>
@@ -377,7 +377,7 @@ export function AuthSecurityClient({ projects }: { projects: AuthV2ProjectRow[] 
           disabled={pendingPolicy}
           onClick={() => void savePolicy()}
           className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-          style={{ background: '#e6b800' }}
+          style={{ background: '#FFFD74' }}
         >
           {pendingPolicy ? 'saving…' : 'save password rules (with live proof)'}
         </button>
@@ -426,7 +426,7 @@ function ToggleRow({
         disabled={disabled}
         onClick={onToggle}
         className="relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed"
-        style={{ background: on ? '#e6b800' : 'var(--color-border)' }}
+        style={{ background: on ? '#FFFD74' : 'var(--color-border)' }}
       >
         <span
           className="absolute top-0.5 size-5 rounded-full bg-white transition"

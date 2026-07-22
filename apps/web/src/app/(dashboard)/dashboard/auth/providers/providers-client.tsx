@@ -397,7 +397,7 @@ export function AuthProvidersClient({
           disabled={pendingCore}
           onClick={() => void saveCore()}
           className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-          style={{ background: '#e6b800' }}
+          style={{ background: '#FFFD74' }}
         >
           {pendingCore ? 'saving…' : 'save core recipes'}
         </button>
@@ -539,7 +539,7 @@ export function AuthProvidersClient({
           disabled={pendingSocial}
           onClick={() => void saveThirdParty()}
           className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-          style={{ background: '#e6b800' }}
+          style={{ background: '#FFFD74' }}
         >
           {pendingSocial ? 'saving…' : 'save third-party providers'}
         </button>
@@ -571,7 +571,7 @@ function Switch({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       aria-checked={on}
       onClick={onToggle}
       className="relative h-6 w-11 shrink-0 rounded-full transition"
-      style={{ background: on ? '#e6b800' : 'var(--color-border)' }}
+      style={{ background: on ? '#FFFD74' : 'var(--color-border)' }}
     >
       <span
         className="absolute top-0.5 size-5 rounded-full bg-white transition"

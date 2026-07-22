@@ -10,7 +10,7 @@ import { usePathname } from 'next/navigation';
  * takes over. Lives as a separate component so the icon-bearing
  * sidebar doesn't need to grow a responsive branch.
  */
-const AUTH_ACCENT = '#e6b800';
+const AUTH_ACCENT = '#FFFD74';
 
 const NAV = [
   { href: '/dashboard', label: 'overview' },

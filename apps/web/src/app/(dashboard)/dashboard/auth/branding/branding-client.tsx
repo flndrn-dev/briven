@@ -150,7 +150,7 @@ export function AuthBrandingClient({ projects }: { projects: AuthV2ProjectRow[] 
         disabled={pending}
         onClick={() => void save()}
         className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-        style={{ background: '#e6b800' }}
+        style={{ background: '#FFFD74' }}
       >
         {pending ? 'saving…' : 'save branding'}
       </button>
