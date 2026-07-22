@@ -2,7 +2,7 @@
 
 **Goal:** Close the competitive gap with Clerk.com and make Briven Auth a production-grade, professional authentication service for the briven.tech platform.
 
-**Status:** In Progress — Phase 8 started (8.1 + 8.4 dashboard surface live)
+**Status:** Phase 8 complete (8.1–8.4 live in Authentication UI, 2026-07-22)
 
 ---
 
@@ -77,7 +77,7 @@
 | **Phase 5** | Enterprise SSO | 3–4 weeks | **Complete** |
 | **Phase 6** | Dashboard & Compliance | 2–3 weeks | **Complete** |
 | **Phase 7** | Developer Experience & Polish | 2 weeks | **Complete** |
-| **Phase 8** | Security Hardening & Account Management | 2 weeks | **In Progress** |
+| **Phase 8** | Security Hardening & Account Management | 2 weeks | **Complete** |
 | **Phase 9** | Enterprise SCIM Provisioning | 2–3 weeks | **Planned** |
 
 ---
@@ -205,8 +205,8 @@
 | Task | Status | Notes |
 |------|--------|-------|
 | 8.1 2FA backup / recovery codes | **Done** (2026-07-22) | Better Auth `twoFactor` + `backupCodeOptions.amount: 10`; SDK `verifyBackupCode` / `generateBackupCodes`; yellow **Authentication → security** toggle with save-proof |
-| 8.2 Device tracking & new-device alerts | **Backend done** | `_briven_auth_devices`; `maybeAlertNewDevice` on sign-in; admin list devices API |
-| 8.3 Account linking (multi-OAuth → 1 user) | **Backend done** | `maybeAutoLinkOAuthAccount` on matching email; list/unlink admin routes |
+| 8.2 Device tracking & new-device alerts | **Done** (2026-07-22) | `_briven_auth_devices`; `maybeAlertNewDevice` on sign-in; yellow **users** detail + **sessions & devices** list |
+| 8.3 Account linking (multi-OAuth → 1 user) | **Done** (2026-07-22) | Auto-link on matching email; yellow **users** detail shows linked logins + admin unlink |
 | 8.4 Password reset policy | **Done** (2026-07-22) | `_briven_auth_password_policy` + force-reset; yellow **security** password rules form |
 
 ---
@@ -275,8 +275,8 @@
 | Task | Status | Notes |
 |------|--------|-------|
 | 8.1 2FA backup / recovery codes | **Done** | Dashboard Security + runtime twoFactor plugin (10 codes) |
-| 8.2 Device tracking & new-device alerts | **Backend done** | Wire richer UI under sessions/users later if needed |
-| 8.3 Account linking (multi-OAuth → 1 user) | **Backend done** | Auto-link on email; manual unlink API exists |
+| 8.2 Device tracking & new-device alerts | **Done** | Users detail + Sessions & devices UI |
+| 8.3 Account linking (multi-OAuth → 1 user) | **Done** | Users detail linked logins + unlink |
 | 8.4 Password reset policy | **Done** | Security page password rules + force-reset admin route |
 
-**Next after this ship:** Phase 8 wrap (optional UI for devices/linking) or Phase 9 polish if SCIM already shipped.
+**Phase 8 complete** on product surface. Phase 9 SCIM was already shipped earlier — next open work is outside Phase 8 (e.g. remaining gap-fix polish, Auth v2 engine depth, or per-connection pricing 5.7).

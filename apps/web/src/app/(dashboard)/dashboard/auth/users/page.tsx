@@ -12,8 +12,8 @@ export default async function AuthUsersPage() {
       <header>
         <h2 className="font-mono text-sm text-[var(--color-text)]">users</h2>
         <p className="mt-1 max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          end-users who signed into each project. emails are hidden for privacy —
-          you see domain hints and ids only.
+          end-users for each project (emails hidden). open a row for linked logins (Google + GitHub
+          on one account), known devices, and live sessions.
         </p>
       </header>
       <AuthUsersClient projects={projects} />

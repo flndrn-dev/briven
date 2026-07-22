@@ -9,7 +9,7 @@ const TABS = [
   { href: '/dashboard/auth/providers', label: 'providers' },
   { href: '/dashboard/auth/security', label: 'security' },
   { href: '/dashboard/auth/users', label: 'users' },
-  { href: '/dashboard/auth/sessions', label: 'sessions' },
+  { href: '/dashboard/auth/sessions', label: 'sessions & devices' },
   { href: '/dashboard/auth/keys', label: 'keys' },
   { href: '/dashboard/auth/domains', label: 'domains' },
 ] as const;

@@ -136,7 +136,20 @@ export default async function BrivenAuthHomePage() {
             >
               users
             </Link>
-            <span className="text-[var(--color-text-muted)]"> — redacted end-user list</span>
+            <span className="text-[var(--color-text-muted)]">
+              {' '}
+              — end-users, linked logins, devices
+            </span>
+          </li>
+          <li>
+            <Link
+              href="/dashboard/auth/sessions"
+              className="underline"
+              style={{ color: 'var(--auth-accent)' }}
+            >
+              sessions & devices
+            </Link>
+            <span className="text-[var(--color-text-muted)]"> — browsers + revoke sessions</span>
           </li>
         </ul>
 
