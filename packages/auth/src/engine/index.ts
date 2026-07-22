@@ -185,12 +185,12 @@ export function brivenEngineProxyTarget(apiOrigin?: string): string {
   return `${origin}/v1/auth-core/fdi`;
 }
 
-export { BRIVEN_ENGINE_SCAFFOLDS, listBrivenEngineScaffolds } from './scaffolds.js';
+export { BRIVEN_ENGINE_SCAFFOLDS, listBrivenEngineScaffolds } from './scaffolds';
 export {
   proxyBrivenEngineAuth,
   brivenEngineNextHandler,
   appAuthPathToFdiSuffix,
   resolveFdiTarget,
-} from './proxy.js';
-export type { BrivenEngineProxyOptions } from './proxy.js';
+} from './proxy';
+export type { BrivenEngineProxyOptions } from './proxy';
 // Server session helper: import from '@briven/auth/engine/server'

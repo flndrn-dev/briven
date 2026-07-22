@@ -9,7 +9,7 @@
  * Not production Auth for customers until flndrn OKs deploy of the full product.
  */
 
-import { brivenEngineNextHandler } from '@briven/auth/engine';
+import { brivenEngineNextHandler } from '@briven/auth/engine/proxy';
 
 const handler = brivenEngineNextHandler({
   apiOrigin:
