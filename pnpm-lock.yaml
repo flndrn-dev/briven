@@ -835,6 +835,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@briven/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@briven/config':
         specifier: workspace:*
         version: link:../../packages/config

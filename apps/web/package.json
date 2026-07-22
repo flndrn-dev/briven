@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@briven/auth": "workspace:*",
     "@briven/config": "workspace:*",
     "@briven/shared": "workspace:*",
     "@briven/ui": "workspace:*",
