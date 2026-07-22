@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * Browser Google OAuth callback (full path).
- * Receives ?code=&state= from Google, posts to briven-engine FDI /signinup.
+ * Browser Google OAuth callback.
+ * Receives ?code=&state= from Google, posts to Auth FDI /signinup.
  */
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-export default function GoogleCallbackPage() {
+function GoogleCallbackInner() {
   const params = useSearchParams();
   const [msg, setMsg] = useState('Completing Google sign-in…');
 
@@ -81,9 +81,28 @@ export default function GoogleCallbackPage() {
       }}
     >
       <p style={{ fontSize: 12, letterSpacing: '0.15em', color: '#e6b800' }}>
-        BRIVEN-ENGINE · GOOGLE · DOLTGRES
+        Auth · Google
       </p>
       <p style={{ marginTop: 12 }}>{msg}</p>
     </main>
+  );
+}
+
+export default function GoogleCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          style={{
+            fontFamily: 'ui-monospace, monospace',
+            padding: '2rem',
+          }}
+        >
+          Completing Google sign-in…
+        </main>
+      }
+    >
+      <GoogleCallbackInner />
+    </Suspense>
   );
 }
