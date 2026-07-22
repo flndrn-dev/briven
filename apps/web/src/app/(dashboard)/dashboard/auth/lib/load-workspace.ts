@@ -1,16 +1,27 @@
 import { apiJson } from '../../../../../lib/api';
 
-import type { AuthV2ProjectRow, AuthV2Workspace } from './auth-v2-types';
+import type { AuthV2ProjectRow } from './auth-v2-types';
 
 /**
  * Server-side load of Auth workspace (all projects + enable flags).
- * Falls back to plain projects list (Auth off) if the Auth workspace API
- * is unavailable — so the card grid still shows something useful.
+ * Prefers briven-engine `/v1/auth-core/workspace`, then auth-v2 bridge,
+ * then plain projects (all Auth off).
  */
 export async function loadAuthV2Workspace(): Promise<AuthV2ProjectRow[]> {
   try {
-    const data = await apiJson<AuthV2Workspace>('/v1/auth-v2/workspace');
-    if (data.projects?.length) return data.projects;
+    const data = await apiJson<{
+      projects?: AuthV2ProjectRow[];
+    }>('/v1/auth-core/workspace');
+    if (data.projects) return data.projects;
+  } catch {
+    /* fall through */
+  }
+
+  try {
+    const data = await apiJson<{
+      projects?: AuthV2ProjectRow[];
+    }>('/v1/auth-v2/workspace');
+    if (data.projects) return data.projects;
   } catch {
     /* fall through */
   }

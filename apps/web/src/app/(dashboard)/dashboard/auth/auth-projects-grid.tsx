@@ -41,11 +41,22 @@ export function AuthProjectsGrid({
     setBusyId(projectId);
     setErr(null);
     try {
-      const res = await fetch(`/api/v1/projects/${projectId}/auth/enable`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-      });
+      // Prefer briven-engine path; fall back to bridged legacy path.
+      let res = await fetch(
+        `/api/v1/auth-core/projects/${encodeURIComponent(projectId)}/enable`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+      if (res.status === 404 || res.status === 410) {
+        res = await fetch(`/api/v1/projects/${projectId}/auth/enable`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
           message?: string;
