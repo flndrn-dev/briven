@@ -1,5 +1,6 @@
-# Briven Pay build
+# Doltgres - knowledge base
  
+
 
 
 # Briven Auth rebuild — SuperTokens knowledge base
@@ -14,9 +15,11 @@ Briven Auth stays **Briven-branded**, multi-tenant on **Briven Doltgres**, not a
 ## How agents should use this
 
 1. Prefer Briven product rules (Doltgres-first, project isolation, `pk_briven_auth_`, no inventing Clerk).
-2. When stuck on a login feature (sessions, passwordless, MFA, etc.), open the matching SuperTokens section below.
-3. Translate Supabase/MySQL examples to **Briven Doltgres**.
-4. Do not paste SuperTokens branding into Briven UI — yellow Auth sub-dashboard, Briven styling.
+2. For **any database / Doltgres / Postgres-wire problem**, open the **Doltgres / Dolt official knowledge base** section at the bottom of this file first (URLs from `AI_DOCS/dolt-reference/`). Also read `AI_DOCS/dolt-reference/00-doltgres-truth.md`.
+3. When stuck on a login feature (sessions, passwordless, MFA, etc.), open the matching SuperTokens section below **and** keep Doltgres constraints from the Doltgres section.
+4. Translate Supabase/MySQL examples to **Briven Doltgres** using official Doltgres docs — do not invent.
+5. Do not paste SuperTokens branding into Briven UI — yellow Auth sub-dashboard, Briven styling.
+6. **Never** abandon SuperTokens Core or change Auth architecture after one SQL error without reading Doltgres docs and **notifying flndrn**.
 
 ## Quickstart
 
@@ -547,3 +550,149 @@ Briven Auth stays **Briven-branded**, multi-tenant on **Briven Doltgres**, not a
 | App domain backend SDK | First-party auth on app + Briven Auth control plane |
 | Dashboard | Yellow **Briven Auth** sidebar section (sub-dashboard) |
 
+
+
+# Briven Pay build
+
+# Briven database — Doltgres / Dolt official knowledge base
+
+**Purpose:** Library cabinet for EVERY Briven build that touches SQL, Auth, backups, or Postgres-family compatibility.
+**Source:** URLs extracted from `AI_DOCS/dolt-reference/*` (already in this repo). Agents must open these — do not guess.
+**HARD RULE:** On any Doltgres / Postgres-wire error (including SuperTokens Core or any tool built for Postgres), search **this section** + `AI_DOCS/dolt-reference/00-doltgres-truth.md` **before** changing architecture. Never quit after one SQL error without reading these and **notifying flndrn** with options.
+
+## Local distilled files (always read first)
+
+- `AI_DOCS/dolt-reference/00-doltgres-truth.md` — **authoritative DoltGres facts** (Postgres-flavored)
+- `AI_DOCS/dolt-reference/01-intro-install.md`
+- `AI_DOCS/dolt-reference/02-use-cases.md`
+- `AI_DOCS/dolt-reference/03-concepts-git.md`
+- `AI_DOCS/dolt-reference/04-concepts-sql.md`
+- `AI_DOCS/dolt-reference/05-rdbms-dolthub.md`
+- `AI_DOCS/dolt-reference/06-sqlref-server.md`
+- `AI_DOCS/dolt-reference/07-sqlref-version-control.md`
+- `DOLTGRES-FIRST.md` — Briven hard product rule
+
+## Official DoltGres (Postgres-flavored) — PRIMARY for Briven
+
+- https://www.doltgres.com/docs/reference/sql-support/supported-types/
+- https://www.doltgres.com/docs/reference/version-control/dolt-sql-functions
+- https://www.doltgres.com/docs/reference/version-control/dolt-system-tables
+- https://www.doltgres.com/docs/reference/version-control/querying-history
+- https://github.com/dolthub/doltgresql/releases/latest/download/install.sh
+- https://raw.githubusercontent.com/dolthub/doltgresql/main/README.md
+
+## Official DoltHub docs (Dolt often MySQL-flavored; translate to DoltGres Postgres)
+
+### Introduction / install
+
+- https://www.dolthub.com/docs/introduction/getting-started/
+- https://www.dolthub.com/docs/introduction/getting-started/database/
+- https://www.dolthub.com/docs/introduction/getting-started/git-for-data/
+- https://www.dolthub.com/docs/introduction/getting-started/versioned-mysql-replica/
+- https://www.dolthub.com/docs/introduction/installation/
+- https://www.dolthub.com/docs/introduction/installation/application-server/
+- https://www.dolthub.com/docs/introduction/installation/docker/
+- https://www.dolthub.com/docs/introduction/installation/linux/
+- https://www.dolthub.com/docs/introduction/installation/mac/
+- https://www.dolthub.com/docs/introduction/installation/source/
+- https://www.dolthub.com/docs/introduction/installation/upgrading/
+- https://www.dolthub.com/docs/introduction/installation/windows/
+- https://www.dolthub.com/docs/introduction/what-is-dolt/
+
+### Use cases
+
+- https://www.dolthub.com/docs/introduction/use-cases/
+- https://www.dolthub.com/docs/introduction/use-cases/audit/
+- https://www.dolthub.com/docs/introduction/use-cases/configuration-management/
+- https://www.dolthub.com/docs/introduction/use-cases/data-and-model-quality/
+- https://www.dolthub.com/docs/introduction/use-cases/data-sharing/
+- https://www.dolthub.com/docs/introduction/use-cases/manual-data-curation/
+- https://www.dolthub.com/docs/introduction/use-cases/offline-first/
+- https://www.dolthub.com/docs/introduction/use-cases/vc-your-app/
+- https://www.dolthub.com/docs/introduction/use-cases/versioned-replica/
+
+### Concepts — overview + git / version control
+
+- https://www.dolthub.com/docs/concepts/dolt/
+- https://www.dolthub.com/docs/concepts/dolt/git/
+- https://www.dolthub.com/docs/concepts/dolt/git/branch/
+- https://www.dolthub.com/docs/concepts/dolt/git/commits/
+- https://www.dolthub.com/docs/concepts/dolt/git/conflicts/
+- https://www.dolthub.com/docs/concepts/dolt/git/diff/
+- https://www.dolthub.com/docs/concepts/dolt/git/log/
+- https://www.dolthub.com/docs/concepts/dolt/git/merge/
+- https://www.dolthub.com/docs/concepts/dolt/git/remotes/
+- https://www.dolthub.com/docs/concepts/dolt/git/working-set/
+
+### Concepts — SQL
+
+- https://www.dolthub.com/docs/concepts/dolt/sql/
+- https://www.dolthub.com/docs/concepts/dolt/sql/constraints/
+- https://www.dolthub.com/docs/concepts/dolt/sql/databases/
+- https://www.dolthub.com/docs/concepts/dolt/sql/indexes/
+- https://www.dolthub.com/docs/concepts/dolt/sql/primary-key/
+- https://www.dolthub.com/docs/concepts/dolt/sql/procedures/
+- https://www.dolthub.com/docs/concepts/dolt/sql/schema/
+- https://www.dolthub.com/docs/concepts/dolt/sql/system-variables/
+- https://www.dolthub.com/docs/concepts/dolt/sql/table/
+- https://www.dolthub.com/docs/concepts/dolt/sql/transaction/
+- https://www.dolthub.com/docs/concepts/dolt/sql/triggers/
+- https://www.dolthub.com/docs/concepts/dolt/sql/types/
+- https://www.dolthub.com/docs/concepts/dolt/sql/users-grants/
+- https://www.dolthub.com/docs/concepts/dolt/sql/views/
+
+### Concepts — RDBMS + DoltHub product
+
+- https://www.dolthub.com/docs/concepts/dolt/rdbms/
+- https://www.dolthub.com/docs/concepts/dolt/rdbms/backups/
+- https://www.dolthub.com/docs/concepts/dolt/rdbms/replication/
+- https://www.dolthub.com/docs/concepts/dolt/rdbms/server/
+- https://www.dolthub.com/docs/concepts/dolthub/
+- https://www.dolthub.com/docs/concepts/dolthub/forks/
+- https://www.dolthub.com/docs/concepts/dolthub/issues/
+- https://www.dolthub.com/docs/concepts/dolthub/permissions/
+- https://www.dolthub.com/docs/concepts/dolthub/prs/
+
+### SQL reference — server ops
+
+- https://www.dolthub.com/docs/sql-reference/server/
+- https://www.dolthub.com/docs/sql-reference/server/access-management/
+- https://www.dolthub.com/docs/sql-reference/server/backups/
+- https://www.dolthub.com/docs/sql-reference/server/branch-permissions/
+- https://www.dolthub.com/docs/sql-reference/server/configuration/
+- https://www.dolthub.com/docs/sql-reference/server/garbage-collection/
+- https://www.dolthub.com/docs/sql-reference/server/hardware-requirements/
+- https://www.dolthub.com/docs/sql-reference/server/metrics/
+- https://www.dolthub.com/docs/sql-reference/server/replication/
+- https://www.dolthub.com/docs/sql-reference/server/troubleshooting/
+
+### SQL reference — version control API
+
+- https://www.dolthub.com/docs/sql-reference/version-control/branches/
+- https://www.dolthub.com/docs/sql-reference/version-control/dolt-sql-functions/
+- https://www.dolthub.com/docs/sql-reference/version-control/dolt-sql-procedures/
+- https://www.dolthub.com/docs/sql-reference/version-control/dolt-system-tables/
+- https://www.dolthub.com/docs/sql-reference/version-control/dolt-sysvars/
+- https://www.dolthub.com/docs/sql-reference/version-control/merges/
+- https://www.dolthub.com/docs/sql-reference/version-control/querying-history/
+- https://www.dolthub.com/docs/sql-reference/version-control/remote-authentication/
+- https://www.dolthub.com/docs/sql-reference/version-control/remotes/
+- https://www.dolthub.com/docs/sql-reference/version-control/saved-queries/
+- https://www.dolthub.com/docs/sql-reference/version-control/sql-extensions/
+
+## Blogs (product state / calling conventions)
+
+- https://www.dolthub.com/blog/2024-07-30-re-introducing-dolt-functions/
+- https://www.dolthub.com/blog/2025-04-16-doltgres-goes-beta/
+- https://www.dolthub.com/blog/2025-10-16-state-of-doltgres/
+
+## GitHub install (Dolt sibling — only if needed for concept)
+
+- https://github.com/dolthub/dolt/releases/latest/download/install.sh
+
+## Agent workflow when something fails on Doltgres
+
+1. Read `AI_DOCS/dolt-reference/00-doltgres-truth.md` and the matching URL group above.
+2. Doltgres = **Postgres family** (port 5432, `pg` driver). Missing feature ≠ abandon the product.
+3. Prefer workarounds (SQL rewrite, session settings, driver, version, config) over stock Postgres.
+4. **Notify flndrn** with: error text, which doc URL you used, options A/B/C — **before** switching architecture.
