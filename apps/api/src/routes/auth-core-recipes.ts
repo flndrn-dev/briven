@@ -71,7 +71,7 @@ authCoreRecipesRouter.get('/v1/auth-core/delivery', (c) => {
     sms: {
       enabled: true,
       includedInPlan: true,
-      modes: ['log', 'provider'],
+      modes: ['log', 'provider', 'error'],
       status: 'briven-engine SMS OTP via passwordless EMAIL_OR_PHONE',
     },
   });

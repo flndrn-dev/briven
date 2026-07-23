@@ -111,13 +111,13 @@ export function ProjectMethodsPanel({
         })}
       </ul>
       <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
-        yellow = on for this project only. SMS needs Twilio secrets under{' '}
+        yellow = on for this project only. For phone codes, open{' '}
         <Link
-          href={`/dashboard/auth/${projectId}/providers?method=passwordlessSms`}
+          href={`/dashboard/auth/${projectId}/providers?method=passwordlessSms#auth-sms-setup`}
           className="underline"
           style={{ color: 'var(--auth-accent, #FFFD74)' }}
         >
-          providers
+          Providers → SMS login (Twilio)
         </Link>
         .
       </p>

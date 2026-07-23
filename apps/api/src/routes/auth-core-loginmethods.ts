@@ -54,6 +54,12 @@ authCoreLoginMethodsRouter.get(
         thirdPartyProvidersConfigured: configuredProviders,
         smsProviderConfigured: config.delivery.sms.configured,
         emailProviderConfigured: config.delivery.email.configured,
+        /** Operator method flags (project-level). */
+        methods: config.methods,
+        /** True only when SMS method is on AND Twilio secrets are saved. */
+        passwordlessSmsReady:
+          config.methods.passwordlessSms && config.delivery.sms.configured,
+        passwordlessSmsEnabled: config.methods.passwordlessSms,
       });
     } catch (err) {
       return c.json({

@@ -34,14 +34,17 @@ export default async function AuthProjectOverviewPage({
   let tenantId = project.tenantId ?? null;
   let methodsOn: string[] = [];
   let oauthConfigured: string[] = [];
+  let smsReady = false;
 
   if (configRes?.ok) {
     const body = (await configRes.json()) as {
       tenantId?: string;
       methods?: Record<string, boolean>;
       providers?: Array<{ name: string; configured: boolean }>;
+      delivery?: { sms?: { configured?: boolean } };
     };
     tenantId = body.tenantId ?? tenantId;
+    smsReady = Boolean(body.delivery?.sms?.configured);
     if (body.methods) {
       const labels: Record<string, string> = {
         emailPassword: 'email + password',
@@ -140,6 +143,7 @@ export default async function AuthProjectOverviewPage({
           {oauthConfigured.length
             ? ` · OAuth: ${oauthConfigured.join(', ')}`
             : ''}
+          {` · SMS: ${smsReady ? 'ready' : 'not set'}`}
         </p>
         <Link
           href={`/dashboard/auth/${id}/providers`}
@@ -149,9 +153,15 @@ export default async function AuthProjectOverviewPage({
           manage sign-in methods →
         </Link>
         <p className="mt-2 font-mono text-[10px] text-[var(--color-text-muted)]">
-          open Providers to turn methods on/off and set Konnos / Google / GitHub
-          client id + secret.
+          open Providers for methods, Twilio SMS, and OAuth client id + secret.
         </p>
+        <Link
+          href={`/dashboard/auth/${id}/providers?method=passwordlessSms`}
+          className="mt-2 inline-block font-mono text-[11px] underline"
+          style={{ color: 'var(--auth-accent, #FFFD74)' }}
+        >
+          {smsReady ? 'update SMS / Twilio →' : 'set up SMS / Twilio →'}
+        </Link>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

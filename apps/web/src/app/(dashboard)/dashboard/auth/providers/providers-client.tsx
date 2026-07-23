@@ -58,7 +58,7 @@ const CORE_METHODS: Array<{
   {
     key: 'passwordlessSms',
     label: 'passwordless-sms',
-    help: 'SMS one-time code (needs Twilio-style secrets later).',
+    help: 'SMS one-time code — turn on here, then set Twilio below.',
   },
   {
     key: 'passkeys',
@@ -103,6 +103,19 @@ export function AuthProvidersClient({
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [methodPending, setMethodPending] = useState<string | null>(null);
+  /** Twilio-compatible SMS secrets draft (never pre-filled from server). */
+  const [smsDraft, setSmsDraft] = useState({
+    accountSid: '',
+    authToken: '',
+    fromNumber: '',
+  });
+  const [smsPending, setSmsPending] = useState(false);
+  const [testPhone, setTestPhone] = useState('');
+  const [testPending, setTestPending] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const focusSms =
+    search.get('method') === 'passwordlessSms' ||
+    search.get('method') === 'sms';
 
   const load = useCallback(async (id: string) => {
     if (!id) return;
@@ -231,6 +244,140 @@ export function AuthProvidersClient({
       setErr(e instanceof Error ? e.message : 'could not update method');
     } finally {
       setMethodPending(null);
+    }
+  }
+
+  async function saveSms(): Promise<void> {
+    if (!projectId) return;
+    const accountSid = smsDraft.accountSid.trim();
+    const authToken = smsDraft.authToken.trim();
+    const fromNumber = smsDraft.fromNumber.trim();
+    if (!accountSid || !authToken || !fromNumber) {
+      setErr(
+        'Fill Account SID, Auth token, and From number (like +15551234567), then save.',
+      );
+      return;
+    }
+    if (!fromNumber.startsWith('+')) {
+      setErr('From number must start with + and country code (E.164), e.g. +15551234567.');
+      return;
+    }
+    setSmsPending(true);
+    setErr(null);
+    setOkMsg(null);
+    try {
+      const res = await fetch(
+        `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/delivery/sms`,
+        {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ accountSid, authToken, fromNumber }),
+        },
+      );
+      const rawText = await res.text();
+      let body: {
+        ok?: boolean;
+        message?: string;
+        code?: string;
+        config?: ProjectConfig;
+      } = {};
+      try {
+        body = JSON.parse(rawText) as typeof body;
+      } catch {
+        body = { message: rawText.slice(0, 200) || res.statusText };
+      }
+      if (!res.ok) {
+        throw new Error(
+          body.message ?? body.code ?? `save failed (http ${res.status})`,
+        );
+      }
+      setSmsDraft({ accountSid: '', authToken: '', fromNumber: '' });
+      await load(projectId);
+      if (body.config?.delivery?.sms) {
+        setConfig((prev) =>
+          prev
+            ? {
+                ...prev,
+                delivery: {
+                  ...prev.delivery,
+                  sms: body.config!.delivery.sms,
+                },
+              }
+            : prev,
+        );
+      } else {
+        setConfig((prev) =>
+          prev
+            ? {
+                ...prev,
+                delivery: {
+                  ...prev.delivery,
+                  sms: { configured: true },
+                },
+              }
+            : prev,
+        );
+      }
+      setOkMsg(
+        'SMS secrets saved for this project. Turn on passwordless-sms above if it is still off. You can send a test SMS below.',
+      );
+      setTestMsg(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'could not save SMS secrets');
+    } finally {
+      setSmsPending(false);
+    }
+  }
+
+  async function sendTestSms(): Promise<void> {
+    if (!projectId) return;
+    const phoneNumber = testPhone.trim();
+    if (!phoneNumber.startsWith('+')) {
+      setTestMsg(null);
+      setErr(
+        'Test phone must start with + and country code (E.164), e.g. +15551234567.',
+      );
+      return;
+    }
+    setTestPending(true);
+    setErr(null);
+    setOkMsg(null);
+    setTestMsg(null);
+    try {
+      const res = await fetch(
+        `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/delivery/sms/test`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ phoneNumber }),
+        },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+        hint?: string;
+        delivery?: { ok?: boolean; mode?: string; message?: string };
+        passwordlessSmsEnabled?: boolean;
+      };
+      if (!res.ok || !body.ok) {
+        const detail =
+          body.delivery?.message ??
+          body.message ??
+          `test failed (http ${res.status})`;
+        throw new Error(detail);
+      }
+      setTestMsg(
+        body.hint ??
+          body.delivery?.message ??
+          'Test SMS sent — check your phone.',
+      );
+      setOkMsg('Test SMS sent. Check your phone.');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'could not send test SMS');
+    } finally {
+      setTestPending(false);
     }
   }
 
@@ -448,6 +595,17 @@ export function AuthProvidersClient({
           <ul className="mt-4 space-y-2">
             {CORE_METHODS.map((m) => {
               const on = Boolean(methods[m.key]);
+              const smsSecretsOk = Boolean(config?.delivery?.sms?.configured);
+              const smsHint =
+                m.key === 'passwordlessSms'
+                  ? on && !smsSecretsOk
+                    ? ' · Twilio not set yet'
+                    : on && smsSecretsOk
+                      ? ' · Twilio ready'
+                      : !on && smsSecretsOk
+                        ? ' · secrets saved, method off'
+                        : ''
+                  : '';
               return (
                 <li
                   key={m.key}
@@ -456,6 +614,11 @@ export function AuthProvidersClient({
                   <div className="min-w-0">
                     <p className="font-mono text-xs text-[var(--color-text)]">
                       {m.label}
+                      {smsHint ? (
+                        <span className="text-[var(--color-text-muted)]">
+                          {smsHint}
+                        </span>
+                      ) : null}
                     </p>
                     <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-muted)]">
                       {m.help}
@@ -488,6 +651,199 @@ export function AuthProvidersClient({
         ) : (
           <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
             loading methods…
+          </p>
+        )}
+      </div>
+
+      {/* ── SMS / Twilio for this project ── */}
+      <div
+        id="auth-sms-setup"
+        className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6"
+        style={
+          focusSms
+            ? { borderColor: 'var(--auth-accent-border, #FFFD74)' }
+            : undefined
+        }
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-mono text-sm text-[var(--color-text)]">
+              SMS login (Twilio)
+            </h2>
+            <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
+              Phone codes for this project only. Secrets stay on Briven — we
+              never show them again after save.
+            </p>
+          </div>
+          <span
+            className="shrink-0 rounded-md px-2.5 py-1 font-mono text-[11px] font-medium"
+            style={
+              config?.delivery?.sms?.configured
+                ? { background: '#FFFD74', color: '#111' }
+                : {
+                    border: '1px solid var(--color-border-subtle)',
+                    color: 'var(--color-text-muted)',
+                  }
+            }
+          >
+            {config
+              ? config.delivery?.sms?.configured
+                ? 'SMS ready'
+                : 'SMS not set'
+              : '…'}
+          </span>
+        </div>
+
+        <ul className="mt-3 list-inside list-disc font-mono text-[11px] text-[var(--color-text-muted)]">
+          <li>Turn on <strong className="text-[var(--color-text)]">passwordless-sms</strong> above.</li>
+          <li>
+            In Twilio: Account SID, Auth Token, and a From number (starts with
+            +).
+          </li>
+          <li>
+            Without secrets, codes are only logged on the server (no real text).
+          </li>
+        </ul>
+
+        {methods?.passwordlessSms && !config?.delivery?.sms?.configured ? (
+          <p className="mt-3 font-mono text-[11px] text-amber-600 dark:text-amber-400">
+            passwordless-sms is on, but Twilio is not set yet — phone login will
+            not reach a real phone until you save secrets below.
+          </p>
+        ) : null}
+
+        {!methods?.passwordlessSms && config?.delivery?.sms?.configured ? (
+          <p className="mt-3 font-mono text-[11px] text-[var(--color-text-muted)]">
+            Twilio is saved. Turn on passwordless-sms above so apps can use SMS
+            login.
+          </p>
+        ) : null}
+
+        <div className="mt-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 font-mono text-xs">
+            <span className="text-[var(--color-text-muted)]">Account SID</span>
+            <input
+              value={smsDraft.accountSid}
+              onChange={(e) =>
+                setSmsDraft((d) => ({ ...d, accountSid: e.target.value }))
+              }
+              autoComplete="off"
+              placeholder={
+                config?.delivery?.sms?.configured
+                  ? '•••• set — paste new to replace'
+                  : 'ACxxxxxxxx…'
+              }
+              className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
+              style={{
+                borderColor: 'var(--auth-accent-border, #FFFD74)',
+              }}
+            />
+          </label>
+          <label className="flex flex-col gap-1 font-mono text-xs">
+            <span className="text-[var(--color-text-muted)]">Auth token</span>
+            <input
+              type="password"
+              value={smsDraft.authToken}
+              onChange={(e) =>
+                setSmsDraft((d) => ({ ...d, authToken: e.target.value }))
+              }
+              autoComplete="new-password"
+              placeholder={
+                config?.delivery?.sms?.configured
+                  ? '•••• set — paste new to replace'
+                  : 'paste Twilio auth token'
+              }
+              className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
+              style={{
+                borderColor: 'var(--auth-accent-border, #FFFD74)',
+              }}
+            />
+          </label>
+          <label className="flex flex-col gap-1 font-mono text-xs">
+            <span className="text-[var(--color-text-muted)]">
+              From number (E.164)
+            </span>
+            <input
+              value={smsDraft.fromNumber}
+              onChange={(e) =>
+                setSmsDraft((d) => ({ ...d, fromNumber: e.target.value }))
+              }
+              autoComplete="off"
+              placeholder={
+                config?.delivery?.sms?.configured
+                  ? '•••• set — paste new to replace'
+                  : '+15551234567'
+              }
+              className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
+              style={{
+                borderColor: 'var(--auth-accent-border, #FFFD74)',
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={
+              smsPending ||
+              !smsDraft.accountSid.trim() ||
+              !smsDraft.authToken.trim() ||
+              !smsDraft.fromNumber.trim()
+            }
+            onClick={() => void saveSms()}
+            className="w-fit rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
+            style={{ background: '#FFFD74' }}
+          >
+            {smsPending ? 'saving…' : 'save SMS secrets'}
+          </button>
+        </div>
+
+        {config?.delivery?.sms?.configured ? (
+          <div
+            className="mt-5 space-y-3 border-t pt-4"
+            style={{ borderColor: 'var(--color-border-subtle)' }}
+          >
+            <p className="font-mono text-xs text-[var(--color-text)]">
+              send test SMS
+            </p>
+            <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
+              Uses saved Twilio secrets. Message says this is a test — not a
+              login code. Real texts may cost Twilio credit.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="flex min-w-[12rem] flex-1 flex-col gap-1 font-mono text-xs">
+                <span className="text-[var(--color-text-muted)]">
+                  your phone (E.164)
+                </span>
+                <input
+                  value={testPhone}
+                  onChange={(e) => setTestPhone(e.target.value)}
+                  autoComplete="tel"
+                  placeholder="+15551234567"
+                  className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
+                  style={{
+                    borderColor: 'var(--auth-accent-border, #FFFD74)',
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={testPending || !testPhone.trim()}
+                onClick={() => void sendTestSms()}
+                className="rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
+                style={{ background: '#FFFD74' }}
+              >
+                {testPending ? 'sending…' : 'send test SMS'}
+              </button>
+            </div>
+            {testMsg ? (
+              <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
+                {testMsg}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-4 font-mono text-[10px] text-[var(--color-text-muted)]">
+            After secrets show as <strong className="text-[var(--color-text)]">SMS ready</strong>, a
+            “send test SMS” box appears here.
           </p>
         )}
       </div>

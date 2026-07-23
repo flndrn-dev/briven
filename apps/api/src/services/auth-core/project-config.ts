@@ -195,6 +195,9 @@ export async function getBrivenEngineProjectConfig(
 
   const smsSid = await hasTenantSecret(projectId, SERVICE, 'briven_engine_sms_account_sid');
   const smsToken = await hasTenantSecret(projectId, SERVICE, 'briven_engine_sms_auth_token');
+  const smsFrom = await hasTenantSecret(projectId, SERVICE, 'briven_engine_sms_from');
+  /** Ready only when Twilio-compatible triple is present (SID + token + from). */
+  const smsConfigured = smsSid && smsToken && smsFrom;
   const emailHost = await hasTenantSecret(projectId, SERVICE, 'briven_engine_smtp_host');
 
   const anyOauthConfigured = providers.some((p) => p.configured);
@@ -229,7 +232,7 @@ export async function getBrivenEngineProjectConfig(
       label: 'passwordless-sms',
       kind: 'core',
       enabled: methods.passwordlessSms,
-      configured: smsSid && smsToken,
+      configured: smsConfigured,
       hrefSuffix: 'providers?method=passwordlessSms',
     },
     {
@@ -266,8 +269,8 @@ export async function getBrivenEngineProjectConfig(
     providers,
     delivery: {
       sms: {
-        configured: smsSid && smsToken,
-        provider: smsSid && smsToken ? 'twilio-compatible' : null,
+        configured: smsConfigured,
+        provider: smsConfigured ? 'twilio-compatible' : null,
       },
       email: {
         configured: emailHost,

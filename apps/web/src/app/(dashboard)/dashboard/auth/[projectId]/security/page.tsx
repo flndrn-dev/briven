@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { apiFetch } from '@/lib/api';
 import { AuthRolesForm } from '../../security/roles-form';
 
@@ -65,6 +67,8 @@ export default async function AuthProjectSecurityPage({
     }
   }
 
+  let smsConfigured = false;
+
   if (configRes?.ok) {
     const body = (await configRes.json()) as {
       methods?: MethodFlags;
@@ -73,8 +77,10 @@ export default async function AuthProjectSecurityPage({
         name: string;
         configured: boolean;
       }>;
+      delivery?: { sms?: { configured?: boolean; provider?: string | null } };
     };
     methods = body.methods ?? null;
+    smsConfigured = Boolean(body.delivery?.sms?.configured);
     // Only OAuth with saved secrets (same as Providers yellow · on)
     oauthOn = (body.providers ?? [])
       .filter((p) => p.configured)
@@ -85,11 +91,23 @@ export default async function AuthProjectSecurityPage({
     configErr = `could not load config (${configRes.status})`;
   }
 
-  const coreChips = CORE_METHOD_ORDER.map((m) => ({
-    id: m.key,
-    label: m.label,
-    on: methods ? Boolean(methods[m.key]) : false,
-  }));
+  const coreChips = CORE_METHOD_ORDER.map((m) => {
+    const on = methods ? Boolean(methods[m.key]) : false;
+    // passwordless-sms: show secrets gap like OAuth "configured"
+    const smsGap =
+      m.key === 'passwordlessSms' && on && !smsConfigured
+        ? ' · needs Twilio'
+        : m.key === 'passwordlessSms' && on && smsConfigured
+          ? ' · Twilio ready'
+          : '';
+    return {
+      id: m.key,
+      label: m.label,
+      on,
+      extra: smsGap,
+    };
+  });
+  const smsReady = Boolean(methods?.passwordlessSms && smsConfigured);
 
   return (
     <section className="space-y-8">
@@ -139,9 +157,31 @@ export default async function AuthProjectSecurityPage({
                 >
                   {c.label}
                   {c.on ? '' : ' · off'}
+                  {c.extra}
                 </li>
               ))}
             </ul>
+
+            <p className="mt-4 font-mono text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
+              SMS (Twilio)
+            </p>
+            <p className="mt-2 font-mono text-[11px] text-[var(--color-text-muted)]">
+              {smsReady
+                ? 'ready — passwordless-sms on + secrets saved'
+                : methods?.passwordlessSms && !smsConfigured
+                  ? 'method on, but secrets not set — open Providers → SMS'
+                  : smsConfigured && !methods?.passwordlessSms
+                    ? 'secrets saved, method off — turn on passwordless-sms under Providers'
+                    : 'not ready — enable passwordless-sms and save Twilio under Providers'}
+              {' · '}
+              <Link
+                href={`/dashboard/auth/${projectId}/providers?method=passwordlessSms#auth-sms-setup`}
+                className="underline"
+                style={{ color: 'var(--auth-accent, #FFFD74)' }}
+              >
+                manage SMS
+              </Link>
+            </p>
 
             <p className="mt-4 font-mono text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
               OAuth (secrets saved)

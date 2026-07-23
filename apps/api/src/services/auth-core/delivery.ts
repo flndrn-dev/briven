@@ -36,6 +36,8 @@ export type SmsDeliveryInput = {
   userContext?: Record<string, unknown>;
   raw?: unknown;
   projectId?: string;
+  /** Full SMS body override (e.g. dashboard test message). */
+  bodyOverride?: string;
 };
 
 export type DeliveryResult = {
@@ -68,6 +70,10 @@ export function getAuthEmailDeliveryStatus(): {
 }
 
 function bodyFromSms(input: SmsDeliveryInput): string {
+  if (input.bodyOverride?.trim()) return input.bodyOverride.trim();
+  if (input.type === 'DASHBOARD_TEST') {
+    return 'Briven Auth test: SMS is working for this project. This is not a login code.';
+  }
   const parts = [
     input.userInputCode ? `Your Briven Auth code: ${input.userInputCode}` : null,
     input.urlWithLinkCode ? `Sign in: ${input.urlWithLinkCode}` : null,
@@ -140,6 +146,11 @@ export async function sendBrivenEngineEmail(
 
 /**
  * Send auth SMS via briven-engine (Twilio-compatible HTTP when secrets present).
+ *
+ * Honest results:
+ * - provider  → real Twilio send succeeded
+ * - log       → no secrets / no project; body only logged (dev) — ok is false so UIs do not lie
+ * - error     → secrets present but Twilio (or network) failed
  */
 export async function sendBrivenEngineSms(
   input: SmsDeliveryInput,
@@ -160,51 +171,109 @@ export async function sendBrivenEngineSms(
       ? input.userContext.projectId
       : undefined);
 
-  if (projectId) {
-    try {
-      const secrets = await getBrivenEngineSmsSecrets(projectId);
-      if (secrets) {
-        const sent = await sendTwilioCompatibleSms({
-          accountSid: secrets.accountSid,
-          authToken: secrets.authToken,
-          from: secrets.fromNumber,
-          to: input.phoneNumber,
-          body,
-        });
-        if (sent.ok) {
-          return {
-            ok: true,
-            channel: 'sms',
-            engine: 'briven-engine',
-            mode: 'provider',
-            message: 'sent via project SMS provider',
-          };
-        }
-        log.warn('briven_engine_sms_provider_failed', { message: sent.message });
-      }
-    } catch (err) {
-      log.warn('briven_engine_sms_secrets_error', {
-        message: err instanceof Error ? err.message : String(err),
+  if (!projectId) {
+    if (env.BRIVEN_ENV !== 'production') {
+      log.debug('briven_engine_sms_dev', {
+        phone: input.phoneNumber,
+        bodyPreview: body.slice(0, 160),
+        reason: 'no_project_id',
       });
     }
+    return {
+      ok: false,
+      channel: 'sms',
+      engine: 'briven-engine',
+      mode: 'log',
+      message:
+        'no project id for SMS — set x-briven-project-id (or project context) so Twilio secrets can load',
+    };
   }
 
-  if (env.BRIVEN_ENV !== 'production') {
-    log.debug('briven_engine_sms_dev', {
-      phone: input.phoneNumber,
-      bodyPreview: body.slice(0, 160),
+  try {
+    const secrets = await getBrivenEngineSmsSecrets(projectId);
+    if (!secrets) {
+      if (env.BRIVEN_ENV !== 'production') {
+        log.debug('briven_engine_sms_dev', {
+          phone: input.phoneNumber,
+          bodyPreview: body.slice(0, 160),
+          reason: 'no_secrets',
+        });
+      }
+      return {
+        ok: false,
+        channel: 'sms',
+        engine: 'briven-engine',
+        mode: 'log',
+        message:
+          'SMS not set for this project — save Account SID, Auth token, and From number under Authentication → Providers → SMS',
+      };
+    }
+
+    const sent = await sendTwilioCompatibleSms({
+      accountSid: secrets.accountSid,
+      authToken: secrets.authToken,
+      from: secrets.fromNumber,
+      to: input.phoneNumber,
+      body,
     });
-  }
+    if (sent.ok) {
+      return {
+        ok: true,
+        channel: 'sms',
+        engine: 'briven-engine',
+        mode: 'provider',
+        message: 'sent via project SMS provider (Twilio-compatible)',
+      };
+    }
 
-  return {
-    ok: true,
-    channel: 'sms',
-    engine: 'briven-engine',
-    mode: 'log',
-    message: projectId
-      ? 'logged (no SMS secrets for project or provider failed)'
-      : 'logged (no projectId for SMS provider lookup)',
-  };
+    log.warn('briven_engine_sms_provider_failed', { message: sent.message });
+    return {
+      ok: false,
+      channel: 'sms',
+      engine: 'briven-engine',
+      mode: 'error',
+      message:
+        sent.message ??
+        'SMS provider rejected the send — check Twilio SID, token, From number, and destination phone',
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn('briven_engine_sms_secrets_error', { message });
+    return {
+      ok: false,
+      channel: 'sms',
+      engine: 'briven-engine',
+      mode: 'error',
+      message: `SMS send failed: ${message}`,
+    };
+  }
+}
+
+/**
+ * Dashboard “Send test SMS” — fixed body, no login code row.
+ */
+export async function sendBrivenEngineSmsTest(input: {
+  projectId: string;
+  phoneNumber: string;
+}): Promise<DeliveryResult> {
+  const phone = input.phoneNumber.trim();
+  if (!phone.startsWith('+') || phone.replace(/\D/g, '').length < 8) {
+    return {
+      ok: false,
+      channel: 'sms',
+      engine: 'briven-engine',
+      mode: 'error',
+      message:
+        'phone must be E.164 (start with + and country code), e.g. +15551234567',
+    };
+  }
+  return sendBrivenEngineSms({
+    phoneNumber: phone,
+    projectId: input.projectId,
+    type: 'DASHBOARD_TEST',
+    bodyOverride:
+      'Briven Auth test: SMS is working for this project. This is not a login code.',
+  });
 }
 
 async function sendTwilioCompatibleSms(opts: {

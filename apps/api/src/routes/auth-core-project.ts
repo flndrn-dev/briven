@@ -19,6 +19,7 @@ import {
   setBrivenEngineSmsSecrets,
   type BrivenEngineMethodFlags,
 } from '../services/auth-core/project-config.js';
+import { sendBrivenEngineSmsTest } from '../services/auth-core/delivery.js';
 import { env } from '../env.js';
 import {
   ensureBrivenEngineTenant,
@@ -194,7 +195,10 @@ authCoreProjectRouter.put(
     } catch {
       body = {};
     }
-    if (!body.accountSid || !body.authToken || !body.fromNumber) {
+    const accountSid = body.accountSid?.trim() ?? '';
+    const authToken = body.authToken?.trim() ?? '';
+    const fromNumber = body.fromNumber?.trim() ?? '';
+    if (!accountSid || !authToken || !fromNumber) {
       return c.json(
         {
           engine: BRIVEN_ENGINE_ID,
@@ -204,11 +208,22 @@ authCoreProjectRouter.put(
         400,
       );
     }
+    if (!fromNumber.startsWith('+')) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'bad_request',
+          message:
+            'fromNumber must be E.164 (start with + and country code), e.g. +15551234567',
+        },
+        400,
+      );
+    }
     try {
       const result = await setBrivenEngineSmsSecrets(projectId, {
-        accountSid: body.accountSid,
-        authToken: body.authToken,
-        fromNumber: body.fromNumber,
+        accountSid,
+        authToken,
+        fromNumber,
       });
       const config = await getBrivenEngineProjectConfig(projectId);
       return c.json({ ...result, config });
@@ -217,6 +232,75 @@ authCoreProjectRouter.put(
         {
           engine: BRIVEN_ENGINE_ID,
           code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Send a test SMS with saved project secrets (no login code). */
+authCoreProjectRouter.post(
+  '/v1/auth-core/projects/:projectId/delivery/sms/test',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    let body: { phoneNumber?: string } = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+    const phoneNumber = body.phoneNumber?.trim() ?? '';
+    if (!phoneNumber) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'bad_request',
+          message: 'phoneNumber required (E.164, e.g. +15551234567)',
+        },
+        400,
+      );
+    }
+    try {
+      const config = await getBrivenEngineProjectConfig(projectId);
+      if (!config.delivery.sms.configured) {
+        return c.json(
+          {
+            engine: BRIVEN_ENGINE_ID,
+            code: 'sms_not_configured',
+            ok: false,
+            message:
+              'SMS not set — save Account SID, Auth token, and From number first',
+            delivery: config.delivery.sms,
+            methods: config.methods,
+          },
+          400,
+        );
+      }
+      const result = await sendBrivenEngineSmsTest({ projectId, phoneNumber });
+      const status = result.ok ? 200 : result.mode === 'log' ? 400 : 502;
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          ok: result.ok,
+          delivery: result,
+          methods: config.methods,
+          passwordlessSmsEnabled: config.methods.passwordlessSms,
+          hint: result.ok
+            ? config.methods.passwordlessSms
+              ? 'Test sent. passwordless-sms is on for this project.'
+              : 'Test sent. Turn on passwordless-sms under Providers so apps can use phone login.'
+            : undefined,
+        },
+        status,
+      );
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'sms_test_failed',
+          ok: false,
           message: err instanceof Error ? err.message : String(err),
         },
         500,

@@ -27,7 +27,7 @@ export default async function AuthProjectProvidersPage({
           providers
         </h2>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          manage sign-in methods and OAuth for this project only
+          methods, SMS (Twilio), and OAuth — this project only
         </p>
       </header>
       <Suspense

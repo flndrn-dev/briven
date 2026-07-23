@@ -10,7 +10,7 @@
 
 **Phase 9 (Konnos browser login on live konnos.org) is done.**  
 MCP guidance updated for briven-engine.  
-**Next build block:** product polish (**SMS + branding**), then deep SuperTokens (**IdP / M2M / audit**).
+**Next build block:** product polish — **SMS steps 1–5 done in code** (UI + honest delivery + test send + `sms-polish-proof.mjs`). Still open: **live Twilio prove + deploy** when you say go; then branding; then stronger email; then IdP / M2M / audit.
 
 ---
 
@@ -85,8 +85,9 @@ Full gap table was given in chat; feature audit: `BRIVEN-AUTH-FEATURE-AUDIT.md`.
 
 **Default Briven session:**
 ```
-Resume from NEXT-SESSION.md. Phase 9 done. Start product polish: SMS + branding
-(not IdP/M2M yet). Live France is rsync+compose deploy when git push is broken.
+Resume from NEXT-SESSION.md. Phase 9 done. SMS polish code + sms-polish-proof.mjs
+done (steps 1–5). Next: live Twilio prove (your secrets) then deploy when OK;
+then branding. Not IdP/M2M yet. France = rsync+compose if git push broken.
 ```
 
 **Konnos-only session:**
