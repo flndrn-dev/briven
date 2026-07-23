@@ -405,8 +405,8 @@ export function AuthProvidersClient({
                         ? '•••• set — paste new to replace'
                         : ''
                     }
-                    className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-                    style={{ borderColor: 'var(--auth-accent-border)' }}
+                    className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
+                    style={{ borderColor: 'var(--auth-accent-border, #FFFD74)' }}
                   />
                 </label>
                 <label className="flex min-w-[10rem] flex-1 flex-col gap-1 font-mono text-xs">
@@ -423,8 +423,8 @@ export function AuthProvidersClient({
                         ? '•••• set — paste new to replace'
                         : ''
                     }
-                    className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-                    style={{ borderColor: 'var(--auth-accent-border)' }}
+                    className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
+                    style={{ borderColor: 'var(--auth-accent-border, #FFFD74)' }}
                   />
                 </label>
                 <button
