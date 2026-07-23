@@ -101,40 +101,39 @@ export function AuthProvidersClient({
   const [pending, setPending] = useState(false);
   const [methodPending, setMethodPending] = useState<string | null>(null);
 
-  const load = useCallback(
-    async (id: string) => {
-      if (!id) return;
-      setErr(null);
-      const res = await fetch(`/api/v1/auth-core/projects/${id}/config`, {
-        credentials: 'include',
-      });
-      if (res.status === 401) {
-        setErr('sign in to briven.tech to manage providers');
-        setConfig(null);
-        return;
-      }
-      if (res.status === 403) {
-        setErr('you need admin access on this project');
-        setConfig(null);
-        return;
-      }
-      if (!res.ok) {
-        setErr(`load failed (${res.status})`);
-        setConfig(null);
-        return;
-      }
-      const body = (await res.json()) as ProjectConfig;
-      setConfig(body);
-      if (body.methods) setMethods(body.methods);
-      const ids = body.providers?.map((p) => p.thirdPartyId) ?? [];
-      if (initialProvider && ids.includes(initialProvider as never)) {
-        setPick(initialProvider);
-      } else if (ids.length && !ids.includes(pick as never)) {
-        setPick(ids[0] ?? 'konnos');
-      }
-    },
-    [initialProvider, pick],
-  );
+  const load = useCallback(async (id: string) => {
+    if (!id) return;
+    setErr(null);
+    const res = await fetch(`/api/v1/auth-core/projects/${id}/config`, {
+      credentials: 'include',
+    });
+    if (res.status === 401) {
+      setErr('sign in to briven.tech to manage providers');
+      setConfig(null);
+      return;
+    }
+    if (res.status === 403) {
+      setErr('you need admin access on this project');
+      setConfig(null);
+      return;
+    }
+    if (!res.ok) {
+      setErr(`load failed (${res.status})`);
+      setConfig(null);
+      return;
+    }
+    const body = (await res.json()) as ProjectConfig;
+    setConfig(body);
+    if (body.methods) setMethods(body.methods);
+    // Keep current pick if still valid — do NOT force-reset to Konnos on every load
+    // (that bug made other OAuth chips unselectable).
+    const ids = body.providers?.map((p) => p.thirdPartyId) ?? [];
+    setPick((prev) => {
+      if (prev && ids.includes(prev)) return prev;
+      if (initialProvider && ids.includes(initialProvider)) return initialProvider;
+      return ids[0] ?? 'konnos';
+    });
+  }, [initialProvider]);
 
   useEffect(() => {
     if (projectId) void load(projectId);
@@ -343,36 +342,50 @@ export function AuthProvidersClient({
             </p>
 
             <ul className="mt-3 flex flex-wrap gap-2">
-              {config.providers.map((p) => (
-                <li key={p.thirdPartyId}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPick(p.thirdPartyId);
-                      setClientId('');
-                      setClientSecret('');
-                      setOkMsg(null);
-                    }}
-                    className="rounded border px-2.5 py-1.5 font-mono text-[11px]"
-                    style={{
-                      borderColor: 'var(--auth-accent-border)',
-                      background:
-                        pick === p.thirdPartyId
-                          ? 'var(--auth-accent-soft)'
-                          : p.configured
-                            ? 'color-mix(in srgb, #FFFD74 8%, transparent)'
-                            : 'transparent',
-                      color: 'var(--color-text)',
-                    }}
-                  >
-                    {p.name}
-                    {p.configured ? '' : ' · set up'}
-                  </button>
-                </li>
-              ))}
+              {config.providers.map((p) => {
+                const isPick = pick === p.thirdPartyId;
+                return (
+                  <li key={p.thirdPartyId}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPick(p.thirdPartyId);
+                        setClientId('');
+                        setClientSecret('');
+                        setOkMsg(null);
+                        setErr(null);
+                      }}
+                      className="rounded border px-2.5 py-1.5 font-mono text-[11px] outline-none focus:outline-none"
+                      style={
+                        isPick
+                          ? {
+                              borderColor: '#FFFD74',
+                              background: '#FFFD74',
+                              color: '#111',
+                            }
+                          : {
+                              borderColor: 'var(--auth-accent-border, #FFFD74)',
+                              background: p.configured
+                                ? 'color-mix(in srgb, #FFFD74 12%, transparent)'
+                                : 'transparent',
+                              color: 'var(--color-text)',
+                            }
+                      }
+                    >
+                      {p.name}
+                      {p.configured ? '' : ' · set up'}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
 
-            <div className="mt-5 space-y-3 border-t border-[var(--color-border-subtle)] pt-4">
+            {/* Credential form for the selected OAuth — always updates when pick changes */}
+            <div
+              key={pick}
+              className="mt-5 space-y-3 rounded-md border p-4"
+              style={{ borderColor: 'var(--auth-accent-border, #FFFD74)' }}
+            >
               <p className="font-mono text-xs text-[var(--color-text)]">
                 {selected?.name ?? pick} — client id &amp; secret
               </p>
@@ -403,7 +416,7 @@ export function AuthProvidersClient({
                     placeholder={
                       selected?.hasClientId
                         ? '•••• set — paste new to replace'
-                        : ''
+                        : `paste ${selected?.name ?? pick} client id`
                     }
                     className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
                     style={{ borderColor: 'var(--auth-accent-border, #FFFD74)' }}
@@ -421,7 +434,7 @@ export function AuthProvidersClient({
                     placeholder={
                       selected?.hasClientSecret
                         ? '•••• set — paste new to replace'
-                        : ''
+                        : `paste ${selected?.name ?? pick} client secret`
                     }
                     className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)] outline-none focus:outline-none"
                     style={{ borderColor: 'var(--auth-accent-border, #FFFD74)' }}
@@ -434,14 +447,19 @@ export function AuthProvidersClient({
                   className="rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
                   style={{ background: '#FFFD74' }}
                 >
-                  {pending ? 'saving…' : 'save'}
+                  {pending ? 'saving…' : `save ${selected?.name ?? pick}`}
                 </button>
               </div>
               {selected?.configured ? (
                 <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
                   {selected.name} is configured for this project
                 </p>
-              ) : null}
+              ) : (
+                <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
+                  not set yet — paste secrets from the {selected?.name ?? pick}{' '}
+                  developer console
+                </p>
+              )}
             </div>
           </>
         ) : (
