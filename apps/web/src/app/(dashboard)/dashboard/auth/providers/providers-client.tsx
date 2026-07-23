@@ -331,23 +331,35 @@ export function AuthProvidersClient({
           OAuth providers
         </h2>
         <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-          Konnos first, then Google, GitHub, and more. Pick one, paste client
-          id + secret, and copy the callback URL into that provider.
+          Many can be on at once. Yellow = secrets saved (on). Click a chip to
+          open that provider&apos;s setup form — others stay on.
         </p>
 
         {config ? (
           <>
             <p className="mt-3 font-mono text-[11px] text-[var(--color-text-muted)]">
               tenant {config.tenantId}
+              {config.providers.some((p) => p.configured)
+                ? ` · on: ${config.providers
+                    .filter((p) => p.configured)
+                    .map((p) => p.name)
+                    .join(', ')}`
+                : ' · none set yet'}
             </p>
 
             <ul className="mt-3 flex flex-wrap gap-2">
               {config.providers.map((p) => {
-                const isPick = pick === p.thirdPartyId;
+                const isEditing = pick === p.thirdPartyId;
+                const isOn = p.configured;
                 return (
                   <li key={p.thirdPartyId}>
                     <button
                       type="button"
+                      title={
+                        isOn
+                          ? `${p.name} is on — click to edit secrets`
+                          : `${p.name} not set — click to add client id + secret`
+                      }
                       onClick={() => {
                         setPick(p.thirdPartyId);
                         setClientId('');
@@ -357,30 +369,38 @@ export function AuthProvidersClient({
                       }}
                       className="rounded border px-2.5 py-1.5 font-mono text-[11px] outline-none focus:outline-none"
                       style={
-                        isPick
+                        isOn
                           ? {
+                              // All configured OAuths stay butter yellow (multi-on)
                               borderColor: '#FFFD74',
                               background: '#FFFD74',
                               color: '#111',
+                              // Editing chip: extra ring so you know which form is open
+                              boxShadow: isEditing
+                                ? '0 0 0 2px #111, 0 0 0 4px #FFFD74'
+                                : undefined,
                             }
                           : {
-                              borderColor: 'var(--auth-accent-border, #FFFD74)',
-                              background: p.configured
-                                ? 'color-mix(in srgb, #FFFD74 12%, transparent)'
+                              borderColor: isEditing
+                                ? '#FFFD74'
+                                : 'var(--color-border-subtle)',
+                              background: isEditing
+                                ? 'color-mix(in srgb, #FFFD74 14%, transparent)'
                                 : 'transparent',
-                              color: 'var(--color-text)',
+                              color: 'var(--color-text-muted)',
                             }
                       }
                     >
                       {p.name}
-                      {p.configured ? '' : ' · set up'}
+                      {isOn ? ' · on' : ' · set up'}
+                      {isEditing ? ' · editing' : ''}
                     </button>
                   </li>
                 );
               })}
             </ul>
 
-            {/* Credential form for the selected OAuth — always updates when pick changes */}
+            {/* Credential form for the provider you're editing (others stay on) */}
             <div
               key={pick}
               className="mt-5 space-y-3 rounded-md border p-4"
@@ -388,6 +408,11 @@ export function AuthProvidersClient({
             >
               <p className="font-mono text-xs text-[var(--color-text)]">
                 {selected?.name ?? pick} — client id &amp; secret
+                {selected?.configured ? (
+                  <span className="ml-2 text-[var(--color-text-muted)]">
+                    (on for this project)
+                  </span>
+                ) : null}
               </p>
               {selected?.help ? (
                 <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
