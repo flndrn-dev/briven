@@ -172,6 +172,27 @@ export interface AuthGuidanceEntry {
 
 export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
   {
+    id: 'briven-engine-fdi',
+    topic: 'briven-engine live auth API (replaces auth-tenant)',
+    keywords: [
+      'briven-engine', 'auth-core', 'fdi', 'auth-tenant', '410', 'engine',
+      'doltgres', 'signinup', 'session', 'me', 'proxy', 'first-party',
+    ],
+    answer:
+      'production login is briven-engine on Doltgres (database briven_engine). HTTP base: ' +
+      'https://api.briven.tech/v1/auth-core. Passwordless FDI: POST /v1/auth-core/fdi/signinup/code ' +
+      'and POST /v1/auth-core/fdi/signinup/code/consume. Session: GET /v1/auth-core/session/me. ' +
+      'Social: authorisationurl + signinup under /v1/auth-core/fdi/. WebAuthn under /v1/auth-core/fdi/webauthn/*. ' +
+      'Always send x-briven-project-id and x-briven-engine: briven-engine. ' +
+      'The old Better Auth surface /v1/auth-tenant/* is retired and returns 410 Gone.',
+    applyInYourProject: [
+      'prefer a first-party proxy on your app (e.g. /api/auth/*) so sAccessToken cookies are same-site on your domain.',
+      'do not call /v1/auth-tenant/* in new code; rewrite any leftover clients to auth-core FDI.',
+      'after consume, mint your own app session if you need SSR without calling Briven every request.',
+    ],
+    docs: DOCS.auth,
+  },
+  {
     id: 'sender-domain-setup',
     topic: 'brand auth emails as your own domain',
     keywords: ['sender', 'domain', 'brand', 'from', 'address', 'noreply', 'custom', 'email'],
@@ -212,8 +233,11 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
       'auth SDK returns ok:true when the API answered at all — it is not delivery proof. ' +
       'an unverified custom senderDomain falls back to noreply@briven.tech automatically — that is success, not a failure.',
     applyInYourProject: [
-      'verify the send really returned HTTP 200 by probing POST /v1/auth-tenant/sign-in/magic-link (or email-otp/send-verification-otp) with origin + x-briven-project-id + Bearer pk_briven_auth_… — empty HTTP 500 is a platform schema issue (report with x-request-id), not "re-toggle providers".',
-      'surface a "check your spam folder" hint in your sign-in UI after a magic-link send.',
+      'verify the send really returned HTTP 200 by probing POST /v1/auth-core/fdi/signinup/code ' +
+        'with headers x-briven-project-id + x-briven-engine: briven-engine and body ' +
+        '{ email, flowType: "USER_INPUT_CODE" | "MAGIC_LINK" } — expect status:"OK" and delivery.ok. ' +
+        'Old /v1/auth-tenant/* returns 410 Gone; do not probe those paths.',
+      'surface a "check your spam folder" hint in your sign-in UI after a magic-link or OTP send.',
     ],
     docs: DOCS.flows,
   },
@@ -225,15 +249,15 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
       'server', 'broken', 'schema', 'templates',
     ],
     answer:
-      'platform root cause (fixed fleet-wide 2026-07-21): older Enable Auth DBs were missing ' +
-      '_briven_auth_email_templates and/or two_factor_enabled — magic-link / email-OTP send then ' +
-      'threw empty 500s. all auth-enabled project DBs were healed; new boots self-heal; re-Enable Auth runs ensure. ' +
-      'CORS allow-origin on a 500 means Allowed Domains already worked — do NOT close with "add domains". ' +
-      'unverified senderDomain is NOT a 500 cause (fallback From is used).',
+      'live login uses briven-engine (Doltgres) under /v1/auth-core/*, not the retired auth-tenant surface. ' +
+      'HTTP 500 on FDI usually means engine not ready (503 notReady), misconfigured delivery, or a real platform bug — ' +
+      'capture x-request-id. Unverified senderDomain is NOT a 500 cause (fallback From is used). ' +
+      'CORS allow-origin on a 500 means Allowed Domains already worked — do NOT close with "add domains".',
     applyInYourProject: [
-      're-probe POST /v1/auth-tenant/sign-in/magic-link and POST /v1/auth-tenant/email-otp/send-verification-otp with your project id + pk_briven_auth_ + Origin; expect 200 {status:true} / {success:true}.',
-      'if still 500 after fleet heal: capture x-request-id + origin + path and file a Briven platform handoff — do not invent Clerk or a side mailer.',
-      'if HTTP 200 but no inbox: check spam; From may be "your brand" <noreply@briven.tech> until sender domain verifies.',
+      're-probe POST https://api.briven.tech/v1/auth-core/fdi/signinup/code with x-briven-project-id, ' +
+        'x-briven-engine: briven-engine, body { email, flowType: "USER_INPUT_CODE" }; expect 200 { status: "OK", engine: "briven-engine" }.',
+      'if still 500: capture x-request-id + origin + path and file a Briven platform handoff — do not invent Clerk or a side mailer.',
+      'if HTTP 200 but no inbox: check spam; From may be branded via fallback until sender domain verifies.',
     ],
     docs: DOCS.flows,
   },
@@ -242,14 +266,17 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
     topic: 'integrate magic-link sign-in',
     keywords: ['magic', 'link', 'sign', 'in', 'login', 'passwordless', 'integrate', 'sdk'],
     answer:
-      'call auth_config_get first — only wire magic link if providers.magicLink.enabled is true ' +
-      '(do not re-ask the owner to toggle if already true). then auth.signIn.magicLink({ email, redirectTo }) ' +
-      'from @briven/auth. the emailed link carries the tenant id. every app origin must be under ' +
-      'auth → allowed domains / app domains. path: POST /v1/auth-tenant/sign-in/magic-link.',
+      'live engine path (Option B / briven-engine): POST /v1/auth-core/fdi/signinup/code with ' +
+      '{ email, flowType: "MAGIC_LINK", magicLinkBaseUrl: "https://your.app/auth/consume" }. ' +
+      'Engine emails a link with preAuthSessionId + linkCode + deviceId; your page POSTs ' +
+      '/v1/auth-core/fdi/signinup/code/consume with those fields. Prefer a first-party proxy ' +
+      '(your.app/api/auth/* → api.briven.tech) so session cookies (sAccessToken) sit on YOUR domain (Safari-safe). ' +
+      'Headers: x-briven-project-id, x-briven-engine: briven-engine. /v1/auth-tenant/* is retired (410).',
     applyInYourProject: [
-      'create the client with createBrivenAuth({ projectId, publicKey: "pk_briven_auth_..." }) — the pk_ key is browser-safe, brk_ keys are not.',
-      'register every origin your app serves from under auth → allowed domains, or CORS/origin gate rejects.',
-      'set redirectTo to the page in YOUR app where a signed-in user should land; treat HTTP 200 as send accepted, not inbox proof.',
+      'register every origin under auth → allowed domains.',
+      'proxy FDI through your domain and rewrite Set-Cookie to first-party Path=/; SameSite=Lax.',
+      'after consume, call GET /v1/auth-core/session/me (or your proxy /api/auth/session/me) with credentials:include.',
+      'treat HTTP 200 + status:OK as send accepted, not inbox proof.',
     ],
     docs: DOCS.flows,
   },
@@ -258,12 +285,15 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
     topic: 'integrate email OTP sign-in',
     keywords: ['otp', 'code', 'one', 'time', 'email', 'verification', 'sign-in'],
     answer:
-      'when emailOtp.enabled is true (auth_config_get), send with POST /v1/auth-tenant/email-otp/send-verification-otp ' +
-      'body { email, type: "sign-in" }, then verify the 6-digit code with the Better Auth / @briven/auth OTP verify path. ' +
-      'codeLength and expiryMinutes come from config.',
+      'briven-engine OTP: POST /v1/auth-core/fdi/signinup/code with { email, flowType: "USER_INPUT_CODE" } ' +
+      '→ response preAuthSessionId + deviceId (store client-side). User enters 6-digit code → ' +
+      'POST /v1/auth-core/fdi/signinup/code/consume with { preAuthSessionId, deviceId, userInputCode }. ' +
+      'Success sets sAccessToken + sRefreshToken cookies. Prefer first-party proxy so cookies land on your app host. ' +
+      'Do not use /v1/auth-tenant/email-otp/* (410).',
     applyInYourProject: [
-      'use @briven/auth OTP helpers or the documented HTTP paths; never invent a local OTP table.',
-      'same Allowed Domains + pk_briven_auth_ rules as magic link.',
+      'never invent a local OTP table — engine stores hashed codes in briven_engine.',
+      'same Allowed Domains + first-party proxy rules as magic link.',
+      'session check: GET /v1/auth-core/session/me with credentials:include and x-briven-project-id.',
     ],
     docs: DOCS.flows,
   },
@@ -311,19 +341,17 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
       'generate', 'authenticate', 'register', 'options', 'fido',
     ],
     answer:
-      'when passkey.enabled is true, WebAuthn is live. Face ID/Touch ID is the device — NOT a "wait for platform update". ' +
-      'Better Auth routes (base /v1/auth-tenant): ' +
-      'GET /passkey/generate-authenticate-options (sign-in options — POST on this path is 404 BY DESIGN), ' +
-      'POST /passkey/verify-authentication, ' +
-      'GET /passkey/generate-register-options (needs signed-in session), ' +
-      'POST /passkey/verify-registration, ' +
-      'GET /passkey/list-user-passkeys. ' +
-      'Use @briven/auth auth.passkey.signIn() / register() (full ceremony) or those exact methods. ' +
-      'rpID is the parent domain (e.g. briven.tech for *.briven.tech apps). Allowed Domains must include the app origin.',
+      'when passkey is enabled, briven-engine WebAuthn is live under /v1/auth-core/fdi/webauthn/*: ' +
+      'POST …/webauthn/signin/options, POST …/webauthn/signin/finish, ' +
+      'POST …/webauthn/register/options (needs session), POST …/webauthn/register/finish, ' +
+      'GET …/webauthn/credentials, DELETE …/webauthn/credentials/:id. ' +
+      'Face ID/Touch ID is the device — NOT a "wait for platform update". ' +
+      'Old Better Auth /v1/auth-tenant/passkey/* paths are retired (410). ' +
+      'rpID should be a parent domain of your host. Allowed Domains must include the app origin.',
     applyInYourProject: [
-      'never probe generate-*-options with POST and claim "passkey broken" — use GET, expect 200 + challenge.',
-      'register passkey only after a normal session (magic link/OTP/password); then signIn with Face ID.',
-      'if GET options returns 200 but browser fails: check HTTPS, Allowed Domains, and that rpId is a parent of your host.',
+      'use the FDI webauthn routes above (or a first-party proxy to them); do not call retired auth-tenant passkey paths.',
+      'register passkey only after a normal session (magic link/OTP/password); then sign-in with Face ID.',
+      'if options return OK but browser fails: check HTTPS, Allowed Domains, and that rpId is a parent of your host.',
     ],
     docs: DOCS.auth,
   },
@@ -332,16 +360,14 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
     topic: 'verify a session locally with tokens (JWT + JWKS)',
     keywords: ['jwt', 'jwks', 'token', 'tokens', 'verify', 'verifiable', 'verification', 'locally', 'stateless', 'bearer'],
     answer:
-      'every project\'s auth surface exposes two endpoints for local session verification: ' +
-      'GET /v1/auth-tenant/token (requires the signed-in session cookie; returns { token }, ' +
-      'a short-lived signed JWT for the current user) and GET /v1/auth-tenant/jwks (public, ' +
-      'no auth; returns the project\'s JSON Web Key Set). your app verifies the JWT against ' +
-      'the JWKS with any standard JWT library — no get-session round-trip per request. ' +
-      'signing keys are per-project; rotation is handled through the JWKS endpoint.',
+      'preferred live path: session cookie sAccessToken (value is the engine session handle) plus ' +
+      'GET /v1/auth-core/session/me with credentials:include and x-briven-project-id. ' +
+      'Many apps mint their OWN first-party signed cookie after me succeeds (e.g. konnos_session) so SSR ' +
+      'does not depend on Briven every request. Retired auth-tenant /token and /jwks return 410 — do not wire new apps to them.',
     applyInYourProject: [
-      'from the signed-in browser, fetch https://api.briven.tech/v1/auth-tenant/token with credentials:include plus your x-briven-project-id header, and pass the returned token to your own backend (e.g. as an authorization: Bearer header).',
-      'on your server, verify the token against https://api.briven.tech/v1/auth-tenant/jwks (same x-briven-project-id header) using a standard JWT library with remote-JWKS support — cache the key set, and refetch it when verification hits an unknown key id (that is how key rotation lands).',
-      'tokens are short-lived by design: refetch /token when verification reports expiry instead of storing one long-term, and keep get-session for the moments you need the full session object.',
+      'after OTP/magic/OAuth consume, call GET /v1/auth-core/session/me (via first-party proxy if possible).',
+      'optionally mint your app session cookie from that identity (HMAC JWT or similar) for SSR.',
+      'do not depend on GET /v1/auth-tenant/token or /jwks for new work.',
     ],
     docs: DOCS.verifyTokens,
   },
@@ -350,13 +376,13 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
     topic: 'sessions and cross-domain cookies',
     keywords: ['session', 'cookie', 'stick', 'logged', 'out', 'cross', 'domain', 'cors'],
     answer:
-      'sessions live in an http cookie set by the auth service; the SDK sends ' +
-      'credentials:include so the browser stores and returns it. server-side rendering on ' +
-      'YOUR domain cannot read a cookie scoped to the auth service domain — check the ' +
-      'session client-side or via the SDK server helpers, and never log user emails or IPs.',
+      'briven-engine sets HttpOnly sAccessToken + sRefreshToken on successful consume/sign-in. ' +
+      'If the browser talks to api.briven.tech directly, those cookies are third-party on your site and Safari may block them. ' +
+      'Production pattern: proxy /api/auth/* on YOUR origin to /v1/auth-core/fdi/* (+ session/me), rewrite Set-Cookie to first-party on your host.',
     applyInYourProject: [
-      'gate protected pages with a client-side session check (useSession) or the SDK server helpers rather than reading raw cookies on your server.',
-      'after sign-in/out, call refresh() on your session hook so the UI updates without a reload.',
+      'implement a same-origin auth proxy; strip upstream Domain, set Path=/ and SameSite=Lax.',
+      'gate protected pages on your own session cookie or server-side session/me with the first-party Briven cookies.',
+      'never log user emails or IPs from auth traffic.',
     ],
     docs: DOCS.security,
   },
@@ -469,10 +495,10 @@ export const AUTH_GUIDANCE: readonly AuthGuidanceEntry[] = [
       'app', 'domains',
     ],
     answer:
-      'every browser Origin that calls /v1/auth-tenant/* must be listed under the project ' +
-      'Auth → Allowed Domains (exact scheme+host, e.g. https://pay.apps.briven.tech and ' +
+      'every browser Origin that calls /v1/auth-core/* (or your first-party auth proxy) must be listed under the project ' +
+      'Auth → Allowed Domains (exact scheme+host, e.g. https://konnos.org and ' +
       'http://localhost:3000 separately). when CORS returns access-control-allow-origin for your ' +
-      'origin, domains are fine — a later 500 is not a domains problem.',
+      'origin, domains are fine — a later 500 is not a domains problem. /v1/auth-tenant/* is retired (410).',
     applyInYourProject: [
       'add every production + local origin the human uses; retest with Origin header matching the list.',
       'do not tell the owner to "re-add domains" if the failing response already shows the correct allow-origin.',
@@ -547,9 +573,10 @@ export function registerAuthBridgeTools(
             'if magicLink/emailOtp/passkey show enabled:true, do NOT re-ask the owner to toggle them — wire the app.',
             'if they are false and your MCP key is write-scope: call auth_enable_passwordless once, then auth_config_get again.',
             'OAuth (google/konnos/…): needs enabled:true AND clientIdSet:true AND a secret in the dashboard; toggle alone is not enough.',
-            'magic link: POST /v1/auth-tenant/sign-in/magic-link — expect 200 (not empty 500).',
-            'email OTP send: POST /v1/auth-tenant/email-otp/send-verification-otp with type:"sign-in".',
-            'passkey: GET /v1/auth-tenant/passkey/generate-authenticate-options (POST on that path is 404 by design); then WebAuthn; then POST …/verify-authentication.',
+            'live engine (briven-engine): POST /v1/auth-core/fdi/signinup/code for OTP or MAGIC_LINK; POST …/signinup/code/consume to finish; GET /v1/auth-core/session/me for session.',
+            'headers on every engine call: x-briven-project-id + x-briven-engine: briven-engine. Prefer first-party /api/auth proxy for cookies.',
+            'passkey: POST /v1/auth-core/fdi/webauthn/signin/options then …/signin/finish (register paths under webauthn/register/*).',
+            'retired: /v1/auth-tenant/* returns 410 — do not wire new apps to it.',
             'every Origin must be under Auth → Allowed Domains; if CORS already allows your origin, do not blame domains for other errors.',
             'keys: pk_briven_auth_… in the browser only; never brk_.',
           ],
@@ -727,10 +754,13 @@ export function registerAuthBridgeTools(
           guidance: {
             summary:
               'passwordless providers are ON. mint a browser key with auth_mint_public_key if ' +
-              'you do not already have pk_briven_auth_…, register Allowed Domains, then wire @briven/auth.',
+              'you do not already have pk_briven_auth_…, register Allowed Domains, then wire ' +
+              'briven-engine FDI (POST /v1/auth-core/fdi/signinup/code + consume) preferably via a first-party proxy.',
             applyInYourProject: [
-              'set NEXT_PUBLIC_BRIVEN_AUTH_KEY / BRIVEN_AUTH_PUBLIC_KEY to a read-write pk_briven_auth_… key.',
-              'passkey: use GET generate-authenticate-options (not POST).',
+              'set NEXT_PUBLIC_BRIVEN_AUTH_KEY / BRIVEN_AUTH_PUBLIC_KEY to a read-write pk_briven_auth_… key when using publishable-key flows.',
+              'OTP/magic: POST /v1/auth-core/fdi/signinup/code then …/code/consume; session: GET /v1/auth-core/session/me.',
+              'passkey: POST /v1/auth-core/fdi/webauthn/signin/options then …/signin/finish.',
+              'do not call retired /v1/auth-tenant/* (410).',
             ],
             docs: DOCS.auth,
           },

@@ -90,12 +90,28 @@ describe('mcp auth bridge — pure helpers', () => {
     expect(ids).toContain('providers-config');
   });
 
-  test('passkey guidance teaches GET options and real Face ID on device', () => {
+  test('passkey guidance teaches briven-engine webauthn FDI paths', () => {
     const entry = AUTH_GUIDANCE.find((e) => e.id === 'passkey-webauthn')!;
     const a = entry.answer.toLowerCase();
-    expect(a).toContain('get /passkey/generate-authenticate-options');
-    expect(a).toContain('404 by design');
+    expect(a).toContain('/v1/auth-core/fdi/webauthn');
+    expect(a).toContain('signin/options');
     expect(a).toContain('device');
+    expect(a).toContain('410');
+  });
+
+  test('OTP and magic guidance cite briven-engine FDI not auth-tenant', () => {
+    const otp = AUTH_GUIDANCE.find((e) => e.id === 'email-otp-integration')!;
+    const magic = AUTH_GUIDANCE.find((e) => e.id === 'magic-link-integration')!;
+    expect(otp.answer).toContain('/v1/auth-core/fdi/signinup/code');
+    expect(magic.answer).toContain('/v1/auth-core/fdi/signinup/code');
+    expect(otp.answer.toLowerCase()).toContain('410');
+    expect(magic.answer.toLowerCase()).toContain('410');
+    // Guidance may mention auth-tenant only as retired
+    for (const e of AUTH_GUIDANCE) {
+      if (e.answer.includes('/v1/auth-tenant/')) {
+        expect(e.answer.toLowerCase()).toMatch(/retir|410|gone|do not/);
+      }
+    }
   });
 
   test('unrelated question returns no matches', () => {

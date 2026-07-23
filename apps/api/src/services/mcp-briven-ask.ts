@@ -182,24 +182,25 @@ export const BRIVEN_AREA_GUIDES: readonly BrivenAreaGuide[] = [
       'google', 'konnos',
     ],
     howBrivenWorksHere:
-      'managed multi-tenant end-user auth (@briven/auth) on Doltgres: email+password, magic link, ' +
-      'email OTP, passkeys (WebAuthn), OAuth, 2FA — per project in the dashboard. ' +
+      'managed multi-tenant end-user auth on briven-engine (Doltgres briven_engine): email+password, magic link, ' +
+      'email OTP, passkeys (WebAuthn), OAuth, TOTP MFA — per project. Live HTTP surface is /v1/auth-core/* ' +
+      '(FDI under /v1/auth-core/fdi/*). Retired /v1/auth-tenant/* returns 410 Gone. ' +
       'ALWAYS call auth_config_get first. Magic/OTP/passkey only need enabled:true; OAuth also needs ' +
       'clientIdSet:true + secret. Unverified senderDomain falls back to noreply@briven.tech (sign-in still works). ' +
-      'Passkey options are GET /v1/auth-tenant/passkey/generate-authenticate-options (POST = 404 by design). ' +
-      'Magic/OTP empty 500s from old schema drift were healed fleet-wide 2026-07; if still 500, file platform with x-request-id. ' +
+      'Passwordless: POST /v1/auth-core/fdi/signinup/code + …/code/consume. Session: GET /v1/auth-core/session/me. ' +
+      'Passkeys: POST /v1/auth-core/fdi/webauthn/signin/options + …/finish. Prefer first-party proxy for cookies. ' +
       'Browser key: pk_briven_auth_… only (never brk_).',
     whatOurToolsGiveYou: [
-      'MCP read: auth_config_get, sender_domain_status, auth_docs_ask.',
+      'MCP read: auth_config_get, sender_domain_status, auth_docs_ask (guidance must cite auth-core FDI, not auth-tenant).',
       'MCP write (read-write/admin key): auth_enable_passwordless (magic+OTP+passkey ON + provision), auth_mint_public_key (pk_briven_auth_… once).',
       'HTTP with admin brk_: PATCH /v1/projects/:id/auth/config, POST …/auth/enable, POST …/auth/api-keys, POST …/auth/allowed-domains (project keys work — not session-only).',
       'CLI: briven setup (new) OR briven connect p_… then briven auth scaffold — never setup --project.',
-      'Sign-in paths: POST …/sign-in/magic-link, POST …/email-otp/send-verification-otp, GET …/passkey/generate-authenticate-options.',
+      'Sign-in paths: POST /v1/auth-core/fdi/signinup/code, POST …/signinup/code/consume, GET /v1/auth-core/session/me, POST …/webauthn/*.',
     ],
     whatYouBuildInYourProject: [
       'if providers OFF: call auth_enable_passwordless (write MCP) or PATCH config with brk_ — do not wait for a human if you have write credentials.',
-      'if already enabled:true — stop asking the owner to re-toggle; wire UI + env.',
-      'use @briven/auth passkey.signIn()/register() or GET+WebAuthn+verify; Face ID is the device.',
+      'if already enabled:true — stop asking the owner to re-toggle; wire UI + first-party /api/auth proxy to auth-core FDI.',
+      'headers: x-briven-project-id + x-briven-engine: briven-engine; never call /v1/auth-tenant/*.',
       'register Origins under Allowed Domains; do not invent Clerk/Firebase; do not edit the Briven monorepo from an app session.',
     ],
     docs: `${DOCS_BASE}/auth`,
