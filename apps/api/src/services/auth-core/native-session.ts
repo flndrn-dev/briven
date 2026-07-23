@@ -102,8 +102,11 @@ export async function listSessionHandles(userId: string): Promise<string[]> {
   return res.rows.map((r: { session_handle: string }) => r.session_handle);
 }
 
-/** Recent active sessions for yellow dashboard (Phase 6). */
-export async function listRecentEngineSessions(limit = 50): Promise<
+/** Recent active sessions for yellow dashboard (optionally one tenant). */
+export async function listRecentEngineSessions(
+  limit = 50,
+  opts?: { tenantId?: string },
+): Promise<
   Array<{
     handle: string;
     userId: string;
@@ -113,14 +116,23 @@ export async function listRecentEngineSessions(limit = 50): Promise<
   }>
 > {
   const pool = getEnginePool();
-  const res = await pool.query(
-    `SELECT session_handle, user_id, tenant_id, expires_at, created_at
-     FROM be_sessions
-     WHERE expires_at > NOW()
-     ORDER BY created_at DESC
-     LIMIT $1`,
-    [limit],
-  );
+  const res = opts?.tenantId
+    ? await pool.query(
+        `SELECT session_handle, user_id, tenant_id, expires_at, created_at
+         FROM be_sessions
+         WHERE expires_at > NOW() AND tenant_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [opts.tenantId, limit],
+      )
+    : await pool.query(
+        `SELECT session_handle, user_id, tenant_id, expires_at, created_at
+         FROM be_sessions
+         WHERE expires_at > NOW()
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit],
+      );
   return (
     res.rows as Array<{
       session_handle: string;

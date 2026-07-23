@@ -83,12 +83,27 @@ authCoreSessionRouter.get('/v1/auth-core/session/recent', async (c) => {
     );
   }
   const limit = Number(c.req.query('limit') ?? '50');
+  const projectId = c.req.query('projectId') ?? undefined;
+  let tenantId = c.req.query('tenantId') ?? undefined;
+  if (!tenantId && projectId) {
+    try {
+      const { projectIdToTenantId } = await import(
+        '../services/auth-core/project-map.js'
+      );
+      tenantId = projectIdToTenantId(projectId);
+    } catch {
+      tenantId = undefined;
+    }
+  }
   const sessions = await listRecentEngineSessions(
     Number.isFinite(limit) ? limit : 50,
+    tenantId ? { tenantId } : undefined,
   );
   return c.json({
     engine: BRIVEN_ENGINE_ID,
     storage: 'doltgres',
+    projectId: projectId ?? null,
+    tenantId: tenantId ?? null,
     sessions,
     count: sessions.length,
   });

@@ -7,7 +7,7 @@ import { useState, type FormEvent } from 'react';
  * Create a role from the yellow Auth security tab.
  * Calls /api/v1/auth-core/roles (proxied to the API with your cookie).
  */
-export function AuthRolesForm() {
+export function AuthRolesForm({ projectId }: { projectId?: string }) {
   const router = useRouter();
   const [role, setRole] = useState('');
   const [permissions, setPermissions] = useState('');
@@ -31,7 +31,11 @@ export function AuthRolesForm() {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role: name, permissions: perms }),
+        body: JSON.stringify({
+          role: name,
+          permissions: perms,
+          ...(projectId ? { projectId } : {}),
+        }),
       });
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean;

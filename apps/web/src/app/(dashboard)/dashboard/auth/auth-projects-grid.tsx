@@ -7,16 +7,13 @@ import { useMemo, useState } from 'react';
 import type { AuthV2ProjectRow } from './lib/auth-v2-types';
 
 /**
- * Same card-grid language as the Projects page, for Auth.
- * Cards show Auth on/off and open configure / enable.
+ * Auth home — same card-grid language as Projects.
+ * Click a card → that project's Auth (users, sessions, keys, …).
  */
 export function AuthProjectsGrid({
   projects,
-  compact,
 }: {
   projects: AuthV2ProjectRow[];
-  /** Fewer columns + no filter (for dashboard home preview). */
-  compact?: boolean;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(projects);
@@ -35,14 +32,11 @@ export function AuthProjectsGrid({
     );
   }, [rows, q]);
 
-  const shown = compact ? filtered.slice(0, 6) : filtered;
-
   async function enable(projectId: string): Promise<void> {
     setBusyId(projectId);
     setErr(null);
     try {
-      // Prefer briven-engine path; fall back to bridged legacy path.
-      let res = await fetch(
+      const res = await fetch(
         `/api/v1/auth-core/projects/${encodeURIComponent(projectId)}/enable`,
         {
           method: 'POST',
@@ -50,13 +44,6 @@ export function AuthProjectsGrid({
           headers: { 'content-type': 'application/json' },
         },
       );
-      if (res.status === 404 || res.status === 410) {
-        res = await fetch(`/api/v1/projects/${projectId}/auth/enable`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'content-type': 'application/json' },
-        });
-      }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
           message?: string;
@@ -82,6 +69,7 @@ export function AuthProjectsGrid({
         ),
       );
       router.refresh();
+      router.push(`/dashboard/auth/${projectId}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'enable failed');
     } finally {
@@ -100,7 +88,8 @@ export function AuthProjectsGrid({
         </p>
         <Link
           href="/dashboard/projects/new"
-          className="mt-4 inline-block font-mono text-xs text-[var(--color-text-link)] hover:underline"
+          className="mt-4 inline-block rounded-md px-3 py-1.5 font-mono text-xs font-medium text-black"
+          style={{ background: 'var(--auth-accent, #FFFD74)' }}
         >
           + new project
         </Link>
@@ -111,10 +100,10 @@ export function AuthProjectsGrid({
   return (
     <div className="flex flex-col gap-3">
       {err ? (
-        <p className="font-mono text-xs text-[var(--color-error)]">{err}</p>
+        <p className="font-mono text-xs text-red-400">{err}</p>
       ) : null}
 
-      {!compact && rows.length > 5 ? (
+      {rows.length > 5 ? (
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -131,60 +120,56 @@ export function AuthProjectsGrid({
         </div>
       ) : null}
 
-      {shown.length === 0 ? (
+      {filtered.length === 0 ? (
         <p className="rounded-md border border-dashed border-[var(--color-border)] p-6 text-center font-mono text-xs text-[var(--color-text-muted)]">
           no projects match that filter.
         </p>
       ) : (
-        <ul
-          className={
-            compact
-              ? 'grid grid-cols-1 gap-3 sm:grid-cols-2'
-              : 'grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-          }
-        >
-          {shown.map((p) => (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filtered.map((p) => (
             <li
               key={p.id}
               className="group relative flex flex-col rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] transition hover:border-[var(--color-border)]"
             >
-              <div className="flex flex-1 flex-col gap-1.5 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-mono text-sm text-[var(--color-text)]">
-                    {p.name}
+              {p.authEnabled ? (
+                <Link
+                  href={`/dashboard/auth/${p.id}`}
+                  className="flex flex-1 flex-col gap-1.5 p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-mono text-sm text-[var(--color-text)]">
+                      {p.name}
+                    </p>
+                    <AuthBadge on />
+                  </div>
+                  <p className="font-mono text-xs text-[var(--color-text-subtle)]">
+                    {p.slug}
+                    {p.tenantId ? (
+                      <span className="text-[var(--color-text-muted)]">
+                        {' · '}
+                        {p.tenantId}
+                      </span>
+                    ) : null}
                   </p>
-                  <AuthBadge row={p} />
-                </div>
-                <p className="font-mono text-xs text-[var(--color-text-subtle)]">
-                  {p.slug}
-                  {p.providers && p.authEnabled ? (
-                    <span className="text-[var(--color-text-muted)]">
-                      {' · '}
-                      {[
-                        p.providers.emailPassword ? 'pwd' : null,
-                        p.providers.magicLink ? 'magic' : null,
-                        p.providers.emailOtp ? 'otp' : null,
-                        p.providers.passkey ? 'passkey' : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  ) : null}
-                </p>
-                <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
-                  {p.error ? (
-                    <span className="font-mono text-[10px] text-[var(--color-error)]">
-                      status unknown
-                    </span>
-                  ) : p.authEnabled ? (
-                    <Link
-                      href={`/dashboard/auth/users`}
-                      className="font-mono text-xs transition"
-                      style={{ color: 'var(--auth-accent, #FFFD74)' }}
-                    >
-                      manage →
-                    </Link>
-                  ) : (
+                  <span
+                    className="mt-auto pt-2 font-mono text-xs"
+                    style={{ color: 'var(--auth-accent, #FFFD74)' }}
+                  >
+                    open Auth →
+                  </span>
+                </Link>
+              ) : (
+                <div className="flex flex-1 flex-col gap-1.5 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-mono text-sm text-[var(--color-text)]">
+                      {p.name}
+                    </p>
+                    <AuthBadge on={false} />
+                  </div>
+                  <p className="font-mono text-xs text-[var(--color-text-subtle)]">
+                    {p.slug}
+                  </p>
+                  <div className="mt-auto pt-2">
                     <button
                       type="button"
                       disabled={busyId === p.id}
@@ -194,9 +179,9 @@ export function AuthProjectsGrid({
                     >
                       {busyId === p.id ? 'enabling…' : 'enable Auth'}
                     </button>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
             </li>
           ))}
         </ul>
@@ -205,15 +190,8 @@ export function AuthProjectsGrid({
   );
 }
 
-function AuthBadge({ row }: { row: AuthV2ProjectRow }) {
-  if (row.error) {
-    return (
-      <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-[var(--color-error)]">
-        error
-      </span>
-    );
-  }
-  if (row.authEnabled) {
+function AuthBadge({ on }: { on: boolean }) {
+  if (on) {
     return (
       <span
         className="shrink-0 font-mono text-[10px] uppercase tracking-wider"

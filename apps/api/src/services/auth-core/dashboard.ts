@@ -45,7 +45,10 @@ export type BrivenEngineDashboard = {
   recipePhase: number | null;
 };
 
-export async function getBrivenEngineDashboard(): Promise<BrivenEngineDashboard> {
+export async function getBrivenEngineDashboard(opts?: {
+  tenantId?: string;
+  projectId?: string;
+}): Promise<BrivenEngineDashboard & { projectId?: string; tenantId?: string }> {
   const probe = await probeBrivenEngine();
   const meta = getAuthCoreRecipeMeta();
   const phase = getRecipePhase();
@@ -79,30 +82,58 @@ export async function getBrivenEngineDashboard(): Promise<BrivenEngineDashboard>
       recentUsers: [],
       recipesLoaded: meta.names,
       recipePhase: meta.phase,
+      projectId: opts?.projectId,
+      tenantId: opts?.tenantId,
     };
   }
 
   const pool = getEnginePool();
+  const tid = opts?.tenantId;
   const [usersC, sessionsC, tenantsC, linksC, codesC] = await Promise.all([
-    pool.query(`SELECT COUNT(*)::int AS n FROM be_users`),
-    pool.query(
-      `SELECT COUNT(*)::int AS n FROM be_sessions WHERE expires_at > NOW()`,
-    ),
+    tid
+      ? pool.query(
+          `SELECT COUNT(*)::int AS n FROM be_users WHERE tenant_id = $1`,
+          [tid],
+        )
+      : pool.query(`SELECT COUNT(*)::int AS n FROM be_users`),
+    tid
+      ? pool.query(
+          `SELECT COUNT(*)::int AS n FROM be_sessions WHERE expires_at > NOW() AND tenant_id = $1`,
+          [tid],
+        )
+      : pool.query(
+          `SELECT COUNT(*)::int AS n FROM be_sessions WHERE expires_at > NOW()`,
+        ),
     pool.query(`SELECT COUNT(*)::int AS n FROM be_tenants`),
-    pool.query(`SELECT COUNT(*)::int AS n FROM be_third_party_links`),
-    pool.query(
-      `SELECT COUNT(*)::int AS n FROM be_passwordless_codes WHERE expires_at > NOW()`,
-    ),
+    tid
+      ? pool.query(
+          `SELECT COUNT(*)::int AS n FROM be_third_party_links WHERE tenant_id = $1`,
+          [tid],
+        )
+      : pool.query(`SELECT COUNT(*)::int AS n FROM be_third_party_links`),
+    tid
+      ? pool.query(
+          `SELECT COUNT(*)::int AS n FROM be_passwordless_codes WHERE expires_at > NOW() AND tenant_id = $1`,
+          [tid],
+        )
+      : pool.query(
+          `SELECT COUNT(*)::int AS n FROM be_passwordless_codes WHERE expires_at > NOW()`,
+        ),
   ]);
 
-  const listed = await listBrivenEngineUsers({ limit: 20 });
+  const listed = await listBrivenEngineUsers({
+    limit: 20,
+    tenantId: tid,
+  });
 
   return {
     engine: BRIVEN_ENGINE_ID,
     storage: 'doltgres',
     database: 'briven_engine',
     ok: true,
-    message: 'dashboard data from Doltgres',
+    message: tid
+      ? 'dashboard data for one Auth project (tenant)'
+      : 'dashboard data from Doltgres',
     counts: {
       users: (usersC.rows[0] as { n: number }).n,
       sessions: (sessionsC.rows[0] as { n: number }).n,
@@ -119,5 +150,7 @@ export async function getBrivenEngineDashboard(): Promise<BrivenEngineDashboard>
     })),
     recipesLoaded: meta.names,
     recipePhase: meta.phase,
+    projectId: opts?.projectId,
+    tenantId: opts?.tenantId,
   };
 }

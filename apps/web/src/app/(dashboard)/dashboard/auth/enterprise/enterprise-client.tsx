@@ -27,13 +27,18 @@ type SsoConn = {
  */
 export function AuthEnterpriseClient({
   projects: initial,
+  lockProjectId,
 }: {
   projects: AuthV2ProjectRow[];
+  /** When set, hide multi-project enable table (per-project Auth page). */
+  lockProjectId?: string;
 }) {
   const router = useRouter();
   const [projects, setProjects] = useState(initial);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
-  const [projectId, setProjectId] = useState(initial[0]?.id ?? '');
+  const [projectId, setProjectId] = useState(
+    lockProjectId ?? initial[0]?.id ?? '',
+  );
   const [connections, setConnections] = useState<SsoConn[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -236,87 +241,89 @@ export function AuthEnterpriseClient({
 
   return (
     <div className="space-y-8">
-      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
-        <h2 className="font-mono text-sm text-[var(--color-text)]">
-          Auth enabled — live check
-        </h2>
-        <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-          A project is Auth-enabled when it has a tenant row in Doltgres
-          (be_tenants). That is what app login uses.
-        </p>
-
-        {rows.length === 0 ? (
-          <p className="mt-4 font-mono text-xs text-[var(--color-text-muted)]">
-            no projects yet
+      {!lockProjectId ? (
+        <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+          <h2 className="font-mono text-sm text-[var(--color-text)]">
+            Auth enabled — live check
+          </h2>
+          <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
+            A project is Auth-enabled when it has a tenant row in Doltgres
+            (be_tenants). That is what app login uses.
           </p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left font-mono text-xs">
-              <thead className="border-b border-[var(--color-border-subtle)] text-[var(--color-text-muted)]">
-                <tr>
-                  <th className="px-2 py-2 font-normal">project</th>
-                  <th className="px-2 py-2 font-normal">Auth</th>
-                  <th className="px-2 py-2 font-normal">tenant</th>
-                  <th className="px-2 py-2 font-normal" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-[var(--color-border-subtle)] last:border-0"
-                  >
-                    <td className="px-2 py-2 text-[var(--color-text)]">
-                      {p.name}
-                      <span className="ml-2 text-[var(--color-text-muted)]">
-                        {p.slug}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2">
-                      {p.reallyEnabled ? (
-                        <span style={{ color: '#FFFD74' }}>enabled</span>
-                      ) : (
-                        <span className="text-[var(--color-text-muted)]">
-                          off
-                        </span>
-                      )}
-                    </td>
-                    <td className="max-w-[12rem] truncate px-2 py-2 text-[var(--color-text-muted)]">
-                      {p.tenantFromDb?.tenantId ?? '—'}
-                    </td>
-                    <td className="px-2 py-2 text-right">
-                      {!p.reallyEnabled ? (
-                        <button
-                          type="button"
-                          disabled={pendingId === p.id}
-                          onClick={() => void enableAuth(p.id)}
-                          className="rounded-md px-2 py-1 font-mono text-[11px] font-medium text-black disabled:opacity-50"
-                          style={{ background: '#FFFD74' }}
-                        >
-                          {pendingId === p.id ? '…' : 'enable'}
-                        </button>
-                      ) : (
-                        <span className="text-[var(--color-text-muted)]">
-                          ok
-                        </span>
-                      )}
-                    </td>
+
+          {rows.length === 0 ? (
+            <p className="mt-4 font-mono text-xs text-[var(--color-text-muted)]">
+              no projects yet
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left font-mono text-xs">
+                <thead className="border-b border-[var(--color-border-subtle)] text-[var(--color-text-muted)]">
+                  <tr>
+                    <th className="px-2 py-2 font-normal">project</th>
+                    <th className="px-2 py-2 font-normal">Auth</th>
+                    <th className="px-2 py-2 font-normal">tenant</th>
+                    <th className="px-2 py-2 font-normal" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {rows.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-[var(--color-border-subtle)] last:border-0"
+                    >
+                      <td className="px-2 py-2 text-[var(--color-text)]">
+                        {p.name}
+                        <span className="ml-2 text-[var(--color-text-muted)]">
+                          {p.slug}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2">
+                        {p.reallyEnabled ? (
+                          <span style={{ color: '#FFFD74' }}>enabled</span>
+                        ) : (
+                          <span className="text-[var(--color-text-muted)]">
+                            off
+                          </span>
+                        )}
+                      </td>
+                      <td className="max-w-[12rem] truncate px-2 py-2 text-[var(--color-text-muted)]">
+                        {p.tenantFromDb?.tenantId ?? '—'}
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        {!p.reallyEnabled ? (
+                          <button
+                            type="button"
+                            disabled={pendingId === p.id}
+                            onClick={() => void enableAuth(p.id)}
+                            className="rounded-md px-2 py-1 font-mono text-[11px] font-medium text-black disabled:opacity-50"
+                            style={{ background: '#FFFD74' }}
+                          >
+                            {pendingId === p.id ? '…' : 'enable'}
+                          </button>
+                        ) : (
+                          <span className="text-[var(--color-text-muted)]">
+                            ok
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-        {note ? (
-          <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
-            {note}
-          </p>
-        ) : null}
-        {err ? (
-          <p className="mt-3 font-mono text-xs text-red-400">{err}</p>
-        ) : null}
-      </div>
+          {note ? (
+            <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
+              {note}
+            </p>
+          ) : null}
+          {err ? (
+            <p className="mt-3 font-mono text-xs text-red-400">{err}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
         <h2 className="font-mono text-sm text-[var(--color-text)]">
@@ -330,21 +337,31 @@ export function AuthEnterpriseClient({
           URLs; accounts land in briven-engine on Doltgres.
         </p>
 
-        <label className="mt-4 flex max-w-md flex-col gap-1 font-mono text-xs">
-          <span className="text-[var(--color-text-muted)]">project</span>
-          <select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-            style={{ borderColor: 'var(--auth-accent-border)' }}
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!lockProjectId ? (
+          <label className="mt-4 flex max-w-md flex-col gap-1 font-mono text-xs">
+            <span className="text-[var(--color-text-muted)]">project</span>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
+              style={{ borderColor: 'var(--auth-accent-border)' }}
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {lockProjectId && note ? (
+          <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
+            {note}
+          </p>
+        ) : null}
+        {lockProjectId && err ? (
+          <p className="mt-3 font-mono text-xs text-red-400">{err}</p>
+        ) : null}
 
         <div className="mt-4 space-y-2">
           {connections.length === 0 ? (

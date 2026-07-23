@@ -10,6 +10,7 @@ export interface AuthV2ProjectRow {
   slug: string;
   name: string;
   authEnabled: boolean;
+  tenantId?: string | null;
   providers: AuthV2ProviderFlags | null;
   error?: boolean;
 }

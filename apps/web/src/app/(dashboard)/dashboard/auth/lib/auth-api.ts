@@ -64,12 +64,17 @@ export async function fetchAuthCoreInfo(): Promise<AuthCoreInfo | null> {
   }
 }
 
-export async function fetchAuthDashboard(): Promise<
+export async function fetchAuthDashboard(
+  projectId?: string,
+): Promise<
   | { ok: true; data: AuthDashboard }
   | { ok: false; status: number; message: string }
 > {
   try {
-    const res = await apiFetch('/v1/auth-core/dashboard');
+    const q = projectId
+      ? `?projectId=${encodeURIComponent(projectId)}`
+      : '';
+    const res = await apiFetch(`/v1/auth-core/dashboard${q}`);
     if (res.status === 401) {
       return { ok: false, status: 401, message: 'sign in to briven.tech required' };
     }
@@ -87,7 +92,10 @@ export async function fetchAuthDashboard(): Promise<
   }
 }
 
-export async function fetchAuthUsers(limit = 50): Promise<
+export async function fetchAuthUsers(
+  limit = 50,
+  projectId?: string,
+): Promise<
   | {
       ok: true;
       users: Array<{
@@ -103,7 +111,9 @@ export async function fetchAuthUsers(limit = 50): Promise<
   | { ok: false; status: number; message: string }
 > {
   try {
-    const res = await apiFetch(`/v1/auth-core/users?limit=${limit}`);
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (projectId) params.set('projectId', projectId);
+    const res = await apiFetch(`/v1/auth-core/users?${params}`);
     if (res.status === 401) {
       return { ok: false, status: 401, message: 'sign in to briven.tech required' };
     }

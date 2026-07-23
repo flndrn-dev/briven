@@ -16,8 +16,17 @@ interface KeyRow {
 /**
  * Mint / list briven-engine SDK keys via /v1/auth-core/projects/:id/keys
  */
-export function AuthKeysClient({ projects }: { projects: AuthV2ProjectRow[] }) {
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
+export function AuthKeysClient({
+  projects,
+  lockProjectId,
+}: {
+  projects: AuthV2ProjectRow[];
+  /** When set, hide project picker (per-project Auth page). */
+  lockProjectId?: string;
+}) {
+  const [projectId, setProjectId] = useState(
+    lockProjectId ?? projects[0]?.id ?? '',
+  );
   const [items, setItems] = useState<KeyRow[]>([]);
   const [name, setName] = useState('browser');
   const [scope, setScope] = useState<'read' | 'read-write' | 'admin'>('read-write');
@@ -113,22 +122,24 @@ export function AuthKeysClient({ projects }: { projects: AuthV2ProjectRow[] }) {
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <label className="flex flex-col gap-1 font-mono text-xs">
-        <span className="text-[var(--color-text-muted)]">project</span>
-        <select
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
-          style={{ borderColor: 'var(--auth-accent-border)' }}
-        >
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.authEnabled ? '' : ' (Auth off)'}
-            </option>
-          ))}
-        </select>
-      </label>
+      {!lockProjectId ? (
+        <label className="flex flex-col gap-1 font-mono text-xs">
+          <span className="text-[var(--color-text-muted)]">project</span>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
+            style={{ borderColor: 'var(--auth-accent-border)' }}
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.authEnabled ? '' : ' (Auth off)'}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 font-mono text-xs">

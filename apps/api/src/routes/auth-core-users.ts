@@ -31,11 +31,28 @@ authCoreUsersRouter.get('/v1/auth-core/users', async (c) => {
   }
   const limit = Number(c.req.query('limit') ?? '50');
   const paginationToken = c.req.query('paginationToken') ?? undefined;
+  const projectId = c.req.query('projectId') ?? undefined;
+  let tenantId = c.req.query('tenantId') ?? undefined;
+  if (!tenantId && projectId) {
+    try {
+      const { projectIdToTenantId } = await import(
+        '../services/auth-core/project-map.js'
+      );
+      tenantId = projectIdToTenantId(projectId);
+    } catch {
+      tenantId = undefined;
+    }
+  }
   const result = await listBrivenEngineUsers({
     limit: Number.isFinite(limit) ? limit : 50,
     paginationToken,
+    tenantId,
   });
-  return c.json(result);
+  return c.json({
+    ...result,
+    projectId: projectId ?? null,
+    tenantId: tenantId ?? null,
+  });
 });
 
 authCoreUsersRouter.get('/v1/auth-core/users/:userId/metadata', async (c) => {

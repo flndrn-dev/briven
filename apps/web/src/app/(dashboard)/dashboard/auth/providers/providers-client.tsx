@@ -36,11 +36,15 @@ type ProjectConfig = {
 export function AuthProvidersClient({
   projects,
   platformMethods,
+  lockProjectId,
 }: {
   projects: AuthV2ProjectRow[];
   platformMethods: string[];
+  lockProjectId?: string;
 }) {
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
+  const [projectId, setProjectId] = useState(
+    lockProjectId ?? projects[0]?.id ?? '',
+  );
   const [config, setConfig] = useState<ProjectConfig | null>(null);
   const [pick, setPick] = useState('google');
   const [clientId, setClientId] = useState('');
@@ -164,21 +168,23 @@ export function AuthProvidersClient({
           Google/GitHub/etc.
         </p>
 
-        <label className="mt-4 flex max-w-md flex-col gap-1 font-mono text-xs">
-          <span className="text-[var(--color-text-muted)]">project</span>
-          <select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-            style={{ borderColor: 'var(--auth-accent-border)' }}
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!lockProjectId ? (
+          <label className="mt-4 flex max-w-md flex-col gap-1 font-mono text-xs">
+            <span className="text-[var(--color-text-muted)]">project</span>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
+              style={{ borderColor: 'var(--auth-accent-border)' }}
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         {config ? (
           <>

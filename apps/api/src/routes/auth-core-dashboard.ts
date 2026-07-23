@@ -19,6 +19,18 @@ authCoreDashboardRouter.use(
 );
 
 authCoreDashboardRouter.get('/v1/auth-core/dashboard', async (c) => {
-  const data = await getBrivenEngineDashboard();
+  const projectId = c.req.query('projectId') ?? undefined;
+  let tenantId = c.req.query('tenantId') ?? undefined;
+  if (!tenantId && projectId) {
+    try {
+      const { projectIdToTenantId } = await import(
+        '../services/auth-core/project-map.js'
+      );
+      tenantId = projectIdToTenantId(projectId);
+    } catch {
+      tenantId = undefined;
+    }
+  }
+  const data = await getBrivenEngineDashboard({ projectId, tenantId });
   return c.json(data);
 });
