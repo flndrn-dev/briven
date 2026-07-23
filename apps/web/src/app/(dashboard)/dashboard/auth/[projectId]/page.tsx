@@ -171,6 +171,11 @@ export default async function AuthProjectOverviewPage({
             label: 'providers',
             help: 'sign-in methods + OAuth secrets',
           },
+          {
+            href: 'branding',
+            label: 'branding',
+            help: 'logo, color, email from-name',
+          },
           { href: 'users', label: 'users', help: 'app end-users' },
           { href: 'sessions', label: 'sessions', help: 'who is signed in' },
           { href: 'keys', label: 'keys', help: 'SDK keys for this app' },

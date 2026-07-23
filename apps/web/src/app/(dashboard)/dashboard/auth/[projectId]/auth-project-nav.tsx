@@ -10,6 +10,7 @@ const TABS: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: '/security', label: 'security' },
   { href: '/keys', label: 'keys' },
   { href: '/providers', label: 'providers' },
+  { href: '/branding', label: 'branding' },
   { href: '/enterprise', label: 'enterprise' },
 ];
 

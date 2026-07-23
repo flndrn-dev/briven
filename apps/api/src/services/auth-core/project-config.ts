@@ -99,6 +99,20 @@ const DEFAULT_METHOD_FLAGS: BrivenEngineMethodFlags = {
 };
 
 const METHOD_FLAGS_SECRET = 'briven_engine_method_flags';
+const BRANDING_SECRET = 'briven_engine_branding';
+
+/** Login email / hosted UI look for one project. */
+export type BrivenEngineBranding = {
+  logoUrl: string | null;
+  primaryColor: string;
+  senderName: string;
+};
+
+export const DEFAULT_BRIVEN_ENGINE_BRANDING: BrivenEngineBranding = {
+  logoUrl: null,
+  primaryColor: '#FFFD74',
+  senderName: 'Briven Auth',
+};
 
 export type BrivenEngineProjectConfig = {
   engine: 'briven-engine';
@@ -118,6 +132,7 @@ export type BrivenEngineProjectConfig = {
     sms: { configured: boolean; provider: string | null };
     email: { configured: boolean; provider: string | null };
   };
+  branding: BrivenEngineBranding;
   /** Legacy boolean bag (kept for older UI). */
   recipes: {
     emailPassword: boolean;
@@ -139,6 +154,67 @@ export type BrivenEngineProjectConfig = {
     hrefSuffix: string;
   }>;
 };
+
+export async function getBrivenEngineBranding(
+  projectId: string,
+): Promise<BrivenEngineBranding> {
+  try {
+    const raw = await getTenantSecret(projectId, SERVICE, BRANDING_SECRET);
+    if (!raw) return { ...DEFAULT_BRIVEN_ENGINE_BRANDING };
+    const parsed = JSON.parse(raw) as Partial<BrivenEngineBranding>;
+    return normalizeBranding(parsed);
+  } catch {
+    return { ...DEFAULT_BRIVEN_ENGINE_BRANDING };
+  }
+}
+
+function normalizeBranding(
+  input: Partial<BrivenEngineBranding> | null | undefined,
+): BrivenEngineBranding {
+  const color =
+    typeof input?.primaryColor === 'string' &&
+    /^#[0-9A-Fa-f]{6}$/.test(input.primaryColor.trim())
+      ? input.primaryColor.trim()
+      : DEFAULT_BRIVEN_ENGINE_BRANDING.primaryColor;
+  const name =
+    typeof input?.senderName === 'string' && input.senderName.trim()
+      ? input.senderName.trim().slice(0, 80)
+      : DEFAULT_BRIVEN_ENGINE_BRANDING.senderName;
+  let logoUrl: string | null = null;
+  if (typeof input?.logoUrl === 'string' && input.logoUrl.trim()) {
+    const u = input.logoUrl.trim();
+    if (u.startsWith('https://') || u.startsWith('http://localhost')) {
+      logoUrl = u.slice(0, 500);
+    }
+  }
+  return { logoUrl, primaryColor: color, senderName: name };
+}
+
+export async function setBrivenEngineBranding(
+  projectId: string,
+  input: Partial<BrivenEngineBranding>,
+  createdBy?: string | null,
+): Promise<{ ok: true; engine: 'briven-engine'; branding: BrivenEngineBranding }> {
+  const current = await getBrivenEngineBranding(projectId);
+  const next = normalizeBranding({
+    logoUrl:
+      input.logoUrl === undefined
+        ? current.logoUrl
+        : input.logoUrl === null || input.logoUrl === ''
+          ? null
+          : input.logoUrl,
+    primaryColor: input.primaryColor ?? current.primaryColor,
+    senderName: input.senderName ?? current.senderName,
+  });
+  await setTenantSecret(
+    projectId,
+    SERVICE,
+    BRANDING_SECRET,
+    JSON.stringify(next),
+    createdBy ?? null,
+  );
+  return { ok: true, engine: 'briven-engine', branding: next };
+}
 
 async function loadMethodFlags(
   projectId: string,
@@ -170,6 +246,7 @@ export async function getBrivenEngineProjectConfig(
 ): Promise<BrivenEngineProjectConfig> {
   const map = mapProjectToAuthCore(projectId);
   const methods = await loadMethodFlags(projectId);
+  const branding = await getBrivenEngineBranding(projectId);
 
   const providers = await Promise.all(
     BRIVEN_ENGINE_SOCIAL_CATALOG.map(async (p) => {
@@ -277,6 +354,7 @@ export async function getBrivenEngineProjectConfig(
         provider: emailHost ? 'smtp' : null,
       },
     },
+    branding,
     methods,
     methodChips,
     recipes: {

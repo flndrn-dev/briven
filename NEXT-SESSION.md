@@ -8,9 +8,9 @@
 
 ## One-line status
 
-**Phase 9 (Konnos browser login on live konnos.org) is done.**  
-MCP guidance updated for briven-engine.  
-**Next build block:** product polish — **SMS steps 1–5 done in code** (UI + honest delivery + test send + `sms-polish-proof.mjs`). Still open: **live Twilio prove + deploy** when you say go; then branding; then stronger email; then IdP / M2M / audit.
+**Phase 9 done.** **SMS polish (steps 1–5) shipped live** at `buildSha` **5e632e8** (rsync + api/web rebuild on France).  
+Git push to `code.konnos.org` still blocked (auth hang / no GitHub remote for Briven; `gh` token invalid). Laptop **ahead 18**.  
+**Next:** branding polish (email look + dashboard branding tab). Live Twilio prove later. Then stronger email; then IdP / M2M / audit.
 
 ---
 

@@ -14,9 +14,11 @@ import {
 import { BRIVEN_ENGINE_ID, isAuthCoreInitialized } from '../services/auth-core/engine.js';
 import {
   getBrivenEngineProjectConfig,
+  setBrivenEngineBranding,
   setBrivenEngineMethodFlags,
   setBrivenEngineProviderSecrets,
   setBrivenEngineSmsSecrets,
+  type BrivenEngineBranding,
   type BrivenEngineMethodFlags,
 } from '../services/auth-core/project-config.js';
 import { sendBrivenEngineSmsTest } from '../services/auth-core/delivery.js';
@@ -225,6 +227,34 @@ authCoreProjectRouter.put(
         authToken,
         fromNumber,
       });
+      const config = await getBrivenEngineProjectConfig(projectId);
+      return c.json({ ...result, config });
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Save login email / hosted UI branding for this project. */
+authCoreProjectRouter.put(
+  '/v1/auth-core/projects/:projectId/branding',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    let body: Partial<BrivenEngineBranding> = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+    try {
+      const result = await setBrivenEngineBranding(projectId, body);
       const config = await getBrivenEngineProjectConfig(projectId);
       return c.json({ ...result, config });
     } catch (err) {

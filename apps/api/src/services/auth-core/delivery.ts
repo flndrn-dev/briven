@@ -14,7 +14,12 @@ import {
   getEmailSenderInfo,
   sendTransactional,
 } from '../../lib/email.js';
-import { getBrivenEngineSmsSecrets } from './project-config.js';
+import {
+  DEFAULT_BRIVEN_ENGINE_BRANDING,
+  getBrivenEngineBranding,
+  getBrivenEngineSmsSecrets,
+  type BrivenEngineBranding,
+} from './project-config.js';
 
 export type EmailDeliveryInput = {
   email: string;
@@ -85,14 +90,54 @@ function bodyFromSms(input: SmsDeliveryInput): string {
 }
 
 /**
+ * Branded HTML for auth emails (OTP / magic link).
+ */
+export function buildBrivenEngineAuthEmailHtml(input: {
+  body: string;
+  branding: BrivenEngineBranding;
+}): string {
+  const b = input.branding;
+  const color = b.primaryColor || DEFAULT_BRIVEN_ENGINE_BRANDING.primaryColor;
+  const name = escapeHtml(b.senderName || DEFAULT_BRIVEN_ENGINE_BRANDING.senderName);
+  const safeLogo = sanitizeLogoUrl(b.logoUrl);
+  const logo = safeLogo
+    ? `<img src="${escapeHtml(safeLogo)}" alt="${name}" width="120" style="display:block;max-width:120px;height:auto;margin:0 0 16px 0;border:0" />`
+    : '';
+  const lines = escapeHtml(input.body)
+    .split('\n')
+    .map((line) => (line ? line : '&nbsp;'))
+    .join('<br/>');
+  return `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#0a0a0a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0a0a0a;padding:32px 16px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" style="max-width:480px;background:#141414;border:1px solid #2a2a2a;border-radius:8px;padding:28px 24px">
+        <tr><td>
+          ${logo}
+          <p style="margin:0 0 8px 0;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#888">${name}</p>
+          <div style="height:3px;width:48px;background:${escapeHtml(color)};margin:0 0 20px 0;border-radius:2px"></div>
+          <div style="font-size:14px;line-height:1.55;color:#f2f2f2">${lines}</div>
+          <p style="margin:24px 0 0 0;font-size:11px;color:#666">If you did not request this, you can ignore this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+/**
  * Send auth email via briven-engine.
  */
 export async function sendBrivenEngineEmail(
   input: EmailDeliveryInput,
 ): Promise<DeliveryResult> {
-  const subject = input.subject ?? 'Your Briven Auth sign-in';
-  const text = input.body ?? 'Briven Auth message';
-  const html = `<pre style="font-family:monospace">${escapeHtml(text)}</pre>`;
+  const branding = input.projectId
+    ? await getBrivenEngineBranding(input.projectId)
+    : { ...DEFAULT_BRIVEN_ENGINE_BRANDING };
+  const subject =
+    input.subject ?? `Your ${branding.senderName} sign-in`;
+  const text = input.body ?? `${branding.senderName} message`;
+  const html = buildBrivenEngineAuthEmailHtml({ body: text, branding });
 
   log.info('briven_engine_email', {
     engine: 'briven-engine',
@@ -100,6 +145,7 @@ export async function sendBrivenEngineEmail(
     subject,
     type: input.type,
     hasBody: Boolean(input.body),
+    senderName: branding.senderName,
   });
 
   // Same chain as platform operator mail: SMTP → mittera → dev stdout.
@@ -333,6 +379,22 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** Only plain https (or localhost) URLs — drop attribute-injection attempts. */
+function sanitizeLogoUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const t = url.trim();
+  if (t.length > 500) return null;
+  if (/[\s"'<>]/.test(t)) return null;
+  try {
+    const u = new URL(t);
+    if (u.protocol === 'https:') return u.toString();
+    if (u.protocol === 'http:' && u.hostname === 'localhost') return u.toString();
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function passwordlessSmsDeliveryService() {

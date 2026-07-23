@@ -1,10 +1,11 @@
 /**
- * Offline SMS honesty checks (no Doltgres).
+ * Offline SMS honesty + email branding HTML (no Doltgres).
  * Full path: bun scripts/sms-polish-proof.mjs (needs local engine DB).
  */
 import { describe, expect, test } from 'bun:test';
 
 import {
+  buildBrivenEngineAuthEmailHtml,
   sendBrivenEngineSms,
   sendBrivenEngineSmsTest,
 } from './delivery.js';
@@ -33,3 +34,36 @@ describe('briven-engine SMS honest delivery (offline)', () => {
     expect(r.message?.toLowerCase()).toMatch(/project/);
   });
 });
+
+describe('briven-engine auth email branding HTML', () => {
+  test('includes sender name, accent color, and escaped body', () => {
+    const html = buildBrivenEngineAuthEmailHtml({
+      body: 'Your code: 123456\nExpires soon.',
+      branding: {
+        logoUrl: null,
+        primaryColor: '#FFFD74',
+        senderName: 'Konnos',
+      },
+    });
+    expect(html).toContain('Konnos');
+    expect(html).toContain('#FFFD74');
+    expect(html).toContain('Your code: 123456');
+    expect(html).not.toContain('<script>');
+  });
+
+  test('escapes HTML in body and drops unsafe logo URLs', () => {
+    const html = buildBrivenEngineAuthEmailHtml({
+      body: '<b>hi</b>',
+      branding: {
+        logoUrl: 'https://example.com/x.png" onerror="alert(1)',
+        primaryColor: '#112233',
+        senderName: 'App <x>',
+      },
+    });
+    expect(html).toContain('&lt;b&gt;hi&lt;/b&gt;');
+    expect(html).toContain('App &lt;x&gt;');
+    expect(html).not.toContain('onerror');
+    expect(html).not.toContain('<img');
+  });
+});
+
