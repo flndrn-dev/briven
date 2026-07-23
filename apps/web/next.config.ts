@@ -14,13 +14,23 @@ const config: NextConfig = {
   async rewrites() {
     // Read at request time, not module load, so env changes take effect
     // without a rebuild. Default falls through to a local dev api.
+    //
+    // CRITICAL: use `fallback` (not a top-level array / afterFiles).
+    // Otherwise `/api/dashboard/auth-core/*` is rewritten to
+    // api.briven.tech/dashboard/... (404) and the App Router proxy never
+    // runs — Providers stuck on "loading methods…" / "load failed (404)".
+    // fallback = only when no local page/route matched, so local routes win:
+    //   /api/dashboard/auth-core/* → apps/web proxy (cookies + Origin)
+    //   /api/v1/*                 → api.briven.tech/v1/*
     const apiOrigin = process.env.BRIVEN_API_ORIGIN ?? 'http://localhost:3001';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${apiOrigin}/:path*`,
-      },
-    ];
+    return {
+      fallback: [
+        {
+          source: '/api/:path*',
+          destination: `${apiOrigin}/:path*`,
+        },
+      ],
+    };
   },
   async redirects() {
     // Stable curl-install URL: `curl -fsSL https://briven.tech/install | sh`

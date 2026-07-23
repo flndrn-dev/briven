@@ -8,9 +8,9 @@
 
 ## One-line status
 
-**Phase 9 done.** **SMS polish (steps 1–5) shipped live** at `buildSha` **5e632e8** (rsync + api/web rebuild on France).  
-Git push to `code.konnos.org` still blocked (auth hang / no GitHub remote for Briven; `gh` token invalid). Laptop **ahead 18**.  
-**Next:** branding polish (email look + dashboard branding tab). Live Twilio prove later. Then stronger email; then IdP / M2M / audit.
+**Phase 9 done.** SMS polish live; **branding polish committed** (`18303f4`) — rsync done, rebuild may be in flight.  
+Git push to `code.konnos.org` still blocked (auth hang; Briven remotes only point there — **no GitHub remote** for Briven). `gh` token invalid. Laptop **ahead ~19**. Konnos app on GitHub was already clean (no SMS/branding changes).  
+**Next:** stronger email delivery polish; Live Twilio prove later; then IdP / M2M / audit.
 
 ---
 

@@ -120,28 +120,53 @@ export function AuthProvidersClient({
   const load = useCallback(async (id: string) => {
     if (!id) return;
     setErr(null);
-    const res = await fetch(
+    // Prefer local dashboard proxy (cookies + Origin). Fallback rewrite to
+    // /api/v1/... only if proxy is missing (legacy deploys).
+    const urls = [
       `/api/dashboard/auth-core/projects/${encodeURIComponent(id)}/config`,
-      { credentials: 'include', cache: 'no-store' },
-    );
+      `/api/v1/auth-core/projects/${encodeURIComponent(id)}/config`,
+    ];
+    let res: Response | null = null;
+    let lastStatus = 0;
+    for (const url of urls) {
+      try {
+        res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+        lastStatus = res.status;
+        // 404 = wrong path (rewrite ate dashboard). Try next URL.
+        if (res.status === 404) continue;
+        break;
+      } catch {
+        res = null;
+      }
+    }
+    if (!res) {
+      setErr('could not reach auth config');
+      setConfig(null);
+      setMethods(null);
+      return;
+    }
     if (res.status === 401) {
       setErr('sign in to briven.tech to manage providers');
       setConfig(null);
+      setMethods(null);
       return;
     }
     if (res.status === 403) {
       setErr('you need admin access on this project');
       setConfig(null);
+      setMethods(null);
       return;
     }
     if (!res.ok) {
-      setErr(`load failed (${res.status})`);
+      setErr(`load failed (${lastStatus || res.status})`);
       setConfig(null);
+      setMethods(null);
       return;
     }
     const body = (await res.json()) as ProjectConfig;
     setConfig(body);
     if (body.methods) setMethods(body.methods);
+    else setMethods(null);
     const ids = body.providers?.map((p) => p.thirdPartyId) ?? [];
     // Keep open forms; seed first open if empty
     setOpenIds((prev) => {
@@ -648,6 +673,10 @@ export function AuthProvidersClient({
               );
             })}
           </ul>
+        ) : err ? (
+          <p className="mt-3 font-mono text-xs text-red-400">
+            could not load methods — {err}
+          </p>
         ) : (
           <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
             loading methods…
@@ -1051,6 +1080,10 @@ export function AuthProvidersClient({
               })}
             </div>
           </>
+        ) : err ? (
+          <p className="mt-3 font-mono text-xs text-red-400">
+            could not load OAuth list — {err}
+          </p>
         ) : (
           <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
             loading providers…
