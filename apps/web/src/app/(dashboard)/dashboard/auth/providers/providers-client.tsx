@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import type { AuthV2ProjectRow } from '../lib/auth-v2-types';
 
@@ -10,78 +11,197 @@ type ProviderRow = {
   configured: boolean;
   hasClientId: boolean;
   hasClientSecret: boolean;
+  help?: string;
+  callbackHint?: string;
+};
+
+type MethodFlags = {
+  emailPassword: boolean;
+  passwordlessEmail: boolean;
+  magicLink: boolean;
+  passwordlessSms: boolean;
+  passkeys: boolean;
+  mfa: boolean;
 };
 
 type ProjectConfig = {
   projectId: string;
   tenantId: string;
   providers: ProviderRow[];
-  recipes: {
-    emailPassword: boolean;
-    passwordless: boolean;
-    passwordlessSms: boolean;
-    thirdParty: boolean;
-    webauthn: boolean;
-    mfa: boolean;
-  };
+  methods?: MethodFlags;
   delivery: {
     sms: { configured: boolean };
     email: { configured: boolean };
   };
 };
 
+const CORE_METHODS: Array<{
+  key: keyof MethodFlags;
+  label: string;
+  help: string;
+}> = [
+  {
+    key: 'emailPassword',
+    label: 'email + password',
+    help: 'Classic email and password sign-in.',
+  },
+  {
+    key: 'passwordlessEmail',
+    label: 'passwordless-email',
+    help: 'One-time code by email (mittera / SMTP).',
+  },
+  {
+    key: 'magicLink',
+    label: 'magic-link',
+    help: 'Magic link by email — same mail path as OTP.',
+  },
+  {
+    key: 'passwordlessSms',
+    label: 'passwordless-sms',
+    help: 'SMS one-time code (needs Twilio-style secrets later).',
+  },
+  {
+    key: 'passkeys',
+    label: 'passkeys',
+    help: 'WebAuthn passkeys — no client secret.',
+  },
+  {
+    key: 'mfa',
+    label: 'mfa (TOTP)',
+    help: 'Authenticator app after password when enrolled.',
+  },
+];
+
 /**
- * Configure per-project social providers (client id + secret encrypted at rest).
+ * Providers section = manage ALL authentication ways for this project:
+ * core methods (on/off) + OAuth (Konnos, Google, GitHub…) with secrets.
  */
 export function AuthProvidersClient({
   projects,
-  platformMethods,
+  platformMethods: _platformMethods,
   lockProjectId,
 }: {
   projects: AuthV2ProjectRow[];
   platformMethods: string[];
   lockProjectId?: string;
 }) {
+  const search = useSearchParams();
+  const initialProvider = search.get('provider') ?? 'konnos';
+
   const [projectId, setProjectId] = useState(
     lockProjectId ?? projects[0]?.id ?? '',
   );
   const [config, setConfig] = useState<ProjectConfig | null>(null);
-  const [pick, setPick] = useState('google');
+  const [methods, setMethods] = useState<MethodFlags | null>(null);
+  const [pick, setPick] = useState(initialProvider);
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [methodPending, setMethodPending] = useState<string | null>(null);
 
-  const load = useCallback(async (id: string) => {
-    if (!id) return;
-    setErr(null);
-    const res = await fetch(`/api/v1/auth-core/projects/${id}/config`, {
-      credentials: 'include',
-    });
-    if (res.status === 401) {
-      setErr('sign in to briven.tech to manage providers');
-      setConfig(null);
-      return;
-    }
-    if (res.status === 403) {
-      setErr('you need admin access on this project');
-      setConfig(null);
-      return;
-    }
-    if (!res.ok) {
-      setErr(`load failed (${res.status})`);
-      setConfig(null);
-      return;
-    }
-    setConfig((await res.json()) as ProjectConfig);
-  }, []);
+  const load = useCallback(
+    async (id: string) => {
+      if (!id) return;
+      setErr(null);
+      const res = await fetch(`/api/v1/auth-core/projects/${id}/config`, {
+        credentials: 'include',
+      });
+      if (res.status === 401) {
+        setErr('sign in to briven.tech to manage providers');
+        setConfig(null);
+        return;
+      }
+      if (res.status === 403) {
+        setErr('you need admin access on this project');
+        setConfig(null);
+        return;
+      }
+      if (!res.ok) {
+        setErr(`load failed (${res.status})`);
+        setConfig(null);
+        return;
+      }
+      const body = (await res.json()) as ProjectConfig;
+      setConfig(body);
+      if (body.methods) setMethods(body.methods);
+      const ids = body.providers?.map((p) => p.thirdPartyId) ?? [];
+      if (initialProvider && ids.includes(initialProvider as never)) {
+        setPick(initialProvider);
+      } else if (ids.length && !ids.includes(pick as never)) {
+        setPick(ids[0] ?? 'konnos');
+      }
+    },
+    [initialProvider, pick],
+  );
 
   useEffect(() => {
     if (projectId) void load(projectId);
   }, [projectId, load]);
 
-  async function save(): Promise<void> {
+  const selected = useMemo(
+    () => config?.providers.find((p) => p.thirdPartyId === pick) ?? null,
+    [config, pick],
+  );
+
+  const apiOrigin =
+    typeof window !== 'undefined'
+      ? (() => {
+          const h = window.location.hostname;
+          if (h === 'briven.tech' || h === 'www.briven.tech') {
+            return 'https://api.briven.tech';
+          }
+          if (h.includes('localhost')) return 'http://localhost:3001';
+          return window.location.origin;
+        })()
+      : 'https://api.briven.tech';
+
+  const callbackUrl = useMemo(() => {
+    if (selected?.callbackHint) {
+      return selected.callbackHint
+        .replace('{apiOrigin}', apiOrigin)
+        .replace('{projectId}', projectId)
+        .replace(
+          /^(Redirect URI: |Authorized redirect: |Authorization callback URL: )/i,
+          '',
+        );
+    }
+    return `${apiOrigin}/v1/auth-core/oauth/${pick}/callback`;
+  }, [selected, apiOrigin, pick, projectId]);
+
+  async function toggleMethod(key: keyof MethodFlags): Promise<void> {
+    if (!projectId || !methods) return;
+    const next = !methods[key];
+    setMethodPending(key);
+    setErr(null);
+    setOkMsg(null);
+    try {
+      const res = await fetch(
+        `/api/v1/auth-core/projects/${projectId}/methods`,
+        {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ [key]: next }),
+        },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        methods?: MethodFlags;
+      };
+      if (!res.ok) throw new Error(body.message ?? `http ${res.status}`);
+      if (body.methods) setMethods(body.methods);
+      else setMethods((m) => (m ? { ...m, [key]: next } : m));
+      setOkMsg(`${key} ${next ? 'on' : 'off'} for this project`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'could not update method');
+    } finally {
+      setMethodPending(null);
+    }
+  }
+
+  async function saveOauth(): Promise<void> {
     if (!projectId || !clientId.trim() || !clientSecret.trim()) return;
     setPending(true);
     setErr(null);
@@ -110,8 +230,10 @@ export function AuthProvidersClient({
       setClientId('');
       setClientSecret('');
       setOkMsg(`${pick} saved (secrets stay encrypted)`);
-      if (body.config) setConfig(body.config);
-      else await load(projectId);
+      if (body.config) {
+        setConfig(body.config);
+        if (body.config.methods) setMethods(body.config.methods);
+      } else await load(projectId);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'save failed');
     } finally {
@@ -129,145 +251,214 @@ export function AuthProvidersClient({
 
   return (
     <div className="space-y-8">
+      {!lockProjectId ? (
+        <label className="flex max-w-md flex-col gap-1 font-mono text-xs">
+          <span className="text-[var(--color-text-muted)]">project</span>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
+            style={{ borderColor: 'var(--auth-accent-border)' }}
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
+      {/* ── Sign-in methods for this project ── */}
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
         <h2 className="font-mono text-sm text-[var(--color-text)]">
-          platform methods (live)
+          sign-in methods
         </h2>
         <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-          what the engine reports as ready (includes Google/GitHub when env secrets
-          are set on the server)
+          turn on only what this app should use. yellow = on for this project.
         </p>
-        {platformMethods.length === 0 ? (
-          <p className="mt-2 font-mono text-xs text-[var(--color-text-muted)]">
-            none reported
-          </p>
-        ) : (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {platformMethods.map((m) => (
-              <li
-                key={m}
-                className="rounded border px-2 py-1 font-mono text-[11px] text-[var(--color-text)]"
-                style={{
-                  borderColor: 'var(--auth-accent-border)',
-                  background: 'var(--auth-accent-soft)',
-                }}
-              >
-                {m}
-              </li>
-            ))}
+
+        {methods ? (
+          <ul className="mt-4 space-y-2">
+            {CORE_METHODS.map((m) => {
+              const on = Boolean(methods[m.key]);
+              return (
+                <li
+                  key={m.key}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--color-border-subtle)] px-3 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs text-[var(--color-text)]">
+                      {m.label}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-muted)]">
+                      {m.help}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={methodPending === m.key}
+                    onClick={() => void toggleMethod(m.key)}
+                    className="shrink-0 rounded-md px-3 py-1.5 font-mono text-[11px] font-medium disabled:opacity-50"
+                    style={
+                      on
+                        ? { background: '#FFFD74', color: '#111' }
+                        : {
+                            border: '1px solid var(--color-border-subtle)',
+                            color: 'var(--color-text-muted)',
+                          }
+                    }
+                  >
+                    {methodPending === m.key
+                      ? '…'
+                      : on
+                        ? 'on'
+                        : 'off'}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
+        ) : (
+          <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
+            loading methods…
+          </p>
         )}
       </div>
 
+      {/* ── OAuth providers ── */}
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
         <h2 className="font-mono text-sm text-[var(--color-text)]">
-          project social secrets
+          OAuth providers
         </h2>
         <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-          store client id + secret per project (encrypted). apps use these for
-          Google/GitHub/etc.
+          Konnos first, then Google, GitHub, and more. Pick one, paste client
+          id + secret, and copy the callback URL into that provider.
         </p>
-
-        {!lockProjectId ? (
-          <label className="mt-4 flex max-w-md flex-col gap-1 font-mono text-xs">
-            <span className="text-[var(--color-text-muted)]">project</span>
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-              style={{ borderColor: 'var(--auth-accent-border)' }}
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
 
         {config ? (
           <>
             <p className="mt-3 font-mono text-[11px] text-[var(--color-text-muted)]">
               tenant {config.tenantId}
             </p>
-            <ul className="mt-3 space-y-1 font-mono text-xs">
+
+            <ul className="mt-3 flex flex-wrap gap-2">
               {config.providers.map((p) => (
-                <li key={p.thirdPartyId} className="text-[var(--color-text)]">
-                  {p.name}
-                  <span className="ml-2 text-[var(--color-text-muted)]">
-                    {p.configured
-                      ? 'configured'
-                      : p.hasClientId || p.hasClientSecret
-                        ? 'partial'
-                        : 'not set'}
-                  </span>
+                <li key={p.thirdPartyId}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPick(p.thirdPartyId);
+                      setClientId('');
+                      setClientSecret('');
+                      setOkMsg(null);
+                    }}
+                    className="rounded border px-2.5 py-1.5 font-mono text-[11px]"
+                    style={{
+                      borderColor: 'var(--auth-accent-border)',
+                      background:
+                        pick === p.thirdPartyId
+                          ? 'var(--auth-accent-soft)'
+                          : p.configured
+                            ? 'color-mix(in srgb, #FFFD74 8%, transparent)'
+                            : 'transparent',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    {p.name}
+                    {p.configured ? '' : ' · set up'}
+                  </button>
                 </li>
               ))}
             </ul>
 
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="mt-5 space-y-3 border-t border-[var(--color-border-subtle)] pt-4">
+              <p className="font-mono text-xs text-[var(--color-text)]">
+                {selected?.name ?? pick} — client id &amp; secret
+              </p>
+              {selected?.help ? (
+                <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
+                  {selected.help}
+                </p>
+              ) : null}
+
               <label className="flex flex-col gap-1 font-mono text-xs">
-                <span className="text-[var(--color-text-muted)]">provider</span>
-                <select
-                  value={pick}
-                  onChange={(e) => setPick(e.target.value)}
-                  className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-                  style={{ borderColor: 'var(--auth-accent-border)' }}
+                <span className="text-[var(--color-text-muted)]">
+                  redirect / callback URL (copy into provider console)
+                </span>
+                <code className="break-all rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg)] px-3 py-2 text-[11px] text-[var(--color-text)]">
+                  {callbackUrl}
+                </code>
+              </label>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <label className="flex min-w-[10rem] flex-1 flex-col gap-1 font-mono text-xs">
+                  <span className="text-[var(--color-text-muted)]">
+                    client id
+                  </span>
+                  <input
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    autoComplete="off"
+                    placeholder={
+                      selected?.hasClientId
+                        ? '•••• set — paste new to replace'
+                        : ''
+                    }
+                    className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
+                    style={{ borderColor: 'var(--auth-accent-border)' }}
+                  />
+                </label>
+                <label className="flex min-w-[10rem] flex-1 flex-col gap-1 font-mono text-xs">
+                  <span className="text-[var(--color-text-muted)]">
+                    client secret
+                  </span>
+                  <input
+                    type="password"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder={
+                      selected?.hasClientSecret
+                        ? '•••• set — paste new to replace'
+                        : ''
+                    }
+                    className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
+                    style={{ borderColor: 'var(--auth-accent-border)' }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={pending || !clientId.trim() || !clientSecret.trim()}
+                  onClick={() => void saveOauth()}
+                  className="rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
+                  style={{ background: '#FFFD74' }}
                 >
-                  {(config.providers.length
-                    ? config.providers
-                    : [{ thirdPartyId: 'google', name: 'Google' }]
-                  ).map((p) => (
-                    <option key={p.thirdPartyId} value={p.thirdPartyId}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex min-w-[10rem] flex-1 flex-col gap-1 font-mono text-xs">
-                <span className="text-[var(--color-text-muted)]">client id</span>
-                <input
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  autoComplete="off"
-                  className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-                  style={{ borderColor: 'var(--auth-accent-border)' }}
-                />
-              </label>
-              <label className="flex min-w-[10rem] flex-1 flex-col gap-1 font-mono text-xs">
-                <span className="text-[var(--color-text-muted)]">client secret</span>
-                <input
-                  type="password"
-                  value={clientSecret}
-                  onChange={(e) => setClientSecret(e.target.value)}
-                  autoComplete="new-password"
-                  className="rounded-md border bg-[var(--color-bg)] px-3 py-2 text-[var(--color-text)]"
-                  style={{ borderColor: 'var(--auth-accent-border)' }}
-                />
-              </label>
-              <button
-                type="button"
-                disabled={pending || !clientId.trim() || !clientSecret.trim()}
-                onClick={() => void save()}
-                className="rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
-                style={{ background: '#FFFD74' }}
-              >
-                {pending ? 'saving…' : 'save'}
-              </button>
+                  {pending ? 'saving…' : 'save'}
+                </button>
+              </div>
+              {selected?.configured ? (
+                <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
+                  {selected.name} is configured for this project
+                </p>
+              ) : null}
             </div>
           </>
-        ) : null}
-
-        {err ? (
-          <p className="mt-3 font-mono text-xs text-red-400">{err}</p>
-        ) : null}
-        {okMsg ? (
+        ) : (
           <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
-            {okMsg}
+            loading providers…
           </p>
-        ) : null}
+        )}
       </div>
+
+      {err ? (
+        <p className="font-mono text-xs text-red-400">{err}</p>
+      ) : null}
+      {okMsg ? (
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          {okMsg}
+        </p>
+      ) : null}
     </div>
   );
 }

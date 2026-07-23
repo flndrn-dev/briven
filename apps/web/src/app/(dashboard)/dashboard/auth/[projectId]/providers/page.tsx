@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+
 import { fetchAuthCoreInfo } from '../../lib/auth-api';
 import { loadAuthV2Workspace } from '../../lib/load-workspace';
 import { AuthProvidersClient } from '../../providers/providers-client';
@@ -25,14 +27,22 @@ export default async function AuthProjectProvidersPage({
           providers
         </h2>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          social secrets for this project
+          manage sign-in methods and OAuth for this project only
         </p>
       </header>
-      <AuthProvidersClient
-        projects={list.length ? list : projects}
-        platformMethods={info?.loginMethods ?? []}
-        lockProjectId={projectId}
-      />
+      <Suspense
+        fallback={
+          <p className="font-mono text-xs text-[var(--color-text-muted)]">
+            loading…
+          </p>
+        }
+      >
+        <AuthProvidersClient
+          projects={list.length ? list : projects}
+          platformMethods={info?.loginMethods ?? []}
+          lockProjectId={projectId}
+        />
+      </Suspense>
     </section>
   );
 }

@@ -54,7 +54,7 @@ export async function enableBrivenEngineAuth(projectId: string): Promise<{
 
 /**
  * Whether Auth is on for a project (tenant row exists).
- * Matches tenant_id (mapped) or project_id (exact / case-insensitive).
+ * Prefer exact tenant_id match (always reliable on Doltgres).
  */
 export async function isBrivenEngineAuthEnabled(
   projectId: string,
@@ -65,9 +65,7 @@ export async function isBrivenEngineAuthEnabled(
     const pool = getEnginePool();
     const res = await pool.query(
       `SELECT 1 FROM be_tenants
-       WHERE tenant_id = $1
-          OR project_id = $2
-          OR lower(project_id) = lower($2)
+       WHERE tenant_id = $1 OR project_id = $2
        LIMIT 1`,
       [map.tenantId, map.projectId],
     );
@@ -94,51 +92,41 @@ export async function listBrivenEngineWorkspace(
 ): Promise<{ engine: 'briven-engine'; projects: BrivenEngineWorkspaceProject[] }> {
   const projects = await listProjectsForUser(userId);
 
-  // Batch tenant lookup when engine is ready.
-  // IMPORTANT: two IN lists need two placeholder ranges ($1..$n and $n+1..$2n).
+  // Build maps first — Auth on = be_tenants row for that project's tenant_id.
+  const maps = projects
+    .map((p) => {
+      try {
+        return mapProjectToAuthCore(p.id);
+      } catch {
+        return null;
+      }
+    })
+    .filter((m): m is NonNullable<typeof m> => m != null);
+
+  const tenantToProject = new Map(maps.map((m) => [m.tenantId, m.projectId]));
   let enabledProjectIds = new Set<string>();
-  if (isAuthCoreInitialized() && projects.length > 0) {
+
+  if (isAuthCoreInitialized() && maps.length > 0) {
     try {
       const pool = getEnginePool();
-      const maps = projects
-        .map((p) => {
-          try {
-            return mapProjectToAuthCore(p.id);
-          } catch {
-            return null;
-          }
-        })
-        .filter((m): m is NonNullable<typeof m> => m != null);
-
-      if (maps.length > 0) {
-        const n = maps.length;
-        const tenantPh = maps.map((_, i) => `$${i + 1}`).join(', ');
-        const projectPh = maps.map((_, i) => `$${i + 1 + n}`).join(', ');
-        const lowerPh = maps.map((_, i) => `$${i + 1 + 2 * n}`).join(', ');
-        const tenantIds = maps.map((m) => m.tenantId);
-        const projectIds = maps.map((m) => m.projectId);
-        const projectIdsLower = projectIds.map((id) => id.toLowerCase());
-        const res = await pool.query(
-          `SELECT project_id, tenant_id FROM be_tenants
-           WHERE tenant_id IN (${tenantPh})
-              OR project_id IN (${projectPh})
-              OR lower(project_id) IN (${lowerPh})`,
-          [...tenantIds, ...projectIds, ...projectIdsLower],
-        );
-        const tenantToProject = new Map(
-          maps.map((m) => [m.tenantId, m.projectId]),
-        );
-        for (const row of res.rows as Array<{
-          project_id: string;
-          tenant_id: string;
-        }>) {
-          markEnabled(enabledProjectIds, row.project_id);
-          const viaTenant = tenantToProject.get(row.tenant_id);
-          markEnabled(enabledProjectIds, viaTenant);
+      // Load all tenants (small table) — avoids IN-clause / lower() quirks on Doltgres.
+      const res = await pool.query(
+        `SELECT project_id, tenant_id FROM be_tenants`,
+      );
+      for (const row of res.rows as Array<{
+        project_id: string;
+        tenant_id: string;
+      }>) {
+        markEnabled(enabledProjectIds, row.project_id);
+        const viaTenant = tenantToProject.get(row.tenant_id);
+        markEnabled(enabledProjectIds, viaTenant);
+        // Also match tenant_id → project when project_id column is stale/mismatched
+        if (row.tenant_id.startsWith('proj-')) {
+          const fromTenant = tenantToProject.get(row.tenant_id);
+          markEnabled(enabledProjectIds, fromTenant);
         }
       }
     } catch {
-      // Fall back to per-project checks below when batch query fails.
       enabledProjectIds = new Set();
     }
   }
@@ -157,7 +145,7 @@ export async function listBrivenEngineWorkspace(
         enabledProjectIds.has(p.id) ||
         enabledProjectIds.has(p.id.toLowerCase());
 
-      // Reliable fallback: direct tenant probe (also covers batch SQL miss).
+      // Direct probe when batch missed (should be rare).
       if (!authEnabled && isAuthCoreInitialized()) {
         authEnabled = await isBrivenEngineAuthEnabled(p.id);
       }
@@ -168,7 +156,8 @@ export async function listBrivenEngineWorkspace(
           slug: p.slug,
           name,
           authEnabled: false,
-          tenantId,
+          // Do not show mapped tenant as if Auth were on
+          tenantId: null,
           providers: null,
         };
       }

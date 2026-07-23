@@ -2,16 +2,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { apiFetch } from '@/lib/api';
-import {
-  fetchAuthCoreInfo,
-  fetchAuthDashboard,
-} from '../lib/auth-api';
+import { fetchAuthDashboard } from '../lib/auth-api';
 import { loadAuthV2Workspace } from '../lib/load-workspace';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * One project's Auth overview — counts + methods for this tenant only.
+ * One project's Auth overview — counts + shortcuts.
+ * Sign-in methods are managed under Providers.
  */
 export default async function AuthProjectOverviewPage({
   params,
@@ -27,27 +25,40 @@ export default async function AuthProjectOverviewPage({
 
   const id = project.id;
 
-  const [info, dash, configRes, tenantsRes] = await Promise.all([
-    fetchAuthCoreInfo(),
+  const [dash, configRes, tenantsRes] = await Promise.all([
     fetchAuthDashboard(id),
     apiFetch(`/v1/auth-core/projects/${id}/config`).catch(() => null),
     apiFetch('/v1/auth-core/tenants').catch(() => null),
   ]);
 
-  let configOk = false;
   let tenantId = project.tenantId ?? null;
-  let providerSummary: Array<{ name: string; configured: boolean }> = [];
+  let methodsOn: string[] = [];
+  let oauthConfigured: string[] = [];
+
   if (configRes?.ok) {
-    configOk = true;
     const body = (await configRes.json()) as {
       tenantId?: string;
+      methods?: Record<string, boolean>;
       providers?: Array<{ name: string; configured: boolean }>;
     };
     tenantId = body.tenantId ?? tenantId;
-    providerSummary = body.providers ?? [];
+    if (body.methods) {
+      const labels: Record<string, string> = {
+        emailPassword: 'email + password',
+        passwordlessEmail: 'passwordless-email',
+        magicLink: 'magic-link',
+        passwordlessSms: 'passwordless-sms',
+        passkeys: 'passkeys',
+        mfa: 'mfa',
+      };
+      methodsOn = Object.entries(body.methods)
+        .filter(([, on]) => on)
+        .map(([k]) => labels[k] ?? k);
+    }
+    oauthConfigured =
+      body.providers?.filter((p) => p.configured).map((p) => p.name) ?? [];
   }
 
-  // Second source of truth: live be_tenants list (catches workspace lag / SQL miss).
   let tenantRowOn = false;
   if (tenantsRes?.ok) {
     try {
@@ -75,7 +86,6 @@ export default async function AuthProjectOverviewPage({
   const counts = dash.ok
     ? dash.data.counts
     : { users: 0, sessions: 0, thirdPartyLinks: 0, passwordlessCodesActive: 0 };
-  const methods = info?.loginMethods ?? [];
 
   return (
     <section className="space-y-6">
@@ -121,69 +131,45 @@ export default async function AuthProjectOverviewPage({
         <h2 className="font-mono text-sm text-[var(--color-text)]">
           this project
         </h2>
-        <p className="mt-2 font-mono text-xs text-[var(--color-text-muted)]">
+        <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
           tenant {tenantId ?? '—'}
-          {configOk ? ' · config loaded' : ''}
         </p>
-        {providerSummary.length > 0 ? (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {providerSummary.map((p) => (
-              <li
-                key={p.name}
-                className="rounded border px-2 py-1 font-mono text-[11px] text-[var(--color-text)]"
-                style={{
-                  borderColor: 'var(--auth-accent-border)',
-                  background: p.configured
-                    ? 'var(--auth-accent-soft)'
-                    : 'transparent',
-                }}
-              >
-                {p.name}
-                {p.configured ? '' : ' · not set'}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
-        <h2 className="font-mono text-sm text-[var(--color-text)]">
-          platform methods live
-        </h2>
-        {methods.length === 0 ? (
-          <p className="mt-2 font-mono text-xs text-[var(--color-text-muted)]">
-            none reported
-          </p>
-        ) : (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {methods.map((m) => (
-              <li
-                key={m}
-                className="rounded border px-2 py-1 font-mono text-[11px] text-[var(--color-text)]"
-                style={{
-                  borderColor: 'var(--auth-accent-border)',
-                  background: 'var(--auth-accent-soft)',
-                }}
-              >
-                {m}
-              </li>
-            ))}
-          </ul>
-        )}
+        <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
+          methods on:{' '}
+          {methodsOn.length ? methodsOn.join(', ') : 'none yet'}
+          {oauthConfigured.length
+            ? ` · OAuth: ${oauthConfigured.join(', ')}`
+            : ''}
+        </p>
+        <Link
+          href={`/dashboard/auth/${id}/providers`}
+          className="mt-4 inline-block rounded-md px-3 py-2 font-mono text-xs font-medium text-black"
+          style={{ background: '#FFFD74' }}
+        >
+          manage sign-in methods →
+        </Link>
+        <p className="mt-2 font-mono text-[10px] text-[var(--color-text-muted)]">
+          open Providers to turn methods on/off and set Konnos / Google / GitHub
+          client id + secret.
+        </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[
+          {
+            href: 'providers',
+            label: 'providers',
+            help: 'sign-in methods + OAuth secrets',
+          },
           { href: 'users', label: 'users', help: 'app end-users' },
           { href: 'sessions', label: 'sessions', help: 'who is signed in' },
           { href: 'keys', label: 'keys', help: 'SDK keys for this app' },
-          { href: 'providers', label: 'providers', help: 'Google, GitHub, …' },
           { href: 'security', label: 'security', help: 'roles' },
           { href: 'enterprise', label: 'enterprise', help: 'SAML / OIDC SSO' },
         ].map((l) => (
           <Link
             key={l.href}
-            href={`/dashboard/auth/${projectId}/${l.href}`}
+            href={`/dashboard/auth/${id}/${l.href}`}
             className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-border)]"
           >
             <p className="font-mono text-sm text-[var(--color-text)]">

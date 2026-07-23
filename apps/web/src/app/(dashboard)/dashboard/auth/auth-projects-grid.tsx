@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import type { AuthV2ProjectRow } from './lib/auth-v2-types';
@@ -15,7 +14,6 @@ export function AuthProjectsGrid({
 }: {
   projects: AuthV2ProjectRow[];
 }) {
-  const router = useRouter();
   const [rows, setRows] = useState(projects);
   const [q, setQ] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);

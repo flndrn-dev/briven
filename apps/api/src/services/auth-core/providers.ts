@@ -8,6 +8,7 @@
  */
 
 export type BrivenSocialProviderId =
+  | 'konnos'
   | 'google'
   | 'github'
   | 'apple'
@@ -26,15 +27,28 @@ export type BrivenSocialProviderMeta = {
   engine: 'briven-engine';
   help: string;
   builtIn: true;
+  /** Shown under OAuth setup (callback / webhook URL pattern). */
+  callbackHint?: string;
 };
 
 export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] = [
+  {
+    thirdPartyId: 'konnos',
+    name: 'Konnos',
+    engine: 'briven-engine',
+    help: 'code.konnos.org → Settings → Applications (OAuth2)',
+    builtIn: true,
+    callbackHint:
+      'Redirect URI: {apiOrigin}/v1/auth-core/oauth/konnos/callback?projectId={projectId}',
+  },
   {
     thirdPartyId: 'google',
     name: 'Google',
     engine: 'briven-engine',
     help: 'Google Cloud Console → APIs & Services → Credentials',
     builtIn: true,
+    callbackHint:
+      'Authorized redirect: {apiOrigin}/v1/auth-core/oauth/google/callback',
   },
   {
     thirdPartyId: 'github',
@@ -42,6 +56,8 @@ export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] =
     engine: 'briven-engine',
     help: 'GitHub → Settings → Developer settings → OAuth Apps',
     builtIn: true,
+    callbackHint:
+      'Authorization callback URL: {apiOrigin}/v1/auth-core/oauth/github/callback',
   },
   {
     thirdPartyId: 'apple',
@@ -184,6 +200,9 @@ export function buildThirdPartyProvidersFromSecrets(
         if (typeof ThirdPartyProviders.Twitter === 'function') {
           out.push(ThirdPartyProviders.Twitter({ clients }));
         }
+        break;
+      case 'konnos':
+        // Custom OIDC / generic — wired in FDI via project secrets + issuer
         break;
       default:
         break;

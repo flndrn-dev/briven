@@ -14,9 +14,12 @@ import {
 import { BRIVEN_ENGINE_ID, isAuthCoreInitialized } from '../services/auth-core/engine.js';
 import {
   getBrivenEngineProjectConfig,
+  setBrivenEngineMethodFlags,
   setBrivenEngineProviderSecrets,
   setBrivenEngineSmsSecrets,
+  type BrivenEngineMethodFlags,
 } from '../services/auth-core/project-config.js';
+import { env } from '../env.js';
 import {
   ensureBrivenEngineTenant,
   listBrivenEngineTenants,
@@ -108,6 +111,38 @@ authCoreProjectRouter.put(
         additionalConfig: body.additionalConfig,
       });
       // Return public config so UI can show “configured”
+      const config = await getBrivenEngineProjectConfig(projectId);
+      return c.json({
+        ...result,
+        config,
+        apiOrigin: env.BRIVEN_API_ORIGIN,
+      });
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Toggle which sign-in methods this project uses. */
+authCoreProjectRouter.put(
+  '/v1/auth-core/projects/:projectId/methods',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    let body: Partial<BrivenEngineMethodFlags> = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+    try {
+      const result = await setBrivenEngineMethodFlags(projectId, body);
       const config = await getBrivenEngineProjectConfig(projectId);
       return c.json({ ...result, config });
     } catch (err) {

@@ -32,6 +32,29 @@ function extraName(id: BrivenSocialProviderId, key: string): string {
   return `briven_engine_${id}_${key}`;
 }
 
+/** Per-project which sign-in methods are turned on for the app. */
+export type BrivenEngineMethodFlags = {
+  emailPassword: boolean;
+  /** Email OTP codes */
+  passwordlessEmail: boolean;
+  /** Magic link in email */
+  magicLink: boolean;
+  passwordlessSms: boolean;
+  passkeys: boolean;
+  mfa: boolean;
+};
+
+const DEFAULT_METHOD_FLAGS: BrivenEngineMethodFlags = {
+  emailPassword: true,
+  passwordlessEmail: true,
+  magicLink: true,
+  passwordlessSms: false,
+  passkeys: true,
+  mfa: false,
+};
+
+const METHOD_FLAGS_SECRET = 'briven_engine_method_flags';
+
 export type BrivenEngineProjectConfig = {
   engine: 'briven-engine';
   projectId: string;
@@ -43,11 +66,14 @@ export type BrivenEngineProjectConfig = {
     configured: boolean;
     hasClientId: boolean;
     hasClientSecret: boolean;
+    help?: string;
+    callbackHint?: string;
   }>;
   delivery: {
     sms: { configured: boolean; provider: string | null };
     email: { configured: boolean; provider: string | null };
   };
+  /** Legacy boolean bag (kept for older UI). */
   recipes: {
     emailPassword: boolean;
     passwordless: boolean;
@@ -56,7 +82,40 @@ export type BrivenEngineProjectConfig = {
     webauthn: boolean;
     mfa: boolean;
   };
+  /** Which methods this project wants on (operator choice). */
+  methods: BrivenEngineMethodFlags;
+  /** Flat list for chips / overview. */
+  methodChips: Array<{
+    id: string;
+    label: string;
+    kind: 'core' | 'oauth';
+    enabled: boolean;
+    configured: boolean;
+    hrefSuffix: string;
+  }>;
 };
+
+async function loadMethodFlags(
+  projectId: string,
+): Promise<BrivenEngineMethodFlags> {
+  try {
+    const raw = await getTenantSecret(projectId, SERVICE, METHOD_FLAGS_SECRET);
+    if (!raw) return { ...DEFAULT_METHOD_FLAGS };
+    const parsed = JSON.parse(raw) as Partial<BrivenEngineMethodFlags>;
+    return {
+      emailPassword: parsed.emailPassword ?? DEFAULT_METHOD_FLAGS.emailPassword,
+      passwordlessEmail:
+        parsed.passwordlessEmail ?? DEFAULT_METHOD_FLAGS.passwordlessEmail,
+      magicLink: parsed.magicLink ?? DEFAULT_METHOD_FLAGS.magicLink,
+      passwordlessSms:
+        parsed.passwordlessSms ?? DEFAULT_METHOD_FLAGS.passwordlessSms,
+      passkeys: parsed.passkeys ?? DEFAULT_METHOD_FLAGS.passkeys,
+      mfa: parsed.mfa ?? DEFAULT_METHOD_FLAGS.mfa,
+    };
+  } catch {
+    return { ...DEFAULT_METHOD_FLAGS };
+  }
+}
 
 /**
  * Public config view (no secret values).
@@ -65,6 +124,7 @@ export async function getBrivenEngineProjectConfig(
   projectId: string,
 ): Promise<BrivenEngineProjectConfig> {
   const map = mapProjectToAuthCore(projectId);
+  const methods = await loadMethodFlags(projectId);
 
   const providers = await Promise.all(
     BRIVEN_ENGINE_SOCIAL_CATALOG.map(async (p) => {
@@ -84,6 +144,8 @@ export async function getBrivenEngineProjectConfig(
         configured: hasClientId && hasClientSecret,
         hasClientId,
         hasClientSecret,
+        help: p.help,
+        callbackHint: p.callbackHint,
       };
     }),
   );
@@ -91,6 +153,67 @@ export async function getBrivenEngineProjectConfig(
   const smsSid = await hasTenantSecret(projectId, SERVICE, 'briven_engine_sms_account_sid');
   const smsToken = await hasTenantSecret(projectId, SERVICE, 'briven_engine_sms_auth_token');
   const emailHost = await hasTenantSecret(projectId, SERVICE, 'briven_engine_smtp_host');
+
+  const anyOauthConfigured = providers.some((p) => p.configured);
+
+  const methodChips: BrivenEngineProjectConfig['methodChips'] = [
+    {
+      id: 'emailPassword',
+      label: 'email + password',
+      kind: 'core',
+      enabled: methods.emailPassword,
+      configured: true,
+      hrefSuffix: 'providers?method=emailPassword',
+    },
+    {
+      id: 'passwordless-email',
+      label: 'passwordless-email',
+      kind: 'core',
+      enabled: methods.passwordlessEmail,
+      configured: true,
+      hrefSuffix: 'providers?method=passwordlessEmail',
+    },
+    {
+      id: 'magic-link',
+      label: 'magic-link',
+      kind: 'core',
+      enabled: methods.magicLink,
+      configured: true,
+      hrefSuffix: 'providers?method=magicLink',
+    },
+    {
+      id: 'passwordless-sms',
+      label: 'passwordless-sms',
+      kind: 'core',
+      enabled: methods.passwordlessSms,
+      configured: smsSid && smsToken,
+      hrefSuffix: 'providers?method=passwordlessSms',
+    },
+    {
+      id: 'passkeys',
+      label: 'passkeys',
+      kind: 'core',
+      enabled: methods.passkeys,
+      configured: true,
+      hrefSuffix: 'providers?method=passkeys',
+    },
+    {
+      id: 'mfa',
+      label: 'mfa (TOTP)',
+      kind: 'core',
+      enabled: methods.mfa,
+      configured: true,
+      hrefSuffix: 'security',
+    },
+    ...providers.map((p) => ({
+      id: p.thirdPartyId,
+      label: p.name,
+      kind: 'oauth' as const,
+      enabled: p.configured,
+      configured: p.configured,
+      hrefSuffix: `providers?provider=${p.thirdPartyId}`,
+    })),
+  ];
 
   return {
     engine: 'briven-engine',
@@ -108,15 +231,44 @@ export async function getBrivenEngineProjectConfig(
         provider: emailHost ? 'smtp' : null,
       },
     },
+    methods,
+    methodChips,
     recipes: {
-      emailPassword: true,
-      passwordless: true,
-      passwordlessSms: true,
-      thirdParty: true,
-      webauthn: true,
-      mfa: true,
+      emailPassword: methods.emailPassword,
+      passwordless: methods.passwordlessEmail || methods.magicLink,
+      passwordlessSms: methods.passwordlessSms,
+      thirdParty: anyOauthConfigured,
+      webauthn: methods.passkeys,
+      mfa: methods.mfa,
     },
   };
+}
+
+/**
+ * Save which sign-in methods this project wants on.
+ */
+export async function setBrivenEngineMethodFlags(
+  projectId: string,
+  flags: Partial<BrivenEngineMethodFlags>,
+  createdBy?: string | null,
+): Promise<{ ok: true; engine: 'briven-engine'; methods: BrivenEngineMethodFlags }> {
+  const current = await loadMethodFlags(projectId);
+  const next: BrivenEngineMethodFlags = {
+    emailPassword: flags.emailPassword ?? current.emailPassword,
+    passwordlessEmail: flags.passwordlessEmail ?? current.passwordlessEmail,
+    magicLink: flags.magicLink ?? current.magicLink,
+    passwordlessSms: flags.passwordlessSms ?? current.passwordlessSms,
+    passkeys: flags.passkeys ?? current.passkeys,
+    mfa: flags.mfa ?? current.mfa,
+  };
+  await setTenantSecret(
+    projectId,
+    SERVICE,
+    METHOD_FLAGS_SECRET,
+    JSON.stringify(next),
+    createdBy ?? null,
+  );
+  return { ok: true, engine: 'briven-engine', methods: next };
 }
 
 /**
