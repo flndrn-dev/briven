@@ -10,7 +10,10 @@
 
 import { log } from '../../lib/logger.js';
 import { env } from '../../env.js';
-import { sendViaSmtp, smtpConfigured } from '../../lib/smtp.js';
+import {
+  getEmailSenderInfo,
+  sendTransactional,
+} from '../../lib/email.js';
 import { getBrivenEngineSmsSecrets } from './project-config.js';
 
 export type EmailDeliveryInput = {
@@ -39,9 +42,30 @@ export type DeliveryResult = {
   ok: boolean;
   channel: 'email' | 'sms';
   engine: 'briven-engine';
-  mode: 'log' | 'platform' | 'provider';
+  mode: 'log' | 'platform' | 'provider' | 'smtp' | 'mittera' | 'dev-stdout' | 'error';
   message?: string;
 };
+
+/** Snapshot for /v1/auth-core/info — how Auth emails leave the platform. */
+export function getAuthEmailDeliveryStatus(): {
+  engine: 'briven-engine';
+  activeTransport: 'smtp' | 'mittera' | 'dev-stdout';
+  smtpConfigured: boolean;
+  mitteraConfigured: boolean;
+  fromAddress: string;
+  realEmailLikely: boolean;
+} {
+  const info = getEmailSenderInfo();
+  return {
+    engine: 'briven-engine',
+    activeTransport: info.activeTransport,
+    smtpConfigured: info.smtpFallbackConfigured,
+    mitteraConfigured: info.mitteraConfigured,
+    fromAddress: info.fromAddress,
+    // SMTP is real delivery; mittera may accept without deliver (platform note).
+    realEmailLikely: info.activeTransport === 'smtp',
+  };
+}
 
 function bodyFromSms(input: SmsDeliveryInput): string {
   const parts = [
@@ -72,42 +96,46 @@ export async function sendBrivenEngineEmail(
     hasBody: Boolean(input.body),
   });
 
-  if (smtpConfigured()) {
-    try {
-      await sendViaSmtp({
-        to: input.email,
-        subject,
-        text,
-        html,
-      });
-      return {
-        ok: true,
-        channel: 'email',
-        engine: 'briven-engine',
-        mode: 'platform',
-        message: 'sent via platform SMTP',
-      };
-    } catch (err) {
-      log.warn('briven_engine_email_smtp_failed', {
-        message: err instanceof Error ? err.message : String(err),
+  // Same chain as platform operator mail: SMTP → mittera → dev stdout.
+  try {
+    await sendTransactional('briven_engine_auth', {
+      to: input.email,
+      subject,
+      text,
+      html,
+      projectId: input.projectId ?? null,
+    });
+    const sender = getEmailSenderInfo();
+    return {
+      ok: true,
+      channel: 'email',
+      engine: 'briven-engine',
+      mode: sender.activeTransport,
+      message:
+        sender.activeTransport === 'smtp'
+          ? 'sent via platform SMTP'
+          : sender.activeTransport === 'mittera'
+            ? 'sent via mittera (set BRIVEN_SMTP_* for guaranteed inbox delivery)'
+            : 'logged to stdout (dev; set BRIVEN_SMTP_* for real email)',
+    };
+  } catch (err) {
+    log.warn('briven_engine_email_send_failed', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    if (env.BRIVEN_ENV !== 'production') {
+      log.debug('briven_engine_email_dev_body', {
+        email: input.email,
+        bodyPreview: text.slice(0, 200),
       });
     }
+    return {
+      ok: false,
+      channel: 'email',
+      engine: 'briven-engine',
+      mode: 'error',
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
-
-  if (env.BRIVEN_ENV !== 'production') {
-    log.debug('briven_engine_email_dev_body', {
-      email: input.email,
-      bodyPreview: text.slice(0, 200),
-    });
-  }
-
-  return {
-    ok: true,
-    channel: 'email',
-    engine: 'briven-engine',
-    mode: 'log',
-    message: smtpConfigured() ? 'smtp failed; logged' : 'logged (no SMTP configured)',
-  };
 }
 
 /**

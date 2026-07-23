@@ -11,12 +11,11 @@ import type { AppEnv } from '../types/app-env.js';
 export const authProductRetiredRouter = new Hono<AppEnv>();
 
 const GONE = {
-  code: 'auth_product_not_open',
+  code: 'auth_product_path_closed',
   message:
-    'Briven Auth is not open for app login yet (Phase 1 shell only). Platform sign-in (briven.tech) is unchanged.',
+    'This Auth dashboard path is not open yet. App login uses /v1/auth-core/fdi/*. Platform sign-in (briven.tech) is unchanged.',
   product: 'Briven Auth',
   engine: 'briven-engine',
-  appLoginReady: false,
 } as const;
 
 // Old Better Auth multi-tenant customer product

@@ -23,7 +23,7 @@ import { getEnginePool, isEnginePoolReady } from './db.js';
 
 export const BRIVEN_ENGINE_ID = 'briven-engine' as const;
 /** Product engine version shown on yellow Auth shell (Option B Phase 1). */
-export const BRIVEN_ENGINE_VERSION = '0.3.0-phase3' as const;
+export const BRIVEN_ENGINE_VERSION = '0.4.0-phase4' as const;
 
 export type AuthCoreStatus = {
   enabled: boolean;
@@ -35,11 +35,10 @@ export type AuthCoreStatus = {
   schemaReady: boolean;
   poolReady: boolean;
   phase: number;
-  /** Phase 2: email/password + sessions open for apps (via FDI). */
   appLoginReady: boolean;
   loginMethods: string[];
   message: string;
-  deployGate: 'phase3-passwordless' | 'phase2-password-sessions';
+  deployGate: 'phase4-social-email';
   recipeNames: string[];
   sdkInitialized: boolean;
   recipePhase: number | null;
@@ -72,10 +71,10 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
     database: 'briven_engine' as const,
     appLoginReady: false,
     loginMethods: [] as string[],
-    deployGate: 'phase3-passwordless' as const,
+    deployGate: 'phase4-social-email' as const,
     recipeNames: [...LOADED_RECIPES],
     sdkInitialized: bootstrapped && schemaReady,
-    recipePhase: bootstrapped ? 3 : null,
+    recipePhase: bootstrapped ? 4 : null,
     // Redact credentials — this object is returned on public /info.
     connectionUri: redactConnectionUri(env.BRIVEN_ENGINE_DATABASE_URL),
     hello: null as string | null,
@@ -117,14 +116,12 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       ok: ready,
       schemaReady,
       poolReady: true,
-      phase: 3,
+      phase: 4,
       appLoginReady: ready,
-      loginMethods: ready
-        ? ['emailpassword', 'passwordless-email', 'passwordless-sms', 'magic-link']
-        : [],
+      loginMethods: ready ? listPhase4LoginMethods() : [],
       hello: ok ? 'Hello' : null,
       message: ready
-        ? 'briven-engine password + passwordless + sessions on Doltgres (Phase 3 local)'
+        ? 'briven-engine password + passwordless + Google/GitHub on Doltgres (Phase 4)'
         : schemaReady
           ? 'Doltgres reachable; engine not fully bootstrapped'
           : 'Doltgres reachable; schema not bootstrapped',
@@ -142,6 +139,22 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       message: `Doltgres unreachable: ${message}`,
     };
   }
+}
+
+function listPhase4LoginMethods(): string[] {
+  const methods = [
+    'emailpassword',
+    'passwordless-email',
+    'passwordless-sms',
+    'magic-link',
+  ];
+  if (process.env.BRIVEN_GOOGLE_CLIENT_ID && process.env.BRIVEN_GOOGLE_CLIENT_SECRET) {
+    methods.push('google');
+  }
+  if (process.env.BRIVEN_GITHUB_CLIENT_ID && process.env.BRIVEN_GITHUB_CLIENT_SECRET) {
+    methods.push('github');
+  }
+  return methods;
 }
 
 function redactConnectionUri(raw: string | undefined): string {
@@ -184,14 +197,9 @@ export async function initAuthCoreSdk(): Promise<boolean> {
       storage: 'doltgres',
       database: 'briven_engine',
       recipes: LOADED_RECIPES,
-      deployGate: 'phase3-passwordless',
+      deployGate: 'phase4-social-email',
       appLoginReady: true,
-      loginMethods: [
-        'emailpassword',
-        'passwordless-email',
-        'passwordless-sms',
-        'magic-link',
-      ],
+      loginMethods: listPhase4LoginMethods(),
     });
     return true;
   } catch (err) {

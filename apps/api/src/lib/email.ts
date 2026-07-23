@@ -328,6 +328,31 @@ export async function sendTenantEmail(
 }
 
 /**
+ * Generic transactional send for briven-engine Auth (OTP, magic link, etc.).
+ * Same chain as platform mail: SMTP primary → mittera → dev stdout.
+ */
+export async function sendTransactional(
+  label: string,
+  args: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+    projectId?: string | null;
+    from?: string;
+  },
+): Promise<void> {
+  await send(label, {
+    to: args.to,
+    subject: args.subject,
+    html: args.html,
+    text: args.text,
+    projectId: args.projectId ?? null,
+    from: args.from,
+  });
+}
+
+/**
  * `flandriendev@hotmail.com` → `f•••v@h•••m`. Enough for an operator to
  * disambiguate two recent sends in the admin stream without surfacing
  * the full address. Same pattern documented in CLAUDE.md §5.1.

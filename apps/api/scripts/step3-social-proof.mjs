@@ -41,7 +41,7 @@ const { getEnginePool } = await import('../src/services/auth-core/db.ts');
 
 const projectId = 'p_step3_local';
 
-console.log('=== Step 3: social login (Google/GitHub) on Doltgres ===');
+console.log('=== Phase 4: social login (Google/GitHub) on Doltgres ===');
 console.log({ projectId });
 
 const ensured = await ensureBrivenEngineDatabase();
@@ -188,7 +188,7 @@ if (!hasGoogle || !hasGithub) {
 }
 
 console.log('');
-console.log('✔ STEP 3 PROOF OK');
+console.log('✔ PHASE 4 LOCAL PROOF OK (social)');
 console.log('  storage: Doltgres');
 console.log('  Google authorisation URL: OK');
 console.log('  GitHub authorisation URL: OK');
@@ -196,6 +196,6 @@ console.log('  Google sign-up + re-login same user: OK');
 console.log('  GitHub sign-up: OK');
 console.log('  be_third_party_links rows: OK');
 console.log('  sessions: OK');
-console.log('  note: real browser OAuth needs real client id/secret;');
-console.log('        exchangeCodeForProfile is implemented for live use.');
+console.log('  note: real browser OAuth needs live Google/GitHub redirect URIs;');
+console.log('        platform env BRIVEN_GOOGLE_* / BRIVEN_GITHUB_* already on France.');
 process.exit(0);

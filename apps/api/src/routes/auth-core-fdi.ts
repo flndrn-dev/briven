@@ -307,7 +307,7 @@ authCoreFdiRouter.post(`${FDI}/signinup/code/consume`, async (c) => {
   });
 });
 
-/** Social: get Google/GitHub authorisation URL */
+/** Social: get Google/GitHub authorisation URL (Phase 4). */
 authCoreFdiRouter.get(`${FDI}/authorisationurl`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
   const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
@@ -319,9 +319,9 @@ authCoreFdiRouter.get(`${FDI}/authorisationurl`, async (c) => {
     projectId: tenant?.projectId ?? c.req.query('projectId') ?? undefined,
   });
   if (result.status !== 'OK') {
-    return c.json(result, result.status === 'NO_CREDENTIALS' ? 400 : 400);
+    return c.json({ ...result, engine: 'briven-engine' }, 400);
   }
-  return c.json(result);
+  return c.json({ ...result, engine: 'briven-engine', storage: 'doltgres' });
 });
 
 /** Social: complete sign-in with OAuth authorization code */
@@ -364,14 +364,20 @@ authCoreFdiRouter.post(`${FDI}/signinup`, async (c) => {
       projectId: tenant?.projectId,
       tenantId: tenant?.tenantId,
     });
-    if (result.status !== 'OK') return c.json(result, 400);
-    c.header(
-      'Set-Cookie',
-      `sAccessToken=${result.session.accessToken}; Path=/; HttpOnly; SameSite=Lax`,
-      { append: true },
-    );
+    if (result.status !== 'OK') {
+      return c.json({ ...result, engine: 'briven-engine' }, 400);
+    }
+    setSessionCookies(c, {
+      sessionHandle: result.session.handle,
+      refreshToken: result.session.refreshToken,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    });
+    c.header('x-briven-engine', 'briven-engine');
+    c.header('x-briven-session-handle', result.session.handle);
     return c.json({
       status: 'OK',
+      engine: 'briven-engine',
+      storage: 'doltgres',
       createdNewUser: result.createdNewUser,
       user: result.user,
       session: { handle: result.session.handle, userId: result.session.userId },
@@ -383,6 +389,7 @@ authCoreFdiRouter.post(`${FDI}/signinup`, async (c) => {
     return c.json(
       {
         status: 'BAD_REQUEST',
+        engine: 'briven-engine',
         message: 'thirdPartyId, code, redirectURI required (or testProfile in dev)',
       },
       400,
@@ -396,14 +403,20 @@ authCoreFdiRouter.post(`${FDI}/signinup`, async (c) => {
     projectId: tenant?.projectId,
     state: body.state,
   });
-  if (result.status !== 'OK') return c.json(result, 400);
-  c.header(
-    'Set-Cookie',
-    `sAccessToken=${result.session.accessToken}; Path=/; HttpOnly; SameSite=Lax`,
-    { append: true },
-  );
+  if (result.status !== 'OK') {
+    return c.json({ ...result, engine: 'briven-engine' }, 400);
+  }
+  setSessionCookies(c, {
+    sessionHandle: result.session.handle,
+    refreshToken: result.session.refreshToken,
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  });
+  c.header('x-briven-engine', 'briven-engine');
+  c.header('x-briven-session-handle', result.session.handle);
   return c.json({
     status: 'OK',
+    engine: 'briven-engine',
+    storage: 'doltgres',
     createdNewUser: result.createdNewUser,
     user: result.user,
     session: { handle: result.session.handle, userId: result.session.userId },

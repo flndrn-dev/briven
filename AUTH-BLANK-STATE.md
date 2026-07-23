@@ -2,44 +2,49 @@
 
 **Updated:** 2026-07-23  
 
-| Phase | What | Ship |
-|-------|------|------|
-| **2 (live after deploy)** | Email/password + sessions on Doltgres | commit `7097457` + deploy |
-| **3 (local only)** | + email OTP, magic link, SMS OTP | **not** committed/pushed/deployed yet |
+| Phase | What | Status |
+|-------|------|--------|
+| **2** | Email/password + sessions | Live |
+| **3** | Email OTP, magic link, SMS OTP | Live |
+| **4** | Google/GitHub social + Auth email via platform mail | Shipping |
 
-## Phase 2 (shipped code path)
+## App login APIs (`briven-engine` on Doltgres `briven_engine`)
 
-- `POST /v1/auth-core/fdi/signup` · `/signin` · `/signout`
-- `GET /v1/auth-core/session/me`
-- `GET /v1/auth-core/info` · `/ready` · `/map/:projectId`
-- Storage: Doltgres `briven_engine`
+| Method | Path |
+|--------|------|
+| Password | `POST /v1/auth-core/fdi/signup` · `/signin` · `/signout` |
+| Passwordless | `POST /v1/auth-core/fdi/signinup/code` · `/signinup/code/consume` |
+| Social | `GET /v1/auth-core/fdi/authorisationurl` · `POST /v1/auth-core/fdi/signinup` |
+| Session | `GET /v1/auth-core/session/me` |
+| Status | `GET /v1/auth-core/info` (includes `emailDelivery`) · `/loginmethods` |
 
-## Phase 3 (local workspace only)
+Header: `x-briven-project-id: <project id>`
 
-- `POST /v1/auth-core/fdi/signinup/code` (email or phone)
-- `POST /v1/auth-core/fdi/signinup/code/consume` (OTP or magic link)
-- Session cookies use handle (same as Phase 2)
-- Delivery: log mode unless SMTP/Twilio secrets set
-- Proof: `bun scripts/step2-passwordless-proof.mjs` → **PHASE 3 LOCAL PROOF OK**
+## Email for OTP / magic link
 
-## How Auth fits Pay + DB
+Uses the **same platform chain** as briven.tech mail:
 
-Same Briven project + Doltgres family: Auth vault `briven_engine`, app data `proj_*`, Pay on its path.
+1. **SMTP** if `BRIVEN_SMTP_HOST` + `USER` + `PASS` (+ optional `FROM`) are set  
+2. Else **mittera** if configured on the API  
+3. Else log/stdout (dev)
+
+`GET /v1/auth-core/info` → `emailDelivery.activeTransport` + `realEmailLikely`.
+
+For **guaranteed inbox delivery**, set SMTP in Dokploy (compose already passes the vars).
+
+## Google / GitHub
+
+Platform env (already on France when set):
+
+- `BRIVEN_GOOGLE_CLIENT_ID` / `BRIVEN_GOOGLE_CLIENT_SECRET`  
+- `BRIVEN_GITHUB_CLIENT_ID` / `BRIVEN_GITHUB_CLIENT_SECRET`  
+
+Add OAuth redirect URIs for each app, e.g. `https://your-app.com/auth/callback/google`.
+
+## Pay + DB
+
+Same Doltgres family: Auth vault, project DBs, Pay — linked by Briven project id.
 
 ## Platform login
 
 briven.tech operator login unchanged (`/v1/auth/*`).
-
-## Local verify Phase 3
-
-```bash
-bun test apps/api/src/services/auth-core/passwordless.test.ts \
-  apps/api/src/services/auth-core/emailpassword.test.ts \
-  apps/api/src/services/auth-core/session.test.ts
-
-cd apps/api && \
-BRIVEN_ENGINE_DATABASE_URL=postgres://postgres:devpass@127.0.0.1:5434/briven_engine?sslmode=disable \
-BRIVEN_DATA_PLANE_URL=postgres://postgres:devpass@127.0.0.1:5434/postgres?sslmode=disable \
-BRIVEN_AUTH_CORE_ENABLED=true BRIVEN_ENV=development \
-bun scripts/step2-passwordless-proof.mjs
-```

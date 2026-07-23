@@ -28,9 +28,9 @@ import { authProductRetiredRouter } from './routes/auth-product-retired.js';
 import { authCoreStatusRouter } from './routes/auth-core-status.js';
 import { authCoreFdiRouter } from './routes/auth-core-fdi.js';
 import { authCoreSessionRouter } from './routes/auth-core-session.js';
+import { authCoreLoginMethodsRouter } from './routes/auth-core-loginmethods.js';
 import { initAuthCoreSdk } from './services/auth-core/engine.js';
-// Option B Phase 2: status + password FDI + session me.
-// Remaining product routers stay unmounted until later phases + flndrn OK.
+// Option B Phase 4: status + FDI (password/passwordless/social) + session + loginmethods.
 // import { authServiceRouter } from './routes/auth-service.js';
 // import { authV2Router } from './routes/auth-v2.js';
 // import { authScimRouter } from './routes/auth-scim.js';
@@ -165,17 +165,17 @@ app.route('/', healthRouter);
 app.route('/', authRouter);
 app.route('/', authCliRouter);
 app.route('/', meRouter);
-// Briven Auth Option B Phase 2: status + email/password FDI + session verify.
+// Briven Auth Option B Phase 4: status + FDI (password/passwordless/social) + session.
 // Platform operator login stays on authRouter (/v1/auth/* Better Auth for briven.tech).
 app.route('/', authCoreStatusRouter);
 app.route('/', authCoreFdiRouter);
 app.route('/', authCoreSessionRouter);
+app.route('/', authCoreLoginMethodsRouter);
 app.route('/', authProductRetiredRouter);
-log.info('auth_product_phase2_password_sessions', {
-  note: 'briven-engine password signup/signin + sessions on Doltgres; other recipes later',
+log.info('auth_product_phase4_social_email', {
+  note: 'briven-engine password + passwordless + Google/GitHub; Auth email via SMTP/mittera',
   engine: 'briven-engine',
   appLoginReady: true,
-  methods: ['emailpassword'],
   platformLogin: '/v1/auth/*',
 });
 app.route('/', projectsRouter);

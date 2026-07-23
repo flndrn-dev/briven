@@ -16,6 +16,7 @@ import {
   BRIVEN_ENGINE_VERSION,
   probeBrivenEngine,
 } from '../services/auth-core/engine.js';
+import { getAuthEmailDeliveryStatus } from '../services/auth-core/delivery.js';
 import type { AppEnv } from '../types/app-env.js';
 import { BUILD_AT, BUILD_SHA } from './health.js';
 
@@ -23,28 +24,32 @@ export const authCoreStatusRouter = new Hono<AppEnv>();
 
 authCoreStatusRouter.get('/v1/auth-core/info', async (c) => {
   const core = await probeBrivenEngine();
+  const emailDelivery = getAuthEmailDeliveryStatus();
   return c.json({
     service: 'briven-auth-core',
     product: 'Briven Auth',
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
-    productStatus: 'phase3-passwordless',
+    productStatus: 'phase4-social-email',
     notice:
-      'password + email OTP + magic link + SMS OTP + sessions on Doltgres',
+      'password + passwordless + Google/GitHub; emails via platform SMTP/mittera',
     buildSha: BUILD_SHA,
     buildAt: BUILD_AT,
+    emailDelivery,
     ...core,
   });
 });
 
 authCoreStatusRouter.get('/v1/auth-core/ready', async (c) => {
   const core = await probeBrivenEngine();
+  const emailDelivery = getAuthEmailDeliveryStatus();
   if (!core.ok) {
     return c.json(
       {
         status: 'not_ready',
         engine: BRIVEN_ENGINE_ID,
         engineVersion: BRIVEN_ENGINE_VERSION,
+        emailDelivery,
         ...core,
       },
       503,
@@ -55,7 +60,8 @@ authCoreStatusRouter.get('/v1/auth-core/ready', async (c) => {
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
     notice:
-      'password + email OTP + magic link + SMS OTP + sessions on Doltgres',
+      'password + passwordless + Google/GitHub; emails via platform SMTP/mittera',
+    emailDelivery,
     ...core,
   });
 });

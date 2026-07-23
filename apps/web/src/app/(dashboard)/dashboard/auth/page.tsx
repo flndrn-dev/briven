@@ -49,18 +49,19 @@ export default async function BrivenAuthOverviewPage() {
           className="font-mono text-[10px] uppercase tracking-widest"
           style={{ color: 'var(--auth-accent, #FFFD74)' }}
         >
-          Phase 3 · password + passwordless
+          Phase 4 · social + real email
         </p>
 
         <h2 className="mt-3 font-mono text-sm text-[var(--color-text)]">
           {appLoginReady
-            ? 'password, email OTP, magic link, SMS OTP (Doltgres)'
+            ? 'password, passwordless, Google/GitHub (Doltgres)'
             : 'engine not ready yet'}
         </h2>
         <p className="mt-2 max-w-lg font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          Apps can sign users in with email/password, email code, magic link, or
-          SMS code. Sessions live in Doltgres next to Briven DB and Briven Pay.
-          Google and MFA come later. Platform login to briven.tech is separate.
+          Apps can sign users in with email/password, email code, magic link, SMS
+          code, Google, or GitHub. OTP emails use the same platform mail path as
+          briven.tech (SMTP if set, otherwise mittera). Sessions live in Doltgres
+          next to Briven DB and Briven Pay.
         </p>
 
         <dl className="mt-6 grid gap-3 font-mono text-xs sm:grid-cols-2">
@@ -104,7 +105,10 @@ export default async function BrivenAuthOverviewPage() {
           <p>
             POST /v1/auth-core/fdi/signinup/code · /signinup/code/consume
           </p>
-          <p>GET /v1/auth-core/session/me</p>
+          <p>
+            GET /v1/auth-core/fdi/authorisationurl · POST /signinup (Google/GitHub)
+          </p>
+          <p>GET /v1/auth-core/session/me · /loginmethods</p>
           <p className="mt-2">
             Send header <code className="text-[var(--color-text)]">x-briven-project-id</code>{' '}
             so each app keeps its own users.
