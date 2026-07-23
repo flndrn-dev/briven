@@ -115,6 +115,30 @@ const STATEMENTS = [
     hit_count INT NOT NULL DEFAULT 0,
     window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  // Enterprise SSO (SAML + OIDC) — briven-engine native
+  `CREATE TABLE IF NOT EXISTS be_sso_connections (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    domains_json TEXT NOT NULL DEFAULT '[]',
+    config_json TEXT NOT NULL DEFAULT '{}',
+    jit_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    deactivated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS be_sso_conn_project_idx ON be_sso_connections (project_id)`,
+  `CREATE TABLE IF NOT EXISTS be_sso_states (
+    state_id TEXT PRIMARY KEY,
+    connection_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    code_verifier TEXT,
+    redirect_uri TEXT,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 export async function bootstrapBrivenEngineSchema(): Promise<void> {
@@ -146,6 +170,8 @@ export async function bootstrapBrivenEngineSchema(): Promise<void> {
       'be_roles',
       'be_user_roles',
       'be_rate_limits',
+      'be_sso_connections',
+      'be_sso_states',
     ],
   });
 }

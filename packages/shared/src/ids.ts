@@ -55,6 +55,7 @@ export type IdPrefix =
   | 'btp' // briven-engine third-party link
   | 'btd' // briven-engine TOTP device
   | 'bwc' // briven-engine webauthn credential
+  | 'bsc' // briven-engine SSO connection (SAML/OIDC)
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${ulid()}`;

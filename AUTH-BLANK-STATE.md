@@ -4,40 +4,35 @@
 
 | Phase | What | Status |
 |-------|------|--------|
-| 2–5 | Login APIs (password, codes, social, MFA, passkeys) | Live (France) |
-| 6 | Yellow dashboard: users, sessions, roles | Live (France) |
-| **7 tabs** | Keys, providers, enterprise (tenants) | **Built locally** — ship when you say COMMIT+PUSH+DEPLOY |
+| 2–5 | Login APIs | Live |
+| 6 | Users / sessions / roles | Live |
+| 7 | Keys / providers / enterprise tabs | Live |
+| **8 SSO** | SAML + OIDC enterprise on briven-engine | **Built locally** — ship with COMMIT+PUSH+DEPLOY |
 
-## Dashboard tabs (signed in to briven.tech)
+## Auth enabled (what “on” means)
 
-| Tab | What |
-|-----|------|
-| Overview | Counts + methods |
-| Users | App end-users |
-| Sessions | Active app sessions |
-| Security | Roles create/list |
-| **Keys** | Mint / list / revoke `pk_briven_auth_…` |
-| **Providers** | Social secrets per project + platform methods |
-| **Enterprise** | Enable Auth, tenants list; SAML/OIDC **not live yet** (honest copy) |
+A project is **really Auth-enabled** when `be_tenants` has a row for it on Doltgres  
+(`briven_engine`). That is what the Enterprise tab and workspace use.
 
-## Operator APIs opened (Phase 7)
+## Enterprise SSO (production login paths)
 
-- `GET /v1/auth-core/workspace`
-- `POST /v1/auth-core/projects/:projectId/enable`
-- `GET /v1/auth-core/projects/:projectId/config`
-- `PUT /v1/auth-core/projects/:projectId/providers/:thirdPartyId`
-- `GET|POST|DELETE /v1/auth-core/projects/:projectId/keys…`
-- `GET /v1/auth-core/tenants`
+| Flow | URL |
+|------|-----|
+| SAML start | `GET /v1/auth-core/sso/saml/:connectionId` |
+| SAML ACS | `POST /v1/auth-core/sso/saml/:connectionId/acs` |
+| SAML metadata | `GET /v1/auth-core/sso/saml/:connectionId/metadata` |
+| OIDC start | `GET /v1/auth-core/sso/oidc/:connectionId` |
+| OIDC callback | `GET /v1/auth-core/sso/oidc/:connectionId/callback` |
+| Admin CRUD | `/v1/auth-core/projects/:projectId/sso/connections` |
 
-## App login APIs
+**productionReady** = required IdP fields present (SAML: SSO URL + cert; OIDC: client id/secret + issuer or endpoints).
 
-Unchanged — FDI under `/v1/auth-core/fdi/*`.
+## Not yet
 
-## Full SuperTokens checklist
-
-See `BRIVEN-AUTH-FEATURE-AUDIT.md` (living Pass / Partial / Missing).  
-Deep enterprise (SAML, Briven as IdP, M2M) and 492-URL pass are **not** claimed yet.
+- Briven as full OAuth2/OIDC **provider for other apps** (IdP mode)
+- M2M client credentials
+- Full SuperTokens 492-URL empty fail list
 
 ## Email
 
-mittera (or SMTP if `BRIVEN_SMTP_*` set).
+mittera (or SMTP if set).

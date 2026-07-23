@@ -34,9 +34,10 @@ import { authCoreUsersRouter } from './routes/auth-core-users.js';
 import { authCoreRolesRouter } from './routes/auth-core-roles.js';
 import { authCoreKeysRouter } from './routes/auth-core-keys.js';
 import { authCoreProjectRouter } from './routes/auth-core-project.js';
+import { authCoreSsoRouter } from './routes/auth-core-sso.js';
 import { authCoreRouter } from './routes/auth-core.js';
 import { initAuthCoreSdk } from './services/auth-core/engine.js';
-// Option B Phase 7: yellow tabs (keys/providers/enterprise) + Phase 6 dashboard.
+// Option B Phase 7+: yellow tabs + enterprise SAML/OIDC on briven-engine.
 import { billingRouter } from './routes/billing.js';
 import { brandingPublicRouter } from './routes/branding-public.js';
 import { dbRouter } from './routes/db.js';
@@ -178,10 +179,11 @@ app.route('/', authCoreUsersRouter);
 app.route('/', authCoreRolesRouter);
 app.route('/', authCoreKeysRouter);
 app.route('/', authCoreProjectRouter);
+app.route('/', authCoreSsoRouter); // SAML + OIDC enterprise SSO
 app.route('/', authCoreRouter); // workspace + enable Auth
 app.route('/', authProductRetiredRouter);
-log.info('auth_product_phase7_tabs', {
-  note: 'briven-engine FDI + yellow dashboard users/sessions/roles/keys/providers/enterprise',
+log.info('auth_product_phase7_enterprise_sso', {
+  note: 'briven-engine FDI + dashboard tabs + SAML/OIDC enterprise SSO',
   engine: 'briven-engine',
   appLoginReady: true,
   platformLogin: '/v1/auth/*',

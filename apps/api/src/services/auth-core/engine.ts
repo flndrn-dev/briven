@@ -23,7 +23,7 @@ import { getEnginePool, isEnginePoolReady } from './db.js';
 
 export const BRIVEN_ENGINE_ID = 'briven-engine' as const;
 /** Product engine version shown on yellow Auth shell (Option B Phase 1). */
-export const BRIVEN_ENGINE_VERSION = '0.7.0-phase7-tabs' as const;
+export const BRIVEN_ENGINE_VERSION = '0.8.0-enterprise-sso' as const;
 
 export type AuthCoreStatus = {
   enabled: boolean;
@@ -38,7 +38,7 @@ export type AuthCoreStatus = {
   appLoginReady: boolean;
   loginMethods: string[];
   message: string;
-  deployGate: 'phase7-tabs';
+  deployGate: 'enterprise-sso';
   recipeNames: string[];
   sdkInitialized: boolean;
   recipePhase: number | null;
@@ -59,6 +59,8 @@ const LOADED_RECIPES = [
   'multifactorauth',
   'usermetadata',
   'userroles',
+  'sso-saml',
+  'sso-oidc',
 ] as const;
 
 /**
@@ -72,10 +74,10 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
     database: 'briven_engine' as const,
     appLoginReady: false,
     loginMethods: [] as string[],
-    deployGate: 'phase7-tabs' as const,
+    deployGate: 'enterprise-sso' as const,
     recipeNames: [...LOADED_RECIPES],
     sdkInitialized: bootstrapped && schemaReady,
-    recipePhase: bootstrapped ? 7 : null,
+    recipePhase: bootstrapped ? 8 : null,
     // Redact credentials — this object is returned on public /info.
     connectionUri: redactConnectionUri(env.BRIVEN_ENGINE_DATABASE_URL),
     hello: null as string | null,
@@ -117,12 +119,12 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       ok: ready,
       schemaReady,
       poolReady: true,
-      phase: 7,
+      phase: 8,
       appLoginReady: ready,
       loginMethods: ready ? listPhase5LoginMethods() : [],
       hello: ok ? 'Hello' : null,
       message: ready
-        ? 'briven-engine login + yellow dashboard tabs (Phase 7: keys/providers/enterprise)'
+        ? 'briven-engine login + dashboard + enterprise SAML/OIDC SSO'
         : schemaReady
           ? 'Doltgres reachable; engine not fully bootstrapped'
           : 'Doltgres reachable; schema not bootstrapped',
@@ -150,6 +152,8 @@ function listPhase5LoginMethods(): string[] {
     'magic-link',
     'totp-mfa',
     'passkeys',
+    'sso-saml',
+    'sso-oidc',
   ];
   if (process.env.BRIVEN_GOOGLE_CLIENT_ID && process.env.BRIVEN_GOOGLE_CLIENT_SECRET) {
     methods.push('google');
@@ -200,7 +204,7 @@ export async function initAuthCoreSdk(): Promise<boolean> {
       storage: 'doltgres',
       database: 'briven_engine',
       recipes: LOADED_RECIPES,
-      deployGate: 'phase7-tabs',
+      deployGate: 'enterprise-sso',
       appLoginReady: true,
       loginMethods: listPhase5LoginMethods(),
     });

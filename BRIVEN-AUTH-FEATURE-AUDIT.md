@@ -2,7 +2,7 @@
 
 **Updated:** 2026-07-23  
 **Storage rule:** COMPLETE Briven project = **Doltgres**. Auth does not use stock Postgres.  
-**Engine:** `0.7.0-phase7-tabs`  
+**Engine:** `0.8.0-enterprise-sso`  
 **SuperTokens:** docs = **checklist only** (no Core).
 
 Legend: **Y** = implemented + proof · **P** = partial · **N** = not yet · **N/A** = won’t do (documented)
@@ -59,7 +59,7 @@ Legend: **Y** = implemented + proof · **P** = partial · **N** = not yet · **N
 | Security (roles) | Y | `/v1/auth-core/roles` |
 | Keys | Y | `/v1/auth-core/projects/:id/keys` |
 | Providers | Y | `/v1/auth-core/projects/:id/config` + PUT providers |
-| Enterprise (tenants) | P | Enable Auth + list tenants; **no SAML login yet** |
+| Enterprise (tenants + SSO) | Y | Enable Auth + live Auth status + SAML/OIDC connections |
 | Branding / domains | N | Still later / legacy paths |
 
 ---
@@ -70,9 +70,10 @@ Legend: **Y** = implemented + proof · **P** = partial · **N** = not yet · **N
 |------|--------|
 | Project → tenant map | Y |
 | Enable Auth (create tenant) | Y |
-| SAML SSO login | N | Honest UI: not live |
-| OIDC enterprise SSO login | N | Honest UI: not live |
-| Briven as OAuth2/OIDC IdP | N | |
+| SAML SSO login | Y | `/v1/auth-core/sso/saml/*` + ACS + metadata; `productionReady` when IdP URL+cert set |
+| OIDC enterprise SSO login | Y | `/v1/auth-core/sso/oidc/*` + discovery + callback |
+| SSO connection admin UI | Y | Enterprise tab CRUD on yellow dashboard |
+| Briven as OAuth2/OIDC IdP | N | Apps use Briven login; Briven is not yet a full IdP for third parties |
 | M2M client credentials | N | |
 | AI auth extras | N | |
 

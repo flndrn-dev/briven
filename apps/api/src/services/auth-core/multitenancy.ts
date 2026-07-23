@@ -67,6 +67,12 @@ export async function ensureBrivenEngineTenant(
 export async function listBrivenEngineTenants(): Promise<{
   engine: 'briven-engine';
   tenantIds: string[];
+  tenants: Array<{
+    tenantId: string;
+    projectId: string;
+    createdAt: string | null;
+    authEnabled: true;
+  }>;
   ok: boolean;
   message?: string;
   storage: 'doltgres';
@@ -76,17 +82,33 @@ export async function listBrivenEngineTenants(): Promise<{
       engine: 'briven-engine',
       storage: 'doltgres',
       tenantIds: [],
+      tenants: [],
       ok: false,
       message: 'sdk not ready',
     };
   }
   try {
     const pool = getEnginePool();
-    const res = await pool.query(`SELECT tenant_id FROM be_tenants ORDER BY created_at`);
+    const res = await pool.query(
+      `SELECT tenant_id, project_id, created_at FROM be_tenants ORDER BY created_at`,
+    );
+    const tenants = (
+      res.rows as Array<{
+        tenant_id: string;
+        project_id: string;
+        created_at: Date | string | null;
+      }>
+    ).map((r) => ({
+      tenantId: r.tenant_id,
+      projectId: r.project_id,
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
+      authEnabled: true as const,
+    }));
     return {
       engine: 'briven-engine',
       storage: 'doltgres',
-      tenantIds: res.rows.map((r: { tenant_id: string }) => r.tenant_id),
+      tenantIds: tenants.map((t) => t.tenantId),
+      tenants,
       ok: true,
     };
   } catch (err) {
@@ -94,6 +116,7 @@ export async function listBrivenEngineTenants(): Promise<{
       engine: 'briven-engine',
       storage: 'doltgres',
       tenantIds: [],
+      tenants: [],
       ok: false,
       message: err instanceof Error ? err.message : String(err),
     };
