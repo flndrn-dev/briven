@@ -29,8 +29,11 @@ import { authCoreStatusRouter } from './routes/auth-core-status.js';
 import { authCoreFdiRouter } from './routes/auth-core-fdi.js';
 import { authCoreSessionRouter } from './routes/auth-core-session.js';
 import { authCoreLoginMethodsRouter } from './routes/auth-core-loginmethods.js';
+import { authCoreDashboardRouter } from './routes/auth-core-dashboard.js';
+import { authCoreUsersRouter } from './routes/auth-core-users.js';
+import { authCoreRolesRouter } from './routes/auth-core-roles.js';
 import { initAuthCoreSdk } from './services/auth-core/engine.js';
-// Option B Phase 4: status + FDI (password/passwordless/social) + session + loginmethods.
+// Option B Phase 6: dashboard users/roles + FDI login surface.
 // import { authServiceRouter } from './routes/auth-service.js';
 // import { authV2Router } from './routes/auth-v2.js';
 // import { authScimRouter } from './routes/auth-scim.js';
@@ -165,15 +168,18 @@ app.route('/', healthRouter);
 app.route('/', authRouter);
 app.route('/', authCliRouter);
 app.route('/', meRouter);
-// Briven Auth Option B Phase 4: status + FDI (password/passwordless/social) + session.
+// Briven Auth Option B Phase 6: FDI login + yellow dashboard (users/sessions/roles).
 // Platform operator login stays on authRouter (/v1/auth/* Better Auth for briven.tech).
 app.route('/', authCoreStatusRouter);
 app.route('/', authCoreFdiRouter);
 app.route('/', authCoreSessionRouter);
 app.route('/', authCoreLoginMethodsRouter);
+app.route('/', authCoreDashboardRouter);
+app.route('/', authCoreUsersRouter);
+app.route('/', authCoreRolesRouter);
 app.route('/', authProductRetiredRouter);
-log.info('auth_product_phase5_mfa_passkeys', {
-  note: 'briven-engine password + passwordless + social + TOTP MFA + passkeys',
+log.info('auth_product_phase6_dashboard', {
+  note: 'briven-engine FDI login + yellow dashboard users/sessions/roles on Doltgres',
   engine: 'briven-engine',
   appLoginReady: true,
   platformLogin: '/v1/auth/*',

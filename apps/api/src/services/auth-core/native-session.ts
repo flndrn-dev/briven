@@ -101,3 +101,39 @@ export async function listSessionHandles(userId: string): Promise<string[]> {
   );
   return res.rows.map((r: { session_handle: string }) => r.session_handle);
 }
+
+/** Recent active sessions for yellow dashboard (Phase 6). */
+export async function listRecentEngineSessions(limit = 50): Promise<
+  Array<{
+    handle: string;
+    userId: string;
+    tenantId: string;
+    expiresAt: string;
+    createdAt: string;
+  }>
+> {
+  const pool = getEnginePool();
+  const res = await pool.query(
+    `SELECT session_handle, user_id, tenant_id, expires_at, created_at
+     FROM be_sessions
+     WHERE expires_at > NOW()
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit],
+  );
+  return (
+    res.rows as Array<{
+      session_handle: string;
+      user_id: string;
+      tenant_id: string;
+      expires_at: Date | string;
+      created_at: Date | string;
+    }>
+  ).map((r) => ({
+    handle: r.session_handle,
+    userId: r.user_id,
+    tenantId: r.tenant_id,
+    expiresAt: new Date(r.expires_at).toISOString(),
+    createdAt: new Date(r.created_at).toISOString(),
+  }));
+}

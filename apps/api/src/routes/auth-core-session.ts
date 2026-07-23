@@ -15,15 +15,20 @@ import {
   revokeSession,
   verifyAuthCoreSession,
 } from '../services/auth-core/session.js';
-import { isAuthCoreInitialized } from '../services/auth-core/engine.js';
+import { listRecentEngineSessions } from '../services/auth-core/native-session.js';
+import {
+  BRIVEN_ENGINE_ID,
+  isAuthCoreInitialized,
+} from '../services/auth-core/engine.js';
 import type { AppEnv } from '../types/app-env.js';
 
 export const authCoreSessionRouter = new Hono<AppEnv>();
 
 // me = self-check via cookie (public to holders of session cookie)
-// list/revoke = dashboard only
+// list/revoke/recent = dashboard only
 authCoreSessionRouter.use('/v1/auth-core/session/list', requireAuthCoreDashboard());
 authCoreSessionRouter.use('/v1/auth-core/session/revoke', requireAuthCoreDashboard());
+authCoreSessionRouter.use('/v1/auth-core/session/recent', requireAuthCoreDashboard());
 
 authCoreSessionRouter.get('/v1/auth-core/session/me', async (c) => {
   if (!isAuthCoreInitialized()) {
@@ -63,6 +68,30 @@ authCoreSessionRouter.get('/v1/auth-core/session/list', async (c) => {
   }
   const handles = await listSessionsForUser(userId);
   return c.json({ userId, handles, count: handles.length });
+});
+
+/** Yellow dashboard: recent active sessions across tenants. */
+authCoreSessionRouter.get('/v1/auth-core/session/recent', async (c) => {
+  if (!isAuthCoreInitialized()) {
+    return c.json(
+      {
+        engine: BRIVEN_ENGINE_ID,
+        code: 'auth_core_sdk_not_ready',
+        sessions: [],
+      },
+      503,
+    );
+  }
+  const limit = Number(c.req.query('limit') ?? '50');
+  const sessions = await listRecentEngineSessions(
+    Number.isFinite(limit) ? limit : 50,
+  );
+  return c.json({
+    engine: BRIVEN_ENGINE_ID,
+    storage: 'doltgres',
+    sessions,
+    count: sessions.length,
+  });
 });
 
 authCoreSessionRouter.post('/v1/auth-core/session/revoke', async (c) => {

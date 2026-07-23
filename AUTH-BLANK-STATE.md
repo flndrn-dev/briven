@@ -4,41 +4,33 @@
 
 | Phase | What | Status |
 |-------|------|--------|
-| 2 | Email/password + sessions | Live |
-| 3 | Email OTP, magic link, SMS OTP | Live |
-| 4 | Google/GitHub + Auth email via mittera/SMTP | Live |
-| 5 | TOTP MFA + passkeys | Shipping |
+| 2–5 | Login APIs (password, codes, social, MFA, passkeys) | Live (France) |
+| **6** | Yellow dashboard: users, sessions, roles/security | Built locally — ship when you say COMMIT+PUSH+DEPLOY |
 
-## App login (briven-engine → Doltgres `briven_engine`)
+## Dashboard (operator, signed in to briven.tech)
 
-| Feature | Path |
-|---------|------|
-| Password | `POST .../fdi/signup` · `/signin` · `/signout` |
-| Passwordless | `POST .../fdi/signinup/code` · `/signinup/code/consume` |
-| Social | `GET .../fdi/authorisationurl` · `POST .../fdi/signinup` |
-| TOTP enroll | `POST .../fdi/totp/setup` · `/totp/setup/verify` (session required) |
-| TOTP login | After password, if MFA enrolled → `MFA_REQUIRED` then `POST .../fdi/totp/verify` |
-| Passkeys | `POST .../fdi/webauthn/register/*` · `/webauthn/signin/*` |
-| Session | `GET .../session/me` |
+| Tab | Data |
+|-----|------|
+| Overview | Engine version, counts, methods |
+| Users | `GET /v1/auth-core/users` |
+| Sessions | `GET /v1/auth-core/session/recent` |
+| Security | Methods + roles list + create form (`/v1/auth-core/roles`) |
 
-Header: `x-briven-project-id`
+## Operator APIs (need briven.tech session)
+
+- `GET /v1/auth-core/dashboard`
+- `GET /v1/auth-core/users`
+- `GET /v1/auth-core/session/recent`
+- `GET|POST /v1/auth-core/roles`, `POST .../roles/assign`, `GET .../users/:id/roles`
+
+## App login APIs
+
+Unchanged from Phase 5 — FDI under `/v1/auth-core/fdi/*`.
 
 ## Email
 
-OTP/magic-link: platform chain **SMTP → mittera → log**.  
-Live currently uses **mittera** until you set `BRIVEN_SMTP_*` in Dokploy.
-
-## SMTP (deferred by flndrn)
-
-Keep mittera for now. To switch to guaranteed inbox SMTP later, set in Dokploy:
-
-- `BRIVEN_SMTP_HOST`, `PORT`, `USER`, `PASS`, `FROM`  
-- Recreate **api** container  
+mittera (or SMTP if `BRIVEN_SMTP_*` set).
 
 ## Pay + DB
 
 Same Doltgres family; same project id.
-
-## Platform login
-
-briven.tech `/v1/auth/*` unchanged.

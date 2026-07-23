@@ -1,31 +1,29 @@
-import { fetchAuthCoreInfo } from './lib/auth-api';
+import {
+  fetchAuthCoreInfo,
+  fetchAuthDashboard,
+} from './lib/auth-api';
 
 export const metadata = { title: 'Auth' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Auth overview — briven-engine on Doltgres (Option B).
- * Phase 2: password · Phase 3 local: passwordless email/SMS + magic link.
+ * Auth overview — engine status + live counts from Doltgres.
  */
 export default async function BrivenAuthOverviewPage() {
   const info = await fetchAuthCoreInfo();
+  const dash = await fetchAuthDashboard();
 
   const engine = info?.engine ?? 'briven-engine';
   const version = info?.engineVersion ?? '—';
   const storage = info?.storage ?? 'doltgres';
   const database = info?.database ?? 'briven_engine';
-  const engineOk = info?.ok === true;
   const appLoginReady = info?.appLoginReady === true;
-  const methods = Array.isArray(info?.loginMethods)
-    ? info!.loginMethods!
-    : appLoginReady
-      ? ['emailpassword']
-      : [];
-  const message =
-    info?.message ??
-    (info
-      ? 'engine replied'
-      : 'could not reach engine status — try again after deploy');
+  const methods = Array.isArray(info?.loginMethods) ? info!.loginMethods! : [];
+  const message = info?.message ?? (info ? 'engine replied' : 'could not reach engine');
+
+  const counts = dash.ok
+    ? dash.data.counts
+    : { users: 0, sessions: 0, tenants: 0, thirdPartyLinks: 0, passwordlessCodesActive: 0 };
 
   return (
     <section>
@@ -34,12 +32,12 @@ export default async function BrivenAuthOverviewPage() {
           Auth
         </h1>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          sign-in for your apps
+          sign-in for your apps · {engine} {version}
         </p>
       </header>
 
       <div
-        className="rounded-md border p-8"
+        className="mb-6 rounded-md border p-6"
         style={{
           borderColor: 'var(--auth-accent-border, var(--color-border))',
           background: 'var(--color-surface)',
@@ -49,74 +47,74 @@ export default async function BrivenAuthOverviewPage() {
           className="font-mono text-[10px] uppercase tracking-widest"
           style={{ color: 'var(--auth-accent, #FFFD74)' }}
         >
-          Phase 5 · MFA + passkeys
+          overview
         </p>
-
-        <h2 className="mt-3 font-mono text-sm text-[var(--color-text)]">
+        <h2 className="mt-2 font-mono text-sm text-[var(--color-text)]">
           {appLoginReady
-            ? 'password, codes, Google/GitHub, TOTP MFA, passkeys'
+            ? 'app login is on (Doltgres)'
             : 'engine not ready yet'}
         </h2>
-        <p className="mt-2 max-w-lg font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          Full app login on Doltgres: email/password, OTP, magic link, SMS,
-          Google, GitHub, authenticator-app MFA (TOTP), and passkeys. OTP emails
-          use mittera (or SMTP if you set it). Sessions sit next to Briven DB
-          and Briven Pay.
+        <p className="mt-2 max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
+          Password, codes, Google/GitHub, MFA, and passkeys for apps. Data sits
+          in {storage}/{database} next to Briven DB and Briven Pay. Platform
+          login to briven.tech is separate.
         </p>
-
-        <dl className="mt-6 grid gap-3 font-mono text-xs sm:grid-cols-2">
-          <div className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3">
-            <dt className="text-[var(--color-text-muted)]">engine</dt>
-            <dd className="mt-1 text-[var(--color-text)]">{engine}</dd>
-          </div>
-          <div className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3">
-            <dt className="text-[var(--color-text-muted)]">version</dt>
-            <dd className="mt-1 text-[var(--color-text)]">{version}</dd>
-          </div>
-          <div className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3">
-            <dt className="text-[var(--color-text-muted)]">storage</dt>
-            <dd className="mt-1 text-[var(--color-text)]">
-              {storage} / {database}
-            </dd>
-          </div>
-          <div className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3">
-            <dt className="text-[var(--color-text-muted)]">app login</dt>
-            <dd className="mt-1 text-[var(--color-text)]">
-              {appLoginReady ? 'open (password)' : engineOk ? 'partial' : 'closed'}
-              {methods.length > 0 ? ` · ${methods.join(', ')}` : ''}
-            </dd>
-          </div>
-        </dl>
-
-        <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+        <p className="mt-3 font-mono text-[11px] text-[var(--color-text-muted)]">
           {message}
-          {info?.buildSha && info.buildSha !== 'dev' ? (
-            <span className="mt-1 block opacity-70">
-              build {info.buildSha.slice(0, 7)}
-            </span>
-          ) : null}
         </p>
+      </div>
 
-        <div className="mt-6 rounded border border-dashed border-[var(--color-border)] p-4 font-mono text-[11px] text-[var(--color-text-muted)]">
-          <p className="text-[var(--color-text)]">For apps (first-party proxy)</p>
-          <p className="mt-2">
-            POST /v1/auth-core/fdi/signup · /signin · /signout
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: 'users', value: counts.users },
+          { label: 'sessions', value: counts.sessions },
+          { label: 'tenants', value: counts.tenants },
+          { label: 'social links', value: counts.thirdPartyLinks },
+        ].map((c) => (
+          <div
+            key={c.label}
+            className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4"
+          >
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
+              {c.label}
+            </p>
+            <p className="mt-1 font-mono text-2xl text-[var(--color-text)]">
+              {dash.ok ? c.value : '—'}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {!dash.ok && dash.status === 401 ? (
+        <p className="mb-6 font-mono text-xs text-[var(--color-text-muted)]">
+          sign in to see live counts
+        </p>
+      ) : null}
+
+      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+        <h2 className="font-mono text-sm text-[var(--color-text)]">
+          methods
+        </h2>
+        {methods.length === 0 ? (
+          <p className="mt-2 font-mono text-xs text-[var(--color-text-muted)]">
+            none reported
           </p>
-          <p>
-            POST /v1/auth-core/fdi/signinup/code · /signinup/code/consume
-          </p>
-          <p>
-            GET /v1/auth-core/fdi/authorisationurl · POST /signinup (Google/GitHub)
-          </p>
-          <p>
-            POST /v1/auth-core/fdi/totp/setup · /totp/verify · webauthn/*
-          </p>
-          <p>GET /v1/auth-core/session/me · /loginmethods</p>
-          <p className="mt-2">
-            Send header <code className="text-[var(--color-text)]">x-briven-project-id</code>{' '}
-            so each app keeps its own users.
-          </p>
-        </div>
+        ) : (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {methods.map((m) => (
+              <li
+                key={m}
+                className="rounded border px-2 py-1 font-mono text-[11px] text-[var(--color-text)]"
+                style={{
+                  borderColor: 'var(--auth-accent-border)',
+                  background: 'var(--auth-accent-soft)',
+                }}
+              >
+                {m}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );

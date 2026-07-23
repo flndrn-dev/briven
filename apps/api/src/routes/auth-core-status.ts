@@ -30,9 +30,9 @@ authCoreStatusRouter.get('/v1/auth-core/info', async (c) => {
     product: 'Briven Auth',
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
-    productStatus: 'phase5-mfa-passkeys',
+    productStatus: 'phase6-dashboard',
     notice:
-      'password + passwordless + social + TOTP MFA + passkeys; email via mittera/SMTP',
+      'login APIs + yellow dashboard users/sessions/roles on Doltgres',
     buildSha: BUILD_SHA,
     buildAt: BUILD_AT,
     emailDelivery,
@@ -60,7 +60,7 @@ authCoreStatusRouter.get('/v1/auth-core/ready', async (c) => {
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
     notice:
-      'password + passwordless + social + TOTP MFA + passkeys; email via mittera/SMTP',
+      'login APIs + yellow dashboard users/sessions/roles on Doltgres',
     emailDelivery,
     ...core,
   });

@@ -173,26 +173,37 @@ export async function listBrivenEngineRoles(opts?: {
   projectId?: string;
   tenantId?: string;
 }): Promise<{
-  roles: Array<{ name: string; permissions: string[] }>;
+  roles: Array<{ name: string; permissions: string[]; tenantId: string }>;
   engine: 'briven-engine';
   storage: 'doltgres';
 }> {
   if (!isAuthCoreInitialized()) {
     return { roles: [], engine: 'briven-engine', storage: 'doltgres' };
   }
-  const tenantId =
-    opts?.tenantId ??
-    (opts?.projectId ? projectIdToTenantId(opts.projectId) : 'public');
   const pool = getEnginePool();
-  const res = await pool.query(
-    `SELECT role_name, permissions_json FROM be_roles WHERE tenant_id = $1 ORDER BY role_name`,
-    [tenantId],
-  );
+  // Dashboard (no filter): all tenants. With project/tenant: that slice only.
+  const scoped =
+    opts?.tenantId ??
+    (opts?.projectId ? projectIdToTenantId(opts.projectId) : null);
+  const res = scoped
+    ? await pool.query(
+        `SELECT tenant_id, role_name, permissions_json FROM be_roles
+         WHERE tenant_id = $1 ORDER BY role_name`,
+        [scoped],
+      )
+    : await pool.query(
+        `SELECT tenant_id, role_name, permissions_json FROM be_roles
+         ORDER BY tenant_id, role_name`,
+      );
   return {
     engine: 'briven-engine',
     storage: 'doltgres',
     roles: (
-      res.rows as Array<{ role_name: string; permissions_json: string }>
+      res.rows as Array<{
+        tenant_id: string;
+        role_name: string;
+        permissions_json: string;
+      }>
     ).map((r) => {
       let permissions: string[] = [];
       try {
@@ -200,7 +211,11 @@ export async function listBrivenEngineRoles(opts?: {
       } catch {
         permissions = [];
       }
-      return { name: r.role_name, permissions };
+      return {
+        name: r.role_name,
+        permissions,
+        tenantId: r.tenant_id,
+      };
     }),
   };
 }
