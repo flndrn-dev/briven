@@ -61,19 +61,13 @@ export function ProjectTabs({
             <Link
               key={tab.href}
               href={href}
-              className={`relative shrink-0 whitespace-nowrap px-3 py-2 font-mono text-sm transition ${
+              className={`shrink-0 whitespace-nowrap px-3 py-2 font-mono text-sm transition outline-none focus:outline-none focus-visible:outline-none ${
                 active
-                  ? 'text-[var(--color-text)]'
+                  ? 'font-medium text-[var(--color-text)]'
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
               }`}
             >
               {tab.label}
-              {active ? (
-                <span
-                  aria-hidden
-                  className="absolute inset-x-3 -bottom-px h-px bg-[var(--color-primary)]"
-                />
-              ) : null}
             </Link>
           );
         })}

@@ -13,10 +13,9 @@ const TABS: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: '/enterprise', label: 'enterprise' },
 ];
 
-const AUTH_ACCENT = '#FFFD74';
-
 /**
  * Tabs for one Auth project — same pattern as project tabs.
+ * Selected tab = brighter text only (no thick accent underline).
  */
 export function AuthProjectNav({ projectId }: { projectId: string }) {
   const pathname = usePathname();
@@ -38,20 +37,13 @@ export function AuthProjectNav({ projectId }: { projectId: string }) {
             <Link
               key={tab.href || 'overview'}
               href={href}
-              className={`relative shrink-0 whitespace-nowrap px-3 py-2 font-mono text-sm transition ${
+              className={`shrink-0 whitespace-nowrap px-3 py-2 font-mono text-sm transition outline-none focus:outline-none focus-visible:outline-none ${
                 active
-                  ? 'text-[var(--color-text)]'
+                  ? 'font-medium text-[var(--color-text)]'
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
               }`}
             >
               {tab.label}
-              {active ? (
-                <span
-                  aria-hidden
-                  className="absolute inset-x-3 -bottom-px h-0.5 rounded-full"
-                  style={{ background: AUTH_ACCENT }}
-                />
-              ) : null}
             </Link>
           );
         })}
