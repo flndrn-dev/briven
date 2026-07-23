@@ -15,14 +15,6 @@ type MethodFlags = {
   mfa: boolean;
 };
 
-type MethodChip = {
-  id: string;
-  label: string;
-  kind: 'core' | 'oauth';
-  enabled: boolean;
-  configured: boolean;
-};
-
 const CORE_METHOD_ORDER: Array<{ key: keyof MethodFlags; label: string }> = [
   { key: 'emailPassword', label: 'email + password' },
   { key: 'passwordlessEmail', label: 'passwordless-email' },
@@ -33,8 +25,7 @@ const CORE_METHOD_ORDER: Array<{ key: keyof MethodFlags; label: string }> = [
 ];
 
 /**
- * Security for one Auth project — roles + read-only view of this project's
- * sign-in methods (same flags as Providers).
+ * Security for one Auth project — roles + login methods mirroring Providers.
  */
 export default async function AuthProjectSecurityPage({
   params,
@@ -45,7 +36,7 @@ export default async function AuthProjectSecurityPage({
   let roles: RoleRow[] = [];
   let rolesErr: string | null = null;
   let methods: MethodFlags | null = null;
-  let oauthChips: MethodChip[] = [];
+  let oauthOn: Array<{ id: string; label: string }> = [];
   let configErr: string | null = null;
 
   const [rolesRes, configRes] = await Promise.all([
@@ -77,7 +68,6 @@ export default async function AuthProjectSecurityPage({
   if (configRes?.ok) {
     const body = (await configRes.json()) as {
       methods?: MethodFlags;
-      methodChips?: MethodChip[];
       providers?: Array<{
         thirdPartyId: string;
         name: string;
@@ -85,19 +75,14 @@ export default async function AuthProjectSecurityPage({
       }>;
     };
     methods = body.methods ?? null;
-    if (body.methodChips?.length) {
-      oauthChips = body.methodChips.filter((c) => c.kind === 'oauth');
-    } else {
-      oauthChips = (body.providers ?? []).map((p) => ({
-        id: p.thirdPartyId,
-        label: p.name,
-        kind: 'oauth' as const,
-        enabled: p.configured,
-        configured: p.configured,
-      }));
-    }
+    // Only OAuth with saved secrets (same as Providers yellow · on)
+    oauthOn = (body.providers ?? [])
+      .filter((p) => p.configured)
+      .map((p) => ({ id: p.thirdPartyId, label: p.name }));
   } else if (configRes && configRes.status === 401) {
     configErr = 'sign in to load methods';
+  } else if (configRes && !configRes.ok) {
+    configErr = `could not load config (${configRes.status})`;
   }
 
   const coreChips = CORE_METHOD_ORDER.map((m) => ({
@@ -122,43 +107,24 @@ export default async function AuthProjectSecurityPage({
           login methods
         </h3>
         <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-          yellow = on for this project · change in Providers
+          same as Providers · yellow = on · change under Providers
         </p>
         {configErr ? (
           <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
             {configErr}
           </p>
         ) : (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {coreChips.map((c) => (
-              <li
-                key={c.id}
-                className="rounded border px-2 py-1 font-mono text-[11px]"
-                style={
-                  c.on
-                    ? {
-                        borderColor: 'var(--auth-accent-border, #FFFD74)',
-                        background: 'var(--auth-accent-soft)',
-                        color: 'var(--color-text)',
-                      }
-                    : {
-                        borderColor: 'var(--color-border-subtle)',
-                        color: 'var(--color-text-muted)',
-                        opacity: 0.55,
-                      }
-                }
-              >
-                {c.label}
-              </li>
-            ))}
-            {oauthChips.map((c) => {
-              const on = c.enabled || c.configured;
-              return (
+          <>
+            <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
+              sign-in methods
+            </p>
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {coreChips.map((c) => (
                 <li
                   key={c.id}
                   className="rounded border px-2 py-1 font-mono text-[11px]"
                   style={
-                    on
+                    c.on
                       ? {
                           borderColor: 'var(--auth-accent-border, #FFFD74)',
                           background: 'var(--auth-accent-soft)',
@@ -172,11 +138,36 @@ export default async function AuthProjectSecurityPage({
                   }
                 >
                   {c.label}
-                  {on ? '' : ' · off'}
+                  {c.on ? '' : ' · off'}
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+
+            <p className="mt-4 font-mono text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
+              OAuth (secrets saved)
+            </p>
+            {oauthOn.length === 0 ? (
+              <p className="mt-2 font-mono text-[11px] text-[var(--color-text-muted)]">
+                none yet — save client id + secret under Providers
+              </p>
+            ) : (
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {oauthOn.map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded border px-2 py-1 font-mono text-[11px]"
+                    style={{
+                      borderColor: 'var(--auth-accent-border, #FFFD74)',
+                      background: 'var(--auth-accent-soft)',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    {c.label}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </div>
 

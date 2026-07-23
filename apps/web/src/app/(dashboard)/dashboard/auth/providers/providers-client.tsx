@@ -237,13 +237,17 @@ export function AuthProvidersClient({
     const draft = drafts[providerId];
     const clientId = draft?.clientId?.trim() ?? '';
     const clientSecret = draft?.clientSecret?.trim() ?? '';
-    if (!projectId || !clientId || !clientSecret) return;
+    if (!projectId) return;
+    if (!clientId || !clientSecret) {
+      setErr('Enter both client id and client secret, then click save.');
+      return;
+    }
     setPendingId(providerId);
     setErr(null);
     setOkMsg(null);
     try {
       const res = await fetch(
-        `/api/v1/auth-core/projects/${projectId}/providers/${providerId}`,
+        `/api/v1/auth-core/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(providerId)}`,
         {
           method: 'PUT',
           credentials: 'include',
@@ -254,28 +258,69 @@ export function AuthProvidersClient({
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         message?: string;
+        code?: string;
         config?: ProjectConfig;
       };
       if (!res.ok) {
-        throw new Error(body.message ?? `http ${res.status}`);
+        throw new Error(
+          body.message ?? body.code ?? `save failed (http ${res.status})`,
+        );
       }
       setDrafts((prev) => ({
         ...prev,
         [providerId]: { clientId: '', clientSecret: '' },
       }));
-      setOkMsg(`${providerId} saved (secrets stay encrypted)`);
-      // Keep this form open; ensure it stays in openIds
       setOpenIds((prev) =>
         prev.includes(providerId) ? prev : [...prev, providerId],
       );
-      if (body.config) {
+      // Prefer server config; always re-load so Security chips match
+      if (body.config?.providers?.length) {
         setConfig(body.config);
         if (body.config.methods) setMethods(body.config.methods);
-      } else await load(projectId);
+      } else {
+        await load(projectId);
+      }
+      // Optimistic mark if reload lag
+      setConfig((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          providers: prev.providers.map((p) =>
+            p.thirdPartyId === providerId
+              ? {
+                  ...p,
+                  configured: true,
+                  hasClientId: true,
+                  hasClientSecret: true,
+                }
+              : p,
+          ),
+        };
+      });
+      const name =
+        config?.providers.find((p) => p.thirdPartyId === providerId)?.name ??
+        providerId;
+      setOkMsg(`${name} saved — shown as on under Providers and Security.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'save failed');
     } finally {
       setPendingId(null);
+    }
+  }
+
+  async function saveAllOpenOauth(): Promise<void> {
+    const toSave = openIds.filter((id) => {
+      const d = drafts[id];
+      return d?.clientId?.trim() && d?.clientSecret?.trim();
+    });
+    if (toSave.length === 0) {
+      setErr(
+        'Fill client id + secret on at least one open form, then save.',
+      );
+      return;
+    }
+    for (const id of toSave) {
+      await saveOauth(id);
     }
   }
 
@@ -396,50 +441,60 @@ export function AuthProvidersClient({
                 : ' · none saved yet'}
             </p>
 
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {config.providers.map((p) => {
-                const isOpen = openIds.includes(p.thirdPartyId);
-                const isOn = p.configured;
-                return (
-                  <li key={p.thirdPartyId}>
-                    <button
-                      type="button"
-                      title={
-                        isOpen
-                          ? `Hide ${p.name} form`
-                          : `Show ${p.name} client id + secret form`
-                      }
-                      onClick={() => toggleOpen(p.thirdPartyId)}
-                      className="rounded border px-2.5 py-1.5 font-mono text-[11px] outline-none focus:outline-none"
-                      style={
-                        isOn
-                          ? {
-                              borderColor: '#FFFD74',
-                              background: '#FFFD74',
-                              color: '#111',
-                              boxShadow: isOpen
-                                ? '0 0 0 2px #111, 0 0 0 4px #FFFD74'
-                                : undefined,
-                            }
-                          : {
-                              borderColor: isOpen
-                                ? '#FFFD74'
-                                : 'var(--color-border-subtle)',
-                              background: isOpen
-                                ? 'color-mix(in srgb, #FFFD74 14%, transparent)'
-                                : 'transparent',
-                              color: 'var(--color-text-muted)',
-                            }
-                      }
-                    >
-                      {p.name}
-                      {isOn ? ' · on' : ' · set up'}
-                      {isOpen ? ' · open' : ''}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <ul className="flex flex-wrap gap-2">
+                {config.providers.map((p) => {
+                  const isOpen = openIds.includes(p.thirdPartyId);
+                  const isOn = p.configured;
+                  return (
+                    <li key={p.thirdPartyId}>
+                      <button
+                        type="button"
+                        title={
+                          isOpen
+                            ? `Hide ${p.name} form`
+                            : `Show ${p.name} client id + secret form`
+                        }
+                        onClick={() => toggleOpen(p.thirdPartyId)}
+                        className="rounded border px-2.5 py-1.5 font-mono text-[11px] outline-none focus:outline-none"
+                        style={
+                          isOn
+                            ? {
+                                borderColor: '#FFFD74',
+                                background: '#FFFD74',
+                                color: '#111',
+                                boxShadow: isOpen
+                                  ? '0 0 0 2px #111, 0 0 0 4px #FFFD74'
+                                  : undefined,
+                              }
+                            : {
+                                borderColor: isOpen
+                                  ? '#FFFD74'
+                                  : 'var(--color-border-subtle)',
+                                background: isOpen
+                                  ? 'color-mix(in srgb, #FFFD74 14%, transparent)'
+                                  : 'transparent',
+                                color: 'var(--color-text-muted)',
+                              }
+                        }
+                      >
+                        {p.name}
+                        {isOn ? ' · on' : ' · set up'}
+                        {isOpen ? ' · open' : ''}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button
+                type="button"
+                onClick={() => void saveAllOpenOauth()}
+                className="ml-auto rounded-md px-3 py-1.5 font-mono text-[11px] font-medium text-black"
+                style={{ background: '#FFFD74' }}
+              >
+                save open forms
+              </button>
+            </div>
 
             {/* One credential card per open provider — stacked, never replace */}
             <div className="mt-5 space-y-4">

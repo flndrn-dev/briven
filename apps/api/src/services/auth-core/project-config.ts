@@ -28,8 +28,53 @@ function clientIdName(id: BrivenSocialProviderId): string {
 function clientSecretName(id: BrivenSocialProviderId): string {
   return `briven_engine_${id}_client_secret`;
 }
+/** Legacy names from pre-engine Auth product (still on some projects). */
+function legacyClientIdName(id: BrivenSocialProviderId): string {
+  return `${id}_client_id`;
+}
+function legacyClientSecretName(id: BrivenSocialProviderId): string {
+  return `${id}_client_secret`;
+}
 function extraName(id: BrivenSocialProviderId, key: string): string {
   return `briven_engine_${id}_${key}`;
+}
+
+async function hasProviderClientId(
+  projectId: string,
+  id: BrivenSocialProviderId,
+): Promise<boolean> {
+  if (await hasTenantSecret(projectId, SERVICE, clientIdName(id))) return true;
+  return hasTenantSecret(projectId, SERVICE, legacyClientIdName(id));
+}
+
+async function hasProviderClientSecret(
+  projectId: string,
+  id: BrivenSocialProviderId,
+): Promise<boolean> {
+  if (await hasTenantSecret(projectId, SERVICE, clientSecretName(id))) {
+    return true;
+  }
+  return hasTenantSecret(projectId, SERVICE, legacyClientSecretName(id));
+}
+
+async function readProviderClientId(
+  projectId: string,
+  id: BrivenSocialProviderId,
+): Promise<string | null> {
+  return (
+    (await getTenantSecret(projectId, SERVICE, clientIdName(id))) ??
+    (await getTenantSecret(projectId, SERVICE, legacyClientIdName(id)))
+  );
+}
+
+async function readProviderClientSecret(
+  projectId: string,
+  id: BrivenSocialProviderId,
+): Promise<string | null> {
+  return (
+    (await getTenantSecret(projectId, SERVICE, clientSecretName(id))) ??
+    (await getTenantSecret(projectId, SERVICE, legacyClientSecretName(id)))
+  );
 }
 
 /** Per-project which sign-in methods are turned on for the app. */
@@ -128,15 +173,13 @@ export async function getBrivenEngineProjectConfig(
 
   const providers = await Promise.all(
     BRIVEN_ENGINE_SOCIAL_CATALOG.map(async (p) => {
-      const hasClientId = await hasTenantSecret(
+      const hasClientId = await hasProviderClientId(
         projectId,
-        SERVICE,
-        clientIdName(p.thirdPartyId),
+        p.thirdPartyId,
       );
-      const hasClientSecret = await hasTenantSecret(
+      const hasClientSecret = await hasProviderClientSecret(
         projectId,
-        SERVICE,
-        clientSecretName(p.thirdPartyId),
+        p.thirdPartyId,
       );
       return {
         thirdPartyId: p.thirdPartyId,
@@ -321,15 +364,10 @@ export async function loadProjectProviderSecrets(
 ): Promise<ProjectProviderSecrets[]> {
   const out: ProjectProviderSecrets[] = [];
   for (const p of BRIVEN_ENGINE_SOCIAL_CATALOG) {
-    const clientId = await getTenantSecret(
+    const clientId = await readProviderClientId(projectId, p.thirdPartyId);
+    const clientSecret = await readProviderClientSecret(
       projectId,
-      SERVICE,
-      clientIdName(p.thirdPartyId),
-    );
-    const clientSecret = await getTenantSecret(
-      projectId,
-      SERVICE,
-      clientSecretName(p.thirdPartyId),
+      p.thirdPartyId,
     );
     if (!clientId || !clientSecret) continue;
     const additionalConfig: Record<string, string> = {};
