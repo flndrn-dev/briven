@@ -330,11 +330,9 @@ export function AuthEnterpriseClient({
           Company SSO (SAML + OIDC)
         </h2>
         <p className="mt-1 max-w-2xl font-mono text-[11px] leading-relaxed text-[var(--color-text-muted)]">
-          Production login paths are live on the API. A connection is marked{' '}
-          <strong className="text-[var(--color-text)]">production ready</strong>{' '}
-          when required IdP fields are set (SAML: SSO URL + certificate; OIDC:
-          client id + secret + issuer or endpoints). Users sign in via those
-          URLs; accounts land in briven-engine on Doltgres.
+          Let staff sign into this app with their company login (Okta, Azure AD,
+          Google Workspace, etc.) instead of a separate password. Add a
+          connection when a company asks for single sign-on.
         </p>
 
         {!lockProjectId ? (

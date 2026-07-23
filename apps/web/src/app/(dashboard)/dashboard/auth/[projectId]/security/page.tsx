@@ -1,5 +1,4 @@
 import { apiFetch } from '@/lib/api';
-import { fetchAuthCoreInfo } from '../../lib/auth-api';
 import { AuthRolesForm } from '../../security/roles-form';
 
 export const metadata = { title: 'Auth · security' };
@@ -7,35 +6,105 @@ export const dynamic = 'force-dynamic';
 
 type RoleRow = { name: string; permissions: string[]; tenantId?: string };
 
+type MethodFlags = {
+  emailPassword: boolean;
+  passwordlessEmail: boolean;
+  magicLink: boolean;
+  passwordlessSms: boolean;
+  passkeys: boolean;
+  mfa: boolean;
+};
+
+type MethodChip = {
+  id: string;
+  label: string;
+  kind: 'core' | 'oauth';
+  enabled: boolean;
+  configured: boolean;
+};
+
+const CORE_METHOD_ORDER: Array<{ key: keyof MethodFlags; label: string }> = [
+  { key: 'emailPassword', label: 'email + password' },
+  { key: 'passwordlessEmail', label: 'passwordless-email' },
+  { key: 'magicLink', label: 'magic-link' },
+  { key: 'passwordlessSms', label: 'passwordless-sms' },
+  { key: 'passkeys', label: 'passkeys' },
+  { key: 'mfa', label: 'mfa (TOTP)' },
+];
+
+/**
+ * Security for one Auth project — roles + read-only view of this project's
+ * sign-in methods (same flags as Providers).
+ */
 export default async function AuthProjectSecurityPage({
   params,
 }: {
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const info = await fetchAuthCoreInfo();
   let roles: RoleRow[] = [];
   let rolesErr: string | null = null;
+  let methods: MethodFlags | null = null;
+  let oauthChips: MethodChip[] = [];
+  let configErr: string | null = null;
 
-  try {
-    const res = await apiFetch(
+  const [rolesRes, configRes] = await Promise.all([
+    apiFetch(
       `/v1/auth-core/roles?projectId=${encodeURIComponent(projectId)}`,
-    );
-    if (res.status === 401) {
+    ).catch(() => null),
+    apiFetch(
+      `/v1/auth-core/projects/${encodeURIComponent(projectId)}/config`,
+    ).catch(() => null),
+  ]);
+
+  if (rolesRes) {
+    if (rolesRes.status === 401) {
       rolesErr = 'sign in to briven.tech to manage roles';
-    } else if (res.ok) {
-      const body = (await res.json()) as {
-        roles?: Array<{ name: string; permissions: string[]; tenantId?: string }>;
+    } else if (rolesRes.ok) {
+      const body = (await rolesRes.json()) as {
+        roles?: Array<{
+          name: string;
+          permissions: string[];
+          tenantId?: string;
+        }>;
       };
       roles = body.roles ?? [];
     } else {
-      rolesErr = await res.text().catch(() => res.statusText);
+      rolesErr = await rolesRes.text().catch(() => rolesRes.statusText);
     }
-  } catch (e) {
-    rolesErr = e instanceof Error ? e.message : String(e);
   }
 
-  const methods = info?.loginMethods ?? [];
+  if (configRes?.ok) {
+    const body = (await configRes.json()) as {
+      methods?: MethodFlags;
+      methodChips?: MethodChip[];
+      providers?: Array<{
+        thirdPartyId: string;
+        name: string;
+        configured: boolean;
+      }>;
+    };
+    methods = body.methods ?? null;
+    if (body.methodChips?.length) {
+      oauthChips = body.methodChips.filter((c) => c.kind === 'oauth');
+    } else {
+      oauthChips = (body.providers ?? []).map((p) => ({
+        id: p.thirdPartyId,
+        label: p.name,
+        kind: 'oauth' as const,
+        enabled: p.configured,
+        configured: p.configured,
+      }));
+    }
+  } else if (configRes && configRes.status === 401) {
+    configErr = 'sign in to load methods';
+  }
+
+  const coreChips = CORE_METHOD_ORDER.map((m) => ({
+    id: m.key,
+    label: m.label,
+    on: methods ? Boolean(methods[m.key]) : false,
+  }));
 
   return (
     <section className="space-y-8">
@@ -50,22 +119,65 @@ export default async function AuthProjectSecurityPage({
 
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
         <h3 className="font-mono text-sm text-[var(--color-text)]">
-          login methods (platform)
+          login methods
         </h3>
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {methods.map((m) => (
-            <li
-              key={m}
-              className="rounded border px-2 py-1 font-mono text-[11px]"
-              style={{
-                borderColor: 'var(--auth-accent-border)',
-                background: 'var(--auth-accent-soft)',
-              }}
-            >
-              {m}
-            </li>
-          ))}
-        </ul>
+        <p className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
+          yellow = on for this project · change in Providers
+        </p>
+        {configErr ? (
+          <p className="mt-3 font-mono text-xs text-[var(--color-text-muted)]">
+            {configErr}
+          </p>
+        ) : (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {coreChips.map((c) => (
+              <li
+                key={c.id}
+                className="rounded border px-2 py-1 font-mono text-[11px]"
+                style={
+                  c.on
+                    ? {
+                        borderColor: 'var(--auth-accent-border, #FFFD74)',
+                        background: 'var(--auth-accent-soft)',
+                        color: 'var(--color-text)',
+                      }
+                    : {
+                        borderColor: 'var(--color-border-subtle)',
+                        color: 'var(--color-text-muted)',
+                        opacity: 0.55,
+                      }
+                }
+              >
+                {c.label}
+              </li>
+            ))}
+            {oauthChips.map((c) => {
+              const on = c.enabled || c.configured;
+              return (
+                <li
+                  key={c.id}
+                  className="rounded border px-2 py-1 font-mono text-[11px]"
+                  style={
+                    on
+                      ? {
+                          borderColor: 'var(--auth-accent-border, #FFFD74)',
+                          background: 'var(--auth-accent-soft)',
+                          color: 'var(--color-text)',
+                        }
+                      : {
+                          borderColor: 'var(--color-border-subtle)',
+                          color: 'var(--color-text-muted)',
+                          opacity: 0.55,
+                        }
+                  }
+                >
+                  {c.label}
+                  {on ? '' : ' · off'}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
