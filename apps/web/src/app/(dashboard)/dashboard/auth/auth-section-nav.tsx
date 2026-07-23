@@ -13,12 +13,12 @@ const TABS = [
   { href: '/dashboard/auth/users', label: 'users', dev: false },
   { href: '/dashboard/auth/sessions', label: 'sessions', dev: false },
   { href: '/dashboard/auth/security', label: 'security', dev: false },
-  // Advanced / setup tools (later phases)
+  { href: '/dashboard/auth/keys', label: 'keys', dev: false },
+  { href: '/dashboard/auth/providers', label: 'providers', dev: false },
+  { href: '/dashboard/auth/enterprise', label: 'enterprise', dev: false },
+  // Advanced / later tools
   { href: '/dashboard/auth/projects', label: 'projects', dev: true },
-  { href: '/dashboard/auth/keys', label: 'keys', dev: true },
-  { href: '/dashboard/auth/providers', label: 'providers', dev: true },
   { href: '/dashboard/auth/branding', label: 'branding', dev: true },
-  { href: '/dashboard/auth/enterprise', label: 'enterprise', dev: true },
   { href: '/dashboard/auth/domains', label: 'domains', dev: true },
 ] as const;
 

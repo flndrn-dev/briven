@@ -30,9 +30,9 @@ authCoreStatusRouter.get('/v1/auth-core/info', async (c) => {
     product: 'Briven Auth',
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
-    productStatus: 'phase6-dashboard',
+    productStatus: 'phase7-tabs',
     notice:
-      'login APIs + yellow dashboard users/sessions/roles on Doltgres',
+      'login APIs + yellow dashboard (users/sessions/roles/keys/providers/enterprise) on Doltgres',
     buildSha: BUILD_SHA,
     buildAt: BUILD_AT,
     emailDelivery,
@@ -60,7 +60,7 @@ authCoreStatusRouter.get('/v1/auth-core/ready', async (c) => {
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
     notice:
-      'login APIs + yellow dashboard users/sessions/roles on Doltgres',
+      'login APIs + yellow dashboard (users/sessions/roles/keys/providers/enterprise) on Doltgres',
     emailDelivery,
     ...core,
   });

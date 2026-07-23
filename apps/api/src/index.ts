@@ -32,12 +32,11 @@ import { authCoreLoginMethodsRouter } from './routes/auth-core-loginmethods.js';
 import { authCoreDashboardRouter } from './routes/auth-core-dashboard.js';
 import { authCoreUsersRouter } from './routes/auth-core-users.js';
 import { authCoreRolesRouter } from './routes/auth-core-roles.js';
+import { authCoreKeysRouter } from './routes/auth-core-keys.js';
+import { authCoreProjectRouter } from './routes/auth-core-project.js';
+import { authCoreRouter } from './routes/auth-core.js';
 import { initAuthCoreSdk } from './services/auth-core/engine.js';
-// Option B Phase 6: dashboard users/roles + FDI login surface.
-// import { authServiceRouter } from './routes/auth-service.js';
-// import { authV2Router } from './routes/auth-v2.js';
-// import { authScimRouter } from './routes/auth-scim.js';
-// import { authCoreRouter } from './routes/auth-core.js';
+// Option B Phase 7: yellow tabs (keys/providers/enterprise) + Phase 6 dashboard.
 import { billingRouter } from './routes/billing.js';
 import { brandingPublicRouter } from './routes/branding-public.js';
 import { dbRouter } from './routes/db.js';
@@ -168,7 +167,7 @@ app.route('/', healthRouter);
 app.route('/', authRouter);
 app.route('/', authCliRouter);
 app.route('/', meRouter);
-// Briven Auth Option B Phase 6: FDI login + yellow dashboard (users/sessions/roles).
+// Briven Auth Option B Phase 7: FDI login + yellow dashboard + keys/providers/enterprise.
 // Platform operator login stays on authRouter (/v1/auth/* Better Auth for briven.tech).
 app.route('/', authCoreStatusRouter);
 app.route('/', authCoreFdiRouter);
@@ -177,9 +176,12 @@ app.route('/', authCoreLoginMethodsRouter);
 app.route('/', authCoreDashboardRouter);
 app.route('/', authCoreUsersRouter);
 app.route('/', authCoreRolesRouter);
+app.route('/', authCoreKeysRouter);
+app.route('/', authCoreProjectRouter);
+app.route('/', authCoreRouter); // workspace + enable Auth
 app.route('/', authProductRetiredRouter);
-log.info('auth_product_phase6_dashboard', {
-  note: 'briven-engine FDI login + yellow dashboard users/sessions/roles on Doltgres',
+log.info('auth_product_phase7_tabs', {
+  note: 'briven-engine FDI + yellow dashboard users/sessions/roles/keys/providers/enterprise',
   engine: 'briven-engine',
   appLoginReady: true,
   platformLogin: '/v1/auth/*',

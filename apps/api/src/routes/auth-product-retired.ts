@@ -24,15 +24,11 @@ authProductRetiredRouter.all('/v1/auth-v2/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/projects/:id/auth/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/projects/:id/scim/*', (c) => c.json(GONE, 410));
 
-// Phase 6 opens: dashboard, users, roles, session recent (operator session).
-// Still closed: legacy project auth, keys UI API, migration bulk, workspace bridge.
+// Phase 7 opens: dashboard, users, roles, sessions, workspace, project config,
+// keys, tenants. Still closed: legacy recipes admin, MFA admin-only helpers,
+// migration bulk (deep enterprise login comes later).
 authProductRetiredRouter.all('/v1/auth-core/recipes', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/recipes/*', (c) => c.json(GONE, 410));
-authProductRetiredRouter.all('/v1/auth-core/workspace', (c) => c.json(GONE, 410));
-authProductRetiredRouter.all('/v1/auth-core/projects/*', (c) => c.json(GONE, 410));
-authProductRetiredRouter.all('/v1/auth-core/tenants', (c) => c.json(GONE, 410));
-authProductRetiredRouter.all('/v1/auth-core/tenants/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/mfa/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/passkeys/*', (c) => c.json(GONE, 410));
-authProductRetiredRouter.all('/v1/auth-core/keys/*', (c) => c.json(GONE, 410));
 authProductRetiredRouter.all('/v1/auth-core/migration/*', (c) => c.json(GONE, 410));

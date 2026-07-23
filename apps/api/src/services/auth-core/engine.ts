@@ -23,7 +23,7 @@ import { getEnginePool, isEnginePoolReady } from './db.js';
 
 export const BRIVEN_ENGINE_ID = 'briven-engine' as const;
 /** Product engine version shown on yellow Auth shell (Option B Phase 1). */
-export const BRIVEN_ENGINE_VERSION = '0.6.0-phase6' as const;
+export const BRIVEN_ENGINE_VERSION = '0.7.0-phase7-tabs' as const;
 
 export type AuthCoreStatus = {
   enabled: boolean;
@@ -38,7 +38,7 @@ export type AuthCoreStatus = {
   appLoginReady: boolean;
   loginMethods: string[];
   message: string;
-  deployGate: 'phase6-dashboard';
+  deployGate: 'phase7-tabs';
   recipeNames: string[];
   sdkInitialized: boolean;
   recipePhase: number | null;
@@ -72,10 +72,10 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
     database: 'briven_engine' as const,
     appLoginReady: false,
     loginMethods: [] as string[],
-    deployGate: 'phase6-dashboard' as const,
+    deployGate: 'phase7-tabs' as const,
     recipeNames: [...LOADED_RECIPES],
     sdkInitialized: bootstrapped && schemaReady,
-    recipePhase: bootstrapped ? 6 : null,
+    recipePhase: bootstrapped ? 7 : null,
     // Redact credentials — this object is returned on public /info.
     connectionUri: redactConnectionUri(env.BRIVEN_ENGINE_DATABASE_URL),
     hello: null as string | null,
@@ -117,12 +117,12 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       ok: ready,
       schemaReady,
       poolReady: true,
-      phase: 6,
+      phase: 7,
       appLoginReady: ready,
       loginMethods: ready ? listPhase5LoginMethods() : [],
       hello: ok ? 'Hello' : null,
       message: ready
-        ? 'briven-engine login + yellow dashboard users/roles/sessions (Phase 6)'
+        ? 'briven-engine login + yellow dashboard tabs (Phase 7: keys/providers/enterprise)'
         : schemaReady
           ? 'Doltgres reachable; engine not fully bootstrapped'
           : 'Doltgres reachable; schema not bootstrapped',
@@ -200,7 +200,7 @@ export async function initAuthCoreSdk(): Promise<boolean> {
       storage: 'doltgres',
       database: 'briven_engine',
       recipes: LOADED_RECIPES,
-      deployGate: 'phase6-dashboard',
+      deployGate: 'phase7-tabs',
       appLoginReady: true,
       loginMethods: listPhase5LoginMethods(),
     });

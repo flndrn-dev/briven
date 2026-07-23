@@ -5,32 +5,39 @@
 | Phase | What | Status |
 |-------|------|--------|
 | 2–5 | Login APIs (password, codes, social, MFA, passkeys) | Live (France) |
-| **6** | Yellow dashboard: users, sessions, roles/security | Built locally — ship when you say COMMIT+PUSH+DEPLOY |
+| 6 | Yellow dashboard: users, sessions, roles | Live (France) |
+| **7 tabs** | Keys, providers, enterprise (tenants) | **Built locally** — ship when you say COMMIT+PUSH+DEPLOY |
 
-## Dashboard (operator, signed in to briven.tech)
+## Dashboard tabs (signed in to briven.tech)
 
-| Tab | Data |
+| Tab | What |
 |-----|------|
-| Overview | Engine version, counts, methods |
-| Users | `GET /v1/auth-core/users` |
-| Sessions | `GET /v1/auth-core/session/recent` |
-| Security | Methods + roles list + create form (`/v1/auth-core/roles`) |
+| Overview | Counts + methods |
+| Users | App end-users |
+| Sessions | Active app sessions |
+| Security | Roles create/list |
+| **Keys** | Mint / list / revoke `pk_briven_auth_…` |
+| **Providers** | Social secrets per project + platform methods |
+| **Enterprise** | Enable Auth, tenants list; SAML/OIDC **not live yet** (honest copy) |
 
-## Operator APIs (need briven.tech session)
+## Operator APIs opened (Phase 7)
 
-- `GET /v1/auth-core/dashboard`
-- `GET /v1/auth-core/users`
-- `GET /v1/auth-core/session/recent`
-- `GET|POST /v1/auth-core/roles`, `POST .../roles/assign`, `GET .../users/:id/roles`
+- `GET /v1/auth-core/workspace`
+- `POST /v1/auth-core/projects/:projectId/enable`
+- `GET /v1/auth-core/projects/:projectId/config`
+- `PUT /v1/auth-core/projects/:projectId/providers/:thirdPartyId`
+- `GET|POST|DELETE /v1/auth-core/projects/:projectId/keys…`
+- `GET /v1/auth-core/tenants`
 
 ## App login APIs
 
-Unchanged from Phase 5 — FDI under `/v1/auth-core/fdi/*`.
+Unchanged — FDI under `/v1/auth-core/fdi/*`.
+
+## Full SuperTokens checklist
+
+See `BRIVEN-AUTH-FEATURE-AUDIT.md` (living Pass / Partial / Missing).  
+Deep enterprise (SAML, Briven as IdP, M2M) and 492-URL pass are **not** claimed yet.
 
 ## Email
 
 mittera (or SMTP if `BRIVEN_SMTP_*` set).
-
-## Pay + DB
-
-Same Doltgres family; same project id.
