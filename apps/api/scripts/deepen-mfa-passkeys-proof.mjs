@@ -43,7 +43,7 @@ const { getAuthorisationUrl } = await import(
 );
 const { getEnginePool } = await import('../src/services/auth-core/db.ts');
 
-console.log('=== Deepen: MFA + passkeys + Google URL (Doltgres) ===');
+console.log('=== Phase 5: MFA + passkeys on Doltgres ===');
 
 if (!(await ensureBrivenEngineDatabase()).ok) process.exit(1);
 if (!(await initAuthCoreSdk())) process.exit(1);
@@ -172,6 +172,8 @@ console.log('SQL totp verified', totpRows.rows[0]);
 console.log('SQL passkeys', pkRows.rows[0]);
 
 console.log('');
-console.log('✔ DEEPEN PROOF OK (MFA + passkeys + Google URL)');
+console.log('✔ PHASE 5 LOCAL PROOF OK (MFA + passkeys)');
 console.log('  storage: Doltgres');
+console.log('  TOTP enroll + verify: OK');
+console.log('  passkey register + authenticate: OK');
 process.exit(0);

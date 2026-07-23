@@ -103,7 +103,7 @@ export async function createTotpDevice(
     opts?.tenantId ??
     (opts?.projectId ? projectIdToTenantId(opts.projectId) : 'public');
   const secret = toBase32(randomBytes(20));
-  const id = newId('btp');
+  const id = newId('btd');
   const name = deviceName.trim() || 'default';
   const pool = getEnginePool();
   await pool.query(
@@ -180,6 +180,18 @@ export async function verifyUserTotp(
     }
   }
   return { ok: false, engine: 'briven-engine' };
+}
+
+/** True if user has at least one verified TOTP device. */
+export async function userHasVerifiedTotp(userId: string): Promise<boolean> {
+  if (!isAuthCoreInitialized()) return false;
+  const pool = getEnginePool();
+  const res = await pool.query(
+    `SELECT 1 AS ok FROM be_totp_devices
+     WHERE user_id = $1 AND verified = TRUE LIMIT 1`,
+    [userId],
+  );
+  return Boolean(res.rowCount && res.rowCount > 0);
 }
 
 export async function listTotpDevices(userId: string): Promise<{

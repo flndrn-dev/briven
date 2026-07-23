@@ -49,19 +49,19 @@ export default async function BrivenAuthOverviewPage() {
           className="font-mono text-[10px] uppercase tracking-widest"
           style={{ color: 'var(--auth-accent, #FFFD74)' }}
         >
-          Phase 4 · social + real email
+          Phase 5 · MFA + passkeys
         </p>
 
         <h2 className="mt-3 font-mono text-sm text-[var(--color-text)]">
           {appLoginReady
-            ? 'password, passwordless, Google/GitHub (Doltgres)'
+            ? 'password, codes, Google/GitHub, TOTP MFA, passkeys'
             : 'engine not ready yet'}
         </h2>
         <p className="mt-2 max-w-lg font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          Apps can sign users in with email/password, email code, magic link, SMS
-          code, Google, or GitHub. OTP emails use the same platform mail path as
-          briven.tech (SMTP if set, otherwise mittera). Sessions live in Doltgres
-          next to Briven DB and Briven Pay.
+          Full app login on Doltgres: email/password, OTP, magic link, SMS,
+          Google, GitHub, authenticator-app MFA (TOTP), and passkeys. OTP emails
+          use mittera (or SMTP if you set it). Sessions sit next to Briven DB
+          and Briven Pay.
         </p>
 
         <dl className="mt-6 grid gap-3 font-mono text-xs sm:grid-cols-2">
@@ -107,6 +107,9 @@ export default async function BrivenAuthOverviewPage() {
           </p>
           <p>
             GET /v1/auth-core/fdi/authorisationurl · POST /signinup (Google/GitHub)
+          </p>
+          <p>
+            POST /v1/auth-core/fdi/totp/setup · /totp/verify · webauthn/*
           </p>
           <p>GET /v1/auth-core/session/me · /loginmethods</p>
           <p className="mt-2">

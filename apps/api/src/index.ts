@@ -172,8 +172,8 @@ app.route('/', authCoreFdiRouter);
 app.route('/', authCoreSessionRouter);
 app.route('/', authCoreLoginMethodsRouter);
 app.route('/', authProductRetiredRouter);
-log.info('auth_product_phase4_social_email', {
-  note: 'briven-engine password + passwordless + Google/GitHub; Auth email via SMTP/mittera',
+log.info('auth_product_phase5_mfa_passkeys', {
+  note: 'briven-engine password + passwordless + social + TOTP MFA + passkeys',
   engine: 'briven-engine',
   appLoginReady: true,
   platformLogin: '/v1/auth/*',

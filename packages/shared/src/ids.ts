@@ -53,6 +53,7 @@ export type IdPrefix =
   | 'tsec' // tenant secret (per-project encrypted credential, e.g. provider keys)
   | 'beu' // briven-engine end-user (Auth product, Doltgres vault)
   | 'btp' // briven-engine third-party link
+  | 'btd' // briven-engine TOTP device
   | 'bwc' // briven-engine webauthn credential
 
 export function newId(prefix: IdPrefix): string {

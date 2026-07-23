@@ -4,47 +4,41 @@
 
 | Phase | What | Status |
 |-------|------|--------|
-| **2** | Email/password + sessions | Live |
-| **3** | Email OTP, magic link, SMS OTP | Live |
-| **4** | Google/GitHub social + Auth email via platform mail | Shipping |
+| 2 | Email/password + sessions | Live |
+| 3 | Email OTP, magic link, SMS OTP | Live |
+| 4 | Google/GitHub + Auth email via mittera/SMTP | Live |
+| 5 | TOTP MFA + passkeys | Shipping |
 
-## App login APIs (`briven-engine` on Doltgres `briven_engine`)
+## App login (briven-engine → Doltgres `briven_engine`)
 
-| Method | Path |
-|--------|------|
-| Password | `POST /v1/auth-core/fdi/signup` · `/signin` · `/signout` |
-| Passwordless | `POST /v1/auth-core/fdi/signinup/code` · `/signinup/code/consume` |
-| Social | `GET /v1/auth-core/fdi/authorisationurl` · `POST /v1/auth-core/fdi/signinup` |
-| Session | `GET /v1/auth-core/session/me` |
-| Status | `GET /v1/auth-core/info` (includes `emailDelivery`) · `/loginmethods` |
+| Feature | Path |
+|---------|------|
+| Password | `POST .../fdi/signup` · `/signin` · `/signout` |
+| Passwordless | `POST .../fdi/signinup/code` · `/signinup/code/consume` |
+| Social | `GET .../fdi/authorisationurl` · `POST .../fdi/signinup` |
+| TOTP enroll | `POST .../fdi/totp/setup` · `/totp/setup/verify` (session required) |
+| TOTP login | After password, if MFA enrolled → `MFA_REQUIRED` then `POST .../fdi/totp/verify` |
+| Passkeys | `POST .../fdi/webauthn/register/*` · `/webauthn/signin/*` |
+| Session | `GET .../session/me` |
 
-Header: `x-briven-project-id: <project id>`
+Header: `x-briven-project-id`
 
-## Email for OTP / magic link
+## Email
 
-Uses the **same platform chain** as briven.tech mail:
+OTP/magic-link: platform chain **SMTP → mittera → log**.  
+Live currently uses **mittera** until you set `BRIVEN_SMTP_*` in Dokploy.
 
-1. **SMTP** if `BRIVEN_SMTP_HOST` + `USER` + `PASS` (+ optional `FROM`) are set  
-2. Else **mittera** if configured on the API  
-3. Else log/stdout (dev)
+## SMTP (deferred by flndrn)
 
-`GET /v1/auth-core/info` → `emailDelivery.activeTransport` + `realEmailLikely`.
+Keep mittera for now. To switch to guaranteed inbox SMTP later, set in Dokploy:
 
-For **guaranteed inbox delivery**, set SMTP in Dokploy (compose already passes the vars).
-
-## Google / GitHub
-
-Platform env (already on France when set):
-
-- `BRIVEN_GOOGLE_CLIENT_ID` / `BRIVEN_GOOGLE_CLIENT_SECRET`  
-- `BRIVEN_GITHUB_CLIENT_ID` / `BRIVEN_GITHUB_CLIENT_SECRET`  
-
-Add OAuth redirect URIs for each app, e.g. `https://your-app.com/auth/callback/google`.
+- `BRIVEN_SMTP_HOST`, `PORT`, `USER`, `PASS`, `FROM`  
+- Recreate **api** container  
 
 ## Pay + DB
 
-Same Doltgres family: Auth vault, project DBs, Pay — linked by Briven project id.
+Same Doltgres family; same project id.
 
 ## Platform login
 
-briven.tech operator login unchanged (`/v1/auth/*`).
+briven.tech `/v1/auth/*` unchanged.
