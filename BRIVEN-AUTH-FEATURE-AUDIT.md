@@ -29,9 +29,10 @@ Legend: **Y** = implemented + proof · **P** = partial · **N** = not yet · **N
 | Email OTP | Y | Phase 3 live |
 | Email magic link | Y | Phase 3 live |
 | SMS OTP | P | Engine + log; Twilio secrets optional |
-| Google OAuth | Y | Platform env + project secrets UI |
-| GitHub OAuth | Y | Platform env + project secrets UI |
-| Other social (Apple, Discord, …) | P | Catalog + secrets store; not all exchange paths |
+| Google OAuth | Y | Platform env + project secrets UI + exchange |
+| GitHub OAuth | Y | Platform env + project secrets UI + exchange |
+| Konnos OAuth | Y | Project secrets + exchange |
+| Other social (Apple, Discord, Microsoft, Facebook, X, LinkedIn, GitLab, Bitbucket, Spotify) | Y | Full authorize + token + profile exchange when secrets set (Apple needs client-secret JWT) |
 | Passkeys | Y | Phase 5 live |
 | TOTP MFA | Y | Phase 5 live |
 

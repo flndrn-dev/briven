@@ -1,5 +1,8 @@
 /**
- * briven-engine third-party social login (Google / GitHub first) on Doltgres.
+ * briven-engine third-party social login on Doltgres.
+ *
+ * Full catalog (Konnos, Google, GitHub, Discord, Apple, Microsoft, Facebook,
+ * X/Twitter, LinkedIn, GitLab, Bitbucket, Spotify).
  *
  * Flow:
  *  1) getAuthorisationUrl → browser → provider
@@ -8,7 +11,7 @@
  *  4) signInUpWithThirdPartyProfile → user + link + session on Doltgres
  */
 
-import { randomBytes } from 'node:crypto';
+import { createSign, randomBytes } from 'node:crypto';
 
 import { newId } from '@briven/shared';
 
@@ -19,15 +22,138 @@ import { createEngineSession } from './native-session.js';
 import { projectIdToTenantId } from './project-map.js';
 import {
   loadProjectProviderSecrets,
-  type ProjectProviderSecrets,
 } from './project-config.js';
 import type { BrivenSocialProviderId } from './providers.js';
 
-export type SupportedSocial = 'google' | 'github' | 'konnos';
+/** All catalog providers that can run OAuth login when secrets are set. */
+export type SupportedSocial = BrivenSocialProviderId;
+
+type OAuthProviderEndpoints = {
+  authorizeUrl: string;
+  tokenUrl: string;
+  userInfoUrl?: string;
+  /** Space-separated OAuth scopes */
+  scope: string;
+  /** How to POST the token request */
+  tokenBody: 'json' | 'form';
+  /** Extra authorize query params */
+  authorizeExtra?: Record<string, string>;
+  /**
+   * Parse access_token + profile from token/userinfo responses.
+   * Defaults: standard OAuth2 JSON userinfo.
+   */
+  profileFrom?: 'userinfo' | 'apple_id_token' | 'twitter_v2';
+};
+
+const OAUTH_ENDPOINTS: Record<SupportedSocial, OAuthProviderEndpoints> = {
+  google: {
+    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    userInfoUrl: 'https://www.googleapis.com/oauth2/v3/userinfo',
+    scope: 'openid email profile',
+    tokenBody: 'form',
+    authorizeExtra: {
+      access_type: 'online',
+      include_granted_scopes: 'true',
+    },
+  },
+  github: {
+    authorizeUrl: 'https://github.com/login/oauth/authorize',
+    tokenUrl: 'https://github.com/login/oauth/access_token',
+    userInfoUrl: 'https://api.github.com/user',
+    scope: 'user:email',
+    tokenBody: 'json',
+  },
+  konnos: {
+    authorizeUrl: `${(process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org').replace(/\/$/, '')}/login/oauth/authorize`,
+    tokenUrl: `${(process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org').replace(/\/$/, '')}/login/oauth/access_token`,
+    userInfoUrl: `${(process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org').replace(/\/$/, '')}/api/user`,
+    scope: 'read:user',
+    tokenBody: 'json',
+  },
+  discord: {
+    authorizeUrl: 'https://discord.com/api/oauth2/authorize',
+    tokenUrl: 'https://discord.com/api/oauth2/token',
+    userInfoUrl: 'https://discord.com/api/users/@me',
+    scope: 'identify email',
+    tokenBody: 'form',
+  },
+  microsoft: {
+    authorizeUrl:
+      'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    userInfoUrl: 'https://graph.microsoft.com/v1.0/me',
+    scope: 'openid email profile User.Read',
+    tokenBody: 'form',
+  },
+  facebook: {
+    authorizeUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
+    tokenUrl: 'https://graph.facebook.com/v18.0/oauth/access_token',
+    userInfoUrl:
+      'https://graph.facebook.com/me?fields=id,name,email',
+    scope: 'email,public_profile',
+    tokenBody: 'form',
+  },
+  twitter: {
+    // X OAuth 2.0
+    authorizeUrl: 'https://twitter.com/i/oauth2/authorize',
+    tokenUrl: 'https://api.twitter.com/2/oauth2/token',
+    userInfoUrl:
+      'https://api.twitter.com/2/users/me?user.fields=id,name,username',
+    scope: 'users.read tweet.read offline.access',
+    tokenBody: 'form',
+    authorizeExtra: { code_challenge_method: 'plain' },
+    profileFrom: 'twitter_v2',
+  },
+  linkedin: {
+    authorizeUrl: 'https://www.linkedin.com/oauth/v2/authorization',
+    tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
+    userInfoUrl: 'https://api.linkedin.com/v2/userinfo',
+    scope: 'openid profile email',
+    tokenBody: 'form',
+  },
+  gitlab: {
+    authorizeUrl: 'https://gitlab.com/oauth/authorize',
+    tokenUrl: 'https://gitlab.com/oauth/token',
+    userInfoUrl: 'https://gitlab.com/api/v4/user',
+    scope: 'read_user',
+    tokenBody: 'form',
+  },
+  bitbucket: {
+    authorizeUrl: 'https://bitbucket.org/site/oauth2/authorize',
+    tokenUrl: 'https://bitbucket.org/site/oauth2/access_token',
+    userInfoUrl: 'https://api.bitbucket.org/2.0/user',
+    scope: 'account email',
+    tokenBody: 'form',
+  },
+  spotify: {
+    authorizeUrl: 'https://accounts.spotify.com/authorize',
+    tokenUrl: 'https://accounts.spotify.com/api/token',
+    userInfoUrl: 'https://api.spotify.com/v1/me',
+    scope: 'user-read-email',
+    tokenBody: 'form',
+  },
+  apple: {
+    authorizeUrl: 'https://appleid.apple.com/auth/authorize',
+    tokenUrl: 'https://appleid.apple.com/auth/token',
+    scope: 'name email',
+    tokenBody: 'form',
+    authorizeExtra: { response_mode: 'form_post' },
+    profileFrom: 'apple_id_token',
+  },
+};
+
+const ALL_SOCIAL = Object.keys(OAUTH_ENDPOINTS) as SupportedSocial[];
 
 const OAUTH_STATE = new Map<
   string,
-  { projectId: string; thirdPartyId: SupportedSocial; createdAt: number }
+  {
+    projectId: string;
+    thirdPartyId: SupportedSocial;
+    createdAt: number;
+    /** PKCE verifier for X/Twitter */
+    codeVerifier?: string;
+  }
 >();
 
 function cleanState(): void {
@@ -35,6 +161,10 @@ function cleanState(): void {
   for (const [k, v] of OAUTH_STATE) {
     if (v.createdAt < cutoff) OAUTH_STATE.delete(k);
   }
+}
+
+function isSupported(id: string): id is SupportedSocial {
+  return ALL_SOCIAL.includes(id as SupportedSocial);
 }
 
 async function ensureTenant(tenantId: string, projectId?: string): Promise<void> {
@@ -70,27 +200,34 @@ export async function resolveProviderCredentials(
         };
       }
     } catch {
-      // secrets table / master key may be unavailable in bare local proof
+      // secrets table / master key may be unavailable
     }
   }
 
-  if (thirdPartyId === 'google') {
-    const clientId = process.env.BRIVEN_GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.BRIVEN_GOOGLE_CLIENT_SECRET;
-    if (clientId && clientSecret) {
-      return { clientId, clientSecret, source: 'platform_env' };
-    }
-  }
-  if (thirdPartyId === 'github') {
-    const clientId = process.env.BRIVEN_GITHUB_CLIENT_ID;
-    const clientSecret = process.env.BRIVEN_GITHUB_CLIENT_SECRET;
-    if (clientId && clientSecret) {
-      return { clientId, clientSecret, source: 'platform_env' };
-    }
-  }
-  if (thirdPartyId === 'konnos') {
-    const clientId = process.env.BRIVEN_KONNOS_CLIENT_ID;
-    const clientSecret = process.env.BRIVEN_KONNOS_CLIENT_SECRET;
+  const envMap: Partial<Record<SupportedSocial, [string, string]>> = {
+    google: ['BRIVEN_GOOGLE_CLIENT_ID', 'BRIVEN_GOOGLE_CLIENT_SECRET'],
+    github: ['BRIVEN_GITHUB_CLIENT_ID', 'BRIVEN_GITHUB_CLIENT_SECRET'],
+    konnos: ['BRIVEN_KONNOS_CLIENT_ID', 'BRIVEN_KONNOS_CLIENT_SECRET'],
+    discord: ['BRIVEN_DISCORD_CLIENT_ID', 'BRIVEN_DISCORD_CLIENT_SECRET'],
+    microsoft: [
+      'BRIVEN_MICROSOFT_CLIENT_ID',
+      'BRIVEN_MICROSOFT_CLIENT_SECRET',
+    ],
+    facebook: ['BRIVEN_FACEBOOK_CLIENT_ID', 'BRIVEN_FACEBOOK_CLIENT_SECRET'],
+    twitter: ['BRIVEN_TWITTER_CLIENT_ID', 'BRIVEN_TWITTER_CLIENT_SECRET'],
+    linkedin: ['BRIVEN_LINKEDIN_CLIENT_ID', 'BRIVEN_LINKEDIN_CLIENT_SECRET'],
+    gitlab: ['BRIVEN_GITLAB_CLIENT_ID', 'BRIVEN_GITLAB_CLIENT_SECRET'],
+    bitbucket: [
+      'BRIVEN_BITBUCKET_CLIENT_ID',
+      'BRIVEN_BITBUCKET_CLIENT_SECRET',
+    ],
+    spotify: ['BRIVEN_SPOTIFY_CLIENT_ID', 'BRIVEN_SPOTIFY_CLIENT_SECRET'],
+    apple: ['BRIVEN_APPLE_CLIENT_ID', 'BRIVEN_APPLE_CLIENT_SECRET'],
+  };
+  const keys = envMap[thirdPartyId];
+  if (keys) {
+    const clientId = process.env[keys[0]];
+    const clientSecret = process.env[keys[1]];
     if (clientId && clientSecret) {
       return { clientId, clientSecret, source: 'platform_env' };
     }
@@ -112,93 +249,67 @@ export type AuthorisationUrlResult =
  * Build provider authorisation URL (step 1 of OAuth).
  */
 export async function getAuthorisationUrl(input: {
-  thirdPartyId: SupportedSocial;
+  thirdPartyId: SupportedSocial | string;
   redirectURI: string;
   projectId?: string;
 }): Promise<AuthorisationUrlResult> {
-  if (
-    input.thirdPartyId !== 'google' &&
-    input.thirdPartyId !== 'github' &&
-    input.thirdPartyId !== 'konnos'
-  ) {
+  if (!isSupported(input.thirdPartyId)) {
     return {
       status: 'BAD_REQUEST',
-      message: 'supported: google, github, konnos',
+      message: `unsupported provider: ${input.thirdPartyId}`,
     };
   }
   if (!input.redirectURI) {
     return { status: 'BAD_REQUEST', message: 'redirectURI required' };
   }
 
+  const thirdPartyId = input.thirdPartyId;
+  const endpoints = OAUTH_ENDPOINTS[thirdPartyId];
   const creds = await resolveProviderCredentials(
     input.projectId,
-    input.thirdPartyId,
+    thirdPartyId,
   );
   if (!creds) {
     return {
       status: 'NO_CREDENTIALS',
-      message:
-        'Set project OAuth secrets (Providers) or BRIVEN_GOOGLE_* / BRIVEN_GITHUB_* / BRIVEN_KONNOS_* env',
+      message: `Set project OAuth secrets for ${thirdPartyId} under Providers (client id + secret)`,
     };
   }
 
   cleanState();
   const state = randomBytes(16).toString('hex');
+  let codeVerifier: string | undefined;
+  if (thirdPartyId === 'twitter') {
+    // PKCE plain (simple); production apps may prefer S256 later
+    codeVerifier = randomBytes(32).toString('base64url');
+  }
   OAUTH_STATE.set(state, {
     projectId: input.projectId ?? '',
-    thirdPartyId: input.thirdPartyId,
+    thirdPartyId,
     createdAt: Date.now(),
+    codeVerifier,
   });
 
-  if (input.thirdPartyId === 'google') {
-    const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    u.searchParams.set('client_id', creds.clientId);
-    u.searchParams.set('redirect_uri', input.redirectURI);
-    u.searchParams.set('response_type', 'code');
-    u.searchParams.set('scope', 'openid email profile');
-    u.searchParams.set('access_type', 'online');
-    u.searchParams.set('include_granted_scopes', 'true');
-    u.searchParams.set('state', state);
-    return {
-      status: 'OK',
-      urlWithQueryParams: u.toString(),
-      state,
-      thirdPartyId: 'google',
-      credentialsSource: creds.source,
-    };
-  }
-
-  if (input.thirdPartyId === 'konnos') {
-    // Konnos as OAuth IdP (code.konnos.org / konnos.org Applications)
-    const base = (
-      process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org'
-    ).replace(/\/$/, '');
-    const u = new URL(`${base}/login/oauth/authorize`);
-    u.searchParams.set('client_id', creds.clientId);
-    u.searchParams.set('redirect_uri', input.redirectURI);
-    u.searchParams.set('response_type', 'code');
-    u.searchParams.set('scope', 'read:user');
-    u.searchParams.set('state', state);
-    return {
-      status: 'OK',
-      urlWithQueryParams: u.toString(),
-      state,
-      thirdPartyId: 'konnos',
-      credentialsSource: creds.source,
-    };
-  }
-
-  // GitHub
-  const u = new URL('https://github.com/login/oauth/authorize');
+  const u = new URL(endpoints.authorizeUrl);
   u.searchParams.set('client_id', creds.clientId);
   u.searchParams.set('redirect_uri', input.redirectURI);
-  u.searchParams.set('scope', 'user:email');
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('scope', endpoints.scope);
   u.searchParams.set('state', state);
+  if (endpoints.authorizeExtra) {
+    for (const [k, v] of Object.entries(endpoints.authorizeExtra)) {
+      u.searchParams.set(k, v);
+    }
+  }
+  if (codeVerifier) {
+    u.searchParams.set('code_challenge', codeVerifier);
+  }
+
   return {
     status: 'OK',
     urlWithQueryParams: u.toString(),
     state,
-    thirdPartyId: 'github',
+    thirdPartyId,
     credentialsSource: creds.source,
   };
 }
@@ -215,7 +326,7 @@ export type OAuthProfile = {
  * Exchange authorization code for a profile (real provider HTTP).
  */
 export async function exchangeCodeForProfile(input: {
-  thirdPartyId: SupportedSocial;
+  thirdPartyId: SupportedSocial | string;
   code: string;
   redirectURI: string;
   projectId?: string;
@@ -224,89 +335,64 @@ export async function exchangeCodeForProfile(input: {
   | { status: 'OK'; profile: OAuthProfile; projectId?: string }
   | { status: 'ERROR'; message: string }
 > {
+  if (!isSupported(input.thirdPartyId)) {
+    return { status: 'ERROR', message: `unsupported provider: ${input.thirdPartyId}` };
+  }
+  const thirdPartyId = input.thirdPartyId;
   let projectId = input.projectId;
+  let codeVerifier: string | undefined;
   if (input.state) {
     const st = OAUTH_STATE.get(input.state);
-    if (!st || st.thirdPartyId !== input.thirdPartyId) {
+    if (!st || st.thirdPartyId !== thirdPartyId) {
       return { status: 'ERROR', message: 'invalid or expired OAuth state' };
     }
     if (st.projectId) projectId = st.projectId;
+    codeVerifier = st.codeVerifier;
     OAUTH_STATE.delete(input.state);
   }
 
-  const creds = await resolveProviderCredentials(
-    projectId,
-    input.thirdPartyId,
-  );
+  const endpoints = OAUTH_ENDPOINTS[thirdPartyId];
+  const creds = await resolveProviderCredentials(projectId, thirdPartyId);
   if (!creds) {
     return { status: 'ERROR', message: 'no credentials for provider' };
   }
 
   try {
-    if (input.thirdPartyId === 'google') {
-      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    // ── token ──
+    let accessToken: string | undefined;
+    let idToken: string | undefined;
+
+    if (thirdPartyId === 'apple') {
+      // Apple client_secret is often a JWT signed with .p8; accept raw secret
+      // from Providers if operator pastes a pre-built JWT secret.
+      const body = new URLSearchParams({
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+        code: input.code,
+        grant_type: 'authorization_code',
+        redirect_uri: input.redirectURI,
+      });
+      const tokenRes = await fetch(endpoints.tokenUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          code: input.code,
-          client_id: creds.clientId,
-          client_secret: creds.clientSecret,
-          redirect_uri: input.redirectURI,
-          grant_type: 'authorization_code',
-        }),
-        signal: AbortSignal.timeout(12000),
+        body,
+        signal: AbortSignal.timeout(15000),
       });
       if (!tokenRes.ok) {
         const t = await tokenRes.text();
         return {
           status: 'ERROR',
-          message: `google token ${tokenRes.status}: ${t.slice(0, 120)}`,
+          message: `apple token ${tokenRes.status}: ${t.slice(0, 160)}`,
         };
       }
-      const tokenJson = (await tokenRes.json()) as { access_token?: string };
-      if (!tokenJson.access_token) {
-        return { status: 'ERROR', message: 'google: no access_token' };
-      }
-      const userRes = await fetch(
-        'https://www.googleapis.com/oauth2/v3/userinfo',
-        {
-          headers: { Authorization: `Bearer ${tokenJson.access_token}` },
-          signal: AbortSignal.timeout(12000),
-        },
-      );
-      if (!userRes.ok) {
-        return {
-          status: 'ERROR',
-          message: `google userinfo ${userRes.status}`,
-        };
-      }
-      const user = (await userRes.json()) as {
-        sub?: string;
-        email?: string;
-        email_verified?: boolean;
-        name?: string;
+      const tokenJson = (await tokenRes.json()) as {
+        access_token?: string;
+        id_token?: string;
       };
-      if (!user.sub) {
-        return { status: 'ERROR', message: 'google: no sub' };
-      }
-      return {
-        status: 'OK',
-        projectId,
-        profile: {
-          thirdPartyId: 'google',
-          thirdPartyUserId: user.sub,
-          email: user.email ?? null,
-          emailVerified: Boolean(user.email_verified),
-          name: user.name ?? null,
-        },
-      };
-    }
-
-    if (input.thirdPartyId === 'konnos') {
-      const origin = (
-        process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org'
-      ).replace(/\/$/, '');
-      const tokenRes = await fetch(`${origin}/login/oauth/access_token`, {
+      accessToken = tokenJson.access_token;
+      idToken = tokenJson.id_token;
+    } else if (endpoints.tokenBody === 'json') {
+      const tokenRes = await fetch(endpoints.tokenUrl, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -317,149 +403,270 @@ export async function exchangeCodeForProfile(input: {
           client_secret: creds.clientSecret,
           code: input.code,
           redirect_uri: input.redirectURI,
+          grant_type: 'authorization_code',
+          ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
         }),
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(15000),
       });
       if (!tokenRes.ok) {
         const t = await tokenRes.text();
         return {
           status: 'ERROR',
-          message: `konnos token ${tokenRes.status}: ${t.slice(0, 120)}`,
+          message: `${thirdPartyId} token ${tokenRes.status}: ${t.slice(0, 160)}`,
         };
       }
       const tokenJson = (await tokenRes.json()) as {
         access_token?: string;
         error?: string;
       };
-      if (!tokenJson.access_token) {
+      accessToken = tokenJson.access_token;
+      if (!accessToken) {
         return {
           status: 'ERROR',
-          message: tokenJson.error ?? 'konnos: no access_token',
+          message: tokenJson.error ?? `${thirdPartyId}: no access_token`,
         };
       }
-      const userRes = await fetch(`${origin}/api/user`, {
-        headers: {
-          Authorization: `Bearer ${tokenJson.access_token}`,
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(12000),
+    } else {
+      // form-urlencoded token (most providers)
+      const params = new URLSearchParams({
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+        code: input.code,
+        redirect_uri: input.redirectURI,
+        grant_type: 'authorization_code',
       });
-      if (!userRes.ok) {
-        return { status: 'ERROR', message: `konnos user ${userRes.status}` };
-      }
-      const user = (await userRes.json()) as {
-        id?: string | number;
-        email?: string | null;
-        name?: string | null;
-        login?: string | null;
+      if (codeVerifier) params.set('code_verifier', codeVerifier);
+      const headers: Record<string, string> = {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
       };
-      if (user.id == null) {
-        return { status: 'ERROR', message: 'konnos: no id' };
+      // Spotify / Bitbucket often want Basic auth for token
+      if (thirdPartyId === 'spotify' || thirdPartyId === 'bitbucket') {
+        headers.authorization = `Basic ${Buffer.from(
+          `${creds.clientId}:${creds.clientSecret}`,
+        ).toString('base64')}`;
       }
+      const tokenRes = await fetch(endpoints.tokenUrl, {
+        method: 'POST',
+        headers,
+        body: params,
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!tokenRes.ok) {
+        const t = await tokenRes.text();
+        return {
+          status: 'ERROR',
+          message: `${thirdPartyId} token ${tokenRes.status}: ${t.slice(0, 160)}`,
+        };
+      }
+      const tokenJson = (await tokenRes.json()) as {
+        access_token?: string;
+        id_token?: string;
+        error?: string;
+      };
+      accessToken = tokenJson.access_token;
+      idToken = tokenJson.id_token;
+      if (!accessToken && !idToken) {
+        return {
+          status: 'ERROR',
+          message: tokenJson.error ?? `${thirdPartyId}: no access_token`,
+        };
+      }
+    }
+
+    // ── profile ──
+    if (endpoints.profileFrom === 'apple_id_token' && idToken) {
+      const payload = decodeJwtPayload(idToken);
+      const sub = payload.sub as string | undefined;
+      if (!sub) return { status: 'ERROR', message: 'apple: no sub in id_token' };
       return {
         status: 'OK',
         projectId,
         profile: {
-          thirdPartyId: 'konnos',
-          thirdPartyUserId: String(user.id),
-          email: user.email ?? null,
-          emailVerified: Boolean(user.email),
-          name: user.name ?? user.login ?? null,
+          thirdPartyId: 'apple',
+          thirdPartyUserId: sub,
+          email: (payload.email as string | undefined) ?? null,
+          emailVerified: payload.email_verified === true || payload.email_verified === 'true',
+          name: null,
         },
       };
     }
 
-    // GitHub
-    const tokenRes = await fetch(
-      'https://github.com/login/oauth/access_token',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          accept: 'application/json',
-        },
-        body: JSON.stringify({
-          client_id: creds.clientId,
-          client_secret: creds.clientSecret,
-          code: input.code,
-          redirect_uri: input.redirectURI,
-        }),
-        signal: AbortSignal.timeout(12000),
-      },
-    );
-    if (!tokenRes.ok) {
-      return { status: 'ERROR', message: `github token ${tokenRes.status}` };
+    if (!accessToken) {
+      return { status: 'ERROR', message: `${thirdPartyId}: no access_token` };
     }
-    const tokenJson = (await tokenRes.json()) as {
-      access_token?: string;
-      error?: string;
-    };
-    if (!tokenJson.access_token) {
-      return {
-        status: 'ERROR',
-        message: tokenJson.error ?? 'github: no access_token',
-      };
+    if (!endpoints.userInfoUrl) {
+      return { status: 'ERROR', message: `${thirdPartyId}: no userInfoUrl` };
     }
-    const userRes = await fetch('https://api.github.com/user', {
+
+    const userRes = await fetch(endpoints.userInfoUrl, {
       headers: {
-        Authorization: `Bearer ${tokenJson.access_token}`,
-        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
         'User-Agent': 'briven-engine',
       },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(15000),
     });
     if (!userRes.ok) {
-      return { status: 'ERROR', message: `github user ${userRes.status}` };
+      return {
+        status: 'ERROR',
+        message: `${thirdPartyId} userinfo ${userRes.status}`,
+      };
     }
-    const user = (await userRes.json()) as {
-      id?: number;
-      email?: string | null;
-      name?: string | null;
-      login?: string;
-    };
-    let email = user.email ?? null;
-    if (!email) {
-      const emailsRes = await fetch('https://api.github.com/user/emails', {
-        headers: {
-          Authorization: `Bearer ${tokenJson.access_token}`,
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'briven-engine',
-        },
-        signal: AbortSignal.timeout(12000),
-      });
-      if (emailsRes.ok) {
-        const emails = (await emailsRes.json()) as Array<{
-          email: string;
-          primary?: boolean;
-          verified?: boolean;
-        }>;
-        const primary =
-          emails.find((e) => e.primary && e.verified) ??
-          emails.find((e) => e.verified) ??
-          emails[0];
-        email = primary?.email ?? null;
+    const user = (await userRes.json()) as Record<string, unknown>;
+
+    // GitHub: fill email from /user/emails if missing
+    if (thirdPartyId === 'github' && !user.email) {
+      try {
+        const emailsRes = await fetch('https://api.github.com/user/emails', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'briven-engine',
+          },
+          signal: AbortSignal.timeout(12000),
+        });
+        if (emailsRes.ok) {
+          const emails = (await emailsRes.json()) as Array<{
+            email: string;
+            primary?: boolean;
+            verified?: boolean;
+          }>;
+          const primary =
+            emails.find((e) => e.primary && e.verified) ??
+            emails.find((e) => e.verified) ??
+            emails[0];
+          if (primary?.email) user.email = primary.email;
+        }
+      } catch {
+        /* ignore */
       }
     }
-    if (user.id == null) {
-      return { status: 'ERROR', message: 'github: no id' };
+
+    // Bitbucket emails
+    if (thirdPartyId === 'bitbucket' && !user.email) {
+      try {
+        const emailsRes = await fetch(
+          'https://api.bitbucket.org/2.0/user/emails',
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: AbortSignal.timeout(12000),
+          },
+        );
+        if (emailsRes.ok) {
+          const body = (await emailsRes.json()) as {
+            values?: Array<{ email?: string; is_primary?: boolean }>;
+          };
+          const primary =
+            body.values?.find((e) => e.is_primary) ?? body.values?.[0];
+          if (primary?.email) user.email = primary.email;
+        }
+      } catch {
+        /* ignore */
+      }
     }
-    return {
-      status: 'OK',
-      projectId,
-      profile: {
-        thirdPartyId: 'github',
-        thirdPartyUserId: String(user.id),
-        email,
-        emailVerified: Boolean(email),
-        name: user.name ?? user.login ?? null,
-      },
-    };
+
+    const profile = normalizeProfile(thirdPartyId, user);
+    if (!profile) {
+      return { status: 'ERROR', message: `${thirdPartyId}: could not parse user id` };
+    }
+    return { status: 'OK', projectId, profile };
   } catch (err) {
     return {
       status: 'ERROR',
       message: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+function decodeJwtPayload(jwt: string): Record<string, unknown> {
+  const parts = jwt.split('.');
+  if (parts.length < 2) return {};
+  try {
+    const json = Buffer.from(parts[1]!, 'base64url').toString('utf8');
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function normalizeProfile(
+  thirdPartyId: SupportedSocial,
+  user: Record<string, unknown>,
+): OAuthProfile | null {
+  // Twitter v2 wraps data
+  if (thirdPartyId === 'twitter' && user.data && typeof user.data === 'object') {
+    const d = user.data as Record<string, unknown>;
+    const id = d.id != null ? String(d.id) : null;
+    if (!id) return null;
+    return {
+      thirdPartyId,
+      thirdPartyUserId: id,
+      email: null, // X free tier often has no email
+      emailVerified: false,
+      name: (d.name as string | undefined) ?? (d.username as string | undefined) ?? null,
+    };
+  }
+
+  // Microsoft Graph uses id + mail / userPrincipalName
+  if (thirdPartyId === 'microsoft') {
+    const id = user.id != null ? String(user.id) : null;
+    if (!id) return null;
+    const email =
+      (user.mail as string | undefined) ??
+      (user.userPrincipalName as string | undefined) ??
+      null;
+    return {
+      thirdPartyId,
+      thirdPartyUserId: id,
+      email,
+      emailVerified: Boolean(email),
+      name: (user.displayName as string | undefined) ?? null,
+    };
+  }
+
+  // LinkedIn OIDC userinfo
+  if (thirdPartyId === 'linkedin') {
+    const id = (user.sub as string | undefined) ?? null;
+    if (!id) return null;
+    return {
+      thirdPartyId,
+      thirdPartyUserId: id,
+      email: (user.email as string | undefined) ?? null,
+      emailVerified: user.email_verified === true,
+      name: (user.name as string | undefined) ?? null,
+    };
+  }
+
+  // Google / Discord / Facebook / GitLab / Spotify / GitHub / Konnos common shapes
+  const id =
+    user.sub != null
+      ? String(user.sub)
+      : user.id != null
+        ? String(user.id)
+        : null;
+  if (!id) return null;
+  const email =
+    typeof user.email === 'string'
+      ? user.email
+      : null;
+  const name =
+    (typeof user.name === 'string' && user.name) ||
+    (typeof user.login === 'string' && user.login) ||
+    (typeof user.username === 'string' && user.username) ||
+    (typeof user.global_name === 'string' && user.global_name) ||
+    null;
+
+  return {
+    thirdPartyId,
+    thirdPartyUserId: id,
+    email,
+    emailVerified:
+      user.email_verified === true ||
+      user.verified === true ||
+      Boolean(email),
+    name,
+  };
 }
 
 export type SignInUpResult =
@@ -484,7 +691,6 @@ export type SignInUpResult =
 
 /**
  * Upsert user + third-party link on Doltgres, create session.
- * Call after a successful code exchange (or local proof profile).
  */
 export async function signInUpWithThirdPartyProfile(input: {
   profile: OAuthProfile;
@@ -500,7 +706,6 @@ export async function signInUpWithThirdPartyProfile(input: {
   const { thirdPartyId, thirdPartyUserId } = input.profile;
   const email = input.profile.email?.trim().toLowerCase() ?? null;
 
-  // Existing link?
   const link = await pool.query(
     `SELECT user_id FROM be_third_party_links
      WHERE tenant_id = $1 AND third_party_id = $2 AND third_party_user_id = $3
@@ -514,7 +719,6 @@ export async function signInUpWithThirdPartyProfile(input: {
   if (link.rows[0]) {
     userId = (link.rows[0] as { user_id: string }).user_id;
   } else {
-    // Optional: match existing email user in tenant
     if (email) {
       const byEmail = await pool.query(
         `SELECT id FROM be_users WHERE tenant_id = $1 AND email = $2 LIMIT 1`,
@@ -528,12 +732,7 @@ export async function signInUpWithThirdPartyProfile(input: {
         await pool.query(
           `INSERT INTO be_users (id, tenant_id, email, email_verified)
            VALUES ($1, $2, $3, $4)`,
-          [
-            userId,
-            tenantId,
-            email,
-            input.profile.emailVerified,
-          ],
+          [userId, tenantId, email, input.profile.emailVerified],
         );
       }
     } else {
@@ -603,10 +802,16 @@ export async function signInUpWithCode(input: {
   });
 }
 
-/** @internal test helper — list pending OAuth states count */
+/** @internal test helper */
 export function __oauthStateSizeForTests(): number {
   cleanState();
   return OAUTH_STATE.size;
 }
 
-void env; // reserved
+export function listSupportedSocialProviders(): SupportedSocial[] {
+  return [...ALL_SOCIAL];
+}
+
+// keep env referenced for future Apple .p8 JWT minting
+void env;
+void createSign;

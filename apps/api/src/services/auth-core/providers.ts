@@ -63,15 +63,19 @@ export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] =
     thirdPartyId: 'apple',
     name: 'Apple',
     engine: 'briven-engine',
-    help: 'Apple Developer → Certificates, Identifiers & Profiles',
+    help: 'Apple Developer → Certificates, Identifiers & Profiles (paste client secret JWT)',
     builtIn: true,
+    callbackHint:
+      'Return URL: {apiOrigin}/v1/auth-core/oauth/apple/callback',
   },
   {
     thirdPartyId: 'discord',
     name: 'Discord',
     engine: 'briven-engine',
-    help: 'Discord Developer Portal → Applications',
+    help: 'Discord Developer Portal → Applications → OAuth2',
     builtIn: true,
+    callbackHint:
+      'Redirects: {apiOrigin}/v1/auth-core/oauth/discord/callback',
   },
   {
     thirdPartyId: 'microsoft',
@@ -79,27 +83,35 @@ export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] =
     engine: 'briven-engine',
     help: 'Azure Portal → Entra ID → App registrations',
     builtIn: true,
+    callbackHint:
+      'Redirect URI: {apiOrigin}/v1/auth-core/oauth/microsoft/callback',
   },
   {
     thirdPartyId: 'facebook',
     name: 'Facebook',
     engine: 'briven-engine',
-    help: 'Meta for Developers → My Apps',
+    help: 'Meta for Developers → My Apps → Facebook Login',
     builtIn: true,
+    callbackHint:
+      'Valid OAuth Redirect URIs: {apiOrigin}/v1/auth-core/oauth/facebook/callback',
   },
   {
     thirdPartyId: 'twitter',
     name: 'X (Twitter)',
     engine: 'briven-engine',
-    help: 'X Developer Portal → Projects & Apps',
+    help: 'X Developer Portal → Projects & Apps → OAuth 2.0',
     builtIn: true,
+    callbackHint:
+      'Callback URI: {apiOrigin}/v1/auth-core/oauth/twitter/callback',
   },
   {
     thirdPartyId: 'linkedin',
     name: 'LinkedIn',
     engine: 'briven-engine',
-    help: 'LinkedIn Developers → My Apps',
+    help: 'LinkedIn Developers → My Apps → Auth',
     builtIn: true,
+    callbackHint:
+      'Redirect URL: {apiOrigin}/v1/auth-core/oauth/linkedin/callback',
   },
   {
     thirdPartyId: 'gitlab',
@@ -107,6 +119,8 @@ export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] =
     engine: 'briven-engine',
     help: 'GitLab → Preferences → Applications',
     builtIn: true,
+    callbackHint:
+      'Redirect URI: {apiOrigin}/v1/auth-core/oauth/gitlab/callback',
   },
   {
     thirdPartyId: 'bitbucket',
@@ -114,13 +128,17 @@ export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] =
     engine: 'briven-engine',
     help: 'Bitbucket → Workspace settings → OAuth consumers',
     builtIn: true,
+    callbackHint:
+      'Callback URL: {apiOrigin}/v1/auth-core/oauth/bitbucket/callback',
   },
   {
     thirdPartyId: 'spotify',
     name: 'Spotify',
     engine: 'briven-engine',
-    help: 'Spotify Developer Dashboard',
+    help: 'Spotify Developer Dashboard → Redirect URIs',
     builtIn: true,
+    callbackHint:
+      'Redirect URIs: {apiOrigin}/v1/auth-core/oauth/spotify/callback',
   },
 ] as const;
 
