@@ -21,12 +21,17 @@ export function AuthProjectsGrid({
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter(
-      (p) =>
-        p.name.toLowerCase().includes(needle) ||
-        p.slug.toLowerCase().includes(needle) ||
-        p.id.toLowerCase().includes(needle),
+    const list = !needle
+      ? rows
+      : rows.filter(
+          (p) =>
+            p.name.toLowerCase().includes(needle) ||
+            p.slug.toLowerCase().includes(needle) ||
+            p.id.toLowerCase().includes(needle),
+        );
+    // A → Z by display name (case-insensitive)
+    return [...list].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
     );
   }, [rows, q]);
 
