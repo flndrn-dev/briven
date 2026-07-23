@@ -50,11 +50,39 @@ authCoreSessionRouter.get('/v1/auth-core/session/me', async (c) => {
   }
 
   const session = result.session;
+  const userId = session.getUserId();
+  // Load email for app session mint (Konnos etc.) — apps expect user.email.
+  let email: string | null = null;
+  let name: string | null = null;
+  try {
+    const { getEnginePool } = await import('../services/auth-core/db.js');
+    const pool = getEnginePool();
+    const u = await pool.query(
+      `SELECT email, metadata_json FROM be_users WHERE id = $1 LIMIT 1`,
+      [userId],
+    );
+    const row = u.rows[0] as
+      | { email?: string | null; metadata_json?: string | null }
+      | undefined;
+    if (row?.email) email = row.email;
+    if (row?.metadata_json) {
+      try {
+        const meta = JSON.parse(row.metadata_json) as { name?: string };
+        if (meta.name) name = meta.name;
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* email optional */
+  }
   return c.json({
     authenticated: true,
-    userId: session.getUserId(),
+    userId,
     sessionHandle: session.getHandle(),
     accessTokenPayload: session.getAccessTokenPayload(),
+    // Better Auth–shaped fields for app mint routes
+    user: { id: userId, email, name },
   });
 });
 

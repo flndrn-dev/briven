@@ -23,7 +23,7 @@ import {
 } from './project-config.js';
 import type { BrivenSocialProviderId } from './providers.js';
 
-export type SupportedSocial = 'google' | 'github';
+export type SupportedSocial = 'google' | 'github' | 'konnos';
 
 const OAUTH_STATE = new Map<
   string,
@@ -88,6 +88,13 @@ export async function resolveProviderCredentials(
       return { clientId, clientSecret, source: 'platform_env' };
     }
   }
+  if (thirdPartyId === 'konnos') {
+    const clientId = process.env.BRIVEN_KONNOS_CLIENT_ID;
+    const clientSecret = process.env.BRIVEN_KONNOS_CLIENT_SECRET;
+    if (clientId && clientSecret) {
+      return { clientId, clientSecret, source: 'platform_env' };
+    }
+  }
   return null;
 }
 
@@ -109,10 +116,14 @@ export async function getAuthorisationUrl(input: {
   redirectURI: string;
   projectId?: string;
 }): Promise<AuthorisationUrlResult> {
-  if (input.thirdPartyId !== 'google' && input.thirdPartyId !== 'github') {
+  if (
+    input.thirdPartyId !== 'google' &&
+    input.thirdPartyId !== 'github' &&
+    input.thirdPartyId !== 'konnos'
+  ) {
     return {
       status: 'BAD_REQUEST',
-      message: 'only google and github supported in step 3',
+      message: 'supported: google, github, konnos',
     };
   }
   if (!input.redirectURI) {
@@ -127,7 +138,7 @@ export async function getAuthorisationUrl(input: {
     return {
       status: 'NO_CREDENTIALS',
       message:
-        'Set project social secrets or BRIVEN_GOOGLE_* / BRIVEN_GITHUB_* env',
+        'Set project OAuth secrets (Providers) or BRIVEN_GOOGLE_* / BRIVEN_GITHUB_* / BRIVEN_KONNOS_* env',
     };
   }
 
@@ -153,6 +164,26 @@ export async function getAuthorisationUrl(input: {
       urlWithQueryParams: u.toString(),
       state,
       thirdPartyId: 'google',
+      credentialsSource: creds.source,
+    };
+  }
+
+  if (input.thirdPartyId === 'konnos') {
+    // Konnos as OAuth IdP (code.konnos.org / konnos.org Applications)
+    const base = (
+      process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org'
+    ).replace(/\/$/, '');
+    const u = new URL(`${base}/login/oauth/authorize`);
+    u.searchParams.set('client_id', creds.clientId);
+    u.searchParams.set('redirect_uri', input.redirectURI);
+    u.searchParams.set('response_type', 'code');
+    u.searchParams.set('scope', 'read:user');
+    u.searchParams.set('state', state);
+    return {
+      status: 'OK',
+      urlWithQueryParams: u.toString(),
+      state,
+      thirdPartyId: 'konnos',
       credentialsSource: creds.source,
     };
   }
@@ -267,6 +298,73 @@ export async function exchangeCodeForProfile(input: {
           email: user.email ?? null,
           emailVerified: Boolean(user.email_verified),
           name: user.name ?? null,
+        },
+      };
+    }
+
+    if (input.thirdPartyId === 'konnos') {
+      const origin = (
+        process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org'
+      ).replace(/\/$/, '');
+      const tokenRes = await fetch(`${origin}/login/oauth/access_token`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: creds.clientId,
+          client_secret: creds.clientSecret,
+          code: input.code,
+          redirect_uri: input.redirectURI,
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!tokenRes.ok) {
+        const t = await tokenRes.text();
+        return {
+          status: 'ERROR',
+          message: `konnos token ${tokenRes.status}: ${t.slice(0, 120)}`,
+        };
+      }
+      const tokenJson = (await tokenRes.json()) as {
+        access_token?: string;
+        error?: string;
+      };
+      if (!tokenJson.access_token) {
+        return {
+          status: 'ERROR',
+          message: tokenJson.error ?? 'konnos: no access_token',
+        };
+      }
+      const userRes = await fetch(`${origin}/api/user`, {
+        headers: {
+          Authorization: `Bearer ${tokenJson.access_token}`,
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!userRes.ok) {
+        return { status: 'ERROR', message: `konnos user ${userRes.status}` };
+      }
+      const user = (await userRes.json()) as {
+        id?: string | number;
+        email?: string | null;
+        name?: string | null;
+        login?: string | null;
+      };
+      if (user.id == null) {
+        return { status: 'ERROR', message: 'konnos: no id' };
+      }
+      return {
+        status: 'OK',
+        projectId,
+        profile: {
+          thirdPartyId: 'konnos',
+          thirdPartyUserId: String(user.id),
+          email: user.email ?? null,
+          emailVerified: Boolean(user.email),
+          name: user.name ?? user.login ?? null,
         },
       };
     }
