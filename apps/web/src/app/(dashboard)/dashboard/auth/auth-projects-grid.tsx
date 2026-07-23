@@ -68,11 +68,10 @@ export function AuthProjectsGrid({
             : r,
         ),
       );
-      router.refresh();
-      router.push(`/dashboard/auth/${projectId}`);
+      // Full navigation so server workspace re-reads be_tenants (no stale RSC cache).
+      window.location.assign(`/dashboard/auth/${projectId}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'enable failed');
-    } finally {
       setBusyId(null);
     }
   }

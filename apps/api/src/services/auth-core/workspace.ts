@@ -54,6 +54,7 @@ export async function enableBrivenEngineAuth(projectId: string): Promise<{
 
 /**
  * Whether Auth is on for a project (tenant row exists).
+ * Matches tenant_id (mapped) or project_id (exact / case-insensitive).
  */
 export async function isBrivenEngineAuthEnabled(
   projectId: string,
@@ -63,13 +64,26 @@ export async function isBrivenEngineAuthEnabled(
     const map = mapProjectToAuthCore(projectId);
     const pool = getEnginePool();
     const res = await pool.query(
-      `SELECT 1 FROM be_tenants WHERE tenant_id = $1 OR project_id = $2 LIMIT 1`,
+      `SELECT 1 FROM be_tenants
+       WHERE tenant_id = $1
+          OR project_id = $2
+          OR lower(project_id) = lower($2)
+       LIMIT 1`,
       [map.tenantId, map.projectId],
     );
     return Boolean(res.rowCount && res.rowCount > 0);
   } catch {
     return false;
   }
+}
+
+function markEnabled(
+  set: Set<string>,
+  projectId: string | null | undefined,
+): void {
+  if (!projectId) return;
+  set.add(projectId);
+  set.add(projectId.toLowerCase());
 }
 
 /**
@@ -80,7 +94,8 @@ export async function listBrivenEngineWorkspace(
 ): Promise<{ engine: 'briven-engine'; projects: BrivenEngineWorkspaceProject[] }> {
   const projects = await listProjectsForUser(userId);
 
-  // Batch tenant lookup when engine is ready (no ANY — Doltgres-friendly)
+  // Batch tenant lookup when engine is ready.
+  // IMPORTANT: two IN lists need two placeholder ranges ($1..$n and $n+1..$2n).
   let enabledProjectIds = new Set<string>();
   if (isAuthCoreInitialized() && projects.length > 0) {
     try {
@@ -96,11 +111,19 @@ export async function listBrivenEngineWorkspace(
         .filter((m): m is NonNullable<typeof m> => m != null);
 
       if (maps.length > 0) {
-        const placeholders = maps.map((_, i) => `$${i + 1}`).join(', ');
+        const n = maps.length;
+        const tenantPh = maps.map((_, i) => `$${i + 1}`).join(', ');
+        const projectPh = maps.map((_, i) => `$${i + 1 + n}`).join(', ');
+        const lowerPh = maps.map((_, i) => `$${i + 1 + 2 * n}`).join(', ');
         const tenantIds = maps.map((m) => m.tenantId);
+        const projectIds = maps.map((m) => m.projectId);
+        const projectIdsLower = projectIds.map((id) => id.toLowerCase());
         const res = await pool.query(
-          `SELECT project_id, tenant_id FROM be_tenants WHERE tenant_id IN (${placeholders}) OR project_id IN (${placeholders})`,
-          [...tenantIds, ...maps.map((m) => m.projectId)],
+          `SELECT project_id, tenant_id FROM be_tenants
+           WHERE tenant_id IN (${tenantPh})
+              OR project_id IN (${projectPh})
+              OR lower(project_id) IN (${lowerPh})`,
+          [...tenantIds, ...projectIds, ...projectIdsLower],
         );
         const tenantToProject = new Map(
           maps.map((m) => [m.tenantId, m.projectId]),
@@ -109,12 +132,13 @@ export async function listBrivenEngineWorkspace(
           project_id: string;
           tenant_id: string;
         }>) {
-          enabledProjectIds.add(row.project_id);
+          markEnabled(enabledProjectIds, row.project_id);
           const viaTenant = tenantToProject.get(row.tenant_id);
-          if (viaTenant) enabledProjectIds.add(viaTenant);
+          markEnabled(enabledProjectIds, viaTenant);
         }
       }
     } catch {
+      // Fall back to per-project checks below when batch query fails.
       enabledProjectIds = new Set();
     }
   }
@@ -128,7 +152,16 @@ export async function listBrivenEngineWorkspace(
       } catch {
         tenantId = null;
       }
-      const authEnabled = enabledProjectIds.has(p.id);
+
+      let authEnabled =
+        enabledProjectIds.has(p.id) ||
+        enabledProjectIds.has(p.id.toLowerCase());
+
+      // Reliable fallback: direct tenant probe (also covers batch SQL miss).
+      if (!authEnabled && isAuthCoreInitialized()) {
+        authEnabled = await isBrivenEngineAuthEnabled(p.id);
+      }
+
       if (!authEnabled) {
         return {
           id: p.id,

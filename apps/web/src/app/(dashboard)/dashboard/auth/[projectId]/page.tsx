@@ -20,13 +20,18 @@ export default async function AuthProjectOverviewPage({
 }) {
   const { projectId } = await params;
   const projects = await loadAuthV2Workspace();
-  const project = projects.find((p) => p.id === projectId);
+  const project = projects.find(
+    (p) => p.id === projectId || p.id.toLowerCase() === projectId.toLowerCase(),
+  );
   if (!project) notFound();
 
-  const [info, dash, configRes] = await Promise.all([
+  const id = project.id;
+
+  const [info, dash, configRes, tenantsRes] = await Promise.all([
     fetchAuthCoreInfo(),
-    fetchAuthDashboard(projectId),
-    apiFetch(`/v1/auth-core/projects/${projectId}/config`).catch(() => null),
+    fetchAuthDashboard(id),
+    apiFetch(`/v1/auth-core/projects/${id}/config`).catch(() => null),
+    apiFetch('/v1/auth-core/tenants').catch(() => null),
   ]);
 
   let configOk = false;
@@ -42,6 +47,31 @@ export default async function AuthProjectOverviewPage({
     providerSummary = body.providers ?? [];
   }
 
+  // Second source of truth: live be_tenants list (catches workspace lag / SQL miss).
+  let tenantRowOn = false;
+  if (tenantsRes?.ok) {
+    try {
+      const body = (await tenantsRes.json()) as {
+        tenants?: Array<{ projectId?: string; tenantId?: string }>;
+        tenantIds?: string[];
+      };
+      const mappedTenant = tenantId;
+      tenantRowOn = Boolean(
+        body.tenants?.some(
+          (t) =>
+            t.projectId === id ||
+            (t.projectId && t.projectId.toLowerCase() === id.toLowerCase()) ||
+            (mappedTenant && t.tenantId === mappedTenant),
+        ) ||
+          (mappedTenant && body.tenantIds?.includes(mappedTenant)),
+      );
+    } catch {
+      tenantRowOn = false;
+    }
+  }
+
+  const authOn = project.authEnabled === true || tenantRowOn;
+
   const counts = dash.ok
     ? dash.data.counts
     : { users: 0, sessions: 0, thirdPartyLinks: 0, passwordlessCodesActive: 0 };
@@ -49,7 +79,7 @@ export default async function AuthProjectOverviewPage({
 
   return (
     <section className="space-y-6">
-      {!project.authEnabled ? (
+      {!authOn ? (
         <div className="rounded-md border border-dashed border-[var(--color-border)] p-6 font-mono text-sm text-[var(--color-text-muted)]">
           Auth is off for this project. Go back to{' '}
           <Link

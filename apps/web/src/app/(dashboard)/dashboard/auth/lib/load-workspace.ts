@@ -9,9 +9,10 @@ import type { AuthV2ProjectRow } from './auth-v2-types';
  */
 export async function loadAuthV2Workspace(): Promise<AuthV2ProjectRow[]> {
   try {
+    // Bust any short-lived cache so enable → open project sees fresh flags.
     const data = await apiJson<{
       projects?: AuthV2ProjectRow[];
-    }>('/v1/auth-core/workspace');
+    }>(`/v1/auth-core/workspace?_=${Date.now()}`);
     if (data.projects) return data.projects;
   } catch {
     /* fall through */

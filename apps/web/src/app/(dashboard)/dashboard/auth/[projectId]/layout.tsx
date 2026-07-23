@@ -19,10 +19,15 @@ export default async function AuthProjectLayout({
 }) {
   const { projectId } = await params;
   const projects = await loadAuthV2Workspace();
-  const project = projects.find((p) => p.id === projectId);
+  const project = projects.find(
+    (p) => p.id === projectId || p.id.toLowerCase() === projectId.toLowerCase(),
+  );
   if (!project) {
     notFound();
   }
+
+  // Trust workspace flag; layout badge only (page may re-check enable).
+  const authOn = project.authEnabled === true;
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,7 +44,7 @@ export default async function AuthProjectLayout({
         </h1>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
           {project.slug}
-          {project.authEnabled ? (
+          {authOn ? (
             <span style={{ color: 'var(--auth-accent, #FFFD74)' }}>
               {' · '}
               Auth on
@@ -58,7 +63,7 @@ export default async function AuthProjectLayout({
           ) : null}
         </p>
       </header>
-      <AuthProjectNav projectId={projectId} />
+      <AuthProjectNav projectId={project.id} />
       {children}
     </div>
   );
