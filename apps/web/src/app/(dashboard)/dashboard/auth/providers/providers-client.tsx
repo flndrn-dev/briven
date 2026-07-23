@@ -107,9 +107,10 @@ export function AuthProvidersClient({
   const load = useCallback(async (id: string) => {
     if (!id) return;
     setErr(null);
-    const res = await fetch(`/api/v1/auth-core/projects/${id}/config`, {
-      credentials: 'include',
-    });
+    const res = await fetch(
+      `/api/dashboard/auth-core/projects/${encodeURIComponent(id)}/config`,
+      { credentials: 'include', cache: 'no-store' },
+    );
     if (res.status === 401) {
       setErr('sign in to briven.tech to manage providers');
       setConfig(null);
@@ -210,7 +211,7 @@ export function AuthProvidersClient({
     setOkMsg(null);
     try {
       const res = await fetch(
-        `/api/v1/auth-core/projects/${projectId}/methods`,
+        `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/methods`,
         {
           method: 'PUT',
           credentials: 'include',
@@ -247,7 +248,7 @@ export function AuthProvidersClient({
     setOkMsg(null);
     try {
       const res = await fetch(
-        `/api/v1/auth-core/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(providerId)}`,
+        `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(providerId)}`,
         {
           method: 'PUT',
           credentials: 'include',
@@ -255,15 +256,23 @@ export function AuthProvidersClient({
           body: JSON.stringify({ clientId, clientSecret }),
         },
       );
-      const body = (await res.json().catch(() => ({}))) as {
+      const rawText = await res.text();
+      let body: {
         ok?: boolean;
         message?: string;
         code?: string;
         config?: ProjectConfig;
-      };
+      } = {};
+      try {
+        body = JSON.parse(rawText) as typeof body;
+      } catch {
+        body = { message: rawText.slice(0, 200) || res.statusText };
+      }
       if (!res.ok) {
         throw new Error(
-          body.message ?? body.code ?? `save failed (http ${res.status})`,
+          body.message ??
+            body.code ??
+            `save failed (http ${res.status})`,
         );
       }
       setDrafts((prev) => ({
@@ -273,14 +282,11 @@ export function AuthProvidersClient({
       setOpenIds((prev) =>
         prev.includes(providerId) ? prev : [...prev, providerId],
       );
-      // Prefer server config; always re-load so Security chips match
-      if (body.config?.providers?.length) {
-        setConfig(body.config);
-        if (body.config.methods) setMethods(body.config.methods);
-      } else {
-        await load(projectId);
-      }
-      // Optimistic mark if reload lag
+
+      // Always reload from server so Security + chips match DB
+      await load(projectId);
+
+      // Ensure this provider shows as on even if cache lags
       setConfig((prev) => {
         if (!prev) return prev;
         return {
@@ -297,10 +303,16 @@ export function AuthProvidersClient({
           ),
         };
       });
+      if (body.config?.methods) setMethods(body.config.methods);
+
       const name =
+        body.config?.providers?.find((p) => p.thirdPartyId === providerId)
+          ?.name ??
         config?.providers.find((p) => p.thirdPartyId === providerId)?.name ??
         providerId;
-      setOkMsg(`${name} saved — shown as on under Providers and Security.`);
+      setOkMsg(
+        `${name} saved. Open Security — it should list this OAuth under “OAuth (secrets saved)”.`,
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'save failed');
     } finally {
@@ -311,16 +323,78 @@ export function AuthProvidersClient({
   async function saveAllOpenOauth(): Promise<void> {
     const toSave = openIds.filter((id) => {
       const d = drafts[id];
-      return d?.clientId?.trim() && d?.clientSecret?.trim();
+      return Boolean(d?.clientId?.trim() && d?.clientSecret?.trim());
     });
     if (toSave.length === 0) {
       setErr(
-        'Fill client id + secret on at least one open form, then save.',
+        'Fill client id + secret on each OAuth form you want saved, then click save (or save open forms).',
       );
       return;
     }
+    setErr(null);
+    const errors: string[] = [];
+    const saved: string[] = [];
     for (const id of toSave) {
-      await saveOauth(id);
+      const draft = drafts[id];
+      const clientId = draft?.clientId?.trim() ?? '';
+      const clientSecret = draft?.clientSecret?.trim() ?? '';
+      setPendingId(id);
+      try {
+        const res = await fetch(
+          `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(id)}`,
+          {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ clientId, clientSecret }),
+          },
+        );
+        const body = (await res.json().catch(() => ({}))) as {
+          message?: string;
+          code?: string;
+        };
+        if (!res.ok) {
+          errors.push(
+            `${id}: ${body.message ?? body.code ?? `http ${res.status}`}`,
+          );
+        } else {
+          saved.push(id);
+          setDrafts((prev) => ({
+            ...prev,
+            [id]: { clientId: '', clientSecret: '' },
+          }));
+        }
+      } catch (e) {
+        errors.push(
+          `${id}: ${e instanceof Error ? e.message : 'failed'}`,
+        );
+      }
+    }
+    setPendingId(null);
+    await load(projectId);
+    if (saved.length) {
+      setConfig((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          providers: prev.providers.map((p) =>
+            saved.includes(p.thirdPartyId)
+              ? {
+                  ...p,
+                  configured: true,
+                  hasClientId: true,
+                  hasClientSecret: true,
+                }
+              : p,
+          ),
+        };
+      });
+      setOkMsg(
+        `Saved: ${saved.join(', ')}. Check Security → OAuth (secrets saved).`,
+      );
+    }
+    if (errors.length) {
+      setErr(errors.join(' · '));
     }
   }
 

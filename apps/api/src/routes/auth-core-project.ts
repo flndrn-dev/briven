@@ -45,8 +45,15 @@ import {
   finishRegistration,
   listPasskeys,
 } from '../services/auth-core/webauthn.js';
-import type { BrivenSocialProviderId } from '../services/auth-core/providers.js';
+import {
+  BRIVEN_ENGINE_SOCIAL_CATALOG,
+  type BrivenSocialProviderId,
+} from '../services/auth-core/providers.js';
 import type { AppEnv } from '../types/app-env.js';
+
+const SOCIAL_IDS = new Set(
+  BRIVEN_ENGINE_SOCIAL_CATALOG.map((p) => p.thirdPartyId),
+);
 
 export const authCoreProjectRouter = new Hono<AppEnv>();
 
@@ -82,7 +89,18 @@ authCoreProjectRouter.put(
   '/v1/auth-core/projects/:projectId/providers/:thirdPartyId',
   async (c) => {
     const projectId = c.req.param('projectId');
-    const thirdPartyId = c.req.param('thirdPartyId') as BrivenSocialProviderId;
+    const thirdPartyIdRaw = c.req.param('thirdPartyId');
+    const thirdPartyId = thirdPartyIdRaw as BrivenSocialProviderId;
+    if (!SOCIAL_IDS.has(thirdPartyId)) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'bad_request',
+          message: `unknown OAuth provider: ${thirdPartyIdRaw}`,
+        },
+        400,
+      );
+    }
     let body: {
       clientId?: string;
       clientSecret?: string;
@@ -93,12 +111,14 @@ authCoreProjectRouter.put(
     } catch {
       body = {};
     }
-    if (!body.clientId || !body.clientSecret) {
+    const clientId = body.clientId?.trim() ?? '';
+    const clientSecret = body.clientSecret?.trim() ?? '';
+    if (!clientId || !clientSecret) {
       return c.json(
         {
           engine: BRIVEN_ENGINE_ID,
           code: 'bad_request',
-          message: 'clientId and clientSecret required',
+          message: 'clientId and clientSecret required (both non-empty)',
         },
         400,
       );
@@ -106,15 +126,17 @@ authCoreProjectRouter.put(
     try {
       const result = await setBrivenEngineProviderSecrets(projectId, {
         thirdPartyId,
-        clientId: body.clientId,
-        clientSecret: body.clientSecret,
+        clientId,
+        clientSecret,
         additionalConfig: body.additionalConfig,
       });
       // Return public config so UI can show “configured”
       const config = await getBrivenEngineProjectConfig(projectId);
+      const saved = config.providers.find((p) => p.thirdPartyId === thirdPartyId);
       return c.json({
         ...result,
         config,
+        savedProvider: saved ?? null,
         apiOrigin: env.BRIVEN_API_ORIGIN,
       });
     } catch (err) {
