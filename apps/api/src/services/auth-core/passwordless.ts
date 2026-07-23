@@ -18,14 +18,44 @@ import { projectIdToTenantId } from './project-map.js';
 
 const CODE_TTL_MS = 15 * 60 * 1000;
 
-function hashSecret(value: string): string {
+/** Exported for unit tests. */
+export function hashSecret(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function sixDigitCode(): string {
-  // 100000–999999
+/** Exported for unit tests. 100000–999999 */
+export function sixDigitCode(): string {
   const n = 100000 + (randomBytes(3).readUIntBE(0, 3) % 900000);
   return String(n);
+}
+
+/**
+ * Pure verify for stored code_hash forms:
+ * - single: hash(otp) or hash(link)
+ * - dual: "otpHash:linkHash"
+ */
+export function matchPasswordlessSecret(
+  stored: string,
+  input: { userInputCode?: string; linkCode?: string },
+): boolean {
+  if (!input.userInputCode && !input.linkCode) return false;
+  if (stored.includes(':')) {
+    const [otpHash, linkHash] = stored.split(':');
+    if (input.userInputCode && hashSecret(input.userInputCode) === otpHash) {
+      return true;
+    }
+    if (input.linkCode && hashSecret(input.linkCode) === linkHash) {
+      return true;
+    }
+    return false;
+  }
+  if (input.userInputCode && hashSecret(input.userInputCode) === stored) {
+    return true;
+  }
+  if (input.linkCode && hashSecret(input.linkCode) === stored) {
+    return true;
+  }
+  return false;
 }
 
 function resolveTenant(input: {
@@ -281,26 +311,12 @@ export async function consumePasswordlessCode(input: {
     return { status: 'EXPIRED', message: 'code expired' };
   }
 
-  // Verify OTP and/or magic link against stored hash form.
-  let matched = false;
-  const stored = row.code_hash;
-  if (stored.includes(':')) {
-    const [otpHash, linkHash] = stored.split(':');
-    if (input.userInputCode && hashSecret(input.userInputCode) === otpHash) {
-      matched = true;
-    }
-    if (input.linkCode && hashSecret(input.linkCode) === linkHash) {
-      matched = true;
-    }
-  } else {
-    if (input.userInputCode && hashSecret(input.userInputCode) === stored) {
-      matched = true;
-    }
-    if (input.linkCode && hashSecret(input.linkCode) === stored) {
-      matched = true;
-    }
-  }
-  if (!matched) {
+  if (
+    !matchPasswordlessSecret(row.code_hash, {
+      userInputCode: input.userInputCode,
+      linkCode: input.linkCode,
+    })
+  ) {
     return { status: 'INCORRECT_USER_INPUT_CODE_ERROR' };
   }
 

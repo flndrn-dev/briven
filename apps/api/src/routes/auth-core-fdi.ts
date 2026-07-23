@@ -209,7 +209,7 @@ authCoreFdiRouter.post(`${FDI}/signout`, async (c) => {
   return c.json({ status: 'OK', engine: 'briven-engine' });
 });
 
-/** Passwordless: create email/SMS code (magic link + OTP). */
+/** Passwordless: create email/SMS code (magic link + OTP). Phase 3. */
 authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
   const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
@@ -217,6 +217,7 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
     email?: string;
     phoneNumber?: string;
     flowType?: 'USER_INPUT_CODE' | 'MAGIC_LINK' | 'USER_INPUT_CODE_AND_MAGIC_LINK';
+    magicLinkBaseUrl?: string;
   } = {};
   try {
     body = await c.req.json();
@@ -229,12 +230,15 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
     projectId: tenant?.projectId,
     tenantId: tenant?.tenantId,
     flowType: body.flowType,
+    magicLinkBaseUrl: body.magicLinkBaseUrl,
   });
   if (result.status !== 'OK') {
-    return c.json(result, 400);
+    return c.json({ ...result, engine: 'briven-engine' }, 400);
   }
   return c.json({
     status: 'OK',
+    engine: 'briven-engine',
+    storage: 'doltgres',
     preAuthSessionId: result.preAuthSessionId,
     deviceId: result.deviceId,
     flowType: result.flowType,
@@ -246,7 +250,7 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
   });
 });
 
-/** Passwordless: consume OTP or magic link. */
+/** Passwordless: consume OTP or magic link. Phase 3. */
 authCoreFdiRouter.post(`${FDI}/signinup/code/consume`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
   const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
@@ -263,7 +267,11 @@ authCoreFdiRouter.post(`${FDI}/signinup/code/consume`, async (c) => {
   }
   if (!body.preAuthSessionId || !body.deviceId) {
     return c.json(
-      { status: 'BAD_REQUEST', message: 'preAuthSessionId and deviceId required' },
+      {
+        status: 'BAD_REQUEST',
+        message: 'preAuthSessionId and deviceId required',
+        engine: 'briven-engine',
+      },
       400,
     );
   }
@@ -276,20 +284,23 @@ authCoreFdiRouter.post(`${FDI}/signinup/code/consume`, async (c) => {
     tenantId: tenant?.tenantId,
   });
   if (result.status !== 'OK') {
-    return c.json(result, result.status === 'EXPIRED' ? 401 : 400);
+    return c.json(
+      { ...result, engine: 'briven-engine' },
+      result.status === 'EXPIRED' ? 401 : 400,
+    );
   }
-  c.header(
-    'Set-Cookie',
-    `sAccessToken=${result.session.accessToken}; Path=/; HttpOnly; SameSite=Lax`,
-    { append: true },
-  );
-  c.header(
-    'Set-Cookie',
-    `sRefreshToken=${result.session.refreshToken}; Path=/; HttpOnly; SameSite=Lax`,
-    { append: true },
-  );
+  // accessToken === session handle (Phase 2 cookie contract)
+  setSessionCookies(c, {
+    sessionHandle: result.session.handle,
+    refreshToken: result.session.refreshToken,
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  });
+  c.header('x-briven-engine', 'briven-engine');
+  c.header('x-briven-session-handle', result.session.handle);
   return c.json({
     status: 'OK',
+    engine: 'briven-engine',
+    storage: 'doltgres',
     createdNewUser: result.createdNewUser,
     user: result.user,
     session: { handle: result.session.handle, userId: result.session.userId },

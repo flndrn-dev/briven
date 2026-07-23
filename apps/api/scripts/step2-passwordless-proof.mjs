@@ -31,7 +31,7 @@ const projectId = 'p_step2_local';
 const email = `step2_${Date.now()}@example.com`;
 const phone = `+1555${String(Date.now()).slice(-7)}`;
 
-console.log('=== Step 2: passwordless (email magic + SMS OTP) on Doltgres ===');
+console.log('=== Phase 3: passwordless (email magic + SMS OTP) on Doltgres ===');
 console.log({ email, phone, projectId });
 
 const ensured = await ensureBrivenEngineDatabase();
@@ -179,11 +179,11 @@ console.log('SQL sessions for step2 users', sessions.rowCount);
 console.log('leftover codes (should be 0 used ones gone)', leftoverCodes.rows[0]);
 
 console.log('');
-console.log('✔ STEP 2 PROOF OK');
+console.log('✔ PHASE 3 LOCAL PROOF OK (passwordless)');
 console.log('  storage: Doltgres');
 console.log('  email OTP: OK');
 console.log('  email magic link: OK');
 console.log('  SMS OTP: OK (delivery mode log/provider)');
 console.log('  wrong OTP rejected: OK');
-console.log('  sessions created: OK');
+console.log('  sessions created: OK (handle = cookie)');
 process.exit(0);

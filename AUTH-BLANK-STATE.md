@@ -1,57 +1,45 @@
-# Briven Auth — state (Option B Phase 2)
+# Briven Auth — state (Option B)
 
-**Updated:** 2026-07-22  
-**Decision:** Phase 0 Option **B** — native briven-engine on Doltgres (no SuperTokens Core product).
+**Updated:** 2026-07-23  
 
-## What is live (Phase 2)
+| Phase | What | Ship |
+|-------|------|------|
+| **2 (live after deploy)** | Email/password + sessions on Doltgres | commit `7097457` + deploy |
+| **3 (local only)** | + email OTP, magic link, SMS OTP | **not** committed/pushed/deployed yet |
 
-1. **Dashboard Auth** — engine version, storage doltgres, **password login open**.
-2. **App login APIs (briven-engine on Doltgres):**
-   - `POST /v1/auth-core/fdi/signup` — email + password
-   - `POST /v1/auth-core/fdi/signin`
-   - `POST /v1/auth-core/fdi/signout`
-   - `GET /v1/auth-core/session/me` — verify session
-3. **Status:**
-   - `GET /v1/auth-core/info` · `ready` · `map/:projectId`
-4. **Still 410 / closed:** old Better Auth customer product, full dashboard Auth data, MFA admin, keys UI APIs, migration, etc.
-5. **How apps call it:** first-party proxy  
-   `https://your-app.com/api/auth/*` → `https://api.briven.tech/v1/auth-core/fdi/*`  
-   Header: `x-briven-project-id: <project id>`
+## Phase 2 (shipped code path)
 
-## How it fits with Pay + DB
+- `POST /v1/auth-core/fdi/signup` · `/signin` · `/signout`
+- `GET /v1/auth-core/session/me`
+- `GET /v1/auth-core/info` · `/ready` · `/map/:projectId`
+- Storage: Doltgres `briven_engine`
 
-| Product | Job | Doltgres |
-|---------|-----|----------|
-| Briven DB | App tables | `proj_<id>` |
-| Briven Auth | Who is logged in | `briven_engine` |
-| Briven Pay | Money | Pay path (same platform family) |
+## Phase 3 (local workspace only)
 
-Same project id ties them together for mavi-pay and others.
+- `POST /v1/auth-core/fdi/signinup/code` (email or phone)
+- `POST /v1/auth-core/fdi/signinup/code/consume` (OTP or magic link)
+- Session cookies use handle (same as Phase 2)
+- Delivery: log mode unless SMTP/Twilio secrets set
+- Proof: `bun scripts/step2-passwordless-proof.mjs` → **PHASE 3 LOCAL PROOF OK**
+
+## How Auth fits Pay + DB
+
+Same Briven project + Doltgres family: Auth vault `briven_engine`, app data `proj_*`, Pay on its path.
 
 ## Platform login
 
-briven.tech dashboard login is **unchanged** (Better Auth on control plane).  
-That is **not** the same door as app end-users.
+briven.tech operator login unchanged (`/v1/auth/*`).
 
-## Local Phase 2 verification (ship-ready quality)
+## Local verify Phase 3
 
 ```bash
-# Unit tests (20 pass)
-bun test apps/api/src/services/auth-core/emailpassword.test.ts \
-  apps/api/src/services/auth-core/session.test.ts \
-  apps/api/src/services/auth-core/project-map.test.ts \
-  apps/api/src/routes/auth-core-fdi.phase2.test.ts \
-  packages/auth/src/engine/proxy.test.ts
+bun test apps/api/src/services/auth-core/passwordless.test.ts \
+  apps/api/src/services/auth-core/emailpassword.test.ts \
+  apps/api/src/services/auth-core/session.test.ts
 
-# Doltgres proof (local port 5434)
 cd apps/api && \
 BRIVEN_ENGINE_DATABASE_URL=postgres://postgres:devpass@127.0.0.1:5434/briven_engine?sslmode=disable \
 BRIVEN_DATA_PLANE_URL=postgres://postgres:devpass@127.0.0.1:5434/postgres?sslmode=disable \
-BRIVEN_AUTH_CORE_ENABLED=true \
-bun scripts/step1-password-proof.mjs
+BRIVEN_AUTH_CORE_ENABLED=true BRIVEN_ENV=development \
+bun scripts/step2-passwordless-proof.mjs
 ```
-
-## Next
-
-Phase 3+ (passwordless, social, MFA, …) only after flndrn says start.  
-Ship (commit/push/deploy) only when flndrn explicitly asks.

@@ -4,10 +4,10 @@ export const metadata = { title: 'Auth' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Phase 2 (Option B) Auth overview — briven-engine on Doltgres.
- * Password + sessions live; other methods later. Same dashboard design language.
+ * Auth overview — briven-engine on Doltgres (Option B).
+ * Phase 2: password · Phase 3 local: passwordless email/SMS + magic link.
  */
-export default async function BrivenAuthPhase2Page() {
+export default async function BrivenAuthOverviewPage() {
   const info = await fetchAuthCoreInfo();
 
   const engine = info?.engine ?? 'briven-engine';
@@ -49,19 +49,18 @@ export default async function BrivenAuthPhase2Page() {
           className="font-mono text-[10px] uppercase tracking-widest"
           style={{ color: 'var(--auth-accent, #FFFD74)' }}
         >
-          Phase 2 · password + sessions
+          Phase 3 · password + passwordless
         </p>
 
         <h2 className="mt-3 font-mono text-sm text-[var(--color-text)]">
           {appLoginReady
-            ? 'email + password login is on (Doltgres)'
+            ? 'password, email OTP, magic link, SMS OTP (Doltgres)'
             : 'engine not ready yet'}
         </h2>
         <p className="mt-2 max-w-lg font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-          Apps can sign users up and in with email and password. Sessions are
-          stored in Doltgres next to Briven DB and Briven Pay. Magic link, SMS,
-          and Google come in later phases. Platform login to briven.tech is
-          separate and unchanged.
+          Apps can sign users in with email/password, email code, magic link, or
+          SMS code. Sessions live in Doltgres next to Briven DB and Briven Pay.
+          Google and MFA come later. Platform login to briven.tech is separate.
         </p>
 
         <dl className="mt-6 grid gap-3 font-mono text-xs sm:grid-cols-2">
@@ -101,6 +100,9 @@ export default async function BrivenAuthPhase2Page() {
           <p className="text-[var(--color-text)]">For apps (first-party proxy)</p>
           <p className="mt-2">
             POST /v1/auth-core/fdi/signup · /signin · /signout
+          </p>
+          <p>
+            POST /v1/auth-core/fdi/signinup/code · /signinup/code/consume
           </p>
           <p>GET /v1/auth-core/session/me</p>
           <p className="mt-2">

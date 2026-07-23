@@ -28,9 +28,9 @@ authCoreStatusRouter.get('/v1/auth-core/info', async (c) => {
     product: 'Briven Auth',
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
-    productStatus: 'phase2-password-sessions',
+    productStatus: 'phase3-passwordless',
     notice:
-      'email/password signup + signin + sessions on Doltgres; other methods later',
+      'password + email OTP + magic link + SMS OTP + sessions on Doltgres',
     buildSha: BUILD_SHA,
     buildAt: BUILD_AT,
     ...core,
@@ -55,7 +55,7 @@ authCoreStatusRouter.get('/v1/auth-core/ready', async (c) => {
     engine: BRIVEN_ENGINE_ID,
     engineVersion: BRIVEN_ENGINE_VERSION,
     notice:
-      'email/password signup + signin + sessions on Doltgres; other methods later',
+      'password + email OTP + magic link + SMS OTP + sessions on Doltgres',
     ...core,
   });
 });

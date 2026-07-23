@@ -23,7 +23,7 @@ import { getEnginePool, isEnginePoolReady } from './db.js';
 
 export const BRIVEN_ENGINE_ID = 'briven-engine' as const;
 /** Product engine version shown on yellow Auth shell (Option B Phase 1). */
-export const BRIVEN_ENGINE_VERSION = '0.2.0-phase2' as const;
+export const BRIVEN_ENGINE_VERSION = '0.3.0-phase3' as const;
 
 export type AuthCoreStatus = {
   enabled: boolean;
@@ -39,7 +39,7 @@ export type AuthCoreStatus = {
   appLoginReady: boolean;
   loginMethods: string[];
   message: string;
-  deployGate: 'phase2-password-sessions';
+  deployGate: 'phase3-passwordless' | 'phase2-password-sessions';
   recipeNames: string[];
   sdkInitialized: boolean;
   recipePhase: number | null;
@@ -72,10 +72,10 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
     database: 'briven_engine' as const,
     appLoginReady: false,
     loginMethods: [] as string[],
-    deployGate: 'phase2-password-sessions' as const,
+    deployGate: 'phase3-passwordless' as const,
     recipeNames: [...LOADED_RECIPES],
     sdkInitialized: bootstrapped && schemaReady,
-    recipePhase: bootstrapped ? 2 : null,
+    recipePhase: bootstrapped ? 3 : null,
     // Redact credentials — this object is returned on public /info.
     connectionUri: redactConnectionUri(env.BRIVEN_ENGINE_DATABASE_URL),
     hello: null as string | null,
@@ -117,12 +117,14 @@ export async function probeBrivenEngine(): Promise<AuthCoreStatus> {
       ok: ready,
       schemaReady,
       poolReady: true,
-      phase: 2,
+      phase: 3,
       appLoginReady: ready,
-      loginMethods: ready ? ['emailpassword'] : [],
+      loginMethods: ready
+        ? ['emailpassword', 'passwordless-email', 'passwordless-sms', 'magic-link']
+        : [],
       hello: ok ? 'Hello' : null,
       message: ready
-        ? 'briven-engine password + sessions live on Doltgres (Phase 2)'
+        ? 'briven-engine password + passwordless + sessions on Doltgres (Phase 3 local)'
         : schemaReady
           ? 'Doltgres reachable; engine not fully bootstrapped'
           : 'Doltgres reachable; schema not bootstrapped',
@@ -182,9 +184,14 @@ export async function initAuthCoreSdk(): Promise<boolean> {
       storage: 'doltgres',
       database: 'briven_engine',
       recipes: LOADED_RECIPES,
-      deployGate: 'phase2-password-sessions',
+      deployGate: 'phase3-passwordless',
       appLoginReady: true,
-      loginMethods: ['emailpassword'],
+      loginMethods: [
+        'emailpassword',
+        'passwordless-email',
+        'passwordless-sms',
+        'magic-link',
+      ],
     });
     return true;
   } catch (err) {
