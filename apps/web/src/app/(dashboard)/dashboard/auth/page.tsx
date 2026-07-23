@@ -34,12 +34,6 @@ export default async function AuthHomePage() {
         </div>
       </header>
 
-      <p className="mb-4 max-w-xl font-mono text-xs leading-relaxed text-[var(--color-text-muted)]">
-        Each card is one app&apos;s sign-in. Open a project to manage its users,
-        sessions, keys, providers, and company SSO — nothing mixed between
-        projects.
-      </p>
-
       <AuthProjectsGrid projects={projects} />
     </section>
   );
