@@ -2,7 +2,7 @@
 # Push Briven main → Konnos ONLY (no GitHub).
 #
 # Dokploy auto-deploy for briven-france is wired to:
-#   https://code.konnos.org/flndrn/briven.git  (customGit)
+#   https://code.konnos.org/flndrn/Briven.git  (customGit)
 # so production rebuilds from Konnos pushes, not GitHub.
 #
 # Usage:
@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-KONNOS_URL="${BRIVEN_KONNOS_URL:-https://code.konnos.org/flndrn/briven.git}"
+KONNOS_URL="${BRIVEN_KONNOS_URL:-https://code.konnos.org/flndrn/Briven.git}"
 ARG="${1:-main}"
 
 if [[ "$ARG" == "setup" ]]; then
