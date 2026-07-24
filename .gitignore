@@ -115,3 +115,8 @@ specs/
 # Local operator secrets — never commit
 memory.md
 .local/
+
+# Keep markdown private locally; only README.md files stay public on the remote
+*.md
+!README.md
+!**/README.md
