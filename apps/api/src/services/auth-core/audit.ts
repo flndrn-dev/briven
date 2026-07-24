@@ -41,6 +41,8 @@ export type BrivenEngineAuditAction =
   | 'oidc.code.issued'
   | 'oidc.token.issued'
   | 'oidc.token.revoked'
+  | 'ai.agent_token.created'
+  | 'ai.agent_token.revoked'
 
 export type RecordBrivenEngineAuditInput = {
   action: BrivenEngineAuditAction | string;

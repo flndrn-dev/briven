@@ -373,11 +373,31 @@ authServiceRouter.post(
     }
 
     try {
-      validateLogoUpload({ contentType: file.type, size: file.size });
+      // Browsers usually set image/jpeg for .jpg/.jpeg; empty type → sniff name.
+      let contentType = file.type || '';
+      if (!contentType && file.name) {
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith('.png')) contentType = 'image/png';
+        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) contentType = 'image/jpeg';
+        else if (lower.endsWith('.webp')) contentType = 'image/webp';
+        else if (lower.endsWith('.svg')) contentType = 'image/svg+xml';
+      }
+      validateLogoUpload({ contentType, size: file.size });
       const bytes = new Uint8Array(await file.arrayBuffer());
-      await putBrandingLogo({ projectId, bytes, contentType: file.type });
+      await putBrandingLogo({ projectId, bytes, contentType });
       const logoUrl = brandingLogoPublicUrl(projectId);
+      // Logo is upload-only — stored as a stable public CDN URL we generate.
+      // Operators never paste an external logo URL in the UI.
       await updateAuthConfig(projectId, { branding: { logoUrl } });
+      // Keep briven-engine branding in lockstep (dashboard Auth → branding).
+      try {
+        const { setBrivenEngineBranding } = await import(
+          '../services/auth-core/project-config.js'
+        );
+        await setBrivenEngineBranding(projectId, { logoUrl }, actor.id);
+      } catch {
+        // Non-fatal: tenant config is still updated.
+      }
       // Drop the cached Better Auth instance so hosted pages rebuild with
       // the new logo (mirrors the config PATCH path).
       await invalidateAuthInstance(projectId);
@@ -426,6 +446,14 @@ authServiceRouter.delete(
     try {
       await deleteBrandingLogo(projectId);
       await updateAuthConfig(projectId, { branding: { logoUrl: null } });
+      try {
+        const { setBrivenEngineBranding } = await import(
+          '../services/auth-core/project-config.js'
+        );
+        await setBrivenEngineBranding(projectId, { logoUrl: null }, actor.id);
+      } catch {
+        // Non-fatal.
+      }
       await invalidateAuthInstance(projectId);
       await audit({
         actorId: actor.id,

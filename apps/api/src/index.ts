@@ -35,6 +35,8 @@ import { authCoreRolesRouter } from './routes/auth-core-roles.js';
 import { authCoreKeysRouter } from './routes/auth-core-keys.js';
 import { authCoreM2mRouter } from './routes/auth-core-m2m.js';
 import { authCoreIdpRouter } from './routes/auth-core-idp.js';
+import { authCoreMigrationRouter } from './routes/auth-core-migration.js';
+import { authCoreAiRouter } from './routes/auth-core-ai.js';
 import { authCoreProjectRouter } from './routes/auth-core-project.js';
 import { authCoreSsoRouter } from './routes/auth-core-sso.js';
 import { authCoreRouter } from './routes/auth-core.js';
@@ -182,16 +184,20 @@ app.route('/', authCoreRolesRouter);
 app.route('/', authCoreKeysRouter);
 app.route('/', authCoreM2mRouter); // M2M client credentials + /oauth/token
 app.route('/', authCoreIdpRouter); // OIDC IdP (Briven as SuperTokens-class provider)
+app.route('/', authCoreMigrationRouter); // bulk user import
+app.route('/', authCoreAiRouter); // AI agent tokens
 app.route('/', authCoreProjectRouter);
 app.route('/', authCoreSsoRouter); // SAML + OIDC enterprise SSO
 app.route('/', authCoreRouter); // workspace + enable Auth
 app.route('/', authProductRetiredRouter);
-log.info('auth_product_idp_m2m_enterprise', {
-  note: 'briven-engine FDI + dashboard + SSO + M2M + OIDC IdP provider',
+log.info('auth_product_parity_surface', {
+  note: 'briven-engine FDI + dashboard + SSO + M2M + OIDC IdP + migration + AI tokens',
   engine: 'briven-engine',
   appLoginReady: true,
   m2mToken: '/v1/auth-core/oauth/token',
   oidcIssuer: '/v1/auth-core/oidc',
+  migration: '/v1/auth-core/migration/users',
+  aiMe: '/v1/auth-core/ai/me',
   platformLogin: '/v1/auth/*',
 });
 app.route('/', projectsRouter);

@@ -155,11 +155,12 @@ describe('auth-mailer — pure helpers (BUILD_PLAN.md §8)', () => {
 
   // ─── renderPasswordReset ────────────────────────────────────────────
 
-  test('renderPasswordReset includes "secure your account" disclaimer', () => {
+  test('renderPasswordReset includes ignore + secure disclaimer', () => {
     const r = renderPasswordReset(ctx, { url: 'https://acme.test/reset?token=xyz' });
-    expect(r.html.toLowerCase()).toContain('secure your account');
+    expect(r.html.toLowerCase()).toContain('ignore this email');
     expect(r.text.toLowerCase()).toContain('secure your account');
     expect(r.html).toContain('https://acme.test/reset?token=xyz');
+    expect(r.html).toContain('Flanders');
   });
 
   // ─── renderNewDeviceLogin ───────────────────────────────────────────
@@ -179,7 +180,7 @@ describe('auth-mailer — pure helpers (BUILD_PLAN.md §8)', () => {
 
   // ─── cross-render invariants ────────────────────────────────────────
 
-  test('every template renders sender name into the footer', () => {
+  test('every template renders sender name + Flanders footer', () => {
     const outs = [
       renderMagicLink(ctx, { url: 'https://x.test', expiryMinutes: 5 }),
       renderOtpCode(ctx, { code: '111', expiryMinutes: 5 }),
@@ -193,6 +194,8 @@ describe('auth-mailer — pure helpers (BUILD_PLAN.md §8)', () => {
     ];
     for (const out of outs) {
       expect(out.html).toContain('acme auth');
+      expect(out.html).toContain('Flanders');
+      expect(out.html).toContain('Limassol');
     }
   });
 

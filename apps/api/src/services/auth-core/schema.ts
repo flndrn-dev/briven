@@ -254,6 +254,23 @@ const STATEMENTS = [
     granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, client_id)
   )`,
+  // AI agent tokens (SuperTokens-class AI auth first cut)
+  `CREATE TABLE IF NOT EXISTS be_ai_agent_tokens (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL DEFAULT 'public',
+    agent_name TEXT NOT NULL,
+    scopes_json TEXT NOT NULL DEFAULT '["ai.invoke"]',
+    token_hash TEXT NOT NULL UNIQUE,
+    token_suffix TEXT NOT NULL,
+    expires_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS be_ai_agent_project_idx
+    ON be_ai_agent_tokens (project_id)`,
 ];
 
 export async function bootstrapBrivenEngineSchema(): Promise<void> {
@@ -295,6 +312,7 @@ export async function bootstrapBrivenEngineSchema(): Promise<void> {
       'be_oidc_auth_codes',
       'be_oidc_refresh_tokens',
       'be_oidc_consents',
+      'be_ai_agent_tokens',
     ],
   });
 }

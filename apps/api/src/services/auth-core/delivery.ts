@@ -30,6 +30,12 @@ export type EmailDeliveryInput = {
   raw?: unknown;
   /** When set, can look up per-project SMTP later */
   projectId?: string;
+  /** Structured magic-link / OTP fields for the Flanders shell. */
+  url?: string | null;
+  code?: string | null;
+  expiryMinutes?: number;
+  title?: string;
+  ctaLabel?: string;
 };
 
 export type SmsDeliveryInput = {
@@ -90,34 +96,101 @@ function bodyFromSms(input: SmsDeliveryInput): string {
 }
 
 /**
- * Branded HTML for auth emails (OTP / magic link).
+ * Shared Briven Auth email shell — matches control-plane mail (logo + brand,
+ * primary CTA / OTP, Flanders footer). Used for all project auth notifications.
  */
 export function buildBrivenEngineAuthEmailHtml(input: {
-  body: string;
+  /** Plain-text body fallback (escaped). Prefer url/code when set. */
+  body?: string;
   branding: BrivenEngineBranding;
+  /** Magic-link URL → renders the green sign-in button. */
+  url?: string | null;
+  /** One-time code → large monospace block. */
+  code?: string | null;
+  expiryMinutes?: number;
+  /** Override title; default "sign in to {brand}". */
+  title?: string;
+  /** CTA label when url is set. */
+  ctaLabel?: string;
 }): string {
   const b = input.branding;
-  const color = b.primaryColor || DEFAULT_BRIVEN_ENGINE_BRANDING.primaryColor;
-  const name = escapeHtml(b.senderName || DEFAULT_BRIVEN_ENGINE_BRANDING.senderName);
+  const color = (b.primaryColor || DEFAULT_BRIVEN_ENGINE_BRANDING.primaryColor).toLowerCase();
+  const rawName = b.senderName || DEFAULT_BRIVEN_ENGINE_BRANDING.senderName;
+  const name = escapeHtml(rawName);
+  const title = escapeHtml(
+    input.title?.trim() || `sign in to ${rawName}`,
+  );
+  const expiry =
+    typeof input.expiryMinutes === 'number' && input.expiryMinutes > 0
+      ? input.expiryMinutes
+      : 10;
+
   const safeLogo = sanitizeLogoUrl(b.logoUrl);
-  const logo = safeLogo
-    ? `<img src="${escapeHtml(safeLogo)}" alt="${name}" width="120" style="display:block;max-width:120px;height:auto;margin:0 0 16px 0;border:0" />`
+  const logoMark = safeLogo
+    ? `<img src="${escapeHtml(safeLogo)}" alt="" width="32" height="32" style="display:block;border:0;outline:none;border-radius:8px;object-fit:contain" />`
+    : `<span style="display:inline-block;width:28px;height:28px;border-radius:999px;background:${escapeHtml(color)};box-shadow:0 0 0 3px ${escapeHtml(color)}33"></span>`;
+
+  const brandUrl = sanitizeBrandUrl(b.brandUrl);
+  const brandUrlHref = brandUrl
+    ? brandUrl.startsWith('http')
+      ? brandUrl
+      : `https://${brandUrl}`
+    : null;
+  const brandUrlLabel = brandUrl
+    ? brandUrl.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+    : null;
+
+  let main = '';
+  if (input.url && sanitizeLogoUrl(input.url) /* reuse URL sanitizer */) {
+    const href = sanitizeLogoUrl(input.url)!;
+    const label = escapeHtml(input.ctaLabel?.trim() || 'sign in');
+    main = `
+          <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px;line-height:1.6">click the button below to sign in. this link expires in ${expiry} minutes.</p>
+          <p style="margin:0 0 24px 0"><a href="${escapeHtml(href)}" style="display:inline-block;background:${escapeHtml(color)};color:#0a0b0d;padding:12px 24px;border-radius:10px;font-weight:500;font-family:system-ui,sans-serif;text-decoration:none">${label}</a></p>`;
+  } else if (input.code && String(input.code).trim()) {
+    const code = escapeHtml(String(input.code).trim());
+    main = `
+          <p style="margin:0 0 16px 0;color:#9ba3af;font-size:15px;line-height:1.6">enter this code to finish signing in. it expires in ${expiry} minutes.</p>
+          <p style="margin:0 0 24px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.35em;text-align:center;background:#1a1d24;border-radius:10px;padding:20px 16px;border:1px solid #2a2e36;color:#f5f7fa">${code}</p>`;
+  } else {
+    const lines = escapeHtml(input.body ?? '')
+      .split('\n')
+      .map((line) => (line ? line : '&nbsp;'))
+      .join('<br/>');
+    main = `<div style="margin:0 0 24px 0;color:#9ba3af;font-size:15px;line-height:1.6">${lines}</div>`;
+  }
+
+  const footerNote = b.footerNote?.trim()
+    ? `<p style="margin:12px 0 0 0;font-size:12px;color:#6b7280">${escapeHtml(b.footerNote.trim())}</p>`
     : '';
-  const lines = escapeHtml(input.body)
-    .split('\n')
-    .map((line) => (line ? line : '&nbsp;'))
-    .join('<br/>');
-  return `<!DOCTYPE html>
-<html><body style="margin:0;padding:0;background:#0a0a0a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0a0a0a;padding:32px 16px">
-    <tr><td align="center">
-      <table role="presentation" width="100%" style="max-width:480px;background:#141414;border:1px solid #2a2a2a;border-radius:8px;padding:28px 24px">
+
+  const brandLine = brandUrlHref
+    ? `${name} · <a style="color:#9ba3af" href="${escapeHtml(brandUrlHref)}">${escapeHtml(brandUrlLabel ?? brandUrlHref)}</a>`
+    : name;
+
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>${title}</title></head>
+<body style="margin:0;background:#0a0b0d;color:#f5f7fa;font-family:system-ui,-apple-system,sans-serif;line-height:1.6">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0a0b0d">
+    <tr><td align="center" style="padding:32px 16px">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#13151a;border:1px solid #2a2e36;border-radius:14px;padding:32px">
         <tr><td>
-          ${logo}
-          <p style="margin:0 0 8px 0;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#888">${name}</p>
-          <div style="height:3px;width:48px;background:${escapeHtml(color)};margin:0 0 20px 0;border-radius:2px"></div>
-          <div style="font-size:14px;line-height:1.55;color:#f2f2f2">${lines}</div>
-          <p style="margin:24px 0 0 0;font-size:11px;color:#666">If you did not request this, you can ignore this email.</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0">
+            <tr>
+              <td style="padding-right:10px;vertical-align:middle">${logoMark}</td>
+              <td style="vertical-align:middle"><span style="font-family:system-ui,sans-serif;font-size:20px;font-weight:500;letter-spacing:-0.02em;color:#f5f7fa">${name}</span></td>
+            </tr>
+          </table>
+          <h2 style="font-family:system-ui,sans-serif;font-size:18px;font-weight:500;margin:0 0 12px 0;color:#f5f7fa">${title}</h2>
+          ${main}
+          <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
+          ${footerNote}
+          <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
+            ${brandLine}<br/>
+            made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn<br/>
+            100% self-funded, sustainable &amp; independent<br/>
+            flndrn Limited, Limassol, Cyprus
+          </p>
         </td></tr>
       </table>
     </td></tr>
@@ -135,9 +208,26 @@ export async function sendBrivenEngineEmail(
     ? await getBrivenEngineBranding(input.projectId)
     : { ...DEFAULT_BRIVEN_ENGINE_BRANDING };
   const subject =
-    input.subject ?? `Your ${branding.senderName} sign-in`;
-  const text = input.body ?? `${branding.senderName} message`;
-  const html = buildBrivenEngineAuthEmailHtml({ body: text, branding });
+    input.subject ??
+    (input.code
+      ? `your ${branding.senderName} sign-in code: ${input.code}`
+      : `your sign-in link to ${branding.senderName}`);
+  const text =
+    input.body ??
+    (input.url
+      ? `sign in to ${branding.senderName}\n\n${input.url}\n\nthis link expires in ${input.expiryMinutes ?? 10} minutes. if you didn't request it, ignore this email.`
+      : input.code
+        ? `sign in to ${branding.senderName}\n\nyour code: ${input.code}\n\nthis code expires in ${input.expiryMinutes ?? 10} minutes. if you didn't request it, ignore this email.`
+        : `${branding.senderName} message`);
+  const html = buildBrivenEngineAuthEmailHtml({
+    body: text,
+    branding,
+    url: input.url,
+    code: input.code,
+    expiryMinutes: input.expiryMinutes,
+    title: input.title,
+    ctaLabel: input.ctaLabel,
+  });
 
   log.info('briven_engine_email', {
     engine: 'briven-engine',
@@ -397,6 +487,29 @@ function sanitizeLogoUrl(url: string | null | undefined): string | null {
   }
 }
 
+/** Brand site for footer — https URL or bare domain. */
+function sanitizeBrandUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const t = url.trim();
+  if (t.length > 200 || /[\s"'<>]/.test(t)) return null;
+  if (/^https?:\/\//i.test(t)) {
+    try {
+      const u = new URL(t);
+      if (u.protocol === 'https:') return u.toString().replace(/\/$/, '');
+      if (u.protocol === 'http:' && u.hostname === 'localhost') {
+        return u.toString().replace(/\/$/, '');
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(t)) {
+    return t.toLowerCase();
+  }
+  return null;
+}
+
 export function passwordlessSmsDeliveryService() {
   return {
     service: {
@@ -439,14 +552,15 @@ export function passwordlessEmailDeliveryService() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         userContext?: any;
       }) => {
+        const expiryMinutes = input.codeLifetime
+          ? Math.max(1, Math.round(input.codeLifetime / 1000 / 60))
+          : 10;
         const bodyParts = [
           input.userInputCode ? `Your code: ${input.userInputCode}` : null,
           input.urlWithLinkCode ? `Magic link: ${input.urlWithLinkCode}` : null,
         ].filter(Boolean);
         await sendBrivenEngineEmail({
           email: input.email,
-          subject: 'Your Briven Auth sign-in',
-          body: bodyParts.join('\n') || 'Briven Auth message',
           type: input.type,
           userContext: input.userContext,
           projectId:
@@ -454,6 +568,10 @@ export function passwordlessEmailDeliveryService() {
               ? input.userContext.projectId
               : undefined,
           raw: input,
+          url: input.urlWithLinkCode ?? null,
+          code: input.userInputCode ?? null,
+          expiryMinutes,
+          body: bodyParts.join('\n') || 'Briven Auth message',
         });
       },
     },

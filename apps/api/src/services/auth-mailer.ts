@@ -46,26 +46,95 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-// ─── shell + cta with per-tenant primary color ──────────────────────────
+// ─── shell + cta (Flanders footer — same layout as control-plane mail) ──
 
 interface ShellArgs {
   title: string;
   body: string;
   primaryColor: string;
   senderName: string;
+  logoUrl?: string | null;
+  brandUrl?: string | null;
+  footerNote?: string | null;
 }
 
-function shell({ title, body, primaryColor, senderName }: ShellArgs): string {
-  // Inline-styled for max email-client compatibility. Dark-themed defaults
-  // per BRAND.md §3; primary color is the only per-tenant variable.
+function safeHttpUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const t = url.trim();
+  if (t.length > 500 || /[\s"'<>]/.test(t)) return null;
+  try {
+    const u = new URL(t);
+    if (u.protocol === 'https:') return u.toString();
+    if (u.protocol === 'http:' && u.hostname === 'localhost') return u.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function shell({
+  title,
+  body,
+  primaryColor,
+  senderName,
+  logoUrl,
+  brandUrl,
+  footerNote,
+}: ShellArgs): string {
   const accent = primaryColor.toLowerCase();
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#0a0b0d;color:#f5f7fa;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-  <div style="max-width:520px;margin:0 auto;padding:40px 24px">
-    <h1 style="font-size:20px;font-weight:600;margin:0 0 24px;color:#f5f7fa">${escapeHtml(title)}</h1>
-    <div style="font-size:15px;line-height:1.5;color:#d1d5db">${body}</div>
-    <hr style="border:none;border-top:1px solid #2a2e36;margin:32px 0">
-    <p style="font-size:12px;color:#6b7280;margin:0">${escapeHtml(senderName)} · powered by <span style="color:${accent}">briven auth</span></p>
-  </div>
+  const name = escapeHtml(senderName);
+  const safeLogo = safeHttpUrl(logoUrl ?? null);
+  const logoMark = safeLogo
+    ? `<img src="${escapeHtml(safeLogo)}" alt="" width="32" height="32" style="display:block;border:0;outline:none;border-radius:8px;object-fit:contain" />`
+    : `<span style="display:inline-block;width:28px;height:28px;border-radius:999px;background:${escapeHtml(accent)};box-shadow:0 0 0 3px ${escapeHtml(accent)}33"></span>`;
+
+  let brandHref: string | null = null;
+  let brandLabel: string | null = null;
+  if (brandUrl?.trim()) {
+    const raw = brandUrl.trim();
+    if (/^https?:\/\//i.test(raw)) {
+      brandHref = safeHttpUrl(raw);
+      brandLabel = brandHref
+        ? brandHref.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+        : null;
+    } else if (/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(raw)) {
+      brandHref = `https://${raw}`;
+      brandLabel = raw;
+    }
+  }
+  const brandLine = brandHref
+    ? `${name} · <a style="color:#9ba3af" href="${escapeHtml(brandHref)}">${escapeHtml(brandLabel ?? brandHref)}</a>`
+    : name;
+  const note = footerNote?.trim()
+    ? `<p style="margin:12px 0 0 0;font-size:12px;color:#6b7280">${escapeHtml(footerNote.trim())}</p>`
+    : '';
+
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>${escapeHtml(title)}</title></head>
+<body style="margin:0;background:#0a0b0d;color:#f5f7fa;font-family:system-ui,-apple-system,sans-serif;line-height:1.6">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0a0b0d">
+    <tr><td align="center" style="padding:32px 16px">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#13151a;border:1px solid #2a2e36;border-radius:14px;padding:32px">
+        <tr><td>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0">
+            <tr>
+              <td style="padding-right:10px;vertical-align:middle">${logoMark}</td>
+              <td style="vertical-align:middle"><span style="font-size:20px;font-weight:500;letter-spacing:-0.02em;color:#f5f7fa">${name}</span></td>
+            </tr>
+          </table>
+          <h2 style="font-size:18px;font-weight:500;margin:0 0 12px 0;color:#f5f7fa">${escapeHtml(title)}</h2>
+          <div style="font-size:15px;line-height:1.6;color:#d1d5db">${body}</div>
+          ${note}
+          <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
+            ${brandLine}<br/>
+            made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn<br/>
+            100% self-funded, sustainable &amp; independent<br/>
+            flndrn Limited, Limassol, Cyprus
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
 </body></html>`;
 }
 
@@ -74,7 +143,7 @@ function cta(label: string, href: string, primaryColor: string): string {
   // briven brand contrast: text on accent is always #0a0b0d (dark) regardless
   // of which hex the customer picked. Their primary-color picker enforces
   // WCAG-AA against #0a0b0d (BUILD_PLAN.md §6 Branding panel).
-  return `<p style="margin:32px 0"><a href="${escapeHtml(href)}" style="display:inline-block;background:${accent};color:#0a0b0d;padding:12px 24px;border-radius:10px;font-weight:500;text-decoration:none">${escapeHtml(label)}</a></p>`;
+  return `<p style="margin:0 0 24px 0"><a href="${escapeHtml(href)}" style="display:inline-block;background:${accent};color:#0a0b0d;padding:12px 24px;border-radius:10px;font-weight:500;text-decoration:none">${escapeHtml(label)}</a></p>`;
 }
 
 // ─── template renderers (pure; exported for tests) ──────────────────────
@@ -82,6 +151,11 @@ function cta(label: string, href: string, primaryColor: string): string {
 export interface RenderContext {
   primaryColor: string;
   senderName: string;
+  /** Public URL of the *uploaded* logo (never a free-form customer paste). */
+  logoUrl?: string | null;
+  /** Brand site for footer (`name · brandUrl`). */
+  brandUrl?: string | null;
+  footerNote?: string | null;
 }
 
 export function renderMagicLink(
@@ -91,14 +165,17 @@ export function renderMagicLink(
   return {
     subject: `your sign-in link to ${ctx.senderName}`,
     html: shell({
-      title: 'sign in',
+      title: `sign in to ${ctx.senderName}`,
       body: `
-        <p>click below to sign in. this link expires in ${args.expiryMinutes} minutes.</p>
+        <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px">click the button below to sign in. this link expires in ${args.expiryMinutes} minutes.</p>
         ${cta('sign in', args.url, ctx.primaryColor)}
-        <p style="color:#6b7280;font-size:13px">if you didn't request this, ignore the email — nothing happens.</p>
+        <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
       `,
       primaryColor: ctx.primaryColor,
       senderName: ctx.senderName,
+      logoUrl: ctx.logoUrl,
+      brandUrl: ctx.brandUrl,
+      footerNote: ctx.footerNote,
     }),
     text: `sign in to ${ctx.senderName}\n\n${args.url}\n\nthis link expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.`,
   };
@@ -112,14 +189,17 @@ export function renderOtpCode(
   return {
     subject: `your ${ctx.senderName} sign-in code: ${args.code}`,
     html: shell({
-      title: 'one-time code',
+      title: `sign in to ${ctx.senderName}`,
       body: `
-        <p>enter this code to finish signing in. it expires in ${args.expiryMinutes} minutes.</p>
-        <p style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:32px;letter-spacing:8px;text-align:center;background:#1a1d24;border-radius:10px;padding:24px;border:1px solid #2a2e36;color:#f5f7fa">${escapedCode}</p>
-        <p style="color:#6b7280;font-size:13px">if you didn't request this, someone may have typed your email by mistake. you can ignore it safely.</p>
+        <p style="margin:0 0 16px 0;color:#9ba3af;font-size:15px">enter this code to finish signing in. it expires in ${args.expiryMinutes} minutes.</p>
+        <p style="margin:0 0 24px 0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:28px;letter-spacing:0.35em;text-align:center;background:#1a1d24;border-radius:10px;padding:20px 16px;border:1px solid #2a2e36;color:#f5f7fa">${escapedCode}</p>
+        <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
       `,
       primaryColor: ctx.primaryColor,
       senderName: ctx.senderName,
+      logoUrl: ctx.logoUrl,
+      brandUrl: ctx.brandUrl,
+      footerNote: ctx.footerNote,
     }),
     text: `sign in to ${ctx.senderName}\n\nyour code: ${args.code}\n\nthis code expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.`,
   };
@@ -132,14 +212,17 @@ export function renderEmailVerify(
   return {
     subject: `verify your email for ${ctx.senderName}`,
     html: shell({
-      title: 'verify your email',
+      title: `verify your email for ${ctx.senderName}`,
       body: `
-        <p>click below to confirm this email address.</p>
+        <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px">click the button below to confirm this email address.</p>
         ${cta('verify email', args.url, ctx.primaryColor)}
-        <p style="color:#6b7280;font-size:13px">if you didn't sign up, ignore the email.</p>
+        <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
       `,
       primaryColor: ctx.primaryColor,
       senderName: ctx.senderName,
+      logoUrl: ctx.logoUrl,
+      brandUrl: ctx.brandUrl,
+      footerNote: ctx.footerNote,
     }),
     text: `verify your email for ${ctx.senderName}\n\n${args.url}\n\nif you didn't sign up, ignore this email.`,
   };
@@ -152,14 +235,17 @@ export function renderPasswordReset(
   return {
     subject: `reset your ${ctx.senderName} password`,
     html: shell({
-      title: 'reset your password',
+      title: `reset your ${ctx.senderName} password`,
       body: `
-        <p>click below to choose a new password. this link expires in 1 hour.</p>
+        <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px">click the button below to choose a new password. this link expires in 1 hour.</p>
         ${cta('reset password', args.url, ctx.primaryColor)}
-        <p style="color:#6b7280;font-size:13px">if you didn't request this, secure your account: change your password and review active sessions.</p>
+        <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email. if it wasn't you, secure your account.</p>
       `,
       primaryColor: ctx.primaryColor,
       senderName: ctx.senderName,
+      logoUrl: ctx.logoUrl,
+      brandUrl: ctx.brandUrl,
+      footerNote: ctx.footerNote,
     }),
     text: `reset your ${ctx.senderName} password\n\n${args.url}\n\nthis link expires in 1 hour. if you didn't request this, secure your account.`,
   };
@@ -176,18 +262,21 @@ export function renderNewDeviceLogin(
   return {
     subject: `new sign-in to ${ctx.senderName}`,
     html: shell({
-      title: 'new device signed in',
+      title: `new sign-in to ${ctx.senderName}`,
       body: `
-        <p>a new device just signed in to your account.</p>
-        <p style="background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
+        <p style="margin:0 0 16px 0;color:#9ba3af;font-size:15px">a new device just signed in to your account.</p>
+        <p style="margin:0 0 24px 0;background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
           ${escDevice}<br>
           at ${escWhen}
         </p>
         ${cta('manage sessions', args.manageUrl, ctx.primaryColor)}
-        <p style="color:#6b7280;font-size:13px">if this was you, no action needed. if not, revoke the session immediately and change your password.</p>
+        <p style="margin:0;color:#6b7280;font-size:13px">if this was you, no action needed. if not, revoke the session and change your password.</p>
       `,
       primaryColor: ctx.primaryColor,
       senderName: ctx.senderName,
+      logoUrl: ctx.logoUrl,
+      brandUrl: ctx.brandUrl,
+      footerNote: ctx.footerNote,
     }),
     text: `new sign-in to ${ctx.senderName}\n\n${args.deviceHint}\nat ${args.whenIso}\n\nmanage: ${args.manageUrl}\n\nif this wasn't you, revoke the session and change your password.`,
   };
@@ -294,16 +383,22 @@ async function maybeUseCustomTemplate(
  * config. Used by Better Auth's `magicLink` plugin's `sendMagicLink`
  * callback (wired in `auth-tenant-pool.ts` when the plugin is enabled).
  */
+function renderCtxFromConfig(config: AuthConfig): RenderContext {
+  return {
+    primaryColor: config.branding.primaryColor,
+    senderName: config.branding.senderName,
+    // logoUrl is set only by the upload route (never free-form paste).
+    logoUrl: config.branding.logoUrl,
+  };
+}
+
 export async function sendBrivenAuthMagicLink(
   projectId: string,
   to: string,
   url: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx: RenderContext = {
-    primaryColor: config.branding.primaryColor,
-    senderName: config.branding.senderName,
-  };
+  const ctx = renderCtxFromConfig(config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'magic-link',
@@ -319,10 +414,7 @@ export async function sendBrivenAuthOtp(
   code: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx: RenderContext = {
-    primaryColor: config.branding.primaryColor,
-    senderName: config.branding.senderName,
-  };
+  const ctx = renderCtxFromConfig(config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'otp',
@@ -338,10 +430,7 @@ export async function sendBrivenAuthEmailVerification(
   url: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx: RenderContext = {
-    primaryColor: config.branding.primaryColor,
-    senderName: config.branding.senderName,
-  };
+  const ctx = renderCtxFromConfig(config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'verification',
@@ -357,10 +446,7 @@ export async function sendBrivenAuthPasswordReset(
   url: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx: RenderContext = {
-    primaryColor: config.branding.primaryColor,
-    senderName: config.branding.senderName,
-  };
+  const ctx = renderCtxFromConfig(config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'password-reset',
@@ -376,10 +462,7 @@ export async function sendBrivenAuthNewDeviceLogin(
   args: { deviceHint: string; whenIso: string; manageUrl: string },
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx: RenderContext = {
-    primaryColor: config.branding.primaryColor,
-    senderName: config.branding.senderName,
-  };
+  const ctx = renderCtxFromConfig(config);
   const tpl = renderNewDeviceLogin(ctx, args);
   await sendForTenant('briven_auth_new_device', { projectId, to, ...tpl });
 }

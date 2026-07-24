@@ -36,34 +36,59 @@ describe('briven-engine SMS honest delivery (offline)', () => {
 });
 
 describe('briven-engine auth email branding HTML', () => {
-  test('includes sender name, accent color, and escaped body', () => {
+  test('includes sender name, Flanders footer, and structured OTP', () => {
     const html = buildBrivenEngineAuthEmailHtml({
-      body: 'Your code: 123456\nExpires soon.',
+      code: '123456',
+      expiryMinutes: 10,
       branding: {
         logoUrl: null,
         primaryColor: '#FFFD74',
         senderName: 'Konnos',
+        brandUrl: 'konnos.org',
+        footerNote: null,
       },
     });
     expect(html).toContain('Konnos');
-    expect(html).toContain('#FFFD74');
-    expect(html).toContain('Your code: 123456');
+    expect(html).toContain('sign in to Konnos');
+    expect(html).toContain('123456');
+    expect(html).toContain('Flanders');
+    expect(html).toContain('Limassol');
+    expect(html).toContain('self-funded');
+    expect(html).toContain('konnos.org');
     expect(html).not.toContain('<script>');
   });
 
-  test('escapes HTML in body and drops unsafe logo URLs', () => {
+  test('magic link renders CTA; unsafe logo URLs dropped', () => {
     const html = buildBrivenEngineAuthEmailHtml({
-      body: '<b>hi</b>',
+      url: 'https://app.example.com/verify?t=1',
       branding: {
         logoUrl: 'https://example.com/x.png" onerror="alert(1)',
         primaryColor: '#112233',
         senderName: 'App <x>',
+        brandUrl: null,
+        footerNote: null,
+      },
+    });
+    expect(html).toContain('https://app.example.com/verify?t=1');
+    expect(html).toContain('click the button below to sign in');
+    expect(html).toContain('App &lt;x&gt;');
+    expect(html).not.toContain('onerror');
+    // Unsafe logo rejected → colored circle, no img
+    expect(html).not.toContain('<img');
+  });
+
+  test('escapes plain body fallback', () => {
+    const html = buildBrivenEngineAuthEmailHtml({
+      body: '<b>hi</b>',
+      branding: {
+        logoUrl: null,
+        primaryColor: '#112233',
+        senderName: 'App',
+        brandUrl: null,
+        footerNote: null,
       },
     });
     expect(html).toContain('&lt;b&gt;hi&lt;/b&gt;');
-    expect(html).toContain('App &lt;x&gt;');
-    expect(html).not.toContain('onerror');
-    expect(html).not.toContain('<img');
   });
 });
 

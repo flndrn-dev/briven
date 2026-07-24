@@ -106,12 +106,21 @@ export type BrivenEngineBranding = {
   logoUrl: string | null;
   primaryColor: string;
   senderName: string;
+  /**
+   * Public brand site shown in the email footer as `{name} · {brandUrl}`.
+   * e.g. `https://mavi.app` or `briven.tech`. Null = show name only.
+   */
+  brandUrl: string | null;
+  /** Optional short line under the email body (support / legal). */
+  footerNote: string | null;
 };
 
 export const DEFAULT_BRIVEN_ENGINE_BRANDING: BrivenEngineBranding = {
   logoUrl: null,
   primaryColor: '#FFFD74',
   senderName: 'Briven Auth',
+  brandUrl: null,
+  footerNote: null,
 };
 
 export type BrivenEngineProjectConfig = {
@@ -180,14 +189,40 @@ function normalizeBranding(
     typeof input?.senderName === 'string' && input.senderName.trim()
       ? input.senderName.trim().slice(0, 80)
       : DEFAULT_BRIVEN_ENGINE_BRANDING.senderName;
+  // Logo is upload-only. The only valid logoUrl is our public CDN route
+  // (…/auth/branding/logo). Free-form external URLs are rejected.
   let logoUrl: string | null = null;
   if (typeof input?.logoUrl === 'string' && input.logoUrl.trim()) {
-    const u = input.logoUrl.trim();
-    if (u.startsWith('https://') || u.startsWith('http://localhost')) {
-      logoUrl = u.slice(0, 500);
+    const u = input.logoUrl.trim().slice(0, 500);
+    if (
+      (u.startsWith('https://') || u.startsWith('http://localhost')) &&
+      /\/v1\/projects\/[^/]+\/auth\/branding\/logo(?:\?|$)/.test(u)
+    ) {
+      logoUrl = u;
     }
   }
-  return { logoUrl, primaryColor: color, senderName: name };
+  let brandUrl: string | null = null;
+  if (typeof input?.brandUrl === 'string' && input.brandUrl.trim()) {
+    const raw = input.brandUrl.trim().slice(0, 200);
+    // Accept bare domains (briven.tech) or full https URLs.
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const u = new URL(raw);
+        if (u.protocol === 'https:' || (u.protocol === 'http:' && u.hostname === 'localhost')) {
+          brandUrl = u.toString().replace(/\/$/, '');
+        }
+      } catch {
+        brandUrl = null;
+      }
+    } else if (/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[\w./-]*)?$/i.test(raw)) {
+      brandUrl = raw.replace(/\/$/, '');
+    }
+  }
+  let footerNote: string | null = null;
+  if (typeof input?.footerNote === 'string' && input.footerNote.trim()) {
+    footerNote = input.footerNote.trim().slice(0, 200);
+  }
+  return { logoUrl, primaryColor: color, senderName: name, brandUrl, footerNote };
 }
 
 export async function setBrivenEngineBranding(
@@ -205,6 +240,18 @@ export async function setBrivenEngineBranding(
           : input.logoUrl,
     primaryColor: input.primaryColor ?? current.primaryColor,
     senderName: input.senderName ?? current.senderName,
+    brandUrl:
+      input.brandUrl === undefined
+        ? current.brandUrl
+        : input.brandUrl === null || input.brandUrl === ''
+          ? null
+          : input.brandUrl,
+    footerNote:
+      input.footerNote === undefined
+        ? current.footerNote
+        : input.footerNote === null || input.footerNote === ''
+          ? null
+          : input.footerNote,
   });
   await setTenantSecret(
     projectId,
