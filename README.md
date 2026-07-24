@@ -1,124 +1,202 @@
-# briven
+# Briven
 
-> the version-controlled backend you own
+**The version-controlled backend you own.**
 
-## 🔴 Doltgres-first (product DNA)
+[briven.tech](https://briven.tech) is a managed backend platform for app builders: databases you can branch like Git, authentication, file storage, serverless functions, and realtime — without running your own servers if you do not want to.
 
-**Briven.tech is built on [Doltgres](https://www.doltgres.com)** — Postgres-wire SQL with git-style branch, commit, and time-travel.  
-Control plane and every project database run on **Doltgres**. Stock Postgres is not the product engine.  
-See **`DOLTGRES-FIRST.md`** (hard rule for all contributors and agents).
+| Surface | What it is |
+|---------|------------|
+| **[briven.tech](https://briven.tech)** | Hosted product (dashboard, projects, billing) |
+| **[docs.briven.tech](https://docs.briven.tech)** | Documentation |
+| **[api.briven.tech](https://api.briven.tech)** | Control plane API |
+| **briven-core** | Open-source engine (self-hostable, AGPL-3.0) |
+| **`npx @briven/cli`** | Developer CLI (MIT) |
 
-briven is an open-core, reactive backend platform for typescript developers. convex-style ergonomics (code-first schema, cli deploys, reactive queries, built-in auth/storage/scheduling) on a git-native sql database — branches, time-travel, commit history. worldwide multi-region. fully self-hostable.
+---
 
-three surfaces:
+## What you get (product map)
 
-- [**briven.tech**](https://briven.tech) — managed hosted service
-- **briven-core** — the open-source engine, self-hostable under agpl-3.0
-- **[`npx briven`](https://www.npmjs.com/package/@briven/cli)** — the developer cli, mit-licensed
+### 1. Projects & databases (Doltgres)
 
-### get started (cli)
+Every **project** on Briven is an isolated app environment.
+
+- **SQL database** with a normal Postgres wire protocol (tools like `psql`, Prisma, Drizzle, and many ORMs work).
+- Under the hood production uses **[Doltgres](https://www.doltgres.com)** — SQL **plus** Git-style history: branches, commits, diffs, and time-travel.
+- Stock Postgres is **not** the product database engine for Briven.tech.
+- Control plane metadata and each project’s data plane live on Doltgres (database-per-project model).
+
+**In the dashboard:** open a project → database / studio to browse tables and run SQL.
+
+**For apps:** use project connection settings and API keys (`brk_…`) for server-side data access. Never put admin secrets in a public frontend.
+
+---
+
+### 2. Briven Auth
+
+**Briven Auth** (product name: **briven-engine**) signs end-users into *your* applications — not only the Briven.tech operator login.
+
+| Capability | Description |
+|------------|-------------|
+| Email + password | Classic sign-up / sign-in |
+| Email OTP / magic link | Passwordless email flows |
+| SMS OTP | Optional; Twilio secrets per project |
+| Social login | Google, GitHub, Konnos, and more when secrets are configured |
+| Passkeys & MFA (TOTP) | Modern second factor |
+| Enterprise SSO | SAML / OIDC *into* your app (company IdP) |
+| Sessions & roles | List / revoke sessions; roles & permissions |
+| Security diary | Audit trail of sign-ins and config changes |
+| M2M | Machine clients: client id + secret → short-lived tokens |
+| OIDC IdP | Briven as a login office for *other* apps (authorize, token, userinfo, …) |
+
+**Dashboard:** **Auth** → pick a project → Overview, Users, Sessions, Security, Keys, **IdP**, Providers, Branding, Enterprise.
+
+**For apps:** prefer a first-party proxy (e.g. `/api/auth/*` on your domain → Briven FDI) so session cookies stay on your site.
+
+**Docs:** [docs.briven.tech/auth](https://docs.briven.tech/auth)
+
+Auth SDK keys look like `pk_briven_auth_…` — different from data-plane `brk_…` keys and storage keys.
+
+---
+
+### 3. File storage (S3 buckets)
+
+Briven gives each project **private object storage** (S3-compatible, MinIO on the managed stack).
+
+| Item | Detail |
+|------|--------|
+| Endpoint | `https://s3.briven.tech` |
+| Bucket | One primary bucket per project (e.g. `proj-…`) |
+| Keys | Scoped access keys from the dashboard (secret shown once) |
+| Public media | `https://media.briven.tech/media/<projectId>/<fileId>` when configured |
+| Soft delete | Restore from dashboard / tools where enabled |
+
+**This is not your SQL database.** Files live in S3; rows live in Doltgres.  
+**This is not platform disaster-recovery backups** (those are a separate ops concern).
+
+**Dashboard:** project → **Storage** → create key → copy endpoint, bucket, access key, secret into **server** env only.
+
+**CLI:** `briven setup` / `briven connect` can mint storage credentials into `.env.local` when possible.
+
+**Docs:** [docs.briven.tech/storage](https://docs.briven.tech/storage)
+
+---
+
+### 4. Functions, realtime, and the rest
+
+| Area | Role |
+|------|------|
+| **Functions** | Serverless-style compute for your project (Deno isolate runtime on the managed product) |
+| **Realtime** | Reactive / websocket paths for live updates |
+| **Schedules** | Timed jobs |
+| **Studio** | Embedded data browser in the product |
+| **MCP** | Agent-facing tools bound to a single project key |
+
+---
+
+## Quick start (CLI)
 
 ```bash
 mkdir my-app && cd my-app
-npx @briven/cli setup --name my-app   # NEW project + wire folder
-# or existing: npx @briven/cli connect p_…
+npx @briven/cli setup --name my-app   # new project + wire this folder
+# or, existing project:
+# npx @briven/cli connect p_…
 briven deploy                         # or: briven dev
 ```
 
 - **New project:** `briven setup` / `briven setup --name my-app`
-- **Existing project:** `briven connect p_…` (never `setup --project`)
-- Docs: [connect](https://docs.briven.tech/connect) · [quickstart](https://docs.briven.tech/quickstart) · [auth](https://docs.briven.tech/auth) · [storage](https://docs.briven.tech/storage)
+- **Existing project:** `briven connect p_…` (do not use `setup --project`)
+- Docs: [connect](https://docs.briven.tech/connect) · [quickstart](https://docs.briven.tech/quickstart)
 
-### remotes (maintainers)
+---
 
-- **GitHub** (auto-deploy on `main`): `https://github.com/flndrn-dev/briven.git`
-- **Konnos** (mirror): `https://code.konnos.org/flndrn/briven.git`
+## Keys (do not mix them)
 
-One push to both (this machine is already configured; re-apply anywhere with):
+| Key style | Used for |
+|-----------|----------|
+| `brk_…` | Project data plane / API (server) |
+| `pk_briven_auth_…` | Auth SDK / app auth config |
+| `brvn…` / storage access keys | One project’s S3 bucket |
+| M2M / OIDC client secrets | Machine tokens / “Sign in with Briven” apps |
 
-```bash
-./scripts/git-push-both.sh setup   # once per clone
-git push origin main               # updates GitHub + Konnos only (no auto-deploy)
-# or: ./scripts/git-push-both.sh main
-```
+Never commit secrets. Rotate anything that has appeared in chat or a public log.
 
-**Auto-deploy is OFF.** Pushing to `main` does **not** redeploy production.
-To deploy: GitHub → Actions → **Deploy to Dokploy** → **Run workflow** (manual only).
+---
 
-## status
-
-phase 1 closing — runtime + realtime + studio + dashboard + cli all live on briven.tech. observability stack + nightly backups + automated deploys via konnos all running. private until the phase 3 dogfood window clears (oct 2026).
-
-## monorepo layout
+## Monorepo layout
 
 ```
 apps/
-  web/        briven.tech — marketing + dashboard (next.js 16)
-  docs/       docs.briven.tech — documentation (next.js 16 + fumadocs)
-  api/        api.briven.tech — control plane (hono on bun)
-  runtime/    function runtime host (deno + node bridge)
-  realtime/   websocket service for reactive queries
+  web/        briven.tech — marketing + dashboard (Next.js)
+  docs/       docs.briven.tech
+  api/        api.briven.tech — control plane (Hono on Bun)
+  runtime/    function runtime host
+  realtime/   websocket service
   studio/     embedded data browser
 
 packages/
   cli/             @briven/cli
   client-react/    @briven/react
   client-vanilla/  @briven/client
-  client-svelte/   @briven/svelte
-  client-vue/      @briven/vue
-  schema/          schema dsl + migration generator
-  shared/          shared types, zod schemas, utilities
-  ui/              shared shadcn/ui components
-  config/          shared ts / eslint / prettier / tailwind configs
+  schema/          schema DSL + migrations
+  shared/          shared types and utilities
 
 infra/
-  dokploy/    dokploy compose templates for self-host
-  k8s/        helm charts (year two)
+  dokploy/    compose templates for deploy / self-host
 ```
 
-## dev
+---
 
-requires **node 20 lts**, **pnpm 9+**, and **bun** for `apps/api`.
+## Local development
+
+Requires **Node 20 LTS**, **pnpm 9+**, and **Bun** for `apps/api`.
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-scripts:
-
 ```bash
-pnpm lint         # eslint across the workspace
-pnpm typecheck    # tsc --noEmit across the workspace
-pnpm test         # unit tests
-pnpm test:e2e     # playwright e2e
-pnpm format       # prettier write
-pnpm build        # turbo build all
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
-## tech stack
+---
 
-see the internal build docs for the authoritative spec. headlines:
+## Tech stack (summary)
 
-- typescript everywhere, strict mode
-- next.js 16 + tailwind v4 + shadcn/ui for every ui surface
-- hono on bun for the control plane
-- deno isolates for the customer function runtime
-- git-native sql database (branches, commits, time-travel, diffs)
-- better auth (google + github + konnos + magic link), polar.sh, mittera.eu, minio, redis
-- grafana + loki + prometheus + postgres_exporter for observability (doltgres is postgres-wire)
+- TypeScript (strict)
+- Next.js + Tailwind for web / docs / dashboard
+- Hono on Bun for the control plane
+- **Doltgres** for SQL + version history (Postgres wire)
+- MinIO for S3-compatible project storage
+- Redis where queues / rate limits need it
+- Observability: Grafana, Loki, Prometheus (ops stack)
 
-## brand
+---
 
-lowercase everywhere. dark-theme only. one primary accent: `#00e87a`. assets in `/assets/`.
+## Brand & licence
 
-## licences
+- Product UI: dark theme; accent `#00e87a` (auth surfaces may use the yellow Auth accent).
+- **briven-core** (engine): **AGPL-3.0**
+- **@briven/cli** and **@briven/client-\***: **MIT**
 
-- `briven-core` (engine): **agpl-3.0**
-- `@briven/cli` and every `@briven/client-*`: **mit**
+---
 
-## links
+## Links
 
-- source: [code.konnos.org/flndrn/briven](https://code.konnos.org/flndrn/briven)
-- managed product: [briven.tech](https://briven.tech)
-- docs: [docs.briven.tech](https://docs.briven.tech)
+| | |
+|--|--|
+| Product | [briven.tech](https://briven.tech) |
+| Docs | [docs.briven.tech](https://docs.briven.tech) |
+| Source (Konnos) | [code.konnos.org/flndrn/briven](https://code.konnos.org/flndrn/briven) |
+
+---
+
+## Maintainers: git remotes
+
+- **Konnos:** `https://code.konnos.org/flndrn/briven.git`
+- Optional GitHub mirror may exist; prefer the remotes configured on this machine.
+
+Pushing `main` does **not** by itself redeploy production unless a separate deploy workflow is run. Deploy via your Dokploy / ops path after review.
