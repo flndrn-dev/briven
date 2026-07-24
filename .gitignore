@@ -106,6 +106,7 @@ CLAUDE.md
 CONTRIBUTING.md
 SPEC.md
 SPRINT-PLAN.md
+AUTH-BLANK-STATE.md
 # Root-only internal docs (leading /). Do NOT use bare `docs/` — that also
 # hid new pages under apps/docs/ (public site) from git.
 /docs/

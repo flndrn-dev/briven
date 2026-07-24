@@ -232,6 +232,21 @@ export async function createPasswordlessCode(input: {
     deliveryMode: delivery.mode,
   });
 
+  const { recordBrivenEngineAudit } = await import('./audit.js');
+  void recordBrivenEngineAudit({
+    action: 'signin.passwordless.code_created',
+    tenantId,
+    projectId: input.projectId,
+    metadata: {
+      channel,
+      flowType,
+      deliveryOk: delivery.ok,
+      deliveryMode: delivery.mode,
+      hasEmail: Boolean(email),
+      hasPhone: Boolean(phone),
+    },
+  });
+
   return {
     status: 'OK',
     preAuthSessionId,
@@ -369,6 +384,19 @@ export async function consumePasswordlessCode(input: {
   }
 
   const session = await createEngineSession({ userId, tenantId });
+
+  const { recordBrivenEngineAudit } = await import('./audit.js');
+  void recordBrivenEngineAudit({
+    action: 'signin.passwordless',
+    tenantId,
+    projectId: input.projectId,
+    userId,
+    metadata: {
+      createdNewUser,
+      channel: row.email ? 'email' : 'sms',
+      sessionHandle: session.sessionHandle,
+    },
+  });
 
   return {
     status: 'OK',

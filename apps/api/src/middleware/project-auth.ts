@@ -22,7 +22,10 @@ import type { Session, User } from './session.js';
  *   3. An `Authorization: Bearer <jwt>` minted by `/v1/auth/cli-token`
  *      (scope=cli), resolved against the same project-access lookup as the
  *      cookie/session branch — so the CLI wizard and dashboard see the same
- *      effective role on the same project.
+ *      effective role on the same project, OR
+ *   4. An `Authorization: Bearer <jwt>` minted by
+ *      `/v1/auth-core/oauth/token` (scope=m2m, client_credentials) for this
+ *      project — role comes from the M2M client (viewer/developer/admin).
  *
  * `paramName` defaults to "id" (v1/projects/{id}/...). Pass "ref" for the
  * Supabase-compat platform/{ref}/... surface. Hono only resolves params for
@@ -62,11 +65,28 @@ export const requireProjectAuth =
       throw new UnauthorizedError();
     }
 
-    // CLI JWT branch — accept scope=cli tokens minted by /v1/auth/cli-token.
-    // The token's `sub` identifies the user; we then resolve project access
-    // the same way the cookie/session branch does (getProjectAccessForUser),
-    // so both paths populate `projectRole` identically.
+    // Non-brk bearer: try M2M JWT first, then CLI JWT.
     if (!token.startsWith('brk_')) {
+      // M2M client_credentials access token (scope=m2m).
+      try {
+        const { verifyM2mAccessToken } = await import('../services/auth-core/m2m.js');
+        const m2m = await verifyM2mAccessToken(token);
+        if (m2m.project_id !== projectId) {
+          throw new ForbiddenError('m2m token does not belong to this project');
+        }
+        c.set('apiKeyId', m2m.client_id);
+        c.set('projectRole', m2m.role as MemberRole);
+        await next();
+        return;
+      } catch (err) {
+        if (err instanceof ForbiddenError) throw err;
+        // Not an M2M token — fall through to CLI JWT.
+      }
+
+      // CLI JWT branch — accept scope=cli tokens minted by /v1/auth/cli-token.
+      // The token's `sub` identifies the user; we then resolve project access
+      // the same way the cookie/session branch does (getProjectAccessForUser),
+      // so both paths populate `projectRole` identically.
       let userRow: User | null = null;
       try {
         const payload = await verifyCliToken(token);
@@ -83,7 +103,7 @@ export const requireProjectAuth =
         log.warn('project_auth_cli_jwt_rejected', {
           err: err instanceof Error ? err.message : String(err),
         });
-        return c.json({ code: 'unauthorized', message: 'invalid cli token' }, 401);
+        return c.json({ code: 'unauthorized', message: 'invalid cli or m2m token' }, 401);
       }
       c.set('user', userRow);
       const access = await getProjectAccessForUser(projectId, userRow.id);

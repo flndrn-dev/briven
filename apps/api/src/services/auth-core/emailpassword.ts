@@ -82,6 +82,15 @@ export async function signUpEmailPassword(input: {
     [userId, hash],
   );
 
+  const { recordBrivenEngineAudit } = await import('./audit.js');
+  void recordBrivenEngineAudit({
+    action: 'signup.password',
+    tenantId,
+    projectId: input.projectId,
+    userId,
+    metadata: { email },
+  });
+
   return {
     status: 'OK',
     user: { id: userId, email, tenantId },
@@ -112,8 +121,23 @@ export async function signInEmailPassword(input: {
     | { id: string; email: string; tenant_id: string; password_hash: string }
     | undefined;
   if (!row || !verifyPassword(input.password, row.password_hash)) {
+    const { recordBrivenEngineAudit } = await import('./audit.js');
+    void recordBrivenEngineAudit({
+      action: 'signin.password.fail',
+      tenantId,
+      projectId: input.projectId,
+      metadata: { email },
+    });
     return { status: 'WRONG_CREDENTIALS_ERROR' };
   }
+  const { recordBrivenEngineAudit } = await import('./audit.js');
+  void recordBrivenEngineAudit({
+    action: 'signin.password',
+    tenantId: row.tenant_id,
+    projectId: input.projectId,
+    userId: row.id,
+    metadata: { email: row.email },
+  });
   return {
     status: 'OK',
     user: { id: row.id, email: row.email, tenantId: row.tenant_id },

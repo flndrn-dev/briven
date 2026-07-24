@@ -763,6 +763,19 @@ export async function signInUpWithThirdPartyProfile(input: {
     tenantId,
   });
 
+  const { recordBrivenEngineAudit } = await import('./audit.js');
+  void recordBrivenEngineAudit({
+    action: 'signin.social',
+    tenantId,
+    projectId: input.projectId,
+    userId,
+    metadata: {
+      thirdPartyId,
+      createdNewUser,
+      email: email ?? null,
+    },
+  });
+
   return {
     status: 'OK',
     createdNewUser,

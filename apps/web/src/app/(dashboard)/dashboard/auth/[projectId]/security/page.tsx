@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiFetch } from '@/lib/api';
+import { AuthAuditTrailClient } from '../../security/audit-trail-client';
 import { AuthRolesForm } from '../../security/roles-form';
 
 export const metadata = { title: 'Auth · security' };
@@ -116,9 +117,13 @@ export default async function AuthProjectSecurityPage({
           security
         </h2>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          roles for this project&apos;s app users
+          roles, login methods, and a live diary of security events
         </p>
       </header>
+
+      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+        <AuthAuditTrailClient projectId={projectId} />
+      </div>
 
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
         <h3 className="font-mono text-sm text-[var(--color-text)]">

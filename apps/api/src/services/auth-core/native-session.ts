@@ -81,10 +81,34 @@ export async function getSessionByHandle(
 
 export async function revokeEngineSession(sessionHandle: string): Promise<boolean> {
   const pool = getEnginePool();
+  // Capture user/tenant before delete for audit
+  let userId: string | null = null;
+  let tenantId: string | null = null;
+  try {
+    const prev = await pool.query(
+      `SELECT user_id, tenant_id FROM be_sessions WHERE session_handle = $1 LIMIT 1`,
+      [sessionHandle],
+    );
+    const row = prev.rows[0] as { user_id?: string; tenant_id?: string } | undefined;
+    userId = row?.user_id ?? null;
+    tenantId = row?.tenant_id ?? null;
+  } catch {
+    /* ignore */
+  }
   const res = await pool.query(`DELETE FROM be_sessions WHERE session_handle = $1`, [
     sessionHandle,
   ]);
-  return (res.rowCount ?? 0) > 0;
+  const ok = (res.rowCount ?? 0) > 0;
+  if (ok) {
+    const { recordBrivenEngineAudit } = await import('./audit.js');
+    void recordBrivenEngineAudit({
+      action: 'session.revoked',
+      tenantId,
+      userId,
+      metadata: { sessionHandle },
+    });
+  }
+  return ok;
 }
 
 export async function revokeAllForUser(userId: string): Promise<number> {

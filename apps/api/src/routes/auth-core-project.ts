@@ -22,6 +22,8 @@ import {
   type BrivenEngineMethodFlags,
 } from '../services/auth-core/project-config.js';
 import { sendBrivenEngineSmsTest } from '../services/auth-core/delivery.js';
+import { listBrivenEngineAudit } from '../services/auth-core/audit.js';
+import { recordBrivenEngineAudit } from '../services/auth-core/audit.js';
 import { env } from '../env.js';
 import {
   ensureBrivenEngineTenant,
@@ -133,6 +135,12 @@ authCoreProjectRouter.put(
         clientSecret,
         additionalConfig: body.additionalConfig,
       });
+      void recordBrivenEngineAudit({
+        action: 'config.oauth_secrets.saved',
+        projectId,
+        // Never log secret values — provider id only.
+        metadata: { thirdPartyId },
+      });
       // Return public config so UI can show “configured”
       const config = await getBrivenEngineProjectConfig(projectId);
       const saved = config.providers.find((p) => p.thirdPartyId === thirdPartyId);
@@ -168,6 +176,11 @@ authCoreProjectRouter.put(
     }
     try {
       const result = await setBrivenEngineMethodFlags(projectId, body);
+      void recordBrivenEngineAudit({
+        action: 'config.methods.updated',
+        projectId,
+        metadata: { methods: result.methods },
+      });
       const config = await getBrivenEngineProjectConfig(projectId);
       return c.json({ ...result, config });
     } catch (err) {
@@ -227,6 +240,11 @@ authCoreProjectRouter.put(
         authToken,
         fromNumber,
       });
+      void recordBrivenEngineAudit({
+        action: 'config.sms_secrets.saved',
+        projectId,
+        metadata: { fromNumber },
+      });
       const config = await getBrivenEngineProjectConfig(projectId);
       return c.json({ ...result, config });
     } catch (err) {
@@ -255,6 +273,14 @@ authCoreProjectRouter.put(
     }
     try {
       const result = await setBrivenEngineBranding(projectId, body);
+      void recordBrivenEngineAudit({
+        action: 'config.branding.saved',
+        projectId,
+        metadata: {
+          hasLogo: Boolean(result.branding.logoUrl),
+          primaryColor: result.branding.primaryColor,
+        },
+      });
       const config = await getBrivenEngineProjectConfig(projectId);
       return c.json({ ...result, config });
     } catch (err) {
@@ -262,6 +288,35 @@ authCoreProjectRouter.put(
         {
           engine: BRIVEN_ENGINE_ID,
           code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Security audit trail for this project (newest first). */
+authCoreProjectRouter.get(
+  '/v1/auth-core/projects/:projectId/audit',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    const limit = Number(c.req.query('limit') ?? '50');
+    const action = c.req.query('action') ?? null;
+    const userId = c.req.query('userId') ?? null;
+    try {
+      const result = await listBrivenEngineAudit({
+        projectId,
+        limit: Number.isFinite(limit) ? limit : 50,
+        action,
+        userId,
+      });
+      return c.json(result);
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'audit_list_failed',
           message: err instanceof Error ? err.message : String(err),
         },
         500,
