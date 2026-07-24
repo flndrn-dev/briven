@@ -16,6 +16,7 @@ import {
 } from '../../lib/email.js';
 import {
   DEFAULT_BRIVEN_ENGINE_BRANDING,
+  buildAuthEmailFooterLines,
   getBrivenEngineBranding,
   getBrivenEngineSmsSecrets,
   type BrivenEngineBranding,
@@ -168,6 +169,22 @@ export function buildBrivenEngineAuthEmailHtml(input: {
     ? `${name} · <a style="color:#9ba3af" href="${escapeHtml(brandUrlHref)}">${escapeHtml(brandUrlLabel ?? brandUrlHref)}</a>`
     : name;
 
+  // Custom per-project footer (no hard-coded Flanders / flndrn).
+  const customLines = buildAuthEmailFooterLines(b);
+  const customFooterHtml = customLines
+    .map((line) => {
+      // Heart glyph for "made with ♥ …"
+      const htmlLine = escapeHtml(line).replace(
+        '♥',
+        '<span style="color:#e8344a">&#9829;</span>',
+      );
+      return htmlLine;
+    })
+    .join('<br/>');
+  const footerBlock = customFooterHtml
+    ? `${brandLine}<br/>${customFooterHtml}`
+    : brandLine;
+
   return `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>${title}</title></head>
 <body style="margin:0;background:#0a0b0d;color:#f5f7fa;font-family:system-ui,-apple-system,sans-serif;line-height:1.6">
@@ -186,10 +203,7 @@ export function buildBrivenEngineAuthEmailHtml(input: {
           <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
           ${footerNote}
           <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
-            ${brandLine}<br/>
-            made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn<br/>
-            100% self-funded, sustainable &amp; independent<br/>
-            flndrn Limited, Limassol, Cyprus
+            ${footerBlock}
           </p>
         </td></tr>
       </table>

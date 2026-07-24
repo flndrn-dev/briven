@@ -11,6 +11,16 @@ interface BrandingState {
   senderName: string;
   brandUrl: string;
   footerNote: string;
+  /** Email footer line 1: made with ♥ {loveName} by {orgName} */
+  footerLoveName: string;
+  footerOrgName: string;
+  /** Email footer line 2 free text */
+  footerTagline: string;
+  footerCity: string;
+  footerCountry: string;
+  footerShowLove: boolean;
+  footerShowTagline: boolean;
+  footerShowAddress: boolean;
 }
 
 const DEFAULT: BrandingState = {
@@ -19,7 +29,36 @@ const DEFAULT: BrandingState = {
   senderName: 'Briven Auth',
   brandUrl: '',
   footerNote: '',
+  footerLoveName: '',
+  footerOrgName: '',
+  footerTagline: '',
+  footerCity: '',
+  footerCountry: '',
+  footerShowLove: false,
+  footerShowTagline: false,
+  footerShowAddress: false,
 };
+
+/** Preview lines matching server buildAuthEmailFooterLines. */
+function previewFooterLines(f: BrandingState): string[] {
+  const lines: string[] = [];
+  const org = f.footerOrgName.trim();
+  const love = f.footerLoveName.trim();
+  const tag = f.footerTagline.trim();
+  const city = f.footerCity.trim();
+  const country = f.footerCountry.trim();
+  if (f.footerShowLove) {
+    if (love && org) lines.push(`made with ♥ ${love} by ${org}`);
+    else if (love) lines.push(`made with ♥ ${love}`);
+    else if (org) lines.push(`made with ♥ by ${org}`);
+  }
+  if (f.footerShowTagline && tag) lines.push(tag);
+  if (f.footerShowAddress) {
+    const parts = [org, city, country].filter(Boolean);
+    if (parts.length) lines.push(parts.join(', '));
+  }
+  return lines;
+}
 
 const ACCEPT = '.svg,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,image/svg+xml';
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
@@ -40,6 +79,14 @@ function applyBrandingPayload(
     logoUrl?: string | null;
     brandUrl?: string | null;
     footerNote?: string | null;
+    footerLoveName?: string | null;
+    footerOrgName?: string | null;
+    footerTagline?: string | null;
+    footerCity?: string | null;
+    footerCountry?: string | null;
+    footerShowLove?: boolean;
+    footerShowTagline?: boolean;
+    footerShowAddress?: boolean;
   },
 ): BrandingState {
   return {
@@ -48,6 +95,14 @@ function applyBrandingPayload(
     senderName: b.senderName ?? DEFAULT.senderName,
     brandUrl: b.brandUrl ?? '',
     footerNote: b.footerNote ?? '',
+    footerLoveName: b.footerLoveName ?? '',
+    footerOrgName: b.footerOrgName ?? '',
+    footerTagline: b.footerTagline ?? '',
+    footerCity: b.footerCity ?? '',
+    footerCountry: b.footerCountry ?? '',
+    footerShowLove: Boolean(b.footerShowLove),
+    footerShowTagline: Boolean(b.footerShowTagline),
+    footerShowAddress: Boolean(b.footerShowAddress),
   };
 }
 
@@ -267,6 +322,14 @@ export function AuthBrandingClient({
         senderName: form.senderName.trim() || DEFAULT.senderName,
         brandUrl: form.brandUrl.trim() || null,
         footerNote: form.footerNote.trim() || null,
+        footerLoveName: form.footerLoveName.trim() || null,
+        footerOrgName: form.footerOrgName.trim() || null,
+        footerTagline: form.footerTagline.trim() || null,
+        footerCity: form.footerCity.trim() || null,
+        footerCountry: form.footerCountry.trim() || null,
+        footerShowLove: form.footerShowLove,
+        footerShowTagline: form.footerShowTagline,
+        footerShowAddress: form.footerShowAddress,
       };
       if (!/^#[0-9A-Fa-f]{6}$/.test(payload.primaryColor)) {
         throw new Error('primary color must be a 6-digit hex like #00e87a');
@@ -334,6 +397,7 @@ export function AuthBrandingClient({
     ? form.primaryColor
     : '#00e87a';
   const brandSite = form.brandUrl.trim().replace(/^https?:\/\//i, '') || null;
+  const footerPreview = previewFooterLines(form);
 
   return (
     <div className="flex max-w-xl flex-col gap-5">
@@ -418,12 +482,25 @@ export function AuthBrandingClient({
               </>
             ) : null}
           </p>
-          <p>
-            made with <span className="text-[#e8344a]">♥</span> in Flanders by
-            flndrn
-          </p>
-          <p>100% self-funded, sustainable &amp; independent</p>
-          <p>flndrn Limited, Limassol, Cyprus</p>
+          {footerPreview.length === 0 ? (
+            <p className="mt-1 text-[11px] text-[#555]">
+              (no custom footer lines yet — turn them on below)
+            </p>
+          ) : (
+            footerPreview.map((line) => (
+              <p key={line}>
+                {line.includes('♥') ? (
+                  <>
+                    {line.split('♥')[0]}
+                    <span className="text-[#e8344a]">♥</span>
+                    {line.split('♥').slice(1).join('♥')}
+                  </>
+                ) : (
+                  line
+                )}
+              </p>
+            ))
+          )}
         </div>
       </div>
 
@@ -563,7 +640,143 @@ export function AuthBrandingClient({
           className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
           style={{ borderColor: 'var(--auth-accent-border)' }}
         />
+        <span className="text-[10px] text-[var(--color-text-muted)]">
+          Small line above the footer (e.g. support email).
+        </span>
       </label>
+
+      {/* Custom email footer — 3 optional lines */}
+      <div
+        className="flex flex-col gap-3 rounded-md border p-4"
+        style={{ borderColor: 'var(--color-border-subtle)' }}
+      >
+        <div>
+          <p className="font-mono text-xs text-[var(--color-text)]">
+            email footer lines
+          </p>
+          <p className="mt-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+            Fill in your own text, then tick which lines to show in sign-in
+            emails. Nothing is hard-coded to flndrn — leave toggles off to hide
+            a line.
+          </p>
+        </div>
+
+        <label className="flex flex-col gap-1 font-mono text-xs">
+          <span className="text-[var(--color-text-muted)]">
+            organization name
+          </span>
+          <input
+            value={form.footerOrgName}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, footerOrgName: e.target.value }))
+            }
+            placeholder="e.g. Mavi Finance Ltd"
+            className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
+            style={{ borderColor: 'var(--auth-accent-border)' }}
+          />
+        </label>
+
+        <div className="rounded-md border border-[var(--color-border-subtle)] p-3">
+          <label className="flex items-center gap-2 font-mono text-xs text-[var(--color-text)]">
+            <input
+              type="checkbox"
+              checked={form.footerShowLove}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, footerShowLove: e.target.checked }))
+              }
+            />
+            show line 1 — made with ♥ {'{name}'} by {'{organization}'}
+          </label>
+          <label className="mt-2 flex flex-col gap-1 font-mono text-xs">
+            <span className="text-[var(--color-text-muted)]">
+              name (place or short phrase)
+            </span>
+            <input
+              value={form.footerLoveName}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, footerLoveName: e.target.value }))
+              }
+              placeholder="e.g. Flanders"
+              disabled={!form.footerShowLove}
+              className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] disabled:opacity-40"
+              style={{ borderColor: 'var(--auth-accent-border)' }}
+            />
+          </label>
+        </div>
+
+        <div className="rounded-md border border-[var(--color-border-subtle)] p-3">
+          <label className="flex items-center gap-2 font-mono text-xs text-[var(--color-text)]">
+            <input
+              type="checkbox"
+              checked={form.footerShowTagline}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  footerShowTagline: e.target.checked,
+                }))
+              }
+            />
+            show line 2 — free text
+          </label>
+          <label className="mt-2 flex flex-col gap-1 font-mono text-xs">
+            <span className="text-[var(--color-text-muted)]">line text</span>
+            <input
+              value={form.footerTagline}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, footerTagline: e.target.value }))
+              }
+              placeholder="e.g. 100% self-funded, sustainable & independent"
+              disabled={!form.footerShowTagline}
+              className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] disabled:opacity-40"
+              style={{ borderColor: 'var(--auth-accent-border)' }}
+            />
+          </label>
+        </div>
+
+        <div className="rounded-md border border-[var(--color-border-subtle)] p-3">
+          <label className="flex items-center gap-2 font-mono text-xs text-[var(--color-text)]">
+            <input
+              type="checkbox"
+              checked={form.footerShowAddress}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  footerShowAddress: e.target.checked,
+                }))
+              }
+            />
+            show line 3 — organization, city, country
+          </label>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 font-mono text-xs">
+              <span className="text-[var(--color-text-muted)]">city</span>
+              <input
+                value={form.footerCity}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, footerCity: e.target.value }))
+                }
+                placeholder="e.g. Limassol"
+                disabled={!form.footerShowAddress}
+                className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] disabled:opacity-40"
+                style={{ borderColor: 'var(--auth-accent-border)' }}
+              />
+            </label>
+            <label className="flex flex-col gap-1 font-mono text-xs">
+              <span className="text-[var(--color-text-muted)]">country</span>
+              <input
+                value={form.footerCountry}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, footerCountry: e.target.value }))
+                }
+                placeholder="e.g. Cyprus"
+                disabled={!form.footerShowAddress}
+                className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] disabled:opacity-40"
+                style={{ borderColor: 'var(--auth-accent-border)' }}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
 
       <button
         type="button"

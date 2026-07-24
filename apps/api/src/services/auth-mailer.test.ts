@@ -160,7 +160,6 @@ describe('auth-mailer — pure helpers (BUILD_PLAN.md §8)', () => {
     expect(r.html.toLowerCase()).toContain('ignore this email');
     expect(r.text.toLowerCase()).toContain('secure your account');
     expect(r.html).toContain('https://acme.test/reset?token=xyz');
-    expect(r.html).toContain('Flanders');
   });
 
   // ─── renderNewDeviceLogin ───────────────────────────────────────────
@@ -180,13 +179,21 @@ describe('auth-mailer — pure helpers (BUILD_PLAN.md §8)', () => {
 
   // ─── cross-render invariants ────────────────────────────────────────
 
-  test('every template renders sender name + Flanders footer', () => {
+  test('every template renders sender name; custom footer when provided', () => {
+    const withFooter: RenderContext = {
+      ...ctx,
+      footerLines: [
+        'made with ♥ Flanders by flndrn',
+        '100% self-funded, sustainable & independent',
+        'flndrn Limited, Limassol, Cyprus',
+      ],
+    };
     const outs = [
-      renderMagicLink(ctx, { url: 'https://x.test', expiryMinutes: 5 }),
-      renderOtpCode(ctx, { code: '111', expiryMinutes: 5 }),
-      renderEmailVerify(ctx, { url: 'https://x.test' }),
-      renderPasswordReset(ctx, { url: 'https://x.test' }),
-      renderNewDeviceLogin(ctx, {
+      renderMagicLink(withFooter, { url: 'https://x.test', expiryMinutes: 5 }),
+      renderOtpCode(withFooter, { code: '111', expiryMinutes: 5 }),
+      renderEmailVerify(withFooter, { url: 'https://x.test' }),
+      renderPasswordReset(withFooter, { url: 'https://x.test' }),
+      renderNewDeviceLogin(withFooter, {
         deviceHint: 'd',
         whenIso: 't',
         manageUrl: 'https://x.test',

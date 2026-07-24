@@ -4,6 +4,11 @@ import { log } from '../lib/logger.js';
 import { recordAuthMailerFailure } from './auth-reliability.js';
 import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
 import { getEmailTemplate, renderTemplate, type EmailTemplateName } from './auth-email-templates.js';
+import {
+  buildAuthEmailFooterLines,
+  getBrivenEngineBranding,
+  type BrivenEngineBranding,
+} from './auth-core/project-config.js';
 
 /**
  * briven auth per-tenant email pipeline (BUILD_PLAN.md §8).
@@ -56,6 +61,8 @@ interface ShellArgs {
   logoUrl?: string | null;
   brandUrl?: string | null;
   footerNote?: string | null;
+  /** Optional custom footer lines (from briven-engine branding). */
+  footerLines?: string[];
 }
 
 function safeHttpUrl(url: string | null | undefined): string | null {
@@ -80,6 +87,7 @@ function shell({
   logoUrl,
   brandUrl,
   footerNote,
+  footerLines,
 }: ShellArgs): string {
   const accent = primaryColor.toLowerCase();
   const name = escapeHtml(senderName);
@@ -109,6 +117,18 @@ function shell({
     ? `<p style="margin:12px 0 0 0;font-size:12px;color:#6b7280">${escapeHtml(footerNote.trim())}</p>`
     : '';
 
+  const customHtml = (footerLines ?? [])
+    .map((line) =>
+      escapeHtml(line).replace(
+        '♥',
+        '<span style="color:#e8344a">&#9829;</span>',
+      ),
+    )
+    .join('<br/>');
+  const footerBlock = customHtml
+    ? `${brandLine}<br/>${customHtml}`
+    : brandLine;
+
   return `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>${escapeHtml(title)}</title></head>
 <body style="margin:0;background:#0a0b0d;color:#f5f7fa;font-family:system-ui,-apple-system,sans-serif;line-height:1.6">
@@ -126,10 +146,7 @@ function shell({
           <div style="font-size:15px;line-height:1.6;color:#d1d5db">${body}</div>
           ${note}
           <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
-            ${brandLine}<br/>
-            made with <span style="color:#e8344a">&#9829;</span> in Flanders by flndrn<br/>
-            100% self-funded, sustainable &amp; independent<br/>
-            flndrn Limited, Limassol, Cyprus
+            ${footerBlock}
           </p>
         </td></tr>
       </table>
@@ -156,6 +173,7 @@ export interface RenderContext {
   /** Brand site for footer (`name · brandUrl`). */
   brandUrl?: string | null;
   footerNote?: string | null;
+  footerLines?: string[];
 }
 
 export function renderMagicLink(
@@ -176,6 +194,7 @@ export function renderMagicLink(
       logoUrl: ctx.logoUrl,
       brandUrl: ctx.brandUrl,
       footerNote: ctx.footerNote,
+      footerLines: ctx.footerLines,
     }),
     text: `sign in to ${ctx.senderName}\n\n${args.url}\n\nthis link expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.`,
   };
@@ -200,6 +219,7 @@ export function renderOtpCode(
       logoUrl: ctx.logoUrl,
       brandUrl: ctx.brandUrl,
       footerNote: ctx.footerNote,
+      footerLines: ctx.footerLines,
     }),
     text: `sign in to ${ctx.senderName}\n\nyour code: ${args.code}\n\nthis code expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.`,
   };
@@ -223,6 +243,7 @@ export function renderEmailVerify(
       logoUrl: ctx.logoUrl,
       brandUrl: ctx.brandUrl,
       footerNote: ctx.footerNote,
+      footerLines: ctx.footerLines,
     }),
     text: `verify your email for ${ctx.senderName}\n\n${args.url}\n\nif you didn't sign up, ignore this email.`,
   };
@@ -246,6 +267,7 @@ export function renderPasswordReset(
       logoUrl: ctx.logoUrl,
       brandUrl: ctx.brandUrl,
       footerNote: ctx.footerNote,
+      footerLines: ctx.footerLines,
     }),
     text: `reset your ${ctx.senderName} password\n\n${args.url}\n\nthis link expires in 1 hour. if you didn't request this, secure your account.`,
   };
@@ -277,6 +299,7 @@ export function renderNewDeviceLogin(
       logoUrl: ctx.logoUrl,
       brandUrl: ctx.brandUrl,
       footerNote: ctx.footerNote,
+      footerLines: ctx.footerLines,
     }),
     text: `new sign-in to ${ctx.senderName}\n\n${args.deviceHint}\nat ${args.whenIso}\n\nmanage: ${args.manageUrl}\n\nif this wasn't you, revoke the session and change your password.`,
   };
@@ -383,12 +406,31 @@ async function maybeUseCustomTemplate(
  * config. Used by Better Auth's `magicLink` plugin's `sendMagicLink`
  * callback (wired in `auth-tenant-pool.ts` when the plugin is enabled).
  */
-function renderCtxFromConfig(config: AuthConfig): RenderContext {
+async function renderCtxForProject(
+  projectId: string,
+  config: AuthConfig,
+): Promise<RenderContext> {
+  // Prefer briven-engine branding (dashboard Auth → branding) for logo + footer.
+  let engine: BrivenEngineBranding | null = null;
+  try {
+    engine = await getBrivenEngineBranding(projectId);
+  } catch {
+    engine = null;
+  }
+  const primaryColor =
+    engine?.primaryColor ?? config.branding.primaryColor;
+  const senderName = engine?.senderName ?? config.branding.senderName;
+  const logoUrl = engine?.logoUrl ?? config.branding.logoUrl;
+  const brandUrl = engine?.brandUrl ?? null;
+  const footerNote = engine?.footerNote ?? null;
+  const footerLines = engine ? buildAuthEmailFooterLines(engine) : [];
   return {
-    primaryColor: config.branding.primaryColor,
-    senderName: config.branding.senderName,
-    // logoUrl is set only by the upload route (never free-form paste).
-    logoUrl: config.branding.logoUrl,
+    primaryColor,
+    senderName,
+    logoUrl,
+    brandUrl,
+    footerNote,
+    footerLines,
   };
 }
 
@@ -398,7 +440,7 @@ export async function sendBrivenAuthMagicLink(
   url: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = renderCtxFromConfig(config);
+  const ctx = await renderCtxForProject(projectId, config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'magic-link',
@@ -414,7 +456,7 @@ export async function sendBrivenAuthOtp(
   code: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = renderCtxFromConfig(config);
+  const ctx = await renderCtxForProject(projectId, config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'otp',
@@ -430,7 +472,7 @@ export async function sendBrivenAuthEmailVerification(
   url: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = renderCtxFromConfig(config);
+  const ctx = await renderCtxForProject(projectId, config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'verification',
@@ -446,7 +488,7 @@ export async function sendBrivenAuthPasswordReset(
   url: string,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = renderCtxFromConfig(config);
+  const ctx = await renderCtxForProject(projectId, config);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'password-reset',
@@ -462,7 +504,7 @@ export async function sendBrivenAuthNewDeviceLogin(
   args: { deviceHint: string; whenIso: string; manageUrl: string },
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = renderCtxFromConfig(config);
+  const ctx = await renderCtxForProject(projectId, config);
   const tpl = renderNewDeviceLogin(ctx, args);
   await sendForTenant('briven_auth_new_device', { projectId, to, ...tpl });
 }

@@ -113,6 +113,22 @@ export type BrivenEngineBranding = {
   brandUrl: string | null;
   /** Optional short line under the email body (support / legal). */
   footerNote: string | null;
+  /**
+   * Custom email footer (3 optional lines). Operators pick text + which
+   * lines to show — no hard-coded Flanders/flndrn copy.
+   *
+   * Line 1: made with ♥ {footerLoveName} by {footerOrgName}
+   * Line 2: {footerTagline}
+   * Line 3: {footerOrgName}, {footerCity}, {footerCountry}
+   */
+  footerLoveName: string | null;
+  footerOrgName: string | null;
+  footerTagline: string | null;
+  footerCity: string | null;
+  footerCountry: string | null;
+  footerShowLove: boolean;
+  footerShowTagline: boolean;
+  footerShowAddress: boolean;
 };
 
 export const DEFAULT_BRIVEN_ENGINE_BRANDING: BrivenEngineBranding = {
@@ -121,7 +137,42 @@ export const DEFAULT_BRIVEN_ENGINE_BRANDING: BrivenEngineBranding = {
   senderName: 'Briven Auth',
   brandUrl: null,
   footerNote: null,
+  footerLoveName: null,
+  footerOrgName: null,
+  footerTagline: null,
+  footerCity: null,
+  footerCountry: null,
+  footerShowLove: false,
+  footerShowTagline: false,
+  footerShowAddress: false,
 };
+
+/** Plain footer lines for email HTML/text (empty strings filtered out). */
+export function buildAuthEmailFooterLines(
+  b: BrivenEngineBranding,
+): string[] {
+  const lines: string[] = [];
+  const org = (b.footerOrgName ?? '').trim();
+  const love = (b.footerLoveName ?? '').trim();
+  const tag = (b.footerTagline ?? '').trim();
+  const city = (b.footerCity ?? '').trim();
+  const country = (b.footerCountry ?? '').trim();
+
+  if (b.footerShowLove) {
+    // "made with ♥ {name} by {organization}"
+    if (love && org) lines.push(`made with ♥ ${love} by ${org}`);
+    else if (love) lines.push(`made with ♥ ${love}`);
+    else if (org) lines.push(`made with ♥ by ${org}`);
+  }
+  if (b.footerShowTagline && tag) {
+    lines.push(tag);
+  }
+  if (b.footerShowAddress) {
+    const parts = [org, city, country].filter(Boolean);
+    if (parts.length) lines.push(parts.join(', '));
+  }
+  return lines;
+}
 
 export type BrivenEngineProjectConfig = {
   engine: 'briven-engine';
@@ -222,7 +273,38 @@ function normalizeBranding(
   if (typeof input?.footerNote === 'string' && input.footerNote.trim()) {
     footerNote = input.footerNote.trim().slice(0, 200);
   }
-  return { logoUrl, primaryColor: color, senderName: name, brandUrl, footerNote };
+
+  const strOrNull = (v: unknown, max: number): string | null => {
+    if (typeof v !== 'string' || !v.trim()) return null;
+    return v.trim().slice(0, max);
+  };
+  const boolOr = (v: unknown, fallback: boolean): boolean =>
+    typeof v === 'boolean' ? v : fallback;
+
+  return {
+    logoUrl,
+    primaryColor: color,
+    senderName: name,
+    brandUrl,
+    footerNote,
+    footerLoveName: strOrNull(input?.footerLoveName, 80),
+    footerOrgName: strOrNull(input?.footerOrgName, 120),
+    footerTagline: strOrNull(input?.footerTagline, 200),
+    footerCity: strOrNull(input?.footerCity, 80),
+    footerCountry: strOrNull(input?.footerCountry, 80),
+    footerShowLove: boolOr(
+      input?.footerShowLove,
+      DEFAULT_BRIVEN_ENGINE_BRANDING.footerShowLove,
+    ),
+    footerShowTagline: boolOr(
+      input?.footerShowTagline,
+      DEFAULT_BRIVEN_ENGINE_BRANDING.footerShowTagline,
+    ),
+    footerShowAddress: boolOr(
+      input?.footerShowAddress,
+      DEFAULT_BRIVEN_ENGINE_BRANDING.footerShowAddress,
+    ),
+  };
 }
 
 export async function setBrivenEngineBranding(
@@ -231,6 +313,17 @@ export async function setBrivenEngineBranding(
   createdBy?: string | null,
 ): Promise<{ ok: true; engine: 'briven-engine'; branding: BrivenEngineBranding }> {
   const current = await getBrivenEngineBranding(projectId);
+  const pickStr = (
+    next: string | null | undefined,
+    cur: string | null,
+  ): string | null => {
+    if (next === undefined) return cur;
+    if (next === null || next === '') return null;
+    return next;
+  };
+  const pickBool = (next: boolean | undefined, cur: boolean): boolean =>
+    next === undefined ? cur : next;
+
   const next = normalizeBranding({
     logoUrl:
       input.logoUrl === undefined
@@ -252,6 +345,20 @@ export async function setBrivenEngineBranding(
         : input.footerNote === null || input.footerNote === ''
           ? null
           : input.footerNote,
+    footerLoveName: pickStr(input.footerLoveName, current.footerLoveName),
+    footerOrgName: pickStr(input.footerOrgName, current.footerOrgName),
+    footerTagline: pickStr(input.footerTagline, current.footerTagline),
+    footerCity: pickStr(input.footerCity, current.footerCity),
+    footerCountry: pickStr(input.footerCountry, current.footerCountry),
+    footerShowLove: pickBool(input.footerShowLove, current.footerShowLove),
+    footerShowTagline: pickBool(
+      input.footerShowTagline,
+      current.footerShowTagline,
+    ),
+    footerShowAddress: pickBool(
+      input.footerShowAddress,
+      current.footerShowAddress,
+    ),
   });
   await setTenantSecret(
     projectId,

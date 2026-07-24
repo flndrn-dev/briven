@@ -36,7 +36,7 @@ describe('briven-engine SMS honest delivery (offline)', () => {
 });
 
 describe('briven-engine auth email branding HTML', () => {
-  test('includes sender name, Flanders footer, and structured OTP', () => {
+  test('includes sender name, custom footer, and structured OTP', () => {
     const html = buildBrivenEngineAuthEmailHtml({
       code: '123456',
       expiryMinutes: 10,
@@ -46,6 +46,14 @@ describe('briven-engine auth email branding HTML', () => {
         senderName: 'Konnos',
         brandUrl: 'konnos.org',
         footerNote: null,
+        footerLoveName: 'Flanders',
+        footerOrgName: 'flndrn',
+        footerTagline: '100% self-funded, sustainable & independent',
+        footerCity: 'Limassol',
+        footerCountry: 'Cyprus',
+        footerShowLove: true,
+        footerShowTagline: true,
+        footerShowAddress: true,
       },
     });
     expect(html).toContain('Konnos');
@@ -58,6 +66,31 @@ describe('briven-engine auth email branding HTML', () => {
     expect(html).not.toContain('<script>');
   });
 
+  test('omits footer lines when toggles are off', () => {
+    const html = buildBrivenEngineAuthEmailHtml({
+      code: '1',
+      branding: {
+        logoUrl: null,
+        primaryColor: '#FFFD74',
+        senderName: 'Mavi',
+        brandUrl: null,
+        footerNote: null,
+        footerLoveName: 'Flanders',
+        footerOrgName: 'flndrn',
+        footerTagline: 'tagline',
+        footerCity: 'Limassol',
+        footerCountry: 'Cyprus',
+        footerShowLove: false,
+        footerShowTagline: false,
+        footerShowAddress: false,
+      },
+    });
+    expect(html).toContain('Mavi');
+    expect(html).not.toContain('Flanders');
+    expect(html).not.toContain('tagline');
+    expect(html).not.toContain('Limassol');
+  });
+
   test('magic link renders CTA; unsafe logo URLs dropped', () => {
     const html = buildBrivenEngineAuthEmailHtml({
       url: 'https://app.example.com/verify?t=1',
@@ -67,6 +100,14 @@ describe('briven-engine auth email branding HTML', () => {
         senderName: 'App <x>',
         brandUrl: null,
         footerNote: null,
+        footerLoveName: null,
+        footerOrgName: null,
+        footerTagline: null,
+        footerCity: null,
+        footerCountry: null,
+        footerShowLove: false,
+        footerShowTagline: false,
+        footerShowAddress: false,
       },
     });
     expect(html).toContain('https://app.example.com/verify?t=1');
@@ -86,6 +127,14 @@ describe('briven-engine auth email branding HTML', () => {
         senderName: 'App',
         brandUrl: null,
         footerNote: null,
+        footerLoveName: null,
+        footerOrgName: null,
+        footerTagline: null,
+        footerCity: null,
+        footerCountry: null,
+        footerShowLove: false,
+        footerShowTagline: false,
+        footerShowAddress: false,
       },
     });
     expect(html).toContain('&lt;b&gt;hi&lt;/b&gt;');
