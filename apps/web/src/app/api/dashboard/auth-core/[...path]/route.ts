@@ -63,11 +63,22 @@ async function proxy(
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    const body = await req.text();
-    if (body) {
-      (init.headers as Record<string, string>)['content-type'] =
-        req.headers.get('content-type') ?? 'application/json';
-      init.body = body;
+    const contentType = req.headers.get('content-type') ?? '';
+    // Multipart logo uploads must keep the boundary + binary body intact.
+    // `req.text()` would corrupt the file and break Hono parseBody().
+    if (contentType.toLowerCase().includes('multipart/form-data')) {
+      const buf = await req.arrayBuffer();
+      if (buf.byteLength > 0) {
+        (init.headers as Record<string, string>)['content-type'] = contentType;
+        init.body = buf;
+      }
+    } else {
+      const body = await req.text();
+      if (body) {
+        (init.headers as Record<string, string>)['content-type'] =
+          contentType || 'application/json';
+        init.body = body;
+      }
     }
   }
 

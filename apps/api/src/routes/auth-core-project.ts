@@ -25,6 +25,17 @@ import { sendBrivenEngineSmsTest } from '../services/auth-core/delivery.js';
 import { listBrivenEngineAudit } from '../services/auth-core/audit.js';
 import { recordBrivenEngineAudit } from '../services/auth-core/audit.js';
 import { env } from '../env.js';
+import { ValidationError } from '@briven/shared';
+import {
+  brandingLogoPublicUrl,
+  deleteBrandingLogo,
+  isStorageConfigured,
+  putBrandingLogo,
+  validateLogoUpload,
+} from '../services/auth-branding-logo.js';
+import { updateAuthConfig } from '../services/tenant-config-store.js';
+import { invalidateAuthInstance } from '../services/auth-tenant-pool.js';
+import { log } from '../lib/logger.js';
 import {
   ensureBrivenEngineTenant,
   listBrivenEngineTenants,
@@ -272,22 +283,187 @@ authCoreProjectRouter.put(
       body = {};
     }
     try {
-      const result = await setBrivenEngineBranding(projectId, body);
+      // Logo is managed only by POST/DELETE …/branding/logo — ignore logoUrl
+      // on this PUT so a partial form save never wipes an uploaded logo.
+      const { logoUrl: _ignoreLogo, ...rest } = body;
+      const result = await setBrivenEngineBranding(projectId, rest);
       void recordBrivenEngineAudit({
         action: 'config.branding.saved',
         projectId,
         metadata: {
           hasLogo: Boolean(result.branding.logoUrl),
           primaryColor: result.branding.primaryColor,
+          senderName: result.branding.senderName,
         },
       });
       const config = await getBrivenEngineProjectConfig(projectId);
-      return c.json({ ...result, config });
+      return c.json({
+        ...result,
+        branding: result.branding,
+        config,
+      });
     } catch (err) {
       return c.json(
         {
           engine: BRIVEN_ENGINE_ID,
           code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/**
+ * Upload project logo (multipart field `file`). Dashboard session path —
+ * same auth as other auth-core project routes so CSRF/cookies work via the
+ * web proxy (the bare /v1/projects/…/logo rewrite often fails CSRF).
+ */
+authCoreProjectRouter.post(
+  '/v1/auth-core/projects/:projectId/branding/logo',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    if (!isStorageConfigured()) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'storage_not_configured',
+          message: 'file storage is not configured on this api',
+        },
+        503,
+      );
+    }
+
+    let file: File | null = null;
+    try {
+      const body = await c.req.parseBody();
+      const f = body.file;
+      if (f instanceof File) file = f;
+    } catch {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'validation_failed',
+          message: 'expected multipart form-data with field `file`',
+        },
+        400,
+      );
+    }
+    if (!file) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'validation_failed',
+          message: 'missing `file` form field',
+        },
+        400,
+      );
+    }
+
+    try {
+      let contentType = file.type || '';
+      if (!contentType && file.name) {
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith('.png')) contentType = 'image/png';
+        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg'))
+          contentType = 'image/jpeg';
+        else if (lower.endsWith('.webp')) contentType = 'image/webp';
+        else if (lower.endsWith('.svg')) contentType = 'image/svg+xml';
+      }
+      validateLogoUpload({ contentType, size: file.size });
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await putBrandingLogo({ projectId, bytes, contentType });
+      const logoUrl = brandingLogoPublicUrl(projectId);
+      await setBrivenEngineBranding(projectId, { logoUrl });
+      try {
+        await updateAuthConfig(projectId, { branding: { logoUrl } });
+        await invalidateAuthInstance(projectId);
+      } catch {
+        // Engine branding is source of truth for Auth dashboard.
+      }
+      void recordBrivenEngineAudit({
+        action: 'config.branding.logo.uploaded',
+        projectId,
+        metadata: { contentType, sizeBytes: file.size },
+      });
+      const branding = (await getBrivenEngineProjectConfig(projectId)).branding;
+      return c.json({
+        ok: true,
+        engine: BRIVEN_ENGINE_ID,
+        logoUrl,
+        branding,
+      });
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        return c.json(
+          {
+            engine: BRIVEN_ENGINE_ID,
+            code: 'validation_failed',
+            message: err.message,
+          },
+          400,
+        );
+      }
+      log.error('briven_engine_branding_logo_upload_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'logo_upload_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Remove project logo. */
+authCoreProjectRouter.delete(
+  '/v1/auth-core/projects/:projectId/branding/logo',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    if (!isStorageConfigured()) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'storage_not_configured',
+          message: 'file storage is not configured on this api',
+        },
+        503,
+      );
+    }
+    try {
+      await deleteBrandingLogo(projectId);
+      await setBrivenEngineBranding(projectId, { logoUrl: null });
+      try {
+        await updateAuthConfig(projectId, { branding: { logoUrl: null } });
+        await invalidateAuthInstance(projectId);
+      } catch {
+        /* engine branding is enough */
+      }
+      void recordBrivenEngineAudit({
+        action: 'config.branding.logo.removed',
+        projectId,
+        metadata: {},
+      });
+      return c.json({
+        ok: true,
+        engine: BRIVEN_ENGINE_ID,
+        logoUrl: null,
+      });
+    } catch (err) {
+      log.error('briven_engine_branding_logo_remove_failed', {
+        projectId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'logo_remove_failed',
           message: err instanceof Error ? err.message : String(err),
         },
         500,

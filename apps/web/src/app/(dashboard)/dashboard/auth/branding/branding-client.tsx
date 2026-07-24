@@ -35,9 +35,26 @@ function sniffType(file: File): string {
   return file.type || '';
 }
 
+function applyBrandingPayload(
+  b: Partial<BrandingState> & {
+    logoUrl?: string | null;
+    brandUrl?: string | null;
+    footerNote?: string | null;
+  },
+): BrandingState {
+  return {
+    logoUrl: b.logoUrl ?? '',
+    primaryColor: b.primaryColor ?? DEFAULT.primaryColor,
+    senderName: b.senderName ?? DEFAULT.senderName,
+    brandUrl: b.brandUrl ?? '',
+    footerNote: b.footerNote ?? '',
+  };
+}
+
 /**
- * briven-engine branding form — save via dashboard auth-core proxy.
- * Logo is upload-only (PNG / JPEG / WEBP / SVG). No URL paste field.
+ * briven-engine branding form.
+ * - Logo: upload-only via dashboard auth-core proxy (cookies + Origin).
+ * - Settings: PUT branding (does not clear logo).
  */
 export function AuthBrandingClient({
   projects,
@@ -46,7 +63,6 @@ export function AuthBrandingClient({
 }: {
   projects: AuthV2ProjectRow[];
   lockProjectId?: string;
-  /** Prefer briven-engine paths (default true). */
   engineMode?: boolean;
 }) {
   const enabled = projects.filter((p) => p.authEnabled !== false);
@@ -57,6 +73,7 @@ export function AuthBrandingClient({
   const [form, setForm] = useState<BrandingState>(DEFAULT);
   const [pending, setPending] = useState(false);
   const [logoPending, setLogoPending] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [proof, setProof] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -64,51 +81,51 @@ export function AuthBrandingClient({
   const load = useCallback(
     async (id: string) => {
       if (!id) return;
+      setLoading(true);
       setErr(null);
-      const url = engineMode
-        ? `/api/dashboard/auth-core/projects/${encodeURIComponent(id)}/config`
-        : `/api/v1/projects/${id}/auth/config`;
-      const res = await fetch(url, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (res.status === 401) {
-        setErr('sign in to briven.tech to manage branding');
-        return;
-      }
-      if (!res.ok) {
-        setErr(`load failed (${res.status})`);
-        return;
-      }
-      const body = (await res.json()) as {
-        branding?: {
-          logoUrl?: string | null;
-          primaryColor?: string;
-          senderName?: string;
-          brandUrl?: string | null;
-          footerNote?: string | null;
-        };
-        config?: {
-          branding?: {
+      try {
+        const url = engineMode
+          ? `/api/dashboard/auth-core/projects/${encodeURIComponent(id)}/config`
+          : `/api/v1/projects/${id}/auth/config`;
+        const res = await fetch(url, {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (res.status === 401) {
+          setErr('sign in to briven.tech to manage branding');
+          return;
+        }
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as {
+            message?: string;
+          };
+          setErr(body.message ?? `load failed (${res.status})`);
+          return;
+        }
+        const body = (await res.json()) as {
+          branding?: Partial<BrandingState> & {
             logoUrl?: string | null;
-            primaryColor?: string;
-            senderName?: string;
             brandUrl?: string | null;
             footerNote?: string | null;
           };
+          config?: {
+            branding?: Partial<BrandingState> & {
+              logoUrl?: string | null;
+              brandUrl?: string | null;
+              footerNote?: string | null;
+            };
+          };
         };
-      };
-      const b = body.branding ?? body.config?.branding;
-      if (b) {
-        setForm({
-          logoUrl: b.logoUrl ?? '',
-          primaryColor: b.primaryColor ?? DEFAULT.primaryColor,
-          senderName: b.senderName ?? DEFAULT.senderName,
-          brandUrl: b.brandUrl ?? '',
-          footerNote: b.footerNote ?? '',
-        });
-      } else {
-        setForm(DEFAULT);
+        const b = body.branding ?? body.config?.branding;
+        if (b) {
+          setForm(applyBrandingPayload(b));
+        } else {
+          setForm(DEFAULT);
+        }
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : 'load failed');
+      } finally {
+        setLoading(false);
       }
     },
     [engineMode],
@@ -131,32 +148,67 @@ export function AuthBrandingClient({
       if (file.size > MAX_BYTES) {
         throw new Error('logo must be 1 MB or smaller');
       }
-      const data = new FormData();
-      data.append('file', file, file.name);
-      const res = await fetch(
-        `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
-        {
+      // Prefer engine dashboard path (session + Origin via Next proxy).
+      // Rebuild FormData per attempt — a body stream can only be read once.
+      const paths = engineMode
+        ? [
+            `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/branding/logo`,
+            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
+          ]
+        : [
+            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
+          ];
+
+      let lastErr = 'upload failed';
+      let logoUrl: string | null = null;
+      let branding: (Partial<BrandingState> & {
+        logoUrl?: string | null;
+        brandUrl?: string | null;
+        footerNote?: string | null;
+      }) | null = null;
+
+      for (const path of paths) {
+        const data = new FormData();
+        data.append('file', file, file.name);
+        const res = await fetch(path, {
           method: 'POST',
           credentials: 'include',
           body: data,
-        },
-      );
-      const body = (await res.json().catch(() => ({}))) as {
-        logoUrl?: string;
-        message?: string;
-        code?: string;
-      };
-      if (!res.ok) {
-        throw new Error(body.message ?? body.code ?? `upload failed (${res.status})`);
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          logoUrl?: string;
+          branding?: Partial<BrandingState> & {
+            logoUrl?: string | null;
+            brandUrl?: string | null;
+            footerNote?: string | null;
+          };
+          message?: string;
+          code?: string;
+        };
+        if (res.ok && body.logoUrl) {
+          logoUrl = body.logoUrl;
+          branding = body.branding ?? null;
+          break;
+        }
+        lastErr =
+          body.message ?? body.code ?? `upload failed (${res.status})`;
+        // Don't retry on validation / storage config — only on auth/proxy miss.
+        if (res.status === 400 || res.status === 503) break;
       }
-      if (!body.logoUrl) throw new Error('upload returned no logo');
-      setForm((f) => ({ ...f, logoUrl: body.logoUrl! }));
-      setProof('logo uploaded — used in sign-in emails');
-      if (fileRef.current) fileRef.current.value = '';
+
+      if (!logoUrl) throw new Error(lastErr);
+
+      setForm((f) =>
+        branding
+          ? applyBrandingPayload({ ...f, ...branding, logoUrl })
+          : { ...f, logoUrl },
+      );
+      setProof(`logo uploaded (${file.name}) — used in sign-in emails`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'upload failed');
     } finally {
       setLogoPending(false);
+      if (fileRef.current) fileRef.current.value = '';
     }
   }
 
@@ -166,24 +218,39 @@ export function AuthBrandingClient({
     setErr(null);
     setProof(null);
     try {
-      const res = await fetch(
-        `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
-        { method: 'DELETE', credentials: 'include' },
-      );
-      if (!res.ok) {
+      const paths = engineMode
+        ? [
+            `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/branding/logo`,
+            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
+          ]
+        : [
+            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
+          ];
+      let ok = false;
+      let lastErr = 'remove failed';
+      for (const path of paths) {
+        const res = await fetch(path, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          ok = true;
+          break;
+        }
         const body = (await res.json().catch(() => ({}))) as {
           message?: string;
           code?: string;
         };
-        throw new Error(body.message ?? body.code ?? `remove failed (${res.status})`);
+        lastErr = body.message ?? body.code ?? `remove failed (${res.status})`;
       }
+      if (!ok) throw new Error(lastErr);
       setForm((f) => ({ ...f, logoUrl: '' }));
       setProof('logo removed');
-      if (fileRef.current) fileRef.current.value = '';
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'remove failed');
     } finally {
       setLogoPending(false);
+      if (fileRef.current) fileRef.current.value = '';
     }
   }
 
@@ -193,17 +260,19 @@ export function AuthBrandingClient({
     setErr(null);
     setProof(null);
     try {
-      // logoUrl is never sent from a text field — only from prior upload.
+      // Never send logoUrl here — upload/remove own that field so save
+      // cannot wipe a logo after a partial load.
       const payload = {
         primaryColor: form.primaryColor.trim() || DEFAULT.primaryColor,
         senderName: form.senderName.trim() || DEFAULT.senderName,
         brandUrl: form.brandUrl.trim() || null,
         footerNote: form.footerNote.trim() || null,
-        // Keep current uploaded logo (do not clear on text save).
-        logoUrl: form.logoUrl.trim() || null,
       };
       if (!/^#[0-9A-Fa-f]{6}$/.test(payload.primaryColor)) {
         throw new Error('primary color must be a 6-digit hex like #00e87a');
+      }
+      if (!payload.senderName.trim()) {
+        throw new Error('brand name is required');
       }
 
       const url = engineMode
@@ -217,12 +286,34 @@ export function AuthBrandingClient({
       });
       const body = (await res.json().catch(() => ({}))) as {
         message?: string;
+        branding?: Partial<BrandingState> & {
+          logoUrl?: string | null;
+          brandUrl?: string | null;
+          footerNote?: string | null;
+        };
+        config?: {
+          branding?: Partial<BrandingState> & {
+            logoUrl?: string | null;
+            brandUrl?: string | null;
+            footerNote?: string | null;
+          };
+        };
       };
       if (!res.ok) throw new Error(body.message ?? `http ${res.status}`);
+
+      const saved = body.branding ?? body.config?.branding;
+      if (saved) {
+        // Keep current logo if response omits it
+        setForm(
+          applyBrandingPayload({
+            ...saved,
+            logoUrl: saved.logoUrl ?? form.logoUrl,
+          }),
+        );
+      }
       setProof(
-        `saved · from “${payload.senderName}” · color ${payload.primaryColor}`,
+        `saved · “${payload.senderName}” · ${payload.primaryColor} — refresh keeps these settings`,
       );
-      await load(projectId);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'save failed');
     } finally {
@@ -262,6 +353,12 @@ export function AuthBrandingClient({
             ))}
           </select>
         </label>
+      ) : null}
+
+      {loading ? (
+        <p className="font-mono text-xs text-[var(--color-text-muted)]">
+          loading saved branding…
+        </p>
       ) : null}
 
       {/* Live email preview — Flanders shell */}
@@ -330,15 +427,15 @@ export function AuthBrandingClient({
         </div>
       </div>
 
-      {/* Logo — upload only */}
+      {/* Logo — one clear upload control */}
       <div
         className="rounded-md border p-4"
         style={{ borderColor: 'var(--color-border-subtle)' }}
       >
         <p className="font-mono text-xs text-[var(--color-text)]">logo</p>
         <p className="mt-1 font-mono text-[10px] text-[var(--color-text-muted)]">
-          upload .svg, .png, .jpg, .jpeg, or .webp (max 1 MB). shown next to
-          the brand name in every Auth email. no link paste — upload only.
+          Click “choose logo file”, pick .svg / .png / .jpg / .jpeg / .webp
+          (max 1 MB). Upload starts automatically after you pick.
         </p>
         {form.logoUrl ? (
           <div className="mt-3 flex items-center gap-3">
@@ -349,7 +446,7 @@ export function AuthBrandingClient({
               className="h-10 w-auto max-w-[8rem] rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] object-contain p-1"
             />
             <span className="font-mono text-[11px] text-[var(--color-text-muted)]">
-              current logo
+              current logo (saved)
             </span>
           </div>
         ) : (
@@ -357,26 +454,28 @@ export function AuthBrandingClient({
             no logo yet — preview uses a colored circle.
           </p>
         )}
+        {/* Hidden real input — button triggers it, pick auto-uploads */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPT}
+          className="sr-only"
+          tabIndex={-1}
+          disabled={logoPending}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void uploadLogo(f);
+          }}
+        />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept={ACCEPT}
-            className="max-w-full font-mono text-xs text-[var(--color-text)] file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-[var(--color-surface)] file:px-3 file:py-2 file:font-mono file:text-xs file:text-[var(--color-text)]"
-            disabled={logoPending}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadLogo(f);
-            }}
-          />
           <button
             type="button"
-            disabled={logoPending}
+            disabled={logoPending || loading}
             onClick={() => fileRef.current?.click()}
             className="rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
             style={{ background: '#FFFD74' }}
           >
-            {logoPending ? 'uploading…' : 'upload logo'}
+            {logoPending ? 'uploading…' : 'choose logo file'}
           </button>
           {form.logoUrl ? (
             <button
@@ -386,7 +485,7 @@ export function AuthBrandingClient({
               className="rounded-md border px-4 py-2 font-mono text-xs text-[var(--color-text-muted)] disabled:opacity-50"
               style={{ borderColor: 'var(--color-border-subtle)' }}
             >
-              remove
+              remove logo
             </button>
           ) : null}
         </div>
@@ -449,9 +548,6 @@ export function AuthBrandingClient({
           className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
           style={{ borderColor: 'var(--auth-accent-border)' }}
         />
-        <span className="text-[10px] text-[var(--color-text-muted)]">
-          Optional. Footer shows “brand · site”.
-        </span>
       </label>
 
       <label className="flex flex-col gap-1 font-mono text-xs">
@@ -471,7 +567,7 @@ export function AuthBrandingClient({
 
       <button
         type="button"
-        disabled={pending}
+        disabled={pending || loading}
         onClick={() => void save()}
         className="self-start rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
         style={{ background: '#FFFD74' }}
