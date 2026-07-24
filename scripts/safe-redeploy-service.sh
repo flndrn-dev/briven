@@ -75,6 +75,35 @@ if [[ -z "${BRIVEN_ENCRYPTION_KEY:-}" || -z "${BRIVEN_BETTER_AUTH_SECRET:-}" ]];
   exit 1
 fi
 
+# Branding + OAuth secrets live in the encrypted tenant-secret store and need
+# BRIVEN_AUTH_MASTER_KEY (64 hex chars). Without it, dashboard Auth → branding
+# save returns "master key not configured for service: auth" and nothing sticks.
+if [[ -z "${BRIVEN_AUTH_MASTER_KEY:-}" || ! "${BRIVEN_AUTH_MASTER_KEY}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  if [[ -f "$DURABLE_ENV" ]]; then
+    GEN=$(openssl rand -hex 32)
+    if grep -q '^BRIVEN_AUTH_MASTER_KEY=' "$DURABLE_ENV"; then
+      tmp=$(mktemp)
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+          BRIVEN_AUTH_MASTER_KEY=*) echo "BRIVEN_AUTH_MASTER_KEY=$GEN" ;;
+          *) printf '%s\n' "$line" ;;
+        esac
+      done < "$DURABLE_ENV" > "$tmp"
+      mv "$tmp" "$DURABLE_ENV"
+    else
+      printf '\nBRIVEN_AUTH_MASTER_KEY=%s\n' "$GEN" >> "$DURABLE_ENV"
+    fi
+    chmod 600 "$DURABLE_ENV"
+    export BRIVEN_AUTH_MASTER_KEY="$GEN"
+    echo "generated BRIVEN_AUTH_MASTER_KEY into $DURABLE_ENV (was missing/invalid)"
+  else
+    echo "error: BRIVEN_AUTH_MASTER_KEY missing and no durable env at $DURABLE_ENV"
+    exit 1
+  fi
+fi
+export BRIVEN_AUTH_MASTER_KEY
+echo "BRIVEN_AUTH_MASTER_KEY loaded (len=${#BRIVEN_AUTH_MASTER_KEY})"
+
 echo "redeploying: $*  (project=$PROJECT domain=$BRIVEN_DOMAIN)"
 docker compose -p "$PROJECT" -f "$FILE" build "$@"
 docker compose -p "$PROJECT" -f "$FILE" up -d --force-recreate --no-deps "$@"
@@ -82,3 +111,6 @@ docker compose -p "$PROJECT" -f "$FILE" up -d --force-recreate --no-deps "$@"
 echo "done. verify:"
 echo "  curl -sS https://api.briven.tech/info | head -c 200"
 echo "  curl -sS -o /dev/null -w '%{http_code}\\n' https://docs.briven.tech/auth/parity"
+if [[ " $* " == *" api "* ]] || [[ "$*" == "api" ]]; then
+  echo "  docker exec briven-brivenfrance-uilsk6-api-1 sh -c 'echo AUTH_MASTER=\${BRIVEN_AUTH_MASTER_KEY:+SET}'"
+fi
