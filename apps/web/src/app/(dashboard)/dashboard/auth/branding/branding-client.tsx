@@ -438,7 +438,7 @@ export function AuthBrandingClient({
         <p className="text-[13px] text-[#6b7280]">
           if you didn&apos;t request this, you can ignore this email.
         </p>
-        <div className="mt-8 border-t border-[#1e2128] pt-4 text-[13px] leading-relaxed text-[#6b7280]">
+        <div className="mt-8 border-t border-[#1e2128] pt-4 text-[12px] leading-relaxed text-[#6b7280]">
           <p>
             {brand}
             {brandSite ? (

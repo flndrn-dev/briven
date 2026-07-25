@@ -202,7 +202,7 @@ export function buildBrivenEngineAuthEmailHtml(input: {
           ${main}
           <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
           ${footerNote}
-          <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
+          <p style="color:#6b7280;font-size:12px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
             ${footerBlock}
           </p>
         </td></tr>

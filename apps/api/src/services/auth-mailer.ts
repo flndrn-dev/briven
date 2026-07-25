@@ -145,7 +145,7 @@ function shell({
           <h2 style="font-size:18px;font-weight:500;margin:0 0 12px 0;color:#f5f7fa">${escapeHtml(title)}</h2>
           <div style="font-size:15px;line-height:1.6;color:#d1d5db">${body}</div>
           ${note}
-          <p style="color:#6b7280;font-size:13px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
+          <p style="color:#6b7280;font-size:12px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
             ${footerBlock}
           </p>
         </td></tr>
