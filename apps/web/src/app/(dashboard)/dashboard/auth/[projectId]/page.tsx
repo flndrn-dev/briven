@@ -4,12 +4,13 @@ import { notFound } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { fetchAuthDashboard } from '../lib/auth-api';
 import { loadAuthV2Workspace } from '../lib/load-workspace';
+import { AuthSetupChecklist } from './setup-checklist';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * One project's Auth overview — counts + shortcuts.
- * Sign-in methods are managed under Providers.
+ * One project's Auth overview — golden-path setup when incomplete,
+ * then counts + shortcuts.
  */
 export default async function AuthProjectOverviewPage({
   params,
@@ -84,7 +85,8 @@ export default async function AuthProjectOverviewPage({
     }
   }
 
-  const authOn = project.authEnabled === true || tenantRowOn;
+  // tenantRowOn used for light diagnostics in “this project” card below.
+  void tenantRowOn;
 
   const counts = dash.ok
     ? dash.data.counts
@@ -92,19 +94,8 @@ export default async function AuthProjectOverviewPage({
 
   return (
     <section className="space-y-6">
-      {!authOn ? (
-        <div className="rounded-md border border-dashed border-[var(--color-border)] p-6 font-mono text-sm text-[var(--color-text-muted)]">
-          Auth is off for this project. Go back to{' '}
-          <Link
-            href="/dashboard/auth"
-            className="underline"
-            style={{ color: 'var(--auth-accent, #FFFD74)' }}
-          >
-            Auth home
-          </Link>{' '}
-          and enable it.
-        </div>
-      ) : null}
+      {/* Golden path — shown until setup is green (client also collapses). */}
+      <AuthSetupChecklist projectId={id} />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[

@@ -101,6 +101,116 @@ authCoreProjectRouter.get('/v1/auth-core/projects/:projectId/config', async (c) 
   }
 });
 
+/** Golden-path checklist for Auth → project overview. */
+authCoreProjectRouter.get(
+  '/v1/auth-core/projects/:projectId/setup-status',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    try {
+      const { getAuthSetupStatus } = await import(
+        '../services/auth-core/setup.js'
+      );
+      const status = await getAuthSetupStatus(projectId);
+      return c.json(status);
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'setup_status_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/**
+ * One-click Finish setup: enable Auth, starter methods, localhost origin,
+ * mint browser key if missing. Optional body.productionOrigin.
+ */
+authCoreProjectRouter.post(
+  '/v1/auth-core/projects/:projectId/setup-finish',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    const user = c.get('user');
+    if (!user?.id) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'unauthorized',
+          message: 'dashboard session required',
+        },
+        401,
+      );
+    }
+    let body: { productionOrigin?: string } = {};
+    try {
+      body = (await c.req.json()) as { productionOrigin?: string };
+    } catch {
+      body = {};
+    }
+    try {
+      const { finishAuthSetup } = await import(
+        '../services/auth-core/setup.js'
+      );
+      const result = await finishAuthSetup(projectId, {
+        userId: user.id,
+        productionOrigin: body.productionOrigin ?? null,
+      });
+      return c.json(result);
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'setup_finish_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Replace or list app origins (CORS / passkey / golden path). */
+authCoreProjectRouter.put(
+  '/v1/auth-core/projects/:projectId/app-origins',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    let body: { origins?: string[] } = {};
+    try {
+      body = (await c.req.json()) as { origins?: string[] };
+    } catch {
+      body = {};
+    }
+    try {
+      const { setBrivenEngineAppOrigins } = await import(
+        '../services/auth-core/project-config.js'
+      );
+      const result = await setBrivenEngineAppOrigins(
+        projectId,
+        Array.isArray(body.origins) ? body.origins : [],
+        c.get('user')?.id ?? null,
+      );
+      void recordBrivenEngineAudit({
+        action: 'config.app_origins.updated',
+        projectId,
+        metadata: { count: result.appOrigins.length },
+      });
+      return c.json(result);
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
 authCoreProjectRouter.put(
   '/v1/auth-core/projects/:projectId/providers/:thirdPartyId',
   async (c) => {

@@ -100,6 +100,8 @@ const DEFAULT_METHOD_FLAGS: BrivenEngineMethodFlags = {
 
 const METHOD_FLAGS_SECRET = 'briven_engine_method_flags';
 const BRANDING_SECRET = 'briven_engine_branding';
+/** App origins allowed for CORS / passkey rpId / magic-link return (JSON string[]). */
+const APP_ORIGINS_SECRET = 'briven_engine_app_origins';
 
 /** Login email / hosted UI look for one project. */
 export type BrivenEngineBranding = {
@@ -213,6 +215,11 @@ export type BrivenEngineProjectConfig = {
     configured: boolean;
     hrefSuffix: string;
   }>;
+  /**
+   * App website origins for this project (e.g. http://localhost:3000,
+   * https://pay.example.com). Used by golden-path setup + CORS/passkey.
+   */
+  appOrigins: string[];
 };
 
 export async function getBrivenEngineBranding(
@@ -392,6 +399,75 @@ async function loadMethodFlags(
   }
 }
 
+function normalizeOrigin(raw: string): string | null {
+  const t = raw.trim().replace(/\/$/, '');
+  if (!t) return null;
+  try {
+    const u = new URL(t.includes('://') ? t : `https://${t}`);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (u.protocol === 'http:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') {
+      return null;
+    }
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+export async function getBrivenEngineAppOrigins(
+  projectId: string,
+): Promise<string[]> {
+  try {
+    const raw = await getTenantSecret(projectId, SERVICE, APP_ORIGINS_SECRET);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: string[] = [];
+    for (const item of parsed) {
+      if (typeof item !== 'string') continue;
+      const o = normalizeOrigin(item);
+      if (o && !out.includes(o)) out.push(o);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export async function setBrivenEngineAppOrigins(
+  projectId: string,
+  origins: string[],
+  createdBy?: string | null,
+): Promise<{ ok: true; engine: 'briven-engine'; appOrigins: string[] }> {
+  const next: string[] = [];
+  for (const item of origins) {
+    const o = normalizeOrigin(item);
+    if (o && !next.includes(o)) next.push(o);
+  }
+  await setTenantSecret(
+    projectId,
+    SERVICE,
+    APP_ORIGINS_SECRET,
+    JSON.stringify(next),
+    createdBy ?? null,
+  );
+  return { ok: true, engine: 'briven-engine', appOrigins: next };
+}
+
+/** Append origins without removing existing ones. */
+export async function addBrivenEngineAppOrigins(
+  projectId: string,
+  origins: string[],
+  createdBy?: string | null,
+): Promise<{ ok: true; engine: 'briven-engine'; appOrigins: string[] }> {
+  const current = await getBrivenEngineAppOrigins(projectId);
+  return setBrivenEngineAppOrigins(
+    projectId,
+    [...current, ...origins],
+    createdBy,
+  );
+}
+
 /**
  * Public config view (no secret values).
  */
@@ -492,6 +568,8 @@ export async function getBrivenEngineProjectConfig(
     })),
   ];
 
+  const appOrigins = await getBrivenEngineAppOrigins(projectId);
+
   return {
     engine: 'briven-engine',
     projectId,
@@ -511,6 +589,7 @@ export async function getBrivenEngineProjectConfig(
     branding,
     methods,
     methodChips,
+    appOrigins,
     recipes: {
       emailPassword: methods.emailPassword,
       passwordless: methods.passwordlessEmail || methods.magicLink,
