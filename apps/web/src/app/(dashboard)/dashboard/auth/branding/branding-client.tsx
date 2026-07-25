@@ -203,55 +203,33 @@ export function AuthBrandingClient({
       if (file.size > MAX_BYTES) {
         throw new Error('logo must be 1 MB or smaller');
       }
-      // Prefer engine dashboard path (session + Origin via Next proxy).
-      // Rebuild FormData per attempt — a body stream can only be read once.
-      const paths = engineMode
-        ? [
-            `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/branding/logo`,
-            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
-          ]
-        : [
-            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
-          ];
-
-      let lastErr = 'upload failed';
-      let logoUrl: string | null = null;
-      let branding: (Partial<BrandingState> & {
-        logoUrl?: string | null;
-        brandUrl?: string | null;
-        footerNote?: string | null;
-      }) | null = null;
-
-      for (const path of paths) {
-        const data = new FormData();
-        data.append('file', file, file.name);
-        const res = await fetch(path, {
-          method: 'POST',
-          credentials: 'include',
-          body: data,
-        });
-        const body = (await res.json().catch(() => ({}))) as {
-          logoUrl?: string;
-          branding?: Partial<BrandingState> & {
-            logoUrl?: string | null;
-            brandUrl?: string | null;
-            footerNote?: string | null;
-          };
-          message?: string;
-          code?: string;
+      // Briven Auth only: /v1/auth-core/* via dashboard proxy (cookies + Origin).
+      // Do NOT fall back to /v1/projects/:id/auth/* — that surface is retired (410).
+      const path = `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/branding/logo`;
+      const data = new FormData();
+      data.append('file', file, file.name);
+      const res = await fetch(path, {
+        method: 'POST',
+        credentials: 'include',
+        body: data,
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        logoUrl?: string;
+        branding?: Partial<BrandingState> & {
+          logoUrl?: string | null;
+          brandUrl?: string | null;
+          footerNote?: string | null;
         };
-        if (res.ok && body.logoUrl) {
-          logoUrl = body.logoUrl;
-          branding = body.branding ?? null;
-          break;
-        }
-        lastErr =
-          body.message ?? body.code ?? `upload failed (${res.status})`;
-        // Don't retry on validation / storage config — only on auth/proxy miss.
-        if (res.status === 400 || res.status === 503) break;
+        message?: string;
+        code?: string;
+      };
+      if (!res.ok || !body.logoUrl) {
+        throw new Error(
+          body.message ?? body.code ?? `upload failed (${res.status})`,
+        );
       }
-
-      if (!logoUrl) throw new Error(lastErr);
+      const logoUrl = body.logoUrl;
+      const branding = body.branding ?? null;
 
       setForm((f) =>
         branding
@@ -273,32 +251,20 @@ export function AuthBrandingClient({
     setErr(null);
     setProof(null);
     try {
-      const paths = engineMode
-        ? [
-            `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/branding/logo`,
-            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
-          ]
-        : [
-            `/api/v1/projects/${encodeURIComponent(projectId)}/auth/branding/logo`,
-          ];
-      let ok = false;
-      let lastErr = 'remove failed';
-      for (const path of paths) {
-        const res = await fetch(path, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
-        if (res.ok) {
-          ok = true;
-          break;
-        }
+      const path = `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/branding/logo`;
+      const res = await fetch(path, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
           message?: string;
           code?: string;
         };
-        lastErr = body.message ?? body.code ?? `remove failed (${res.status})`;
+        throw new Error(
+          body.message ?? body.code ?? `remove failed (${res.status})`,
+        );
       }
-      if (!ok) throw new Error(lastErr);
       setForm((f) => ({ ...f, logoUrl: '' }));
       setProof('logo removed');
     } catch (e) {

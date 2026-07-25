@@ -1,27 +1,17 @@
+import { S3Client } from 'bun';
 import { ValidationError } from '@briven/shared';
 
 import { env } from '../env.js';
-import { presignS3Url } from '../lib/s3-presign.js';
 import { isStorageConfigured } from './storage.js';
 
 /**
- * Storage + serving for auth → branding logos.
+ * Storage + serving for auth → branding logos (briven-engine).
  *
- * Logos must render on PUBLIC hosted login pages, so neither presigned
- * (expiring) URLs nor bucket-policy changes are suitable. Instead we keep
- * the object PRIVATE in MinIO at a STABLE key and serve it back through an
- * UNAUTHENTICATED api route (`GET /v1/projects/:id/auth/branding/logo`)
- * that acts like a tiny CDN. The branding config's `logoUrl` then points
- * at that route (cache-busted), so the value is a permanent public URL.
+ * Upload path (dashboard): POST /v1/auth-core/projects/:projectId/branding/logo
+ * Public serve: GET /v1/projects/:id/auth/branding/logo (brandingPublicRouter)
  *
- * Object key is stable + overwritten on every upload:
- *   auth-branding/<projectId>/logo
- *
- * We reuse the same SigV4 signing path as `services/storage.ts`
- * (`lib/s3-presign.ts` → Bun's native S3 client) rather than constructing
- * a second S3 client. The content-type set on PUT round-trips through
- * MinIO natively and is read back off the GET response, so we don't need a
- * separate metadata sidecar.
+ * Object key: auth-branding/<projectId>/logo
+ * Uses Bun's S3Client for server-side PUT/GET/DELETE (no presign round-trip).
  */
 
 export const LOGO_MAX_BYTES = 1024 * 1024; // 1 MiB
@@ -43,12 +33,6 @@ interface StorageEnv {
   secretKey: string;
 }
 
-/**
- * Read MinIO config from env. Mirrors the private `requireStorageEnv` in
- * `services/storage.ts` (not exported there); the env vars are the shared
- * source of truth. Server-side ops use the INTERNAL endpoint — these
- * fetches never leave the api host, so they don't bounce through traefik.
- */
 function requireStorageEnv(): StorageEnv {
   const endpoint = env.BRIVEN_MINIO_ENDPOINT;
   const accessKey = env.BRIVEN_MINIO_ACCESS_KEY;
@@ -67,11 +51,20 @@ function requireStorageEnv(): StorageEnv {
   };
 }
 
-/** Re-export so the route can return a `503 not_configured` cleanly. */
 export { isStorageConfigured };
 
 function objectKey(projectId: string): string {
   return `auth-branding/${projectId}/logo`;
+}
+
+function s3Client(cfg: StorageEnv): S3Client {
+  return new S3Client({
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket: cfg.bucket,
+    accessKeyId: cfg.accessKey,
+    secretAccessKey: cfg.secretKey,
+  });
 }
 
 /**
@@ -80,8 +73,6 @@ function objectKey(projectId: string): string {
  * over-cap / non-positive size.
  */
 export function validateLogoUpload(input: { contentType: string; size: number }): void {
-  // Normalise: a browser may append `; charset=...` for svg. Compare the
-  // bare media type so `image/svg+xml; charset=utf-8` still validates.
   const bare = input.contentType.split(';', 1)[0]!.trim().toLowerCase();
   if (!(ALLOWED_LOGO_TYPES as readonly string[]).includes(bare)) {
     throw new ValidationError(
@@ -97,10 +88,8 @@ export function validateLogoUpload(input: { contentType: string; size: number })
 }
 
 /**
- * Build the STABLE public URL for a project's logo, cache-busted with the
- * current unix-seconds so a re-upload busts browser + edge caches. This is
- * what gets stored in `branding.logoUrl`. Points at the public serve route
- * on the api origin (world-readable; no auth).
+ * STABLE public URL for a project's logo (served by brandingPublicRouter).
+ * Cache-busted with unix seconds.
  */
 export function brandingLogoPublicUrl(projectId: string): string {
   const v = Math.floor(Date.now() / 1000);
@@ -108,9 +97,7 @@ export function brandingLogoPublicUrl(projectId: string): string {
 }
 
 /**
- * Store (overwrite) the logo object in MinIO. The content-type is tied
- * into the signed PUT and persisted on the object, so the serve route can
- * hand it straight back.
+ * Store (overwrite) the logo object in MinIO via Bun S3 write.
  */
 export async function putBrandingLogo(input: {
   projectId: string;
@@ -119,25 +106,15 @@ export async function putBrandingLogo(input: {
 }): Promise<void> {
   const bare = input.contentType.split(';', 1)[0]!.trim().toLowerCase();
   const cfg = requireStorageEnv();
-  const url = presignS3Url({
-    endpoint: cfg.endpoint,
-    region: cfg.region,
-    bucket: cfg.bucket,
-    key: objectKey(input.projectId),
-    method: 'PUT',
-    accessKey: cfg.accessKey,
-    secretKey: cfg.secretKey,
-    expiresIn: 60,
-    contentType: bare,
-  });
-  const res = await fetch(url, {
-    method: 'PUT',
-    body: input.bytes,
-    headers: { 'content-type': bare },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`minio logo put failed: ${res.status} ${body.slice(0, 200)}`);
+  const client = s3Client(cfg);
+  const key = objectKey(input.projectId);
+  try {
+    // Prefer S3File.write (Bun docs); fall back to client.write if present.
+    const file = client.file(key);
+    await file.write(input.bytes, { type: bare });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`minio logo put failed: ${msg.slice(0, 200)}`);
   }
 }
 
@@ -147,56 +124,38 @@ export interface BrandingLogoObject {
 }
 
 /**
- * Fetch the stored logo. Returns `null` when the object does not exist
- * (so the route can 404). The content-type comes back off MinIO's GET
- * response — the same value set on PUT.
+ * Fetch the stored logo. Returns null when missing.
  */
-export async function getBrandingLogo(projectId: string): Promise<BrandingLogoObject | null> {
+export async function getBrandingLogo(
+  projectId: string,
+): Promise<BrandingLogoObject | null> {
   const cfg = requireStorageEnv();
-  const url = presignS3Url({
-    endpoint: cfg.endpoint,
-    region: cfg.region,
-    bucket: cfg.bucket,
-    key: objectKey(projectId),
-    method: 'GET',
-    accessKey: cfg.accessKey,
-    secretKey: cfg.secretKey,
-    expiresIn: 60,
-  });
-  const res = await fetch(url, { method: 'GET' });
-  if (res.status === 404 || res.status === 403) {
-    // MinIO returns 404 for a missing key; some configs 403 on a missing
-    // object. Either way: treat as "no logo".
+  const client = s3Client(cfg);
+  const key = objectKey(projectId);
+  const file = client.file(key);
+  try {
+    const exists = await file.exists();
+    if (!exists) return null;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const contentType =
+      (typeof file.type === 'string' && file.type) || 'application/octet-stream';
+    return { bytes, contentType };
+  } catch {
     return null;
   }
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`minio logo get failed: ${res.status} ${body.slice(0, 200)}`);
-  }
-  const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  return { bytes, contentType };
 }
 
 /**
- * Delete the stored logo. Idempotent — a missing object (404) is success,
- * mirroring `services/storage.ts:deleteFile`.
+ * Delete the stored logo. Idempotent.
  */
 export async function deleteBrandingLogo(projectId: string): Promise<void> {
   const cfg = requireStorageEnv();
-  const url = presignS3Url({
-    endpoint: cfg.endpoint,
-    region: cfg.region,
-    bucket: cfg.bucket,
-    key: objectKey(projectId),
-    method: 'DELETE',
-    accessKey: cfg.accessKey,
-    secretKey: cfg.secretKey,
-    expiresIn: 60,
-  });
-  const res = await fetch(url, { method: 'DELETE' });
-  if (!res.ok && res.status !== 404) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`minio logo delete failed: ${res.status} ${body.slice(0, 200)}`);
+  const client = s3Client(cfg);
+  const key = objectKey(projectId);
+  try {
+    const file = client.file(key);
+    await file.delete();
+  } catch {
+    // Missing object is fine.
   }
 }
