@@ -92,14 +92,22 @@ export async function invoke(input: InvokeInput): Promise<InvokeResult> {
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    log.error('runtime_error', {
+    // 401 from the runtime almost always means BRIVEN_RUNTIME_SHARED_SECRET
+    // drifted between api and runtime after a partial redeploy (see skill gotcha #17).
+    const likelySecretMismatch =
+      res.status === 401 && body.includes('runtime is not open to the public');
+    log.error(likelySecretMismatch ? 'runtime_shared_secret_mismatch' : 'runtime_error', {
       projectId: input.projectId,
       status: res.status,
       body: body.slice(0, 500),
     });
-    throw new brivenError('runtime_error', 'function runtime returned an error', {
-      status: 502,
-    });
+    throw new brivenError(
+      likelySecretMismatch ? 'runtime_auth_failed' : 'runtime_error',
+      likelySecretMismatch
+        ? 'function runtime rejected the control plane (shared secret mismatch — recreate runtime with .env.prod)'
+        : 'function runtime returned an error',
+      { status: 502 },
+    );
   }
 
   const payload = (await res.json()) as {

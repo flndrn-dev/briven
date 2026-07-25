@@ -9,7 +9,11 @@ import { log } from '../lib/logger.js';
 import { hasRoleAtLeast } from '../services/access.js';
 import { resolveApiKey } from '../services/api-keys.js';
 import { getProjectAccessForUser } from '../services/projects.js';
-import type { MemberRole } from '../db/schema.js';
+import {
+  looksLikeServiceBadge,
+  resolveDbServiceBadge,
+} from '../services/service-badges.js';
+import type { MemberRole, ServiceBadgeProduct } from '../db/schema.js';
 import type { Session, User } from './session.js';
 
 /**
@@ -55,6 +59,7 @@ export const requireProjectAuth =
       const access = await getProjectAccessForUser(projectId, user.id);
       c.set('apiKeyId', null);
       c.set('projectRole', access.role);
+      c.set('serviceBadgeProduct', null);
       await next();
       return;
     }
@@ -63,6 +68,21 @@ export const requireProjectAuth =
     const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
     if (!token) {
       throw new UnauthorizedError();
+    }
+
+    // Service badge (product-scoped agent pass). Today only product=db is a
+    // bearer; s3 uses MinIO keys and auth uses M2M client_credentials.
+    if (looksLikeServiceBadge(token)) {
+      const badge = await resolveDbServiceBadge(token);
+      if (!badge) throw new UnauthorizedError('invalid or revoked service badge');
+      if (badge.projectId !== projectId) {
+        throw new ForbiddenError('service badge does not belong to this project');
+      }
+      c.set('apiKeyId', badge.badgeId);
+      c.set('projectRole', badge.role as MemberRole);
+      c.set('serviceBadgeProduct', badge.product as ServiceBadgeProduct);
+      await next();
+      return;
     }
 
     // Non-brk bearer: try M2M JWT first, then CLI JWT.
@@ -76,6 +96,10 @@ export const requireProjectAuth =
         }
         c.set('apiKeyId', m2m.client_id);
         c.set('projectRole', m2m.role as MemberRole);
+        // M2M JWT keeps project-wide access at its role (existing SuperTokens-
+        // style behaviour). Product isolation for minting lives on the badge
+        // registry; the short-lived token is the machine session for the project.
+        c.set('serviceBadgeProduct', null);
         await next();
         return;
       } catch (err) {
@@ -109,6 +133,7 @@ export const requireProjectAuth =
       const access = await getProjectAccessForUser(projectId, userRow.id);
       c.set('apiKeyId', null);
       c.set('projectRole', access.role);
+      c.set('serviceBadgeProduct', null);
       await next();
       return;
     }
@@ -121,6 +146,7 @@ export const requireProjectAuth =
 
     c.set('apiKeyId', resolved.keyId);
     c.set('projectRole', resolved.role);
+    c.set('serviceBadgeProduct', null);
     await next();
     return;
   };

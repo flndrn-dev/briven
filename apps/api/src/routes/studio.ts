@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import { projectRateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
+import { requireServiceProduct } from '../middleware/service-product.js';
 import { audit, hashIp } from '../services/audit.js';
 import { exportProjectSchema } from '../services/schema-export.js';
 import {
@@ -85,7 +86,12 @@ import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
  */
 export const studioRouter = new Hono<AppEnv>();
 
-studioRouter.use('/v1/projects/:id/studio/*', requireProjectAuth());
+// Studio is the Doltgres wall — service badges must be product=db.
+studioRouter.use(
+  '/v1/projects/:id/studio/*',
+  requireProjectAuth(),
+  requireServiceProduct('db'),
+);
 
 studioRouter.get(
   '/v1/projects/:id/studio/tables',

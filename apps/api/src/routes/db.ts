@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { rateLimit } from '../middleware/rate-limit.js';
 import { requireProjectAuth, requireProjectRole } from '../middleware/project-auth.js';
+import { requireServiceProduct } from '../middleware/service-product.js';
 import { requireRecentMfa } from '../middleware/step-up.js';
 import type { ProjectAppEnv as AppEnv } from '../types/app-env.js';
 import { audit, hashIp } from '../services/audit.js';
@@ -24,8 +25,13 @@ function ipHash(c: Context<AppEnv>): string | null {
 
 export const dbRouter = new Hono<AppEnv>();
 
-// `db/shell-token` rotates a privileged DSN — admin-tier.
-dbRouter.use('/v1/projects/:id/db/*', requireProjectAuth(), requireProjectRole('admin'));
+// `db/shell-token` rotates a privileged DSN — admin-tier. Doltgres wall only.
+dbRouter.use(
+  '/v1/projects/:id/db/*',
+  requireProjectAuth(),
+  requireServiceProduct('db'),
+  requireProjectRole('admin'),
+);
 
 // why: 5/min per project is enough for a human-driven `briven db shell`
 // loop and restrictive enough that a leaked api key can't silently

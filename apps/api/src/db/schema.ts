@@ -1558,6 +1558,60 @@ export const mcpKeys = pgTable(
 export type McpKey = typeof mcpKeys.$inferSelect;
 export type NewMcpKey = typeof mcpKeys.$inferInsert;
 
+/* ─── service_badges (project-scoped agent pass — one product only) ───── */
+// Standard "staff pass" for machines/agents. Each badge opens exactly one
+// product wall inside one project:
+//   db   → Doltgres data plane (studio / query / tables) — bearer sb_db_…
+//   s3   → MinIO / S3 storage keys for this project's bucket
+//   auth → SuperTokens-style M2M client_credentials (briven-engine)
+//   pay  → reserved for Briven Pay (not minted yet)
+// Plaintext secrets are shown once; only a hash (db) or a link to the
+// underlying product credential (s3/auth) is stored.
+export const serviceBadgeProduct = ['db', 's3', 'auth', 'pay'] as const;
+export type ServiceBadgeProduct = (typeof serviceBadgeProduct)[number];
+
+export const serviceBadgeRole = ['viewer', 'developer', 'admin'] as const;
+export type ServiceBadgeRole = (typeof serviceBadgeRole)[number];
+
+export const serviceBadges = pgTable(
+  'service_badges',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // Product wall this badge opens. Never change after mint.
+    product: text('product').$type<ServiceBadgeProduct>().notNull(),
+    name: text('name').notNull(),
+    role: text('role').$type<ServiceBadgeRole>().notNull().default('developer'),
+    // Plaintext prefix constant for this product (sb_db_ / sb_s3_ / sb_auth_).
+    prefix: text('prefix').notNull(),
+    // Last 4 of the secret — safe dashboard hint.
+    suffix: varchar('suffix', { length: 4 }).notNull(),
+    // SHA-256 of bearer secret (product=db). Null for s3/auth (they use
+    // storage_keys / be_m2m_clients as the credential store).
+    hash: text('hash'),
+    // product=s3 → storage_keys.id
+    storageKeyId: text('storage_key_id'),
+    // product=auth → be_m2m_clients.client_id
+    m2mClientId: text('m2m_client_id'),
+    createdBy: text('created_by').references(() => users.id),
+    lastUsedAt: ts('last_used_at'),
+    expiresAt: ts('expires_at'),
+    createdAt: createdAt(),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('service_badges_hash_idx').on(t.hash),
+    projectProductIdx: index('service_badges_project_product_idx').on(t.projectId, t.product),
+    m2mClientIdx: index('service_badges_m2m_client_idx').on(t.m2mClientId),
+    storageKeyIdx: index('service_badges_storage_key_idx').on(t.storageKeyId),
+  }),
+);
+
+export type ServiceBadge = typeof serviceBadges.$inferSelect;
+export type NewServiceBadge = typeof serviceBadges.$inferInsert;
+
 /* ─── tenant_secrets (per-tenant encrypted secrets — OAuth client secrets) ─ */
 // Persistence layer for the Layer-2 secret primitive in
 // services/tenant-secret-store.ts (HKDF-SHA256 per-tenant key +

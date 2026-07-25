@@ -22,6 +22,7 @@ import { adminManifestRouter } from './routes/admin-manifest.js';
 import { adminTimeseriesRouter } from './routes/admin-timeseries.js';
 import { aiRouter } from './routes/ai.js';
 import { apiKeysRouter } from './routes/api-keys.js';
+import { serviceBadgesRouter } from './routes/service-badges.js';
 import { authRouter } from './routes/auth.js';
 import { authCliRouter } from './routes/auth-cli.js';
 import { authProductRetiredRouter } from './routes/auth-product-retired.js';
@@ -202,6 +203,7 @@ log.info('auth_product_parity_surface', {
 });
 app.route('/', projectsRouter);
 app.route('/', apiKeysRouter);
+app.route('/', serviceBadgesRouter);
 app.route('/', membersRouter);
 app.route('/', deploymentsRouter);
 app.route('/', invokeRouter);

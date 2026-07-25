@@ -2,6 +2,7 @@ import { Hono } from "hono";
 
 import { projectRateLimit } from "../middleware/rate-limit.js";
 import { requireProjectAuth, requireProjectRole } from "../middleware/project-auth.js";
+import { requireServiceProduct } from "../middleware/service-product.js";
 import type { ProjectAppEnv as AppEnv } from "../types/app-env.js";
 import {
   listProjectTables,
@@ -40,9 +41,10 @@ import { log } from "../lib/logger.js";
 
 const platformRouter = new Hono<AppEnv>();
 
-/** Shared gate for every :ref route: resolve project + admin role. */
+/** Shared gate for every :ref route: resolve project + admin role. Doltgres wall. */
 const platformRefAuth = [
   requireProjectAuth("ref"),
+  requireServiceProduct("db"),
   projectRateLimit("mutate"),
   requireProjectRole("admin"),
 ] as const;

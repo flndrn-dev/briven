@@ -13,6 +13,8 @@ const TABS = [
   { href: '/snapshots', label: 'snapshots', dev: false },
   // Auth is no longer a project tab — independent yellow Briven Auth section.
   { href: '/storage', label: 'S3 bucket', dev: false },
+  // Service badges — one pass per product (db / s3 / auth), always visible.
+  { href: '/badges', label: 'badges', dev: false },
   // Agent access (MCP keys) — always visible: agents are first-class users
   // of Briven, so the door to them can't hide behind developer mode.
   { href: '/mcp', label: 'mcp', dev: false },
