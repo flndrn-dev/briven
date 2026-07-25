@@ -1,7 +1,7 @@
-import { S3Client } from 'bun';
 import { ValidationError } from '@briven/shared';
 
 import { env } from '../env.js';
+import { presignS3Url } from '../lib/s3-presign.js';
 import { isStorageConfigured } from './storage.js';
 
 /**
@@ -11,7 +11,10 @@ import { isStorageConfigured } from './storage.js';
  * Public serve: GET /v1/projects/:id/auth/branding/logo (brandingPublicRouter)
  *
  * Object key: auth-branding/<projectId>/logo
- * Uses Bun's S3Client for server-side PUT/GET/DELETE (no presign round-trip).
+ *
+ * Uses the same SigV4 path as `services/storage.ts` (presign + fetch).
+ * That path is proven against live MinIO; Bun S3File.write has been flaky
+ * with SignatureDoesNotMatch when env/signing context drifts.
  */
 
 export const LOGO_MAX_BYTES = 1024 * 1024; // 1 MiB
@@ -57,14 +60,52 @@ function objectKey(projectId: string): string {
   return `auth-branding/${projectId}/logo`;
 }
 
-function s3Client(cfg: StorageEnv): S3Client {
-  return new S3Client({
-    endpoint: cfg.endpoint,
-    region: cfg.region,
-    bucket: cfg.bucket,
-    accessKeyId: cfg.accessKey,
-    secretAccessKey: cfg.secretKey,
-  });
+/**
+ * When MinIO / Bun omits Content-Type (or returns application/octet-stream),
+ * sniff from magic bytes so `<img>` can render. Browsers refuse images with
+ * `nosniff` + `application/octet-stream`.
+ */
+export function sniffLogoContentType(
+  bytes: Uint8Array,
+  headerType?: string | null,
+): string {
+  const bare = (headerType ?? '').split(';', 1)[0]!.trim().toLowerCase();
+  if ((ALLOWED_LOGO_TYPES as readonly string[]).includes(bare)) {
+    return bare;
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  // SVG is text — look for <svg or <?xml…svg in the first 256 bytes.
+  const head = new TextDecoder('utf-8', { fatal: false })
+    .decode(bytes.subarray(0, Math.min(bytes.length, 256)))
+    .toLowerCase();
+  if (head.includes('<svg') || (head.includes('<?xml') && head.includes('svg'))) {
+    return 'image/svg+xml';
+  }
+  return bare || 'application/octet-stream';
 }
 
 /**
@@ -72,7 +113,10 @@ function s3Client(cfg: StorageEnv): S3Client {
  * `ValidationError` (400 at the route) on a disallowed content-type or an
  * over-cap / non-positive size.
  */
-export function validateLogoUpload(input: { contentType: string; size: number }): void {
+export function validateLogoUpload(input: {
+  contentType: string;
+  size: number;
+}): void {
   const bare = input.contentType.split(';', 1)[0]!.trim().toLowerCase();
   if (!(ALLOWED_LOGO_TYPES as readonly string[]).includes(bare)) {
     throw new ValidationError(
@@ -83,7 +127,9 @@ export function validateLogoUpload(input: { contentType: string; size: number })
     throw new ValidationError('logo file is empty');
   }
   if (input.size > LOGO_MAX_BYTES) {
-    throw new ValidationError(`logo exceeds the ${LOGO_MAX_BYTES} byte (1 MiB) cap`);
+    throw new ValidationError(
+      `logo exceeds the ${LOGO_MAX_BYTES} byte (1 MiB) cap`,
+    );
   }
 }
 
@@ -97,7 +143,8 @@ export function brandingLogoPublicUrl(projectId: string): string {
 }
 
 /**
- * Store (overwrite) the logo object in MinIO via Bun S3 write.
+ * Store (overwrite) the logo object in MinIO via signed PUT (same path as
+ * project storage uploads).
  */
 export async function putBrandingLogo(input: {
   projectId: string;
@@ -106,15 +153,34 @@ export async function putBrandingLogo(input: {
 }): Promise<void> {
   const bare = input.contentType.split(';', 1)[0]!.trim().toLowerCase();
   const cfg = requireStorageEnv();
-  const client = s3Client(cfg);
   const key = objectKey(input.projectId);
-  try {
-    // Prefer S3File.write (Bun docs); fall back to client.write if present.
-    const file = client.file(key);
-    await file.write(input.bytes, { type: bare });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`minio logo put failed: ${msg.slice(0, 200)}`);
+  const url = presignS3Url({
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket: cfg.bucket,
+    key,
+    method: 'PUT',
+    accessKey: cfg.accessKey,
+    secretKey: cfg.secretKey,
+    expiresIn: 60,
+    contentType: bare,
+  });
+  // Body must be a plain ArrayBuffer / Buffer — some runtimes mishandle
+  // Uint8Array views when signing Content-Length / payload hash.
+  const body = input.bytes.buffer.slice(
+    input.bytes.byteOffset,
+    input.bytes.byteOffset + input.bytes.byteLength,
+  ) as ArrayBuffer;
+  const res = await fetch(url, {
+    method: 'PUT',
+    body,
+    headers: { 'content-type': bare },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(
+      `minio logo put failed: ${res.status} ${text.slice(0, 200)}`,
+    );
   }
 }
 
@@ -130,19 +196,30 @@ export async function getBrandingLogo(
   projectId: string,
 ): Promise<BrandingLogoObject | null> {
   const cfg = requireStorageEnv();
-  const client = s3Client(cfg);
-  const key = objectKey(projectId);
-  const file = client.file(key);
-  try {
-    const exists = await file.exists();
-    if (!exists) return null;
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const contentType =
-      (typeof file.type === 'string' && file.type) || 'application/octet-stream';
-    return { bytes, contentType };
-  } catch {
-    return null;
+  const url = presignS3Url({
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket: cfg.bucket,
+    key: objectKey(projectId),
+    method: 'GET',
+    accessKey: cfg.accessKey,
+    secretKey: cfg.secretKey,
+    expiresIn: 60,
+  });
+  const res = await fetch(url, { method: 'GET' });
+  if (res.status === 404 || res.status === 403) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(
+      `minio logo get failed: ${res.status} ${text.slice(0, 200)}`,
+    );
   }
+  const headerType = res.headers.get('content-type');
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  return {
+    bytes,
+    contentType: sniffLogoContentType(bytes, headerType),
+  };
 }
 
 /**
@@ -150,12 +227,21 @@ export async function getBrandingLogo(
  */
 export async function deleteBrandingLogo(projectId: string): Promise<void> {
   const cfg = requireStorageEnv();
-  const client = s3Client(cfg);
-  const key = objectKey(projectId);
-  try {
-    const file = client.file(key);
-    await file.delete();
-  } catch {
-    // Missing object is fine.
+  const url = presignS3Url({
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket: cfg.bucket,
+    key: objectKey(projectId),
+    method: 'DELETE',
+    accessKey: cfg.accessKey,
+    secretKey: cfg.secretKey,
+    expiresIn: 60,
+  });
+  const res = await fetch(url, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => '');
+    throw new Error(
+      `minio logo delete failed: ${res.status} ${text.slice(0, 200)}`,
+    );
   }
 }

@@ -6,6 +6,7 @@ import {
   ALLOWED_LOGO_TYPES,
   LOGO_MAX_BYTES,
   brandingLogoPublicUrl,
+  sniffLogoContentType,
   validateLogoUpload,
 } from './auth-branding-logo.js';
 
@@ -72,5 +73,27 @@ describe('brandingLogoPublicUrl', () => {
     const url = brandingLogoPublicUrl('p_abc123');
     expect(url).toContain('/v1/projects/p_abc123/auth/branding/logo');
     expect(url).toMatch(/\?v=\d+$/);
+  });
+});
+
+describe('sniffLogoContentType', () => {
+  it('keeps a trusted header type', () => {
+    expect(sniffLogoContentType(new Uint8Array([1, 2, 3]), 'image/png')).toBe(
+      'image/png',
+    );
+  });
+
+  it('sniffs png magic when header is missing', () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(sniffLogoContentType(png, 'application/octet-stream')).toBe(
+      'image/png',
+    );
+  });
+
+  it('sniffs svg text when header is wrong', () => {
+    const svg = new TextEncoder().encode(
+      '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>',
+    );
+    expect(sniffLogoContentType(svg, null)).toBe('image/svg+xml');
   });
 });
