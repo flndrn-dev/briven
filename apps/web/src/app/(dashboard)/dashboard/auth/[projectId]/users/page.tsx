@@ -1,7 +1,21 @@
+import Link from 'next/link';
+
 import { fetchAuthUsers } from '../../lib/auth-api';
 
 export const metadata = { title: 'Auth · users' };
 export const dynamic = 'force-dynamic';
+
+function statusLabel(status?: string): string {
+  if (status === 'held') return 'on hold';
+  if (status === 'archived') return 'archived';
+  return 'active';
+}
+
+function statusColor(status?: string): string {
+  if (status === 'held') return 'var(--auth-accent, #FFFD74)';
+  if (status === 'archived') return 'var(--color-text-muted)';
+  return 'var(--color-text-muted)';
+}
 
 export default async function AuthProjectUsersPage({
   params,
@@ -18,7 +32,7 @@ export default async function AuthProjectUsersPage({
           users
         </h2>
         <p className="mt-1 font-mono text-sm text-[var(--color-text-muted)]">
-          app end-users for this project only
+          app end-users for this project · click a row to manage access
         </p>
       </header>
 
@@ -38,29 +52,55 @@ export default async function AuthProjectUsersPage({
             <thead className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)]">
               <tr>
                 <th className="px-3 py-2 font-normal">email / phone</th>
-                <th className="px-3 py-2 font-normal">user id</th>
+                <th className="px-3 py-2 font-normal">status</th>
                 <th className="px-3 py-2 font-normal">joined</th>
+                <th className="px-3 py-2 font-normal" />
               </tr>
             </thead>
             <tbody>
-              {result.users.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-b border-[var(--color-border-subtle)] last:border-0"
-                >
-                  <td className="px-3 py-2 text-[var(--color-text)]">
-                    {u.emails[0] ?? u.phoneNumbers[0] ?? '—'}
-                  </td>
-                  <td className="max-w-[12rem] truncate px-3 py-2 text-[var(--color-text-muted)]">
-                    {u.id}
-                  </td>
-                  <td className="px-3 py-2 text-[var(--color-text-muted)]">
-                    {u.timeJoined
-                      ? new Date(u.timeJoined).toLocaleString()
-                      : '—'}
-                  </td>
-                </tr>
-              ))}
+              {result.users.map((u) => {
+                const status =
+                  'status' in u && typeof u.status === 'string'
+                    ? u.status
+                    : 'active';
+                return (
+                  <tr
+                    key={u.id}
+                    className="border-b border-[var(--color-border-subtle)] last:border-0 hover:bg-[var(--color-surface)]"
+                  >
+                    <td className="px-3 py-2 text-[var(--color-text)]">
+                      <Link
+                        href={`/dashboard/auth/${encodeURIComponent(projectId)}/users/${encodeURIComponent(u.id)}`}
+                        className="hover:underline"
+                      >
+                        {u.emails[0] ?? u.phoneNumbers[0] ?? '—'}
+                      </Link>
+                      <span className="mt-0.5 block max-w-[14rem] truncate text-[10px] text-[var(--color-text-subtle)]">
+                        {u.id}
+                      </span>
+                    </td>
+                    <td
+                      className="px-3 py-2"
+                      style={{ color: statusColor(status) }}
+                    >
+                      {statusLabel(status)}
+                    </td>
+                    <td className="px-3 py-2 text-[var(--color-text-muted)]">
+                      {u.timeJoined
+                        ? new Date(u.timeJoined).toLocaleString()
+                        : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Link
+                        href={`/dashboard/auth/${encodeURIComponent(projectId)}/users/${encodeURIComponent(u.id)}`}
+                        className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                      >
+                        manage →
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           <p className="border-t border-[var(--color-border-subtle)] px-3 py-2 font-mono text-[10px] text-[var(--color-text-muted)]">

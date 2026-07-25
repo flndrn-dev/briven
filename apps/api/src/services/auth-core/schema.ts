@@ -19,7 +19,11 @@ const STATEMENTS = [
     phone TEXT,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     time_joined TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata_json TEXT NOT NULL DEFAULT '{}'
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    held_at TIMESTAMPTZ,
+    held_reason TEXT,
+    archived_at TIMESTAMPTZ,
+    archived_reason TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS be_users_tenant_email_idx ON be_users (tenant_id, email)`,
   `CREATE INDEX IF NOT EXISTS be_users_tenant_phone_idx ON be_users (tenant_id, phone)`,
@@ -273,6 +277,41 @@ const STATEMENTS = [
     ON be_ai_agent_tokens (project_id)`,
 ];
 
+/** Doltgres often lacks ADD COLUMN IF NOT EXISTS — probe then add. */
+async function ensureBeUsersModerationColumns(): Promise<void> {
+  const pool = getEnginePool();
+  const cols: Array<{ name: string; ddl: string }> = [
+    { name: 'held_at', ddl: 'ALTER TABLE be_users ADD COLUMN held_at TIMESTAMPTZ' },
+    { name: 'held_reason', ddl: 'ALTER TABLE be_users ADD COLUMN held_reason TEXT' },
+    {
+      name: 'archived_at',
+      ddl: 'ALTER TABLE be_users ADD COLUMN archived_at TIMESTAMPTZ',
+    },
+    {
+      name: 'archived_reason',
+      ddl: 'ALTER TABLE be_users ADD COLUMN archived_reason TEXT',
+    },
+  ];
+  for (const col of cols) {
+    try {
+      const probe = await pool.query(
+        `SELECT 1 AS ok FROM information_schema.columns
+         WHERE table_name = 'be_users' AND column_name = $1 LIMIT 1`,
+        [col.name],
+      );
+      if ((probe.rowCount ?? 0) > 0 || (probe.rows?.length ?? 0) > 0) continue;
+      await pool.query(col.ddl);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/already exists|duplicate/i.test(message)) continue;
+      log.warn('briven_engine_user_moderation_col', {
+        column: col.name,
+        message,
+      });
+    }
+  }
+}
+
 export async function bootstrapBrivenEngineSchema(): Promise<void> {
   const pool = getEnginePool();
   for (const sql of STATEMENTS) {
@@ -286,6 +325,7 @@ export async function bootstrapBrivenEngineSchema(): Promise<void> {
       throw err;
     }
   }
+  await ensureBeUsersModerationColumns();
   log.info('briven_engine_schema_ready', {
     engine: 'briven-engine',
     storage: 'doltgres',

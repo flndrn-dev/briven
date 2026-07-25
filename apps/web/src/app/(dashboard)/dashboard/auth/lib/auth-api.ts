@@ -92,20 +92,48 @@ export async function fetchAuthDashboard(
   }
 }
 
+export type AuthUserStatus = 'active' | 'held' | 'archived';
+
+export type AuthUserSummary = {
+  id: string;
+  emails: string[];
+  phoneNumbers: string[];
+  tenantId?: string;
+  timeJoined: number;
+  status?: AuthUserStatus;
+  heldAt?: string | null;
+  heldReason?: string | null;
+  archivedAt?: string | null;
+  archivedReason?: string | null;
+  storage?: string;
+};
+
+export type AuthUserDetail = AuthUserSummary & {
+  emailVerified?: boolean;
+  metadata?: Record<string, unknown>;
+  roles?: string[];
+  linkedLogins?: Array<{
+    id: string;
+    provider: string;
+    providerUserId: string;
+    createdAt: string;
+  }>;
+  sessions?: Array<{
+    handle: string;
+    expiresAt: string;
+    createdAt: string;
+  }>;
+  passkeyCount?: number;
+  totpCount?: number;
+};
+
 export async function fetchAuthUsers(
   limit = 50,
   projectId?: string,
 ): Promise<
   | {
       ok: true;
-      users: Array<{
-        id: string;
-        emails: string[];
-        phoneNumbers: string[];
-        tenantId?: string;
-        timeJoined: number;
-        storage?: string;
-      }>;
+      users: AuthUserSummary[];
       storage?: string;
     }
   | { ok: false; status: number; message: string }
@@ -122,14 +150,7 @@ export async function fetchAuthUsers(
       return { ok: false, status: res.status, message: t || res.statusText };
     }
     const body = (await res.json()) as {
-      users?: Array<{
-        id: string;
-        emails: string[];
-        phoneNumbers: string[];
-        tenantId?: string;
-        timeJoined: number;
-        storage?: string;
-      }>;
+      users?: AuthUserSummary[];
       storage?: string;
     };
     return {
@@ -137,6 +158,39 @@ export async function fetchAuthUsers(
       users: body.users ?? [],
       storage: body.storage ?? 'doltgres',
     };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export async function fetchAuthUserDetail(
+  userId: string,
+  projectId: string,
+): Promise<
+  | { ok: true; user: AuthUserDetail }
+  | { ok: false; status: number; message: string }
+> {
+  try {
+    const params = new URLSearchParams({ projectId });
+    const res = await apiFetch(
+      `/v1/auth-core/users/${encodeURIComponent(userId)}?${params}`,
+    );
+    if (res.status === 401) {
+      return { ok: false, status: 401, message: 'sign in to briven.tech required' };
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      return { ok: false, status: res.status, message: t || res.statusText };
+    }
+    const body = (await res.json()) as { user?: AuthUserDetail };
+    if (!body.user) {
+      return { ok: false, status: 404, message: 'user not found' };
+    }
+    return { ok: true, user: body.user };
   } catch (err) {
     return {
       ok: false,

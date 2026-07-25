@@ -28,6 +28,23 @@ export async function createEngineSession(input: {
   tenantId: string;
   ttlDays?: number;
 }): Promise<EngineSession> {
+  // Block held / archived accounts from minting new sessions (all login paths).
+  try {
+    const { getUserAccessBlock } = await import('./users.js');
+    const block = await getUserAccessBlock(input.userId);
+    if (block === 'held') {
+      throw new Error('user_held');
+    }
+    if (block === 'archived') {
+      throw new Error('user_archived');
+    }
+  } catch (err) {
+    if (err instanceof Error && (err.message === 'user_held' || err.message === 'user_archived')) {
+      throw err;
+    }
+    // Schema not ready — do not brick login.
+  }
+
   const sessionHandle = `sh_${randomBytes(16).toString('hex')}`;
   // Phase 2: access cookie value IS the session handle (Doltgres PK lookup).
   // Keep field name accessToken for FDI/cookie compatibility.

@@ -64,6 +64,19 @@ export async function verifyAuthCoreSession(opts: {
   }
   const row = await getSessionByHandle(handle);
   if (!row) return { ok: false, reason: 'invalid_session', status: 401 };
+  // Held / archived accounts cannot keep using existing sessions.
+  try {
+    const { getUserAccessBlock } = await import('./users.js');
+    const block = await getUserAccessBlock(row.userId);
+    if (block === 'held') {
+      return { ok: false, reason: 'user_held', status: 403 };
+    }
+    if (block === 'archived') {
+      return { ok: false, reason: 'user_archived', status: 403 };
+    }
+  } catch {
+    // If moderation columns are not ready yet, do not brick login.
+  }
   return {
     ok: true,
     session: {
