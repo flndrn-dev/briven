@@ -1,29 +1,60 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-
-const TABS: Array<{ href: string; label: string; exact?: boolean }> = [
-  { href: '', label: 'overview', exact: true },
-  { href: '/users', label: 'users' },
-  { href: '/sessions', label: 'sessions' },
-  { href: '/security', label: 'security' },
-  { href: '/keys', label: 'keys' },
-  { href: '/idp', label: 'IdP' },
-  { href: '/migration', label: 'import' },
-  { href: '/ai', label: 'AI' },
-  { href: '/providers', label: 'providers' },
-  { href: '/branding', label: 'branding' },
-  { href: '/enterprise', label: 'enterprise' },
-];
+import { usePathname, useRouter } from 'next/navigation';
 
 /**
- * Tabs for one Auth project — same pattern as project tabs.
- * Selected tab = brighter text only (no thick accent underline).
+ * Tabs for one Auth project — same pattern as project-tabs:
+ * clean set by default; advanced tools behind “developer mode”.
  */
-export function AuthProjectNav({ projectId }: { projectId: string }) {
+const TABS = [
+  { href: '', label: 'overview', exact: true, dev: false },
+  { href: '/users', label: 'users', dev: false },
+  { href: '/sessions', label: 'sessions', dev: false },
+  { href: '/security', label: 'security', dev: false },
+  { href: '/keys', label: 'keys', dev: false },
+  { href: '/providers', label: 'providers', dev: false },
+  { href: '/branding', label: 'branding', dev: false },
+  // Advanced / later tools
+  { href: '/idp', label: 'IdP', dev: true },
+  { href: '/migration', label: 'import', dev: true },
+  { href: '/ai', label: 'AI', dev: true },
+  { href: '/enterprise', label: 'enterprise', dev: true },
+] as const;
+
+const AUTH_ACCENT = '#FFFD74';
+const COOKIE = 'briven_auth_project_dev';
+
+export function AuthProjectNav({
+  projectId,
+  developerMode,
+}: {
+  projectId: string;
+  developerMode: boolean;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
   const base = `/dashboard/auth/${projectId}`;
+  const visible = TABS.filter((tab) => developerMode || !tab.dev);
+
+  // If user lands on a hidden dev tab while mode is off, still show that tab
+  // so they aren’t stranded.
+  const forceShow = TABS.filter(
+    (tab) =>
+      tab.dev &&
+      !visible.includes(tab) &&
+      (pathname === `${base}${tab.href}` ||
+        pathname.startsWith(`${base}${tab.href}/`)),
+  );
+  const tabs = [...visible, ...forceShow];
+
+  function toggleDev() {
+    const on = document.cookie
+      .split('; ')
+      .some((c) => c === `${COOKIE}=1`);
+    document.cookie = `${COOKIE}=${on ? '0' : '1'}; path=/; max-age=31536000; samesite=lax`;
+    router.refresh();
+  }
 
   return (
     <div className="flex items-center gap-2 border-b border-[var(--color-border-subtle)]">
@@ -31,12 +62,12 @@ export function AuthProjectNav({ projectId }: { projectId: string }) {
         aria-label="Auth project sections"
         className="flex flex-1 gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const href = `${base}${tab.href}`;
-          const active =
-            tab.exact === true
-              ? pathname === base || pathname === `${base}/`
-              : pathname === href || pathname.startsWith(`${href}/`);
+          const exact = 'exact' in tab && tab.exact === true;
+          const active = exact
+            ? pathname === base || pathname === `${base}/`
+            : pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
               key={tab.href || 'overview'}
@@ -52,12 +83,37 @@ export function AuthProjectNav({ projectId }: { projectId: string }) {
           );
         })}
       </nav>
-      <Link
-        href="/dashboard/auth"
-        className="shrink-0 whitespace-nowrap px-2 py-1 font-mono text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+      <button
+        type="button"
+        onClick={toggleDev}
+        title={
+          developerMode
+            ? 'Hide advanced Auth tools'
+            : 'Show advanced tools (IdP, import, AI, enterprise…)'
+        }
+        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 font-mono text-xs transition"
+        style={
+          developerMode
+            ? { background: AUTH_ACCENT, color: '#111' }
+            : {
+                color: `color-mix(in srgb, ${AUTH_ACCENT} 65%, transparent)`,
+              }
+        }
       >
-        ← all Auth
-      </Link>
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="size-3.5"
+        >
+          <path d="M7 17 17 7M7 7h10v10" />
+        </svg>
+        developer mode
+      </button>
     </div>
   );
 }

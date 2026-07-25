@@ -61,6 +61,42 @@ if docker ps --format '{{.Names}}' | grep -qx 'briven-brivenfrance-uilsk6-doltgr
   fi
 fi
 
+# Live MinIO root password is source of truth for S3 access.
+# Compose wires BOTH minio.MINIO_ROOT_PASSWORD and api.BRIVEN_MINIO_SECRET_KEY
+# from ${BRIVEN_MINIO_ROOT_PASSWORD}. If durable/bootstrap has a different
+# value than the already-running MinIO volume, logo uploads fail with
+# SignatureDoesNotMatch (and older UI surfaces a confusing 410 on fallback).
+if docker ps --format '{{.Names}}' | grep -qx 'briven-brivenfrance-uilsk6-minio-1'; then
+  LIVE_MINIO_PW="$(
+    docker inspect briven-brivenfrance-uilsk6-minio-1 \
+      --format '{{range .Config.Env}}{{println .}}{{end}}' \
+      | sed -n 's/^MINIO_ROOT_PASSWORD=//p'
+  )"
+  if [[ -n "${LIVE_MINIO_PW:-}" ]]; then
+    export BRIVEN_MINIO_ROOT_PASSWORD="$LIVE_MINIO_PW"
+    export BRIVEN_MINIO_SECRET_KEY="$LIVE_MINIO_PW"
+    # Keep durable env in lockstep so the next redeploy does not drift again.
+    if [[ -f "$DURABLE_ENV" ]]; then
+      if grep -q '^BRIVEN_MINIO_ROOT_PASSWORD=' "$DURABLE_ENV"; then
+        tmp=$(mktemp)
+        while IFS= read -r line || [[ -n "$line" ]]; do
+          case "$line" in
+            BRIVEN_MINIO_ROOT_PASSWORD=*) echo "BRIVEN_MINIO_ROOT_PASSWORD=$LIVE_MINIO_PW" ;;
+            BRIVEN_MINIO_SECRET_KEY=*) echo "BRIVEN_MINIO_SECRET_KEY=$LIVE_MINIO_PW" ;;
+            *) printf '%s\n' "$line" ;;
+          esac
+        done < "$DURABLE_ENV" > "$tmp"
+        mv "$tmp" "$DURABLE_ENV"
+      else
+        printf '\nBRIVEN_MINIO_ROOT_PASSWORD=%s\nBRIVEN_MINIO_SECRET_KEY=%s\n' \
+          "$LIVE_MINIO_PW" "$LIVE_MINIO_PW" >> "$DURABLE_ENV"
+      fi
+      chmod 600 "$DURABLE_ENV"
+    fi
+    echo "loaded live MINIO root password from container (len=${#LIVE_MINIO_PW})"
+  fi
+fi
+
 export BRIVEN_DOMAIN="${BRIVEN_DOMAIN:-briven.tech}"
 export BRIVEN_DOMAIN="${BRIVEN_DOMAIN#https://}"
 export BRIVEN_DOMAIN="${BRIVEN_DOMAIN#http://}"
