@@ -119,8 +119,13 @@ if (!tok.access_token || !tok.id_token) fail('missing tokens', tok);
 ok('token exchange (confidential)');
 
 const info = await buildUserInfo(tok.access_token);
-if (!info.ok || info.sub !== userId) fail('userinfo', info);
-ok(`userinfo sub=${info.sub}`);
+if (!info.ok) fail('userinfo', info);
+const sub =
+  info && typeof info === 'object' && 'body' in info
+    ? (info as { body?: { sub?: string } }).body?.sub
+    : (info as { sub?: string }).sub;
+if (sub !== userId) fail('userinfo sub mismatch', info);
+ok(`userinfo sub=${sub}`);
 
 if (!tok.refresh_token) fail('expected refresh_token with offline_access');
 const refreshed = await exchangeRefreshToken({
