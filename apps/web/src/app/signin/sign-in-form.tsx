@@ -159,17 +159,19 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
             signing in. the link expires in 10 minutes.
           </p>
 
-          <div
-            className="mt-4 inline-flex items-center gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg)] px-3 py-2"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
-              check spam after
-            </span>
-            <span className="font-mono text-lg tabular-nums text-[var(--color-text)]">
-              {clock}
-            </span>
+          <div className="mt-5 flex w-full justify-center">
+            <div
+              className="inline-flex flex-col items-center gap-1 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg)] px-5 py-3"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
+                check spam after
+              </span>
+              <span className="font-mono text-2xl tabular-nums tracking-tight text-[var(--color-text)]">
+                {clock}
+              </span>
+            </div>
           </div>
 
           <ul className="mt-3 flex flex-col gap-1 text-xs text-[var(--color-text-subtle)]">
