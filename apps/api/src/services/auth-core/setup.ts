@@ -61,47 +61,80 @@ function coreMethodsOn(m: BrivenEngineMethodFlags): boolean {
 }
 
 /**
+ * True when a proxy response clearly came from briven-engine (even on 404 —
+ * FDI returns auth_core_fdi_partial + engine for unknown paths). Hard 404 HTML
+ * from Next with no engine body does NOT count.
+ */
+function bodyLooksLikeBrivenAuth(text: string): boolean {
+  return (
+    text.includes('briven-engine') ||
+    text.includes('auth_core') ||
+    text.includes('auth_core_fdi') ||
+    text.includes('"status":"BAD_REQUEST"') ||
+    text.includes('"status": "BAD_REQUEST"')
+  );
+}
+
+/**
  * Probe whether the app host has a first-party auth proxy.
  * Soft check — network failures = not ok, not a hard error.
+ *
+ * Real apps (e.g. Mavi) mount FDI at `/api/auth/*` → `/v1/auth-core/fdi/*`.
+ * Probing only `/api/auth/v1/auth-core/info` was wrong: that path 404s on FDI
+ * even when the proxy works, so the checklist never turned green.
  */
 async function probeProxy(origin: string): Promise<{
   ok: boolean;
   detail: string;
 }> {
   const base = origin.replace(/\/$/, '');
-  const candidates = [
-    `${base}/api/auth/v1/auth-core/info`,
-    `${base}/api/auth/v1/auth-core/ready`,
+  // Prefer the FDI path real apps use; keep legacy candidates as fallback.
+  const candidates: Array<{ url: string; method: 'GET' | 'POST'; body?: string }> = [
+    {
+      url: `${base}/api/auth/signinup/code`,
+      method: 'POST',
+      body: '{}',
+    },
+    { url: `${base}/api/auth/session`, method: 'GET' },
+    { url: `${base}/api/auth/v1/auth-core/info`, method: 'GET' },
+    { url: `${base}/api/auth/v1/auth-core/ready`, method: 'GET' },
   ];
-  for (const url of candidates) {
+  for (const c of candidates) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 4000);
-      const res = await fetch(url, {
-        method: 'GET',
+      const res = await fetch(c.url, {
+        method: c.method,
         signal: ctrl.signal,
         redirect: 'manual',
-        headers: { accept: 'application/json' },
+        headers: {
+          accept: 'application/json',
+          ...(c.method === 'POST'
+            ? {
+                'content-type': 'application/json',
+                rid: 'passwordless',
+                'fdi-version': '1.19',
+              }
+            : {}),
+        },
+        body: c.method === 'POST' ? (c.body ?? '{}') : undefined,
       });
       clearTimeout(t);
-      // Any non-network response means the path exists (even 401/404/502).
-      // Prefer 2xx with engine JSON for true green.
-      if (res.status >= 200 && res.status < 500) {
-        const text = await res.text().catch(() => '');
-        if (
-          res.ok &&
-          (text.includes('briven-engine') ||
-            text.includes('auth_core') ||
-            text.includes('"ok"'))
-        ) {
-          return { ok: true, detail: `proxy answered at ${url.replace(base, '')}` };
-        }
-        if (res.status !== 404) {
-          return {
-            ok: true,
-            detail: `proxy path reachable (${res.status}) — finish wiring if login fails`,
-          };
-        }
+      if (res.status < 200 || res.status >= 600) continue;
+      const text = await res.text().catch(() => '');
+      // Engine JSON = proxy is live (status can be 200/400/404 FDI partial).
+      if (bodyLooksLikeBrivenAuth(text)) {
+        return {
+          ok: true,
+          detail: `proxy answered at ${c.url.replace(base, '')} (${res.status})`,
+        };
+      }
+      // Non-404 without engine body: path exists, may still be wiring.
+      if (res.status !== 404 && res.status < 500) {
+        return {
+          ok: true,
+          detail: `proxy path reachable (${res.status}) — finish wiring if login fails`,
+        };
       }
     } catch {
       // try next
@@ -200,15 +233,16 @@ export async function getAuthSetupStatus(
   ];
 
   const complete = steps.every((s) => s.ok);
-  const proxySnippet = `// next.config — rewrite app /api/auth/* → Briven API
-// (or use @briven/auth scaffold middleware)
+  const proxySnippet = `// App route or middleware: browser → YOUR /api/auth/* → Briven FDI
+// (Mavi-style) destination: ${env.BRIVEN_API_ORIGIN}/v1/auth-core/fdi/:path*
 // Browser calls same-origin /api/auth/... so cookies stay on YOUR domain.
 
+// next.config rewrite example:
 async rewrites() {
   return [
     {
       source: '/api/auth/:path*',
-      destination: '${env.BRIVEN_API_ORIGIN}/:path*',
+      destination: '${env.BRIVEN_API_ORIGIN}/v1/auth-core/fdi/:path*',
     },
   ];
 }`;
