@@ -98,7 +98,7 @@ const authConfigSchema = z.object({
     dropbox: oauthProviderConfig,
     facebook: oauthProviderConfig,
     spotify: oauthProviderConfig,
-    // Generic OIDC/OAuth provider (Forgejo at code.konnos.org). Same
+    // Generic OIDC/OAuth provider (Git at code.konnos.org). Same
     // {enabled, clientId} shape as the built-in social providers — the
     // public client id is non-secret; the secret rides the encrypted
     // tenant-secret-store like the others.

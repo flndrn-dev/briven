@@ -293,8 +293,8 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-11',
     tags: ['infra'],
-    title: 'forgejo actions ci',
-    body: '.forgejo/workflows/ci.yml runs pnpm -r lint + typecheck + test on every push to main. real eslint config replaces 13 lint stubs; 15 packages green workspace-wide.',
+    title: 'git actions ci',
+    body: 'CI workflows run pnpm -r lint + typecheck + test on every push to main. real eslint config replaces 13 lint stubs; 15 packages green workspace-wide.',
   },
   {
     date: '2026-05-11',

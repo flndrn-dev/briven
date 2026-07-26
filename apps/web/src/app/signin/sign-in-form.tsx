@@ -20,7 +20,7 @@ interface Props {
 
 /**
  * Google / GitHub / Discord → Better Auth socialProviders (/sign-in/social).
- * Konnos (Forgejo) → genericOAuth (/sign-in/oauth2, providerId: konnos).
+ * Konnos (Git at code.konnos.org) → genericOAuth (/sign-in/oauth2, providerId: konnos).
  */
 type SocialKind = 'google' | 'github' | 'discord';
 type ProviderKind = SocialKind | 'konnos';

@@ -35,7 +35,7 @@ const config: NextConfig = {
   async redirects() {
     // Stable curl-install URL: `curl -fsSL https://briven.tech/install | sh`
     // forwards to whichever install.sh is attached to the latest Codeberg
-    // release. Forgejo's /releases/latest/download/<asset> follows the
+    // release. Codeberg's /releases/latest/download/<asset> follows the
     // newest non-draft release tag.
     return [
       {

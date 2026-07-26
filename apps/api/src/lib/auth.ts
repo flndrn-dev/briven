@@ -143,8 +143,8 @@ export const auth = betterAuth({
   },
 
   // Google + GitHub use Better Auth's built-in socialProviders config.
-  // Konnos (Forgejo at code.konnos.org) uses the genericOAuth plugin
-  // since Forgejo isn't on Better Auth's hard-coded list.
+  // Konnos (Git at code.konnos.org) uses the genericOAuth plugin
+  // since that Git host isn't on Better Auth's hard-coded list.
   socialProviders: {
     ...(env.BRIVEN_GOOGLE_CLIENT_ID && env.BRIVEN_GOOGLE_CLIENT_SECRET
       ? {
@@ -186,11 +186,10 @@ export const auth = betterAuth({
         await sendMagicLink(email, url);
       },
     }),
-    // Konnos (Forgejo) OAuth — endpoints follow Forgejo's gitea-compatible
-    // shape: /login/oauth/authorize, /login/oauth/access_token,
-    // /api/v1/user. Forgejo's userinfo endpoint returns
-    // {id, login, email, full_name, avatar_url}; mapProfileToUser
-    // adapts it to Better Auth's expected shape.
+    // Konnos (Git at code.konnos.org) OAuth — endpoints follow the host's
+    // OAuth shape: /login/oauth/authorize, /login/oauth/access_token,
+    // /api/v1/user. Userinfo returns {id, login, email, full_name, avatar_url};
+    // mapProfileToUser adapts it to Better Auth's expected shape.
     ...(env.BRIVEN_KONNOS_CLIENT_ID && env.BRIVEN_KONNOS_CLIENT_SECRET
       ? [
           genericOAuth({

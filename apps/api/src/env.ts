@@ -176,9 +176,9 @@ const envSchema = z.object({
   // Override if you want product-specific routing later.
   BRIVEN_MIGRATIONS_INBOX: z.string().email().default('migrations@flndrn.com'),
 
-  // Konnos OAuth — Forgejo at code.konnos.org. Better Auth's generic OAuth
+  // Konnos OAuth — Git at code.konnos.org. Better Auth's generic OAuth
   // plugin lets us reuse the same callback shape for any OAuth2/OIDC
-  // provider; the Forgejo endpoints (authorize / token / userinfo) are
+  // provider; the Git host endpoints (authorize / token / userinfo) are
   // pinned below.
   BRIVEN_KONNOS_CLIENT_ID: z.string().optional(),
   BRIVEN_KONNOS_CLIENT_SECRET: z.string().optional(),

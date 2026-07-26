@@ -821,7 +821,7 @@ export function buildGenericOAuthConfigs(
 
   const konnos = config.providers.konnos;
   if (konnos.enabled && konnos.clientId && secrets.konnos) {
-    // Forgejo (code.konnos.org) — gitea-compatible OAuth endpoints, mirroring
+    // Git at code.konnos.org — OAuth endpoints, mirroring
     // the control-plane wiring in lib/auth.ts.
     const issuer = env.BRIVEN_KONNOS_ISSUER.replace(/\/$/, '');
     entries.push({
