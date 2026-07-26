@@ -120,10 +120,7 @@ ok('token exchange (confidential)');
 
 const info = await buildUserInfo(tok.access_token);
 if (!info.ok) fail('userinfo', info);
-const sub =
-  info && typeof info === 'object' && 'body' in info
-    ? (info as { body?: { sub?: string } }).body?.sub
-    : (info as { sub?: string }).sub;
+const sub = info.body?.sub;
 if (sub !== userId) fail('userinfo sub mismatch', info);
 ok(`userinfo sub=${sub}`);
 
