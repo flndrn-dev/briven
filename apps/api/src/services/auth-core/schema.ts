@@ -277,6 +277,23 @@ const STATEMENTS = [
     ON be_ai_agent_tokens (project_id)`,
 ];
 
+/** Soft-disable Auth per project without deleting end-user data. */
+async function ensureBeTenantsDisabledColumn(): Promise<void> {
+  const pool = getEnginePool();
+  try {
+    const probe = await pool.query(
+      `SELECT 1 AS ok FROM information_schema.columns
+       WHERE table_name = 'be_tenants' AND column_name = 'disabled_at' LIMIT 1`,
+    );
+    if ((probe.rowCount ?? 0) > 0 || (probe.rows?.length ?? 0) > 0) return;
+    await pool.query(`ALTER TABLE be_tenants ADD COLUMN disabled_at TIMESTAMPTZ`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/already exists|duplicate/i.test(message)) return;
+    log.warn('briven_engine_tenant_disabled_col', { message });
+  }
+}
+
 /** Doltgres often lacks ADD COLUMN IF NOT EXISTS — probe then add. */
 async function ensureBeUsersModerationColumns(): Promise<void> {
   const pool = getEnginePool();
@@ -326,6 +343,7 @@ export async function bootstrapBrivenEngineSchema(): Promise<void> {
     }
   }
   await ensureBeUsersModerationColumns();
+  await ensureBeTenantsDisabledColumn();
   log.info('briven_engine_schema_ready', {
     engine: 'briven-engine',
     storage: 'doltgres',

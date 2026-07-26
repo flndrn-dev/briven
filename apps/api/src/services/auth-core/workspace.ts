@@ -27,7 +27,7 @@ export type BrivenEngineWorkspaceProject = {
 
 /**
  * Enable Auth for a project = create briven-engine tenant island on Doltgres.
- * Idempotent.
+ * Idempotent. Re-enables if previously soft-disabled.
  */
 export async function enableBrivenEngineAuth(projectId: string): Promise<{
   ok: boolean;
@@ -40,6 +40,19 @@ export async function enableBrivenEngineAuth(projectId: string): Promise<{
   storage: 'doltgres';
 }> {
   const result = await ensureBrivenEngineTenant(projectId);
+  if (result.ok) {
+    try {
+      const pool = getEnginePool();
+      // Clear soft-disable so Auth is on again (users/data stay intact).
+      await pool.query(
+        `UPDATE be_tenants SET disabled_at = NULL
+         WHERE tenant_id = $1 OR project_id = $2`,
+        [result.tenantId, result.projectId],
+      );
+    } catch {
+      /* column may not exist yet on very old engines — treat as enabled */
+    }
+  }
   return {
     ok: result.ok,
     engine: 'briven-engine',
@@ -53,8 +66,84 @@ export async function enableBrivenEngineAuth(projectId: string): Promise<{
 }
 
 /**
- * Whether Auth is on for a project (tenant row exists).
- * Prefer exact tenant_id match (always reliable on Doltgres).
+ * Turn Auth off for a project without deleting end-users or credentials.
+ * Soft-disable: tenant stays, disabled_at is set; app login should treat Auth as off.
+ */
+export async function disableBrivenEngineAuth(projectId: string): Promise<{
+  ok: boolean;
+  engine: 'briven-engine';
+  projectId: string;
+  tenantId: string;
+  authEnabled: boolean;
+  message?: string;
+  storage: 'doltgres';
+}> {
+  const map = mapProjectToAuthCore(projectId);
+  const base = {
+    engine: 'briven-engine' as const,
+    storage: 'doltgres' as const,
+    projectId: map.projectId,
+    tenantId: map.tenantId,
+  };
+  if (!isAuthCoreInitialized()) {
+    return {
+      ...base,
+      ok: false,
+      authEnabled: false,
+      message: 'briven-engine not ready on Doltgres',
+    };
+  }
+  try {
+    const pool = getEnginePool();
+    const existing = await pool.query(
+      `SELECT tenant_id FROM be_tenants
+       WHERE tenant_id = $1 OR project_id = $2
+       LIMIT 1`,
+      [map.tenantId, map.projectId],
+    );
+    if (!existing.rowCount) {
+      return {
+        ...base,
+        ok: true,
+        authEnabled: false,
+        message: 'Auth was already off for this project',
+      };
+    }
+    try {
+      await pool.query(
+        `UPDATE be_tenants SET disabled_at = NOW()
+         WHERE tenant_id = $1 OR project_id = $2`,
+        [map.tenantId, map.projectId],
+      );
+    } catch (err) {
+      // Fallback if disabled_at column missing: leave row (still "on") and report.
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        ...base,
+        ok: false,
+        authEnabled: true,
+        message: `could not disable Auth: ${message}`,
+      };
+    }
+    return {
+      ...base,
+      ok: true,
+      authEnabled: false,
+      message:
+        'Auth disabled for this project. User data is kept — enable Auth again anytime.',
+    };
+  } catch (err) {
+    return {
+      ...base,
+      ok: false,
+      authEnabled: true,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Whether Auth is on for a project (tenant row exists and not soft-disabled).
  */
 export async function isBrivenEngineAuthEnabled(
   projectId: string,
@@ -63,13 +152,25 @@ export async function isBrivenEngineAuthEnabled(
   try {
     const map = mapProjectToAuthCore(projectId);
     const pool = getEnginePool();
-    const res = await pool.query(
-      `SELECT 1 FROM be_tenants
-       WHERE tenant_id = $1 OR project_id = $2
-       LIMIT 1`,
-      [map.tenantId, map.projectId],
-    );
-    return Boolean(res.rowCount && res.rowCount > 0);
+    // Prefer disabled_at IS NULL; if column missing, any tenant row means on.
+    try {
+      const res = await pool.query(
+        `SELECT 1 FROM be_tenants
+         WHERE (tenant_id = $1 OR project_id = $2)
+           AND disabled_at IS NULL
+         LIMIT 1`,
+        [map.tenantId, map.projectId],
+      );
+      return Boolean(res.rowCount && res.rowCount > 0);
+    } catch {
+      const res = await pool.query(
+        `SELECT 1 FROM be_tenants
+         WHERE tenant_id = $1 OR project_id = $2
+         LIMIT 1`,
+        [map.tenantId, map.projectId],
+      );
+      return Boolean(res.rowCount && res.rowCount > 0);
+    }
   } catch {
     return false;
   }
@@ -109,10 +210,16 @@ export async function listBrivenEngineWorkspace(
   if (isAuthCoreInitialized() && maps.length > 0) {
     try {
       const pool = getEnginePool();
-      // Load all tenants (small table) — avoids IN-clause / lower() quirks on Doltgres.
-      const res = await pool.query(
-        `SELECT project_id, tenant_id FROM be_tenants`,
-      );
+      // Active Auth only: tenant row and not soft-disabled.
+      let res;
+      try {
+        res = await pool.query(
+          `SELECT project_id, tenant_id FROM be_tenants
+           WHERE disabled_at IS NULL`,
+        );
+      } catch {
+        res = await pool.query(`SELECT project_id, tenant_id FROM be_tenants`);
+      }
       for (const row of res.rows as Array<{
         project_id: string;
         tenant_id: string;

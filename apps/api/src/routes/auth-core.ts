@@ -24,6 +24,7 @@ import {
   probeBrivenEngine,
 } from '../services/auth-core/engine.js';
 import {
+  disableBrivenEngineAuth,
   enableBrivenEngineAuth,
   listBrivenEngineWorkspace,
 } from '../services/auth-core/workspace.js';
@@ -110,6 +111,19 @@ authCoreRouter.post(
 );
 
 /**
+ * Disable Auth for a project (soft). User data stays; enable again anytime.
+ */
+authCoreRouter.post(
+  '/v1/auth-core/projects/:projectId/disable',
+  ...[requireProjectAuth('projectId'), requireProjectRole('admin')],
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    const result = await disableBrivenEngineAuth(projectId);
+    return c.json(result, result.ok ? 200 : 503);
+  },
+);
+
+/**
  * Bridge: dashboard "enable Auth" buttons still call the old path.
  * Do NOT return 410 — wire to briven-engine instead.
  */
@@ -139,6 +153,34 @@ authCoreRouter.post(
       message: result.created
         ? 'Auth enabled for this project'
         : 'Auth already on for this project',
+      storage: 'doltgres',
+    });
+  },
+);
+
+authCoreRouter.post(
+  '/v1/projects/:id/auth/disable',
+  ...[requireProjectAuth('id'), requireProjectRole('admin')],
+  async (c) => {
+    const projectId = c.req.param('id');
+    const result = await disableBrivenEngineAuth(projectId);
+    if (!result.ok) {
+      return c.json(
+        {
+          code: 'auth_disable_failed',
+          message: result.message ?? 'could not disable Auth',
+          engine: BRIVEN_ENGINE_ID,
+        },
+        503,
+      );
+    }
+    return c.json({
+      ok: true,
+      engine: BRIVEN_ENGINE_ID,
+      projectId: result.projectId,
+      tenantId: result.tenantId,
+      authEnabled: false,
+      message: result.message ?? 'Auth disabled for this project',
       storage: 'doltgres',
     });
   },
