@@ -253,6 +253,18 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
   } catch {
     body = {};
   }
+  const requestOrigin =
+    c.req.header('origin') ??
+    (() => {
+      const ref = c.req.header('referer');
+      if (!ref) return undefined;
+      try {
+        return new URL(ref).origin;
+      } catch {
+        return undefined;
+      }
+    })() ??
+    undefined;
   const result = await createPasswordlessCode({
     email: body.email,
     phoneNumber: body.phoneNumber,
@@ -260,6 +272,7 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
     tenantId: tenant?.tenantId,
     flowType: body.flowType,
     magicLinkBaseUrl: body.magicLinkBaseUrl,
+    requestOrigin,
   });
   if (result.status !== 'OK') {
     return c.json({ ...result, engine: 'briven-engine' }, 400);

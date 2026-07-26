@@ -3,10 +3,29 @@ import { describe, expect, test } from 'bun:test';
 import {
   hashSecret,
   matchPasswordlessSecret,
+  pickMagicLinkAppOrigin,
   sixDigitCode,
 } from './passwordless.js';
 
 describe('passwordless pure helpers (Phase 3)', () => {
+  test('pickMagicLinkAppOrigin prefers https production over localhost', () => {
+    expect(
+      pickMagicLinkAppOrigin(
+        ['http://localhost:3000', 'https://pay.mavifinans.sh'],
+        null,
+      ),
+    ).toBe('https://pay.mavifinans.sh');
+  });
+
+  test('pickMagicLinkAppOrigin prefers matching request Origin', () => {
+    expect(
+      pickMagicLinkAppOrigin(
+        ['http://localhost:3000', 'https://pay.mavifinans.sh'],
+        'http://localhost:3000',
+      ),
+    ).toBe('http://localhost:3000');
+  });
+
   test('sixDigitCode is 6 digits', () => {
     for (let i = 0; i < 20; i++) {
       const c = sixDigitCode();

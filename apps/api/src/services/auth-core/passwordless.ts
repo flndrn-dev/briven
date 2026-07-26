@@ -14,9 +14,79 @@ import {
   sendBrivenEngineSms,
 } from './delivery.js';
 import { createEngineSession } from './native-session.js';
+import { getBrivenEngineAppOrigins } from './project-config.js';
 import { projectIdToTenantId } from './project-map.js';
 
 const CODE_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Where the magic-link email should send the user.
+ * Prefer: explicit base from the app → project Allowed Domains → request Origin
+ * → never the platform marketing site (briven.tech) for customer projects.
+ */
+export function pickMagicLinkAppOrigin(
+  origins: string[],
+  requestOrigin?: string | null,
+): string | null {
+  const norm = origins
+    .map((o) => {
+      try {
+        const u = new URL(o.includes('://') ? o : `https://${o}`);
+        return `${u.protocol}//${u.host}`;
+      } catch {
+        return null;
+      }
+    })
+    .filter((o): o is string => Boolean(o));
+
+  if (requestOrigin) {
+    try {
+      const u = new URL(requestOrigin);
+      const ro = `${u.protocol}//${u.host}`;
+      if (norm.includes(ro)) return ro;
+    } catch {
+      /* ignore bad Origin */
+    }
+  }
+
+  const prod = norm.find(
+    (o) =>
+      o.startsWith('https://') &&
+      !/localhost|127\.0\.0\.1/i.test(o),
+  );
+  if (prod) return prod;
+  return norm[0] ?? null;
+}
+
+export async function resolveMagicLinkBaseUrl(input: {
+  explicit?: string | null;
+  projectId?: string;
+  requestOrigin?: string | null;
+}): Promise<string> {
+  const explicit = input.explicit?.trim();
+  if (explicit) {
+    // App may send full verify path or just origin.
+    if (/\/auth\/verify\/?$/i.test(explicit) || /\/login\/magic\/?$/i.test(explicit)) {
+      return explicit.replace(/\/$/, '');
+    }
+    return `${explicit.replace(/\/$/, '')}/auth/verify`;
+  }
+
+  let origins: string[] = [];
+  if (input.projectId) {
+    try {
+      origins = await getBrivenEngineAppOrigins(input.projectId);
+    } catch {
+      origins = [];
+    }
+  }
+
+  const picked = pickMagicLinkAppOrigin(origins, input.requestOrigin);
+  if (picked) return `${picked}/auth/verify`;
+
+  // Last resort for local engine tests only — not for multi-tenant product mail.
+  return `${(env.BRIVEN_WEB_ORIGIN ?? 'http://localhost:3000').replace(/\/$/, '')}/auth/verify`;
+}
 
 /** Exported for unit tests. */
 export function hashSecret(value: string): string {
@@ -109,6 +179,8 @@ export async function createPasswordlessCode(input: {
   flowType?: 'USER_INPUT_CODE' | 'MAGIC_LINK' | 'USER_INPUT_CODE_AND_MAGIC_LINK';
   /** Base URL for magic link, e.g. https://app.example.com/auth/verify */
   magicLinkBaseUrl?: string;
+  /** Browser Origin / Referer — used when magicLinkBaseUrl omitted */
+  requestOrigin?: string | null;
 }): Promise<CreatePasswordlessCodeResult> {
   const email = input.email?.trim().toLowerCase();
   const phone = input.phoneNumber?.trim();
@@ -185,9 +257,11 @@ export async function createPasswordlessCode(input: {
   };
 
   if (channel === 'email' && email) {
-    const base =
-      input.magicLinkBaseUrl ??
-      `${(env.BRIVEN_WEB_ORIGIN ?? 'http://localhost:3000').replace(/\/$/, '')}/auth/verify`;
+    const base = await resolveMagicLinkBaseUrl({
+      explicit: input.magicLinkBaseUrl,
+      projectId: input.projectId,
+      requestOrigin: input.requestOrigin,
+    });
     const urlWithLinkCode = linkCode
       ? `${base}?preAuthSessionId=${encodeURIComponent(preAuthSessionId)}&linkCode=${encodeURIComponent(linkCode)}&deviceId=${encodeURIComponent(deviceId)}`
       : undefined;
