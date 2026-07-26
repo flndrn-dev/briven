@@ -28,12 +28,21 @@ import type { BrivenSocialProviderId } from './providers.js';
 /** All catalog providers that can run OAuth login when secrets are set. */
 export type SupportedSocial = BrivenSocialProviderId;
 
-/** Git host for Konnos OAuth (code.konnos.org). */
+/**
+ * "Sign in with Konnos" product OAuth host (konnos.org).
+ * Not the Git forge at code.konnos.org — kc_* apps are registered under
+ * konnos.org → Settings → Applications.
+ * Override with BRIVEN_KONNOS_OAUTH_ORIGIN if needed.
+ */
 function konnosOAuthOrigin(): string {
   const raw =
     process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ??
     process.env.BRIVEN_KONNOS_ISSUER ??
-    'https://code.konnos.org';
+    'https://konnos.org';
+  // Legacy misconfig: code.konnos.org is Gogs/Git, not Sign-in with Konnos.
+  if (/^https?:\/\/code\.konnos\.org\/?$/i.test(raw.replace(/\/$/, ''))) {
+    return 'https://konnos.org';
+  }
   return raw.replace(/\/$/, '');
 }
 
@@ -73,11 +82,11 @@ const OAUTH_ENDPOINTS: Record<SupportedSocial, OAuthProviderEndpoints> = {
     scope: 'user:email',
     tokenBody: 'json',
   },
-  // Git at code.konnos.org (not bare konnos.org). Prefer OAUTH_ORIGIN, then ISSUER.
+  // Sign in with Konnos (product) — paths from konnos apps/web OAuth provider.
   konnos: {
     authorizeUrl: `${konnosOAuthOrigin()}/login/oauth/authorize`,
     tokenUrl: `${konnosOAuthOrigin()}/login/oauth/access_token`,
-    userInfoUrl: `${konnosOAuthOrigin()}/api/v1/user`,
+    userInfoUrl: `${konnosOAuthOrigin()}/api/user`,
     scope: 'read:user',
     tokenBody: 'json',
   },

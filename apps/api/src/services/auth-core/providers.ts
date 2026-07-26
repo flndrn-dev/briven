@@ -36,10 +36,10 @@ export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] =
     thirdPartyId: 'konnos',
     name: 'Konnos',
     engine: 'briven-engine',
-    help: 'code.konnos.org → Settings → Applications (OAuth2)',
+    help: 'konnos.org → Settings → Applications (Sign in with Konnos). Not code.konnos.org (Git).',
     builtIn: true,
     callbackHint:
-      'Redirect URI: {apiOrigin}/v1/auth-core/oauth/konnos/callback?projectId={projectId}',
+      'Redirect URI for apps using first-party proxy: https://YOUR_APP/login/oauth/callback — or Briven callback {apiOrigin}/v1/auth-core/oauth/konnos/callback?projectId={projectId}',
   },
   {
     thirdPartyId: 'google',
