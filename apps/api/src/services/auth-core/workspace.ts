@@ -95,6 +95,12 @@ export async function disableBrivenEngineAuth(projectId: string): Promise<{
   }
   try {
     const pool = getEnginePool();
+    // Ensure soft-disable column exists (older engines may not have run migration).
+    try {
+      await pool.query(`ALTER TABLE be_tenants ADD COLUMN disabled_at TIMESTAMPTZ`);
+    } catch {
+      /* already exists or unsupported — continue */
+    }
     const existing = await pool.query(
       `SELECT tenant_id FROM be_tenants
        WHERE tenant_id = $1 OR project_id = $2

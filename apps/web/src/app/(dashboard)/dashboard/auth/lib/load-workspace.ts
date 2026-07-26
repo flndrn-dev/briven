@@ -48,17 +48,24 @@ export async function loadAuthV2Workspace(): Promise<AuthV2ProjectRow[]> {
     }
   }
 
-  // Merge live tenants — fixes false "Auth off" when workspace flag is stale.
+  // Merge live *active* tenants (API excludes soft-disabled rows).
+  // Active list is the source of truth for on/off so "disable Auth" cannot be
+  // flipped back on just because the tenant row still exists in the database.
   try {
     const res = await apiFetch('/v1/auth-core/tenants');
     if (res.ok) {
       const body = (await res.json()) as {
-        tenants?: Array<{ projectId?: string; tenantId?: string }>;
+        tenants?: Array<{
+          projectId?: string;
+          tenantId?: string;
+          authEnabled?: boolean;
+        }>;
         tenantIds?: string[];
       };
       const byProject = new Map<string, string>();
       const tenantSet = new Set<string>();
       for (const t of body.tenants ?? []) {
+        if (t.authEnabled === false) continue;
         if (t.tenantId) tenantSet.add(t.tenantId);
         if (t.projectId) {
           byProject.set(t.projectId, t.tenantId ?? '');
@@ -66,6 +73,9 @@ export async function loadAuthV2Workspace(): Promise<AuthV2ProjectRow[]> {
         }
       }
       for (const tid of body.tenantIds ?? []) tenantSet.add(tid);
+
+      const activeListLoaded =
+        (body.tenants?.length ?? 0) > 0 || (body.tenantIds?.length ?? 0) > 0;
 
       projects = projects.map((p) => {
         const tid =
@@ -81,12 +91,18 @@ export async function loadAuthV2Workspace(): Promise<AuthV2ProjectRow[]> {
           .replace(/[^a-z0-9-]/g, '-')
           .replace(/-+/g, '-')
           .replace(/^-|-$/g, '')}`.slice(0, 64);
-        const on =
-          p.authEnabled === true ||
+        const activeTenant =
           byProject.has(p.id) ||
           byProject.has(p.id.toLowerCase()) ||
           (mapped ? tenantSet.has(mapped) : false) ||
           (p.tenantId ? tenantSet.has(p.tenantId) : false);
+
+        // If we have an active-tenants list, it wins (soft-disable safe).
+        // If the list is empty (no Auth anywhere, or total outage), keep workspace.
+        const on = activeListLoaded
+          ? activeTenant
+          : p.authEnabled === true || activeTenant;
+
         return {
           ...p,
           authEnabled: on,

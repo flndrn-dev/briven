@@ -71,7 +71,7 @@ export async function listBrivenEngineTenants(): Promise<{
     tenantId: string;
     projectId: string;
     createdAt: string | null;
-    authEnabled: true;
+    authEnabled: boolean;
   }>;
   ok: boolean;
   message?: string;
@@ -89,20 +89,32 @@ export async function listBrivenEngineTenants(): Promise<{
   }
   try {
     const pool = getEnginePool();
-    const res = await pool.query(
-      `SELECT tenant_id, project_id, created_at FROM be_tenants ORDER BY created_at`,
-    );
+    // Soft-disabled tenants stay in the table but must not count as Auth on.
+    let res;
+    try {
+      res = await pool.query(
+        `SELECT tenant_id, project_id, created_at, disabled_at
+         FROM be_tenants
+         WHERE disabled_at IS NULL
+         ORDER BY created_at`,
+      );
+    } catch {
+      res = await pool.query(
+        `SELECT tenant_id, project_id, created_at FROM be_tenants ORDER BY created_at`,
+      );
+    }
     const tenants = (
       res.rows as Array<{
         tenant_id: string;
         project_id: string;
         created_at: Date | string | null;
+        disabled_at?: Date | string | null;
       }>
     ).map((r) => ({
       tenantId: r.tenant_id,
       projectId: r.project_id,
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
-      authEnabled: true as const,
+      authEnabled: true as boolean,
     }));
     return {
       engine: 'briven-engine',
