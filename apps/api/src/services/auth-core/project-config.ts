@@ -102,6 +102,10 @@ const METHOD_FLAGS_SECRET = 'briven_engine_method_flags';
 const BRANDING_SECRET = 'briven_engine_branding';
 /** App origins allowed for CORS / passkey rpId / magic-link return (JSON string[]). */
 const APP_ORIGINS_SECRET = 'briven_engine_app_origins';
+/** Custom OIDC ID-token claims (JSON object of string keys → string|number|boolean). */
+const JWT_CLAIMS_SECRET = 'briven_engine_jwt_claims';
+/** When true, email/password sign-in also accepts metadata.username. */
+const USERNAME_LOGIN_SECRET = 'briven_engine_username_login';
 
 /** Login email / hosted UI look for one project. */
 export type BrivenEngineBranding = {
@@ -220,6 +224,19 @@ export type BrivenEngineProjectConfig = {
    * https://pay.example.com). Used by golden-path setup + CORS/passkey.
    */
   appOrigins: string[];
+  /** Extra claims merged into OIDC ID tokens (string keys only). */
+  jwtClaims: Record<string, string | number | boolean>;
+  /** Allow sign-in with username (stored in user metadata) as well as email. */
+  usernameLogin: boolean;
+  /**
+   * Bot protection for app login (Turnstile). When required=true, FDI expects
+   * turnstileToken on sign-up / sign-in. siteKey is public for the widget.
+   */
+  captcha: {
+    required: boolean;
+    siteKey: string | null;
+    provider: 'turnstile' | null;
+  };
 };
 
 export async function getBrivenEngineBranding(
@@ -569,6 +586,20 @@ export async function getBrivenEngineProjectConfig(
   ];
 
   const appOrigins = await getBrivenEngineAppOrigins(projectId);
+  const jwtClaims = await getBrivenEngineJwtClaims(projectId);
+  const usernameLogin = await getBrivenEngineUsernameLogin(projectId);
+
+  // Platform Turnstile (not per-project secret store): apps read siteKey for widget.
+  let captchaRequired = false;
+  let captchaSiteKey: string | null = null;
+  try {
+    const { env } = await import('../../env.js');
+    captchaRequired = Boolean(env.BRIVEN_TURNSTILE_SECRET_KEY);
+    captchaSiteKey = env.BRIVEN_TURNSTILE_SITE_KEY ?? null;
+  } catch {
+    captchaRequired = false;
+    captchaSiteKey = null;
+  }
 
   return {
     engine: 'briven-engine',
@@ -590,6 +621,13 @@ export async function getBrivenEngineProjectConfig(
     methods,
     methodChips,
     appOrigins,
+    jwtClaims,
+    usernameLogin,
+    captcha: {
+      required: captchaRequired,
+      siteKey: captchaSiteKey,
+      provider: captchaRequired ? 'turnstile' : null,
+    },
     recipes: {
       emailPassword: methods.emailPassword,
       passwordless: methods.passwordlessEmail || methods.magicLink,
@@ -599,6 +637,76 @@ export async function getBrivenEngineProjectConfig(
       mfa: methods.mfa,
     },
   };
+}
+
+/** Custom claims for OIDC ID tokens (project-wide template). */
+export async function getBrivenEngineJwtClaims(
+  projectId: string,
+): Promise<Record<string, string | number | boolean>> {
+  try {
+    const raw = await getTenantSecret(projectId, SERVICE, JWT_CLAIMS_SECRET);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, string | number | boolean> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (!/^[a-zA-Z_][a-zA-Z0-9_.-]{0,63}$/.test(k)) continue;
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        out[k] = v;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export async function setBrivenEngineJwtClaims(
+  projectId: string,
+  claims: Record<string, string | number | boolean>,
+  createdBy?: string | null,
+): Promise<{ ok: true; engine: 'briven-engine'; jwtClaims: Record<string, string | number | boolean> }> {
+  const cleaned = await getBrivenEngineJwtClaims(projectId);
+  // replace with validated input
+  const next: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(claims ?? {})) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_.-]{0,63}$/.test(k)) continue;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      next[k] = v;
+    }
+  }
+  await setTenantSecret(
+    projectId,
+    SERVICE,
+    JWT_CLAIMS_SECRET,
+    JSON.stringify(next),
+    createdBy ?? null,
+  );
+  void cleaned;
+  return { ok: true, engine: 'briven-engine', jwtClaims: next };
+}
+
+export async function getBrivenEngineUsernameLogin(projectId: string): Promise<boolean> {
+  try {
+    const raw = await getTenantSecret(projectId, SERVICE, USERNAME_LOGIN_SECRET);
+    return raw === 'true' || raw === '1';
+  } catch {
+    return false;
+  }
+}
+
+export async function setBrivenEngineUsernameLogin(
+  projectId: string,
+  enabled: boolean,
+  createdBy?: string | null,
+): Promise<{ ok: true; engine: 'briven-engine'; usernameLogin: boolean }> {
+  await setTenantSecret(
+    projectId,
+    SERVICE,
+    USERNAME_LOGIN_SECRET,
+    enabled ? 'true' : 'false',
+    createdBy ?? null,
+  );
+  return { ok: true, engine: 'briven-engine', usernameLogin: enabled };
 }
 
 /**

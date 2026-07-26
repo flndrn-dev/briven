@@ -42,11 +42,17 @@ export async function signUpEmailPassword(input: {
   password: string;
   tenantId?: string;
   projectId?: string;
+  /** Optional username (stored in metadata; enables username login when project flag on). */
+  username?: string;
 }): Promise<SignUpResult> {
   const tenantId =
     input.tenantId ??
     (input.projectId ? projectIdToTenantId(input.projectId) : 'public');
   const email = input.email.trim().toLowerCase();
+  const username = input.username?.trim().toLowerCase() || null;
+  if (username && !/^[a-z0-9_]{3,32}$/.test(username)) {
+    throw new Error('username must be 3–32 chars: a-z, 0-9, underscore');
+  }
   const pool = getEnginePool();
 
   const existing = await pool.query(
@@ -72,10 +78,11 @@ export async function signUpEmailPassword(input: {
     );
   }
 
+  const metadata = username ? JSON.stringify({ username }) : '{}';
   await pool.query(
-    `INSERT INTO be_users (id, tenant_id, email, email_verified)
-     VALUES ($1, $2, $3, FALSE)`,
-    [userId, tenantId, email],
+    `INSERT INTO be_users (id, tenant_id, email, email_verified, metadata_json)
+     VALUES ($1, $2, $3, FALSE, $4)`,
+    [userId, tenantId, email, metadata],
   );
   await pool.query(
     `INSERT INTO be_password_hashes (user_id, password_hash) VALUES ($1, $2)`,
@@ -102,21 +109,48 @@ export async function signInEmailPassword(input: {
   password: string;
   tenantId?: string;
   projectId?: string;
+  /**
+   * When true (or project flag usernameLogin), `email` field may be a username
+   * stored in metadata_json.username.
+   */
+  allowUsername?: boolean;
 }): Promise<SignInResult> {
   const tenantId =
     input.tenantId ??
     (input.projectId ? projectIdToTenantId(input.projectId) : 'public');
-  const email = input.email.trim().toLowerCase();
+  const login = input.email.trim().toLowerCase();
   const pool = getEnginePool();
 
-  const res = await pool.query(
+  let allowUsername = Boolean(input.allowUsername);
+  if (!allowUsername && input.projectId) {
+    try {
+      const { getBrivenEngineUsernameLogin } = await import('./project-config.js');
+      allowUsername = await getBrivenEngineUsernameLogin(input.projectId);
+    } catch {
+      allowUsername = false;
+    }
+  }
+
+  // Prefer exact email match; optional username via metadata (Doltgres-safe LIKE).
+  let res = await pool.query(
     `SELECT u.id, u.email, u.tenant_id, p.password_hash
      FROM be_users u
      JOIN be_password_hashes p ON p.user_id = u.id
      WHERE u.tenant_id = $1 AND u.email = $2
      LIMIT 1`,
-    [tenantId, email],
+    [tenantId, login],
   );
+  if ((!res.rowCount || res.rowCount === 0) && allowUsername) {
+    res = await pool.query(
+      `SELECT u.id, u.email, u.tenant_id, p.password_hash
+       FROM be_users u
+       JOIN be_password_hashes p ON p.user_id = u.id
+       WHERE u.tenant_id = $1
+         AND u.metadata_json LIKE $2
+       LIMIT 1`,
+      [tenantId, `%"username":"${login}"%`],
+    );
+  }
   const row = res.rows[0] as
     | { id: string; email: string; tenant_id: string; password_hash: string }
     | undefined;
@@ -126,7 +160,7 @@ export async function signInEmailPassword(input: {
       action: 'signin.password.fail',
       tenantId,
       projectId: input.projectId,
-      metadata: { email },
+      metadata: { login },
     });
     return { status: 'WRONG_CREDENTIALS_ERROR' };
   }

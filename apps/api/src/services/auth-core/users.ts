@@ -383,6 +383,72 @@ export async function unarchiveBrivenEngineUser(
 }
 
 /**
+ * GDPR-style data export for one end-user (JSON package).
+ * Operator-triggered; no raw IP columns.
+ */
+export async function exportBrivenEngineUserGdpr(
+  userId: string,
+  opts?: { tenantId?: string },
+): Promise<{
+  ok: true;
+  exportedAt: string;
+  engine: 'briven-engine';
+  package: Record<string, unknown>;
+} | null> {
+  const detail = await getBrivenEngineUser(userId, opts);
+  if (!detail) return null;
+  const pool = getEnginePool();
+  const [pw, codes] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*)::int AS n FROM be_password_hashes WHERE user_id = $1`,
+      [userId],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS n FROM be_passwordless_codes WHERE user_id = $1`,
+      [userId],
+    ).catch(() => ({ rows: [{ n: 0 }] })),
+  ]);
+  void recordBrivenEngineAudit({
+    action: 'user.gdpr_export',
+    userId,
+    tenantId: detail.tenantId,
+    metadata: {},
+  });
+  return {
+    ok: true,
+    exportedAt: new Date().toISOString(),
+    engine: 'briven-engine',
+    package: {
+      subject: {
+        id: detail.id,
+        emails: detail.emails,
+        phoneNumbers: detail.phoneNumbers,
+        emailVerified: detail.emailVerified,
+        tenantId: detail.tenantId,
+        timeJoined: detail.timeJoined,
+        heldAt: detail.heldAt ?? null,
+        archivedAt: detail.archivedAt ?? null,
+      },
+      metadata: detail.metadata,
+      roles: detail.roles,
+      linkedLogins: detail.linkedLogins,
+      sessions: detail.sessions.map((s) => ({
+        handle: s.handle,
+        expiresAt: s.expiresAt,
+        createdAt: s.createdAt,
+      })),
+      credentials: {
+        hasPassword: Number((pw.rows[0] as { n?: number })?.n ?? 0) > 0,
+        passkeyCount: detail.passkeyCount,
+        totpCount: detail.totpCount,
+        passwordlessCodeRows: Number((codes.rows[0] as { n?: number })?.n ?? 0),
+      },
+      note: 'Password hashes and raw secrets are never included in GDPR export packages.',
+    },
+  };
+}
+
+/**
  * Hard delete — remove user + credentials + sessions + links.
  * Email becomes free for a new signup.
  */

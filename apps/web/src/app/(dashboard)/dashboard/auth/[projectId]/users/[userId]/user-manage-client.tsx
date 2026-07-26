@@ -146,6 +146,38 @@ export function UserManageClient({
     router.refresh();
   }
 
+  async function downloadGdprExport(): Promise<void> {
+    setBusy('export');
+    setErr(null);
+    setNote(null);
+    try {
+      const res = await fetch(
+        `${base}/export?projectId=${encodeURIComponent(projectId)}`,
+        { credentials: 'include' },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          (data as { message?: string }).message ?? `export failed (${res.status})`,
+        );
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `briven-auth-export-${user.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setNote('GDPR export downloaded (no password hashes)');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'export failed');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const email = user.emails?.[0] ?? user.phoneNumbers?.[0] ?? 'user';
   const status = user.status ?? 'active';
 
@@ -177,6 +209,17 @@ export function UserManageClient({
             ? ` · joined ${new Date(user.timeJoined).toLocaleString()}`
             : null}
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy === 'export'}
+          onClick={() => void downloadGdprExport()}
+          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text)] hover:border-[var(--color-primary)] disabled:opacity-50"
+        >
+          {busy === 'export' ? 'exporting…' : 'download GDPR export'}
+        </button>
       </div>
 
       {/* Access summary */}

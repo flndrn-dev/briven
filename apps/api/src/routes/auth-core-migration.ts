@@ -22,7 +22,7 @@ authCoreMigrationRouter.use(
 );
 
 authCoreMigrationRouter.post('/v1/auth-core/migration/users', async (c) => {
-  let body: { users?: ImportUserInput[] } = {};
+  let body: { users?: ImportUserInput[]; projectId?: string } = {};
   try {
     body = await c.req.json();
   } catch {
@@ -33,7 +33,7 @@ authCoreMigrationRouter.post('/v1/auth-core/migration/users', async (c) => {
       {
         engine: BRIVEN_ENGINE_ID,
         code: 'users_array_required',
-        message: 'Body must be { users: [...] }',
+        message: 'Body must be { users: [...], projectId?: "p_…" }',
       },
       400,
     );
@@ -48,6 +48,15 @@ authCoreMigrationRouter.post('/v1/auth-core/migration/users', async (c) => {
       400,
     );
   }
-  const result = await importBrivenEngineUsers(body.users);
+  // Stamp top-level projectId onto rows that omit it (dashboard migration UX).
+  const projectId =
+    typeof body.projectId === 'string' && body.projectId.startsWith('p_')
+      ? body.projectId
+      : null;
+  const users = body.users.map((u) => ({
+    ...u,
+    projectId: u.projectId ?? projectId ?? undefined,
+  }));
+  const result = await importBrivenEngineUsers(users);
   return c.json(result, result.ok ? 200 : 503);
 });

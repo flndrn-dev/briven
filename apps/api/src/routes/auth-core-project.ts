@@ -15,9 +15,11 @@ import { BRIVEN_ENGINE_ID, isAuthCoreInitialized } from '../services/auth-core/e
 import {
   getBrivenEngineProjectConfig,
   setBrivenEngineBranding,
+  setBrivenEngineJwtClaims,
   setBrivenEngineMethodFlags,
   setBrivenEngineProviderSecrets,
   setBrivenEngineSmsSecrets,
+  setBrivenEngineUsernameLogin,
   type BrivenEngineBranding,
   type BrivenEngineMethodFlags,
 } from '../services/auth-core/project-config.js';
@@ -301,6 +303,75 @@ authCoreProjectRouter.put(
         action: 'config.methods.updated',
         projectId,
         metadata: { methods: result.methods },
+      });
+      const config = await getBrivenEngineProjectConfig(projectId);
+      return c.json({ ...result, config });
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Custom OIDC ID-token claim templates (string/number/boolean values). */
+authCoreProjectRouter.put(
+  '/v1/auth-core/projects/:projectId/jwt-claims',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    let body: Record<string, string | number | boolean> = {};
+    try {
+      body = (await c.req.json()) as Record<string, string | number | boolean>;
+    } catch {
+      body = {};
+    }
+    try {
+      const result = await setBrivenEngineJwtClaims(projectId, body);
+      void recordBrivenEngineAudit({
+        action: 'config.jwt_claims.updated',
+        projectId,
+        metadata: { keys: Object.keys(result.jwtClaims) },
+      });
+      const config = await getBrivenEngineProjectConfig(projectId);
+      return c.json({ ...result, config });
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Allow email/password sign-in with metadata.username when true. */
+authCoreProjectRouter.put(
+  '/v1/auth-core/projects/:projectId/username-login',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    let body: { enabled?: boolean } = {};
+    try {
+      body = (await c.req.json()) as { enabled?: boolean };
+    } catch {
+      body = {};
+    }
+    try {
+      const result = await setBrivenEngineUsernameLogin(
+        projectId,
+        Boolean(body.enabled),
+      );
+      void recordBrivenEngineAudit({
+        action: 'config.username_login.updated',
+        projectId,
+        metadata: { enabled: result.usernameLogin },
       });
       const config = await getBrivenEngineProjectConfig(projectId);
       return c.json({ ...result, config });

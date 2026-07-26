@@ -276,10 +276,13 @@ async function loadUserClaims(userId: string): Promise<{
   email?: string;
   email_verified?: boolean;
   name?: string;
+  preferred_username?: string;
+  projectId?: string;
+  custom?: Record<string, string | number | boolean>;
 }> {
   const pool = getEnginePool();
   const res = await pool.query(
-    `SELECT id, email, email_verified, metadata_json FROM be_users WHERE id = $1 LIMIT 1`,
+    `SELECT id, email, email_verified, metadata_json, tenant_id FROM be_users WHERE id = $1 LIMIT 1`,
     [userId],
   );
   const row = res.rows[0] as
@@ -288,21 +291,54 @@ async function loadUserClaims(userId: string): Promise<{
         email?: string | null;
         email_verified?: boolean;
         metadata_json?: string;
+        tenant_id?: string;
       }
     | undefined;
   if (!row) return { sub: userId };
   let name: string | undefined;
+  let preferred_username: string | undefined;
+  let projectId: string | undefined;
   try {
-    const meta = JSON.parse(row.metadata_json ?? '{}') as { name?: string };
+    const meta = JSON.parse(row.metadata_json ?? '{}') as {
+      name?: string;
+      username?: string;
+    };
     if (meta.name) name = meta.name;
+    if (meta.username) preferred_username = meta.username;
   } catch {
     /* ignore */
+  }
+  // tenant_id often equals projectId for project-mapped tenants
+  if (row.tenant_id?.startsWith('p_')) projectId = row.tenant_id;
+  else if (row.tenant_id) {
+    try {
+      const t = await pool.query(
+        `SELECT project_id FROM be_tenants WHERE tenant_id = $1 LIMIT 1`,
+        [row.tenant_id],
+      );
+      const pid = (t.rows[0] as { project_id?: string } | undefined)?.project_id;
+      if (pid) projectId = pid;
+    } catch {
+      /* ignore */
+    }
+  }
+  let custom: Record<string, string | number | boolean> = {};
+  if (projectId) {
+    try {
+      const { getBrivenEngineJwtClaims } = await import('./project-config.js');
+      custom = await getBrivenEngineJwtClaims(projectId);
+    } catch {
+      custom = {};
+    }
   }
   return {
     sub: row.id,
     email: row.email ?? undefined,
     email_verified: Boolean(row.email_verified),
     name,
+    preferred_username,
+    projectId,
+    custom,
   };
 }
 
@@ -339,8 +375,20 @@ async function signAccessAndIdToken(input: {
     idPayload.email = claims.email;
     idPayload.email_verified = claims.email_verified ?? false;
   }
-  if (input.scope.includes('profile') && claims.name) {
-    idPayload.name = claims.name;
+  if (input.scope.includes('profile')) {
+    if (claims.name) idPayload.name = claims.name;
+    if (claims.preferred_username) {
+      idPayload.preferred_username = claims.preferred_username;
+    }
+  }
+  // Project-level custom JWT claim templates (SuperTokens-class depth).
+  if (claims.custom) {
+    for (const [k, v] of Object.entries(claims.custom)) {
+      if (k === 'sub' || k === 'iss' || k === 'aud' || k === 'exp' || k === 'iat') {
+        continue;
+      }
+      idPayload[k] = v;
+    }
   }
   if (input.nonce) idPayload.nonce = input.nonce;
 

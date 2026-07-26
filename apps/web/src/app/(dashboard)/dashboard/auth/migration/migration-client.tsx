@@ -39,8 +39,19 @@ export function AuthMigrationClient({ projectId }: { projectId?: string }) {
     setErr(null);
     setResult(null);
     try {
-      const body = JSON.parse(json) as { users?: unknown[] };
+      const body = JSON.parse(json) as {
+        users?: Array<Record<string, unknown>>;
+        projectId?: string;
+      };
       if (!Array.isArray(body.users)) throw new Error('JSON must have users: []');
+      // Always stamp this project's id so operators need not paste p_… on every row.
+      if (projectId) {
+        body.projectId = projectId;
+        body.users = body.users.map((u) => ({
+          ...u,
+          projectId: (typeof u.projectId === 'string' && u.projectId) || projectId,
+        }));
+      }
       const res = await fetch('/api/v1/auth-core/migration/users', {
         method: 'POST',
         credentials: 'include',
@@ -82,6 +93,13 @@ export function AuthMigrationClient({ projectId }: { projectId?: string }) {
         <code className="text-[var(--color-text)]">passwordPlaintext</code> or a{' '}
         <code className="text-[var(--color-text)]">passwordHash</code> (bcrypt / argon2).
         Max 500 per request.
+        {projectId ? (
+          <>
+            {' '}
+            This project (<code className="text-[var(--color-text)]">{projectId}</code>) is
+            applied automatically — you can leave projectId out of each row.
+          </>
+        ) : null}
       </p>
       <textarea
         value={json}

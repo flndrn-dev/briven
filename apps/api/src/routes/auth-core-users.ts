@@ -102,6 +102,30 @@ authCoreUsersRouter.get('/v1/auth-core/users/:userId', async (c) => {
   return c.json({ engine: BRIVEN_ENGINE_ID, user, projectId: projectId ?? null });
 });
 
+/** GDPR-style JSON export for one end-user (no password hashes). */
+authCoreUsersRouter.get('/v1/auth-core/users/:userId/export', async (c) => {
+  if (!isAuthCoreInitialized()) {
+    return c.json({ engine: BRIVEN_ENGINE_ID, code: 'auth_core_sdk_not_ready' }, 503);
+  }
+  const userId = c.req.param('userId');
+  const projectId = c.req.query('projectId') ?? undefined;
+  const tenantId = await resolveTenantId(
+    projectId,
+    c.req.query('tenantId') ?? undefined,
+  );
+  const { exportBrivenEngineUserGdpr } = await import(
+    '../services/auth-core/users.js'
+  );
+  const pack = await exportBrivenEngineUserGdpr(userId, { tenantId });
+  if (!pack) {
+    return c.json(
+      { engine: BRIVEN_ENGINE_ID, code: 'not_found', message: 'user not found' },
+      404,
+    );
+  }
+  return c.json(pack);
+});
+
 authCoreUsersRouter.get('/v1/auth-core/users/:userId/metadata', async (c) => {
   const userId = c.req.param('userId');
   const metadata = await getBrivenEngineUserMetadata(userId);

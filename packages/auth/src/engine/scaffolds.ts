@@ -71,6 +71,27 @@ await auth.signInEmailPassword({
 });
 `.trim(),
 
+  honoProxy: `
+// Hono first-party proxy → briven-engine FDI
+import { Hono } from 'hono';
+
+const api = process.env.BRIVEN_API_ORIGIN ?? 'https://api.briven.tech';
+const app = new Hono();
+
+app.all('/api/auth/*', async (c) => {
+  const path = c.req.path.replace(/^\\/api\\/auth/, '/v1/auth-core/fdi');
+  const url = new URL(path + (c.req.url.includes('?') ? c.req.url.slice(c.req.url.indexOf('?')) : ''), api);
+  const headers = new Headers(c.req.raw.headers);
+  headers.set('x-briven-engine', 'briven-engine');
+  const res = await fetch(url, {
+    method: c.req.method,
+    headers,
+    body: c.req.method === 'GET' || c.req.method === 'HEAD' ? undefined : await c.req.arrayBuffer(),
+  });
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+`.trim(),
+
   passwordlessSms: `
 // SMS OTP is included in briven-engine
 const code = await auth.createPasswordlessCode({

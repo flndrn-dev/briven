@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
 import { AuthAuditTrailClient } from '../../security/audit-trail-client';
 import { AuthRolesForm } from '../../security/roles-form';
+import { AdvancedAuthSettings } from './advanced-auth-settings';
 
 export const metadata = { title: 'Auth · security' };
 export const dynamic = 'force-dynamic';
@@ -123,6 +124,10 @@ export default async function AuthProjectSecurityPage({
 
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
         <AuthAuditTrailClient projectId={projectId} />
+      </div>
+
+      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">
+        <AdvancedAuthSettings projectId={projectId} />
       </div>
 
       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6">

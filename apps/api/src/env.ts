@@ -271,6 +271,8 @@ const envSchema = z.object({
   // on briven auth sign-up / sign-in flows. The site key is per-tenant config;
   // this secret verifies tokens server-side.
   BRIVEN_TURNSTILE_SECRET_KEY: z.string().optional(),
+  /** Public site key for app widgets when Turnstile is required on FDI. */
+  BRIVEN_TURNSTILE_SITE_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
