@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { FaDiscord, FaGithub } from 'react-icons/fa';
 import { FcGoogle } from 'react-icons/fc';
 
@@ -8,6 +8,7 @@ export interface Providers {
   google: boolean;
   github: boolean;
   discord: boolean;
+  konnos: boolean;
 }
 
 interface Props {
@@ -18,10 +19,18 @@ interface Props {
 }
 
 /**
- * Google, GitHub + Discord are first-class in Better Auth's socialProviders
- * config, so they all go through /v1/auth/sign-in/social.
+ * Google / GitHub / Discord → Better Auth socialProviders (/sign-in/social).
+ * Konnos (Forgejo) → genericOAuth (/sign-in/oauth2, providerId: konnos).
  */
-type ProviderKind = 'google' | 'github' | 'discord';
+type SocialKind = 'google' | 'github' | 'discord';
+type ProviderKind = SocialKind | 'konnos';
+
+function formatMmSs(totalSec: number): string {
+  const s = Math.max(0, totalSec);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+}
 
 export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
   const [email, setEmail] = useState('');
@@ -29,13 +38,18 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
   const [oauthPending, setOauthPending] = useState<ProviderKind | null>(null);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Seconds left until we recommend checking spam (starts at 2:00). */
+  const [spamCountdown, setSpamCountdown] = useState(120);
 
-  // Why we POST directly to the api origin instead of going through the
-  // Next.js `/api/...` rewrite: in production, edge proxies (Cloudflare,
-  // some CDNs) inspect rewrite-proxied request bodies and can corrupt
-  // Better Auth's callbackURL validation, producing a spurious
-  // INVALID_CALLBACK_URL 403. Talking directly to the api avoids the
-  // proxy hop entirely. CORS on the api allows the dashboard origin.
+  useEffect(() => {
+    if (!sent) return;
+    setSpamCountdown(120);
+    const id = window.setInterval(() => {
+      setSpamCountdown((prev) => (prev <= 0 ? 0 : prev - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [sent]);
+
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
@@ -60,21 +74,17 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
     }
   }
 
-  async function onOAuth(kind: ProviderKind) {
+  async function onSocial(kind: SocialKind) {
     setOauthPending(kind);
     setError(null);
     try {
       const callbackURL = `${window.location.origin}${next}`;
-      // When Better Auth rejects the callback (state_mismatch, scope
-      // denied, etc.) we want the user to land back on /signin with
-      // a friendly error chip, not the api origin's JSON.
       const errorCallbackURL = `${window.location.origin}/signin?error=oauth_${kind}`;
-      const body = { provider: kind, callbackURL, errorCallbackURL };
       const res = await fetch(`${apiOrigin}/v1/auth/sign-in/social`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ provider: kind, callbackURL, errorCallbackURL }),
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -89,31 +99,84 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
     }
   }
 
+  async function onKonnos() {
+    setOauthPending('konnos');
+    setError(null);
+    try {
+      const callbackURL = `${window.location.origin}${next}`;
+      const errorCallbackURL = `${window.location.origin}/signin?error=oauth_konnos`;
+      // genericOAuth plugin endpoint (not socialProviders)
+      const res = await fetch(`${apiOrigin}/v1/auth/sign-in/oauth2`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          providerId: 'konnos',
+          callbackURL,
+          errorCallbackURL,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `request failed (${res.status})`);
+      }
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error('no redirect url returned');
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'konnos sign-in failed');
+      setOauthPending(null);
+    }
+  }
+
   const anyPending = pending || oauthPending !== null;
   const anyOAuth =
-    providers.google || providers.github || providers.discord;
+    providers.google || providers.github || providers.discord || providers.konnos;
 
   if (sent) {
     const isOutlookFamily = /@(hotmail|outlook|live|msn)\./i.test(email);
+    const clock = formatMmSs(spamCountdown);
+    const spamHint =
+      spamCountdown > 0
+        ? `don't see it yet? wait for the timer (${clock}), then check spam / junk${
+            isOutlookFamily
+              ? ' — outlook / hotmail / live / msn often hide new senders'
+              : ''
+          }.`
+        : `don't see it? check spam / junk now${
+            isOutlookFamily
+              ? ' — outlook / hotmail / live / msn often hide new senders'
+              : ''
+          }.`;
+
     return (
       <div className="flex flex-col gap-4">
         <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 font-mono text-sm">
           <p className="text-[var(--color-text)]">check your inbox</p>
           <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-            if there&apos;s an account on briven for{' '}
-            <span className="text-[var(--color-text)]">{email}</span>, we sent a one-time link
-            to it. click it to finish signing in. the link expires in 10 minutes.
+            we sent a one-time link to{' '}
+            <span className="text-[var(--color-text)]">{email}</span>. click it to finish
+            signing in. the link expires in 10 minutes.
           </p>
+
+          <div
+            className="mt-4 inline-flex items-center gap-2 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg)] px-3 py-2"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
+              check spam after
+            </span>
+            <span className="font-mono text-lg tabular-nums text-[var(--color-text)]">
+              {clock}
+            </span>
+          </div>
+
           <ul className="mt-3 flex flex-col gap-1 text-xs text-[var(--color-text-subtle)]">
+            <li>· {spamHint}</li>
             <li>
-              · don&apos;t see it within 2 minutes? check spam / junk
-              {isOutlookFamily
-                ? ' — outlook / hotmail / live / msn spam-filter new sender domains aggressively'
-                : ''}
-              .
+              · prefer google, github, or konnos? go back and use those buttons instead.
             </li>
-            <li>· briven is invite-only beta; signing in with an address that has no account is silent on purpose.</li>
-            <li>· already linked google or github before? use that button above instead.</li>
           </ul>
         </div>
         <button
@@ -121,6 +184,7 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
           onClick={() => {
             setSent(false);
             setEmail('');
+            setSpamCountdown(120);
           }}
           className="self-start font-mono text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
@@ -137,7 +201,7 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
           {providers.google ? (
             <button
               type="button"
-              onClick={() => onOAuth('google')}
+              onClick={() => onSocial('google')}
               disabled={disabled || anyPending}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
             >
@@ -151,7 +215,7 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
           {providers.github ? (
             <button
               type="button"
-              onClick={() => onOAuth('github')}
+              onClick={() => onSocial('github')}
               disabled={disabled || anyPending}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
             >
@@ -162,10 +226,28 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
             </button>
           ) : null}
 
+          {providers.konnos ? (
+            <button
+              type="button"
+              onClick={() => void onKonnos()}
+              disabled={disabled || anyPending}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
+            >
+              <span
+                className="inline-flex h-5 w-5 items-center justify-center rounded-sm font-mono text-[10px] font-bold text-black"
+                style={{ background: '#FFFD74' }}
+                aria-hidden
+              >
+                K
+              </span>
+              {oauthPending === 'konnos' ? 'redirecting...' : 'continue with konnos'}
+            </button>
+          ) : null}
+
           {providers.discord ? (
             <button
               type="button"
-              onClick={() => onOAuth('discord')}
+              onClick={() => onSocial('discord')}
               disabled={disabled || anyPending}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
             >

@@ -42,6 +42,8 @@ export default async function SignInPage({
     google: process.env.NEXT_PUBLIC_BRIVEN_HAS_GOOGLE_OAUTH === 'true',
     github: process.env.NEXT_PUBLIC_BRIVEN_HAS_GITHUB_OAUTH === 'true',
     discord: process.env.NEXT_PUBLIC_BRIVEN_HAS_DISCORD_OAUTH === 'true',
+    // Forgejo at code.konnos.org — platform genericOAuth (see apps/api/src/lib/auth.ts)
+    konnos: process.env.NEXT_PUBLIC_BRIVEN_HAS_KONNOS_OAUTH === 'true',
   };
 
   return (
