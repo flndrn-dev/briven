@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 
 import { getDb } from '../db/client.js';
 import { tenantSecrets } from '../db/schema.js';
+import { log } from '../lib/logger.js';
 
 import {
   decryptTenantSecret,
@@ -83,7 +84,24 @@ export async function getTenantSecret(
     )
     .limit(1);
   if (!row) return null;
-  return decryptTenantSecret({ service, projectId, ciphertext: row.encryptedValue });
+  try {
+    return decryptTenantSecret({
+      service,
+      projectId,
+      ciphertext: row.encryptedValue,
+    });
+  } catch (err) {
+    // Row exists but ciphertext won't open (e.g. master key rotated). Callers
+    // treat null as "not configured" so the dashboard asks the user to re-save.
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn('tenant_secret_decrypt_failed', {
+      projectId,
+      service,
+      name,
+      message,
+    });
+    return null;
+  }
 }
 
 /**

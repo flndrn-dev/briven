@@ -39,24 +39,6 @@ function extraName(id: BrivenSocialProviderId, key: string): string {
   return `briven_engine_${id}_${key}`;
 }
 
-async function hasProviderClientId(
-  projectId: string,
-  id: BrivenSocialProviderId,
-): Promise<boolean> {
-  if (await hasTenantSecret(projectId, SERVICE, clientIdName(id))) return true;
-  return hasTenantSecret(projectId, SERVICE, legacyClientIdName(id));
-}
-
-async function hasProviderClientSecret(
-  projectId: string,
-  id: BrivenSocialProviderId,
-): Promise<boolean> {
-  if (await hasTenantSecret(projectId, SERVICE, clientSecretName(id))) {
-    return true;
-  }
-  return hasTenantSecret(projectId, SERVICE, legacyClientSecretName(id));
-}
-
 async function readProviderClientId(
   projectId: string,
   id: BrivenSocialProviderId,
@@ -75,6 +57,26 @@ async function readProviderClientSecret(
     (await getTenantSecret(projectId, SERVICE, clientSecretName(id))) ??
     (await getTenantSecret(projectId, SERVICE, legacyClientSecretName(id)))
   );
+}
+
+/**
+ * "Configured" means we can actually open the secret with the current master
+ * key — not merely that a ciphertext row exists (stale after key rotation).
+ */
+async function hasProviderClientId(
+  projectId: string,
+  id: BrivenSocialProviderId,
+): Promise<boolean> {
+  const v = await readProviderClientId(projectId, id);
+  return Boolean(v && v.length > 0);
+}
+
+async function hasProviderClientSecret(
+  projectId: string,
+  id: BrivenSocialProviderId,
+): Promise<boolean> {
+  const v = await readProviderClientSecret(projectId, id);
+  return Boolean(v && v.length > 0);
 }
 
 /** Per-project which sign-in methods are turned on for the app. */
@@ -774,6 +776,14 @@ export async function setBrivenEngineProviderSecrets(
         input.createdBy ?? null,
       );
     }
+  }
+  // Prove we can open what we just wrote (catches master-key / encrypt bugs early).
+  const idOk = await readProviderClientId(projectId, input.thirdPartyId);
+  const secretOk = await readProviderClientSecret(projectId, input.thirdPartyId);
+  if (!idOk || !secretOk || idOk !== input.clientId || secretOk !== input.clientSecret) {
+    throw new Error(
+      'OAuth secrets saved but could not be re-read. Check BRIVEN_AUTH_MASTER_KEY on the API, then paste client id + secret again.',
+    );
   }
   return { ok: true, engine: 'briven-engine' };
 }

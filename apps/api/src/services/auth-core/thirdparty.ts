@@ -28,6 +28,15 @@ import type { BrivenSocialProviderId } from './providers.js';
 /** All catalog providers that can run OAuth login when secrets are set. */
 export type SupportedSocial = BrivenSocialProviderId;
 
+/** Git host for Konnos OAuth (code.konnos.org). */
+function konnosOAuthOrigin(): string {
+  const raw =
+    process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ??
+    process.env.BRIVEN_KONNOS_ISSUER ??
+    'https://code.konnos.org';
+  return raw.replace(/\/$/, '');
+}
+
 type OAuthProviderEndpoints = {
   authorizeUrl: string;
   tokenUrl: string;
@@ -64,10 +73,11 @@ const OAUTH_ENDPOINTS: Record<SupportedSocial, OAuthProviderEndpoints> = {
     scope: 'user:email',
     tokenBody: 'json',
   },
+  // Git at code.konnos.org (not bare konnos.org). Prefer OAUTH_ORIGIN, then ISSUER.
   konnos: {
-    authorizeUrl: `${(process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org').replace(/\/$/, '')}/login/oauth/authorize`,
-    tokenUrl: `${(process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org').replace(/\/$/, '')}/login/oauth/access_token`,
-    userInfoUrl: `${(process.env.BRIVEN_KONNOS_OAUTH_ORIGIN ?? 'https://konnos.org').replace(/\/$/, '')}/api/user`,
+    authorizeUrl: `${konnosOAuthOrigin()}/login/oauth/authorize`,
+    tokenUrl: `${konnosOAuthOrigin()}/login/oauth/access_token`,
+    userInfoUrl: `${konnosOAuthOrigin()}/api/v1/user`,
     scope: 'read:user',
     tokenBody: 'json',
   },
@@ -272,7 +282,10 @@ export async function getAuthorisationUrl(input: {
   if (!creds) {
     return {
       status: 'NO_CREDENTIALS',
-      message: `Set project OAuth secrets for ${thirdPartyId} under Providers (client id + secret)`,
+      message:
+        `Set project OAuth secrets for ${thirdPartyId} under Providers (client id + secret). ` +
+        `If the dashboard already shows “set”, paste both values again and click save — ` +
+        `stale secrets after a key change cannot be read for login.`,
     };
   }
 
