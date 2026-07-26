@@ -102,7 +102,6 @@ _reference/
 # AI instructions, and a security-sensitive bug report. Kept local-only.
 ARCHITECTURE.md
 BUILD_PLAN.md
-CLAUDE.md
 CONTRIBUTING.md
 SPEC.md
 SPRINT-PLAN.md
@@ -121,3 +120,7 @@ memory.md
 *.md
 !README.md
 !**/README.md
+# Agent hard rules + SuperTokens library index (must be visible to every agent)
+!CLAUDE.md
+!AGENTS.md
+!/docs/knowledge-base.md
