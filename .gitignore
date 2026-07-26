@@ -123,4 +123,6 @@ memory.md
 # Agent hard rules + SuperTokens library index (must be visible to every agent)
 !CLAUDE.md
 !AGENTS.md
+# Un-ignore parent dir first, then the file (gitignore parent-dir rule)
+!/docs/
 !/docs/knowledge-base.md
