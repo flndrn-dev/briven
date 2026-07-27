@@ -176,10 +176,11 @@ const envSchema = z.object({
   // Override if you want product-specific routing later.
   BRIVEN_MIGRATIONS_INBOX: z.string().email().default('migrations@flndrn.com'),
 
-  // Konnos OAuth — Git at code.konnos.org. Better Auth's generic OAuth
-  // plugin lets us reuse the same callback shape for any OAuth2/OIDC
-  // provider; the Git host endpoints (authorize / token / userinfo) are
-  // pinned below.
+  // Konnos OAuth for **briven.tech platform sign-in only** (Better Auth in
+  // lib/auth.ts). Customer projects do NOT use these — each project pastes
+  // its own Client ID + Secret under Auth → Providers (per-project rule,
+  // SuperTokens-style; flndrn 2026-07-27). Issuer/origin may still help
+  // endpoint defaults; prefer konnos.org product OAuth, not code.konnos.org Git.
   BRIVEN_KONNOS_CLIENT_ID: z.string().optional(),
   BRIVEN_KONNOS_CLIENT_SECRET: z.string().optional(),
   BRIVEN_KONNOS_ISSUER: z.string().url().default('https://code.konnos.org'),

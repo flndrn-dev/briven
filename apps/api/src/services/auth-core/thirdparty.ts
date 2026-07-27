@@ -201,56 +201,41 @@ async function ensureTenant(tenantId: string, projectId?: string): Promise<void>
 }
 
 /**
- * Resolve client id/secret: project secrets first, then platform env fallbacks.
+ * Resolve OAuth client id/secret for a **Briven project** (briven-engine).
+ *
+ * Product rule (flndrn 2026-07-27): **per-project only** — SuperTokens-style.
+ * Each project must have its own Konnos/Google/… Client ID + Secret under
+ * Auth → Providers. We do **not** fall back to platform env
+ * (`BRIVEN_KONNOS_*`, `BRIVEN_GOOGLE_*`, …) for customer-project login.
+ *
+ * Platform sign-in for briven.tech itself still uses Better Auth + env in
+ * `apps/api/src/lib/auth.ts` — that path is separate and is not a project.
+ *
+ * Without a projectId, or without saved project secrets → no credentials
+ * (Konnos/Google/… stay off for that project until keys are pasted).
  */
 export async function resolveProviderCredentials(
   projectId: string | undefined,
   thirdPartyId: SupportedSocial,
 ): Promise<{ clientId: string; clientSecret: string; source: string } | null> {
-  if (projectId) {
-    try {
-      const secrets = await loadProjectProviderSecrets(projectId);
-      const hit = secrets.find((s) => s.thirdPartyId === thirdPartyId);
-      if (hit?.clientId && hit?.clientSecret) {
-        return {
-          clientId: hit.clientId,
-          clientSecret: hit.clientSecret,
-          source: 'project_secrets',
-        };
-      }
-    } catch {
-      // secrets table / master key may be unavailable
-    }
+  if (!projectId || !projectId.trim()) {
+    return null;
   }
 
-  const envMap: Partial<Record<SupportedSocial, [string, string]>> = {
-    google: ['BRIVEN_GOOGLE_CLIENT_ID', 'BRIVEN_GOOGLE_CLIENT_SECRET'],
-    github: ['BRIVEN_GITHUB_CLIENT_ID', 'BRIVEN_GITHUB_CLIENT_SECRET'],
-    konnos: ['BRIVEN_KONNOS_CLIENT_ID', 'BRIVEN_KONNOS_CLIENT_SECRET'],
-    discord: ['BRIVEN_DISCORD_CLIENT_ID', 'BRIVEN_DISCORD_CLIENT_SECRET'],
-    microsoft: [
-      'BRIVEN_MICROSOFT_CLIENT_ID',
-      'BRIVEN_MICROSOFT_CLIENT_SECRET',
-    ],
-    facebook: ['BRIVEN_FACEBOOK_CLIENT_ID', 'BRIVEN_FACEBOOK_CLIENT_SECRET'],
-    twitter: ['BRIVEN_TWITTER_CLIENT_ID', 'BRIVEN_TWITTER_CLIENT_SECRET'],
-    linkedin: ['BRIVEN_LINKEDIN_CLIENT_ID', 'BRIVEN_LINKEDIN_CLIENT_SECRET'],
-    gitlab: ['BRIVEN_GITLAB_CLIENT_ID', 'BRIVEN_GITLAB_CLIENT_SECRET'],
-    bitbucket: [
-      'BRIVEN_BITBUCKET_CLIENT_ID',
-      'BRIVEN_BITBUCKET_CLIENT_SECRET',
-    ],
-    spotify: ['BRIVEN_SPOTIFY_CLIENT_ID', 'BRIVEN_SPOTIFY_CLIENT_SECRET'],
-    apple: ['BRIVEN_APPLE_CLIENT_ID', 'BRIVEN_APPLE_CLIENT_SECRET'],
-  };
-  const keys = envMap[thirdPartyId];
-  if (keys) {
-    const clientId = process.env[keys[0]];
-    const clientSecret = process.env[keys[1]];
-    if (clientId && clientSecret) {
-      return { clientId, clientSecret, source: 'platform_env' };
+  try {
+    const secrets = await loadProjectProviderSecrets(projectId.trim());
+    const hit = secrets.find((s) => s.thirdPartyId === thirdPartyId);
+    if (hit?.clientId && hit?.clientSecret) {
+      return {
+        clientId: hit.clientId,
+        clientSecret: hit.clientSecret,
+        source: 'project_secrets',
+      };
     }
+  } catch {
+    // secrets table / master key may be unavailable — treat as not configured
   }
+
   return null;
 }
 
@@ -292,8 +277,10 @@ export async function getAuthorisationUrl(input: {
     return {
       status: 'NO_CREDENTIALS',
       message:
-        `Set project OAuth secrets for ${thirdPartyId} under Providers (client id + secret). ` +
-        `If the dashboard already shows “set”, paste both values again and click save — ` +
+        `No ${thirdPartyId} Client ID + Secret for this project. ` +
+        `Open Briven Auth → Providers for this project, paste that project’s own OAuth app keys, and save. ` +
+        `Each project needs its own keys (not shared with other projects). ` +
+        `If the dashboard already shows “set”, paste both values again and save — ` +
         `stale secrets after a key change cannot be read for login.`,
     };
   }
