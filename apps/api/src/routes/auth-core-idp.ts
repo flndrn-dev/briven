@@ -15,7 +15,9 @@
  *
  * Dashboard (project admin):
  *   GET|POST /v1/auth-core/projects/:projectId/oidc/clients
- *   DELETE   /v1/auth-core/projects/:projectId/oidc/clients/:clientId
+ *   POST     /v1/auth-core/projects/:projectId/oidc/clients/:clientId/rotate-secret
+ *   DELETE   /v1/auth-core/projects/:projectId/oidc/clients/:clientId  (soft revoke)
+ *   DELETE   /v1/auth-core/projects/:projectId/oidc/clients/:clientId?hard=1  (purge row)
  */
 
 import { Hono } from 'hono';
@@ -24,9 +26,11 @@ import { requireAuthCoreProject } from '../middleware/auth-core-guard.js';
 import { BRIVEN_ENGINE_ID } from '../services/auth-core/engine.js';
 import {
   createOidcClient,
+  deleteOidcClient,
   getOidcClientByClientId,
   listOidcClients,
   revokeOidcClient,
+  rotateOidcClientSecret,
 } from '../services/auth-core/idp-clients.js';
 import { getOidcJwks } from '../services/auth-core/idp-signing.js';
 import {
@@ -618,8 +622,11 @@ authCoreIdpRouter.get(
   '/v1/auth-core/projects/:projectId/oidc/clients',
   async (c) => {
     const projectId = c.req.param('projectId');
+    const includeRevoked =
+      c.req.query('includeRevoked') === '1' ||
+      c.req.query('includeRevoked') === 'true';
     try {
-      const clients = await listOidcClients(projectId);
+      const clients = await listOidcClients(projectId, { includeRevoked });
       return c.json({
         engine: BRIVEN_ENGINE_ID,
         projectId,
@@ -709,24 +716,77 @@ authCoreIdpRouter.post(
   },
 );
 
+/** Rotate confidential client secret — old secret dies immediately. */
+authCoreIdpRouter.post(
+  '/v1/auth-core/projects/:projectId/oidc/clients/:clientId/rotate-secret',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    const clientId = c.req.param('clientId');
+    try {
+      const rotated = await rotateOidcClientSecret(projectId, clientId);
+      return c.json({
+        engine: BRIVEN_ENGINE_ID,
+        ok: true,
+        projectId,
+        client: {
+          clientId: rotated.client.clientId,
+          name: rotated.client.name,
+          hint: rotated.client.secretSuffix
+            ? `…${rotated.client.secretSuffix}`
+            : null,
+          clientSecret: rotated.clientSecret,
+        },
+        note: 'Copy client_secret now — the previous secret no longer works. Live refresh tokens for this app were revoked.',
+      });
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'rotate_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        400,
+      );
+    }
+  },
+);
+
+/**
+ * DELETE without hard=1 → soft revoke (secret wiped, tokens killed).
+ * DELETE ?hard=1 → permanent remove (leftover apps).
+ */
 authCoreIdpRouter.delete(
   '/v1/auth-core/projects/:projectId/oidc/clients/:clientId',
   async (c) => {
     const projectId = c.req.param('projectId');
     const clientId = c.req.param('clientId');
+    const hard =
+      c.req.query('hard') === '1' || c.req.query('hard') === 'true';
     try {
+      if (hard) {
+        await deleteOidcClient(projectId, clientId, { force: true });
+        return c.json({
+          engine: BRIVEN_ENGINE_ID,
+          ok: true,
+          projectId,
+          clientId,
+          deleted: true,
+        });
+      }
       await revokeOidcClient(projectId, clientId);
       return c.json({
         engine: BRIVEN_ENGINE_ID,
         ok: true,
         projectId,
         clientId,
+        revoked: true,
+        note: 'Client secret wiped; refresh tokens revoked. Use ?hard=1 to delete the leftover row.',
       });
     } catch (err) {
       return c.json(
         {
           engine: BRIVEN_ENGINE_ID,
-          code: 'revoke_failed',
+          code: hard ? 'delete_failed' : 'revoke_failed',
           message: err instanceof Error ? err.message : String(err),
         },
         404,

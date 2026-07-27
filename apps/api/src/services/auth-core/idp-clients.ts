@@ -180,10 +180,50 @@ export async function createOidcClient(input: {
   return { client, clientSecret };
 }
 
-export async function listOidcClients(projectId: string): Promise<OidcClient[]> {
+/**
+ * Kill live credentials for a client: refresh tokens, unused auth codes,
+ * pending auth requests. SuperTokens-class: revoke means the old secret/tokens
+ * cannot be used again.
+ */
+export async function purgeOidcClientSessions(clientId: string): Promise<{
+  refreshRevoked: number;
+  codesDeleted: number;
+  requestsDeleted: number;
+}> {
   const pool = getEnginePool();
+  const refresh = await pool.query(
+    `UPDATE be_oidc_refresh_tokens SET revoked_at = NOW()
+     WHERE client_id = $1 AND revoked_at IS NULL`,
+    [clientId],
+  );
+  const codes = await pool.query(
+    `DELETE FROM be_oidc_auth_codes
+     WHERE client_id = $1 AND used_at IS NULL`,
+    [clientId],
+  );
+  const requests = await pool.query(
+    `DELETE FROM be_oidc_auth_requests WHERE client_id = $1`,
+    [clientId],
+  );
+  return {
+    refreshRevoked: refresh.rowCount ?? 0,
+    codesDeleted: codes.rowCount ?? 0,
+    requestsDeleted: requests.rowCount ?? 0,
+  };
+}
+
+export async function listOidcClients(
+  projectId: string,
+  opts?: { includeRevoked?: boolean },
+): Promise<OidcClient[]> {
+  const pool = getEnginePool();
+  const includeRevoked = Boolean(opts?.includeRevoked);
   const res = await pool.query(
-    `SELECT * FROM be_oidc_clients WHERE project_id = $1 ORDER BY created_at DESC`,
+    includeRevoked
+      ? `SELECT * FROM be_oidc_clients WHERE project_id = $1 ORDER BY created_at DESC`
+      : `SELECT * FROM be_oidc_clients
+         WHERE project_id = $1 AND revoked_at IS NULL
+         ORDER BY created_at DESC`,
     [projectId],
   );
   return (res.rows as Array<Record<string, unknown>>).map(mapRow);
@@ -202,22 +242,129 @@ export async function getOidcClientByClientId(
   return mapRow(row);
 }
 
+/**
+ * Rotate confidential client secret. Old secret is overwritten immediately;
+ * live refresh tokens for this app are revoked.
+ */
+export async function rotateOidcClientSecret(
+  projectId: string,
+  clientId: string,
+): Promise<{ client: OidcClient; clientSecret: string }> {
+  const client = await getOidcClientByClientId(clientId);
+  if (!client || client.projectId !== projectId) {
+    throw new Error('client not found');
+  }
+  if (client.revokedAt) throw new Error('client is revoked — cannot rotate');
+  if (client.isPublic) {
+    throw new Error('public clients have no secret — use PKCE only');
+  }
+
+  const clientSecret = `oidc_sec_${randomBytes(24).toString('base64url')}`;
+  const secretHash = hashSecret(clientSecret);
+  const secretSuffix = clientSecret.slice(-4);
+  const pool = getEnginePool();
+  const res = await pool.query(
+    `UPDATE be_oidc_clients
+     SET client_secret_hash = $1,
+         client_secret_suffix = $2
+     WHERE project_id = $3 AND client_id = $4 AND revoked_at IS NULL
+     RETURNING id`,
+    [secretHash, secretSuffix, projectId, clientId],
+  );
+  if (res.rowCount === 0) throw new Error('client not found or already revoked');
+
+  const purged = await purgeOidcClientSessions(clientId);
+  void recordBrivenEngineAudit({
+    action: 'oidc.client.secret_rotated',
+    projectId,
+    metadata: {
+      clientId,
+      refreshRevoked: purged.refreshRevoked,
+      codesDeleted: purged.codesDeleted,
+    },
+  });
+
+  const updated = await getOidcClientByClientId(clientId);
+  if (!updated) throw new Error('client missing after rotate');
+  return { client: updated, clientSecret };
+}
+
+/**
+ * Soft-revoke: client cannot authenticate; secret wiped; sessions purged.
+ * Row stays for audit until hard-deleted.
+ */
 export async function revokeOidcClient(
   projectId: string,
   clientId: string,
 ): Promise<void> {
   const pool = getEnginePool();
   const res = await pool.query(
-    `UPDATE be_oidc_clients SET revoked_at = NOW()
+    `UPDATE be_oidc_clients
+     SET revoked_at = NOW(),
+         client_secret_hash = NULL,
+         client_secret_suffix = NULL
      WHERE project_id = $1 AND client_id = $2 AND revoked_at IS NULL
      RETURNING id`,
     [projectId, clientId],
   );
   if (res.rowCount === 0) throw new Error('client not found or already revoked');
+  const purged = await purgeOidcClientSessions(clientId);
+  // Drop consents so re-register feels clean if a new client is created later
+  await pool.query(`DELETE FROM be_oidc_consents WHERE client_id = $1`, [
+    clientId,
+  ]);
   void recordBrivenEngineAudit({
     action: 'oidc.client.revoked',
     projectId,
-    metadata: { clientId },
+    metadata: {
+      clientId,
+      refreshRevoked: purged.refreshRevoked,
+      codesDeleted: purged.codesDeleted,
+    },
+  });
+}
+
+/**
+ * Permanently remove a revoked (or force-active) client and leftover rows.
+ */
+export async function deleteOidcClient(
+  projectId: string,
+  clientId: string,
+  opts?: { force?: boolean },
+): Promise<void> {
+  const client = await getOidcClientByClientId(clientId);
+  if (!client || client.projectId !== projectId) {
+    throw new Error('client not found');
+  }
+  if (!client.revokedAt && !opts?.force) {
+    throw new Error('revoke the client first, then delete — or pass force');
+  }
+  await purgeOidcClientSessions(clientId);
+  const pool = getEnginePool();
+  await pool.query(`DELETE FROM be_oidc_consents WHERE client_id = $1`, [
+    clientId,
+  ]);
+  await pool.query(
+    `DELETE FROM be_oidc_auth_codes WHERE client_id = $1`,
+    [clientId],
+  );
+  await pool.query(
+    `DELETE FROM be_oidc_refresh_tokens WHERE client_id = $1`,
+    [clientId],
+  );
+  await pool.query(
+    `DELETE FROM be_oidc_auth_requests WHERE client_id = $1`,
+    [clientId],
+  );
+  const res = await pool.query(
+    `DELETE FROM be_oidc_clients WHERE project_id = $1 AND client_id = $2`,
+    [projectId, clientId],
+  );
+  if (res.rowCount === 0) throw new Error('client not found');
+  void recordBrivenEngineAudit({
+    action: 'oidc.client.deleted',
+    projectId,
+    metadata: { clientId, force: Boolean(opts?.force) },
   });
 }
 
