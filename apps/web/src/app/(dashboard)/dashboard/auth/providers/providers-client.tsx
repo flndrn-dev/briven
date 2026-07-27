@@ -996,11 +996,25 @@ export function AuthProvidersClient({
 
                     <label className="flex flex-col gap-1 font-mono text-xs">
                       <span className="text-[var(--color-text-muted)]">
-                        redirect / callback URL (copy into provider console)
+                        redirect / callback URL (copy into provider console —
+                        must match exactly)
                       </span>
                       <code className="break-all rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg)] px-3 py-2 text-[11px] text-[var(--color-text)]">
                         {callbackFor(p)}
                       </code>
+                      {p.thirdPartyId === 'konnos' ? (
+                        <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
+                          mavi pay example:{' '}
+                          <span className="text-[var(--color-text)]">
+                            https://pay.mavifinans.sh/login/oauth/callback
+                          </span>
+                          . Local:{' '}
+                          <span className="text-[var(--color-text)]">
+                            http://localhost:3000/login/oauth/callback
+                          </span>
+                          . Do not use api.briven.tech for first-party app login.
+                        </p>
+                      ) : null}
                     </label>
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
