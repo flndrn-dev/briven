@@ -5,6 +5,12 @@ import { recordAuthMailerFailure } from './auth-reliability.js';
 import { getAuthConfig, type AuthConfig } from './tenant-config-store.js';
 import { getEmailTemplate, renderTemplate, type EmailTemplateName } from './auth-email-templates.js';
 import {
+  type AuthEmailRequestMeta,
+  authEmailRequestMetaHtml,
+  authEmailRequestMetaText,
+  resolveAuthEmailRequestMeta,
+} from './auth-core/auth-email-context.js';
+import {
   buildAuthEmailFooterLines,
   getBrivenEngineBranding,
   type BrivenEngineBranding,
@@ -63,6 +69,8 @@ interface ShellArgs {
   footerNote?: string | null;
   /** Optional custom footer lines (from briven-engine branding). */
   footerLines?: string[];
+  /** Platform / device location / send time. */
+  requestMeta?: AuthEmailRequestMeta | null;
 }
 
 function safeHttpUrl(url: string | null | undefined): string | null {
@@ -88,6 +96,7 @@ function shell({
   brandUrl,
   footerNote,
   footerLines,
+  requestMeta,
 }: ShellArgs): string {
   const accent = primaryColor.toLowerCase();
   const name = escapeHtml(senderName);
@@ -144,6 +153,7 @@ function shell({
           </table>
           <h2 style="font-size:18px;font-weight:500;margin:0 0 12px 0;color:#f5f7fa">${escapeHtml(title)}</h2>
           <div style="font-size:15px;line-height:1.6;color:#d1d5db">${body}</div>
+          ${requestMeta ? authEmailRequestMetaHtml(requestMeta) : ''}
           ${note}
           <p style="color:#6b7280;font-size:12px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
             ${footerBlock}
@@ -174,29 +184,44 @@ export interface RenderContext {
   brandUrl?: string | null;
   footerNote?: string | null;
   footerLines?: string[];
+  requestMeta?: AuthEmailRequestMeta | null;
+}
+
+function shellOpts(ctx: RenderContext, title: string, body: string): ShellArgs {
+  return {
+    title,
+    body,
+    primaryColor: ctx.primaryColor,
+    senderName: ctx.senderName,
+    logoUrl: ctx.logoUrl,
+    brandUrl: ctx.brandUrl,
+    footerNote: ctx.footerNote,
+    footerLines: ctx.footerLines,
+    requestMeta: ctx.requestMeta,
+  };
 }
 
 export function renderMagicLink(
   ctx: RenderContext,
   args: { url: string; expiryMinutes: number },
 ): { subject: string; html: string; text: string } {
+  const metaText = ctx.requestMeta
+    ? `\n\n${authEmailRequestMetaText(ctx.requestMeta)}`
+    : '';
   return {
-    subject: `your sign-in link to ${ctx.senderName}`,
-    html: shell({
-      title: `sign in to ${ctx.senderName}`,
-      body: `
+    subject: `Your ${ctx.senderName} Auth sign-in`,
+    html: shell(
+      shellOpts(
+        ctx,
+        `sign in to ${ctx.senderName}`,
+        `
         <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px">click the button below to sign in. this link expires in ${args.expiryMinutes} minutes.</p>
         ${cta('sign in', args.url, ctx.primaryColor)}
         <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
       `,
-      primaryColor: ctx.primaryColor,
-      senderName: ctx.senderName,
-      logoUrl: ctx.logoUrl,
-      brandUrl: ctx.brandUrl,
-      footerNote: ctx.footerNote,
-      footerLines: ctx.footerLines,
-    }),
-    text: `sign in to ${ctx.senderName}\n\n${args.url}\n\nthis link expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.`,
+      ),
+    ),
+    text: `sign in to ${ctx.senderName}\n\n${args.url}\n\nthis link expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.${metaText}`,
   };
 }
 
@@ -205,23 +230,23 @@ export function renderOtpCode(
   args: { code: string; expiryMinutes: number },
 ): { subject: string; html: string; text: string } {
   const escapedCode = escapeHtml(args.code);
+  const metaText = ctx.requestMeta
+    ? `\n\n${authEmailRequestMetaText(ctx.requestMeta)}`
+    : '';
   return {
-    subject: `your ${ctx.senderName} sign-in code: ${args.code}`,
-    html: shell({
-      title: `sign in to ${ctx.senderName}`,
-      body: `
+    subject: `Your ${ctx.senderName} Auth code: ${args.code}`,
+    html: shell(
+      shellOpts(
+        ctx,
+        `sign in to ${ctx.senderName}`,
+        `
         <p style="margin:0 0 16px 0;color:#9ba3af;font-size:15px">enter this code to finish signing in. it expires in ${args.expiryMinutes} minutes.</p>
         <p style="margin:0 0 24px 0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:28px;letter-spacing:0.35em;text-align:center;background:#1a1d24;border-radius:10px;padding:20px 16px;border:1px solid #2a2e36;color:#f5f7fa">${escapedCode}</p>
         <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
       `,
-      primaryColor: ctx.primaryColor,
-      senderName: ctx.senderName,
-      logoUrl: ctx.logoUrl,
-      brandUrl: ctx.brandUrl,
-      footerNote: ctx.footerNote,
-      footerLines: ctx.footerLines,
-    }),
-    text: `sign in to ${ctx.senderName}\n\nyour code: ${args.code}\n\nthis code expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.`,
+      ),
+    ),
+    text: `sign in to ${ctx.senderName}\n\nyour code: ${args.code}\n\nthis code expires in ${args.expiryMinutes} minutes. if you didn't request it, ignore this email.${metaText}`,
   };
 }
 
@@ -229,23 +254,23 @@ export function renderEmailVerify(
   ctx: RenderContext,
   args: { url: string },
 ): { subject: string; html: string; text: string } {
+  const metaText = ctx.requestMeta
+    ? `\n\n${authEmailRequestMetaText(ctx.requestMeta)}`
+    : '';
   return {
     subject: `verify your email for ${ctx.senderName}`,
-    html: shell({
-      title: `verify your email for ${ctx.senderName}`,
-      body: `
+    html: shell(
+      shellOpts(
+        ctx,
+        `verify your email for ${ctx.senderName}`,
+        `
         <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px">click the button below to confirm this email address.</p>
         ${cta('verify email', args.url, ctx.primaryColor)}
         <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
       `,
-      primaryColor: ctx.primaryColor,
-      senderName: ctx.senderName,
-      logoUrl: ctx.logoUrl,
-      brandUrl: ctx.brandUrl,
-      footerNote: ctx.footerNote,
-      footerLines: ctx.footerLines,
-    }),
-    text: `verify your email for ${ctx.senderName}\n\n${args.url}\n\nif you didn't sign up, ignore this email.`,
+      ),
+    ),
+    text: `verify your email for ${ctx.senderName}\n\n${args.url}\n\nif you didn't sign up, ignore this email.${metaText}`,
   };
 }
 
@@ -253,23 +278,23 @@ export function renderPasswordReset(
   ctx: RenderContext,
   args: { url: string },
 ): { subject: string; html: string; text: string } {
+  const metaText = ctx.requestMeta
+    ? `\n\n${authEmailRequestMetaText(ctx.requestMeta)}`
+    : '';
   return {
     subject: `reset your ${ctx.senderName} password`,
-    html: shell({
-      title: `reset your ${ctx.senderName} password`,
-      body: `
+    html: shell(
+      shellOpts(
+        ctx,
+        `reset your ${ctx.senderName} password`,
+        `
         <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px">click the button below to choose a new password. this link expires in 1 hour.</p>
         ${cta('reset password', args.url, ctx.primaryColor)}
         <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email. if it wasn't you, secure your account.</p>
       `,
-      primaryColor: ctx.primaryColor,
-      senderName: ctx.senderName,
-      logoUrl: ctx.logoUrl,
-      brandUrl: ctx.brandUrl,
-      footerNote: ctx.footerNote,
-      footerLines: ctx.footerLines,
-    }),
-    text: `reset your ${ctx.senderName} password\n\n${args.url}\n\nthis link expires in 1 hour. if you didn't request this, secure your account.`,
+      ),
+    ),
+    text: `reset your ${ctx.senderName} password\n\n${args.url}\n\nthis link expires in 1 hour. if you didn't request this, secure your account.${metaText}`,
   };
 }
 
@@ -281,11 +306,16 @@ export function renderNewDeviceLogin(
   // the call site so this template doesn't see raw IPs (CLAUDE.md §5.1).
   const escDevice = escapeHtml(args.deviceHint);
   const escWhen = escapeHtml(args.whenIso);
+  const metaText = ctx.requestMeta
+    ? `\n\n${authEmailRequestMetaText(ctx.requestMeta)}`
+    : '';
   return {
     subject: `new sign-in to ${ctx.senderName}`,
-    html: shell({
-      title: `new sign-in to ${ctx.senderName}`,
-      body: `
+    html: shell(
+      shellOpts(
+        ctx,
+        `new sign-in to ${ctx.senderName}`,
+        `
         <p style="margin:0 0 16px 0;color:#9ba3af;font-size:15px">a new device just signed in to your account.</p>
         <p style="margin:0 0 24px 0;background:#1a1d24;border-radius:8px;padding:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:#9ba3af;border:1px solid #2a2e36">
           ${escDevice}<br>
@@ -294,14 +324,9 @@ export function renderNewDeviceLogin(
         ${cta('manage sessions', args.manageUrl, ctx.primaryColor)}
         <p style="margin:0;color:#6b7280;font-size:13px">if this was you, no action needed. if not, revoke the session and change your password.</p>
       `,
-      primaryColor: ctx.primaryColor,
-      senderName: ctx.senderName,
-      logoUrl: ctx.logoUrl,
-      brandUrl: ctx.brandUrl,
-      footerNote: ctx.footerNote,
-      footerLines: ctx.footerLines,
-    }),
-    text: `new sign-in to ${ctx.senderName}\n\n${args.deviceHint}\nat ${args.whenIso}\n\nmanage: ${args.manageUrl}\n\nif this wasn't you, revoke the session and change your password.`,
+      ),
+    ),
+    text: `new sign-in to ${ctx.senderName}\n\n${args.deviceHint}\nat ${args.whenIso}\n\nmanage: ${args.manageUrl}\n\nif this wasn't you, revoke the session and change your password.${metaText}`,
   };
 }
 
@@ -409,6 +434,7 @@ async function maybeUseCustomTemplate(
 async function renderCtxForProject(
   projectId: string,
   config: AuthConfig,
+  request?: { userAgent?: string | null; clientIp?: string | null },
 ): Promise<RenderContext> {
   // Prefer briven-engine branding (dashboard Auth → branding) for logo + footer.
   let engine: BrivenEngineBranding | null = null;
@@ -424,6 +450,13 @@ async function renderCtxForProject(
   const brandUrl = engine?.brandUrl ?? null;
   const footerNote = engine?.footerNote ?? null;
   const footerLines = engine ? buildAuthEmailFooterLines(engine) : [];
+  const requestMeta =
+    request?.userAgent || request?.clientIp
+      ? await resolveAuthEmailRequestMeta({
+          userAgent: request.userAgent,
+          clientIp: request.clientIp,
+        })
+      : null;
   return {
     primaryColor,
     senderName,
@@ -431,16 +464,23 @@ async function renderCtxForProject(
     brandUrl,
     footerNote,
     footerLines,
+    requestMeta,
   };
 }
+
+export type AuthMailRequestContext = {
+  userAgent?: string | null;
+  clientIp?: string | null;
+};
 
 export async function sendBrivenAuthMagicLink(
   projectId: string,
   to: string,
   url: string,
+  request?: AuthMailRequestContext,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = await renderCtxForProject(projectId, config);
+  const ctx = await renderCtxForProject(projectId, config, request);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'magic-link',
@@ -454,9 +494,10 @@ export async function sendBrivenAuthOtp(
   projectId: string,
   to: string,
   code: string,
+  request?: AuthMailRequestContext,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = await renderCtxForProject(projectId, config);
+  const ctx = await renderCtxForProject(projectId, config, request);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'otp',
@@ -470,9 +511,10 @@ export async function sendBrivenAuthEmailVerification(
   projectId: string,
   to: string,
   url: string,
+  request?: AuthMailRequestContext,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = await renderCtxForProject(projectId, config);
+  const ctx = await renderCtxForProject(projectId, config, request);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'verification',
@@ -486,9 +528,10 @@ export async function sendBrivenAuthPasswordReset(
   projectId: string,
   to: string,
   url: string,
+  request?: AuthMailRequestContext,
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = await renderCtxForProject(projectId, config);
+  const ctx = await renderCtxForProject(projectId, config, request);
   const tpl = await maybeUseCustomTemplate(
     projectId,
     'password-reset',
@@ -501,10 +544,19 @@ export async function sendBrivenAuthPasswordReset(
 export async function sendBrivenAuthNewDeviceLogin(
   projectId: string,
   to: string,
-  args: { deviceHint: string; whenIso: string; manageUrl: string },
+  args: {
+    deviceHint: string;
+    whenIso: string;
+    manageUrl: string;
+    userAgent?: string | null;
+    clientIp?: string | null;
+  },
 ): Promise<void> {
   const config = await getAuthConfig(projectId);
-  const ctx = await renderCtxForProject(projectId, config);
+  const ctx = await renderCtxForProject(projectId, config, {
+    userAgent: args.userAgent,
+    clientIp: args.clientIp,
+  });
   const tpl = renderNewDeviceLogin(ctx, args);
   await sendForTenant('briven_auth_new_device', { projectId, to, ...tpl });
 }

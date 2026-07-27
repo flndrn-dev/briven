@@ -112,7 +112,7 @@ describe('auth-mailer — pure helpers (BUILD_PLAN.md §8)', () => {
 
   test('renderMagicLink includes the URL + expiry + sender name', () => {
     const r = renderMagicLink(ctx, { url: 'https://example.com/x', expiryMinutes: 15 });
-    expect(r.subject).toBe('your sign-in link to acme auth');
+    expect(r.subject).toBe('Your acme auth Auth sign-in');
     expect(r.html).toContain('https://example.com/x');
     expect(r.html).toContain('15 minutes');
     expect(r.text).toContain('https://example.com/x');

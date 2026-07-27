@@ -185,6 +185,10 @@ export async function createPasswordlessCode(input: {
   magicLinkBaseUrl?: string;
   /** Browser Origin / Referer — used when magicLinkBaseUrl omitted */
   requestOrigin?: string | null;
+  /** User-Agent of the browser that requested the code (for email meta). */
+  userAgent?: string | null;
+  /** Client IP that requested the code (for email meta + geo). */
+  clientIp?: string | null;
 }): Promise<CreatePasswordlessCodeResult> {
   const email = input.email?.trim().toLowerCase();
   const phone = input.phoneNumber?.trim();
@@ -309,6 +313,8 @@ export async function createPasswordlessCode(input: {
       expiryMinutes,
       title: `sign in to ${appName}`,
       ctaLabel: 'sign in',
+      userAgent: input.userAgent,
+      clientIp: input.clientIp,
     });
     delivery = {
       ok: sent.ok,

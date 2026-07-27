@@ -94,6 +94,7 @@ export async function maybeAlertNewDevice(
       deviceHint: hint,
       whenIso: new Date().toISOString(),
       manageUrl: `${process.env.BRIVEN_API_ORIGIN ?? 'https://api.briven.tech'}/v1/auth-tenant/get-session?briven_project_id=${projectId}`,
+      userAgent,
     }).catch(() => {
       // Swallow — email failure must not break sign-in.
     });

@@ -15,6 +15,12 @@ import {
   sendTransactional,
 } from '../../lib/email.js';
 import {
+  type AuthEmailRequestMeta,
+  authEmailRequestMetaHtml,
+  authEmailRequestMetaText,
+  resolveAuthEmailRequestMeta,
+} from './auth-email-context.js';
+import {
   DEFAULT_BRIVEN_ENGINE_BRANDING,
   buildAuthEmailFooterLines,
   getBrivenEngineBranding,
@@ -37,6 +43,12 @@ export type EmailDeliveryInput = {
   expiryMinutes?: number;
   title?: string;
   ctaLabel?: string;
+  /** Browser user-agent of the person who triggered this email. */
+  userAgent?: string | null;
+  /** Client IP of the person who triggered this email. */
+  clientIp?: string | null;
+  /** Pre-built meta (tests / callers that already resolved geo). */
+  requestMeta?: AuthEmailRequestMeta | null;
 };
 
 export type SmsDeliveryInput = {
@@ -137,6 +149,8 @@ export function buildBrivenEngineAuthEmailHtml(input: {
   title?: string;
   /** CTA label when url is set. */
   ctaLabel?: string;
+  /** Platform / device location / send time (Europe/Brussels). */
+  requestMeta?: AuthEmailRequestMeta | null;
 }): string {
   const b = input.branding;
   const color = (b.primaryColor || DEFAULT_BRIVEN_ENGINE_BRANDING.primaryColor).toLowerCase();
@@ -231,6 +245,7 @@ export function buildBrivenEngineAuthEmailHtml(input: {
           <h2 style="font-family:system-ui,sans-serif;font-size:18px;font-weight:500;margin:0 0 12px 0;color:#f5f7fa">${title}</h2>
           ${main}
           <p style="margin:0;color:#6b7280;font-size:13px">if you didn't request this, you can ignore this email.</p>
+          ${input.requestMeta ? authEmailRequestMetaHtml(input.requestMeta) : ''}
           ${footerNote}
           <p style="color:#6b7280;font-size:12px;margin-top:32px;border-top:1px solid #1e2128;padding-top:16px">
             ${footerBlock}
@@ -261,14 +276,27 @@ export async function sendBrivenEngineEmail(
       ? authEmailSubject(appName, 'code', input.code)
       : authEmailSubject(appName, 'sign-in'));
   const expiry = input.expiryMinutes ?? 10;
+  const requestMeta =
+    input.requestMeta ??
+    (input.userAgent || input.clientIp
+      ? await resolveAuthEmailRequestMeta({
+          userAgent: input.userAgent,
+          clientIp: input.clientIp,
+        })
+      : null);
   const defaultText = [
     hasCode ? `Your ${appName} Auth code: ${String(input.code).trim()}` : null,
     hasUrl ? `Sign in to ${appName}: ${String(input.url).trim()}` : null,
     `This expires in ${expiry} minutes. If you didn't request it, ignore this email.`,
+    requestMeta ? authEmailRequestMetaText(requestMeta) : null,
   ]
     .filter(Boolean)
     .join('\n\n');
-  const text = input.body ?? (defaultText || `${appName} message`);
+  const text = input.body
+    ? requestMeta
+      ? `${input.body}\n\n${authEmailRequestMetaText(requestMeta)}`
+      : input.body
+    : defaultText || `${appName} message`;
   const html = buildBrivenEngineAuthEmailHtml({
     body: text,
     branding,
@@ -278,6 +306,7 @@ export async function sendBrivenEngineEmail(
     expiryMinutes: input.expiryMinutes,
     title: input.title ?? `sign in to ${appName}`,
     ctaLabel: input.ctaLabel,
+    requestMeta,
   });
 
   log.info('briven_engine_email', {
