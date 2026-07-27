@@ -36,11 +36,10 @@ export const BRIVEN_ENGINE_SOCIAL_CATALOG: readonly BrivenSocialProviderMeta[] =
     thirdPartyId: 'konnos',
     name: 'Konnos',
     engine: 'briven-engine',
-    help: 'konnos.org → Settings → Applications (Sign in with Konnos). Callback must match EXACTLY what your app sends (usually https://your-app/login/oauth/callback). Not code.konnos.org (Git).',
+    help: '',
     builtIn: true,
-    // First-party apps (mavi, etc.) send their own origin — not the Briven API host.
-    callbackHint:
-      'https://YOUR_APP_ORIGIN/login/oauth/callback',
+    // SuperTokens: redirect_uri = OAuth callback path on the app (not post-login /dashboard).
+    callbackHint: 'https://YOUR_APP_ORIGIN/auth/callback',
   },
   {
     thirdPartyId: 'google',
