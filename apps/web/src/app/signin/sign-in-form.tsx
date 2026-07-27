@@ -235,13 +235,15 @@ export function SignInForm({ next, apiOrigin, disabled, providers }: Props) {
               disabled={disabled || anyPending}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 font-mono text-sm text-[var(--color-text)] transition hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
             >
-              <span
-                className="inline-flex h-5 w-5 items-center justify-center rounded-sm font-mono text-[10px] font-bold text-black"
-                style={{ background: '#FFFD74' }}
+              {/* Official Konnos mark (logo.svg) — auto when Konnos OAuth is on */}
+              <img
+                src="/konnos.svg"
+                alt=""
+                width={20}
+                height={20}
+                className="h-5 w-5 rounded-sm object-contain"
                 aria-hidden
-              >
-                K
-              </span>
+              />
               {oauthPending === 'konnos' ? 'redirecting...' : 'continue with konnos'}
             </button>
           ) : null}
