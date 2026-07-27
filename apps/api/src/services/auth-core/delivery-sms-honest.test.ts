@@ -5,6 +5,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  authEmailSubject,
   buildBrivenEngineAuthEmailHtml,
   sendBrivenEngineSms,
   sendBrivenEngineSmsTest,
@@ -116,6 +117,46 @@ describe('briven-engine auth email branding HTML', () => {
     expect(html).not.toContain('onerror');
     // Unsafe logo rejected → colored circle, no img
     expect(html).not.toContain('<img');
+    // No raw "Magic link:" dump — button only
+    expect(html).not.toContain('Magic link:');
+  });
+
+  test('OTP-only email has code and no magic-link CTA', () => {
+    const html = buildBrivenEngineAuthEmailHtml({
+      code: '847291',
+      branding: {
+        logoUrl: null,
+        primaryColor: '#0ea5e9',
+        senderName: 'mavi pay',
+        brandUrl: 'pay.mavifinans.sh',
+        footerNote: null,
+        footerLoveName: null,
+        footerOrgName: null,
+        footerTagline: null,
+        footerCity: null,
+        footerCountry: null,
+        footerShowLove: false,
+        footerShowTagline: false,
+        footerShowAddress: false,
+      },
+    });
+    expect(html).toContain('mavi pay');
+    expect(html).toContain('847291');
+    expect(html).toContain('enter this code');
+    expect(html).not.toContain('click the button below');
+    expect(html).not.toContain('Magic link');
+  });
+
+  test('authEmailSubject uses project name not Briven Auth', () => {
+    expect(authEmailSubject('mavi pay', 'sign-in')).toBe(
+      'Your mavi pay Auth sign-in',
+    );
+    expect(authEmailSubject('mavi pay', 'code', '123456')).toBe(
+      'Your mavi pay Auth code: 123456',
+    );
+    expect(authEmailSubject('mavi pay', 'code')).toBe(
+      'Your mavi pay Auth code',
+    );
   });
 
   test('escapes plain body fallback', () => {

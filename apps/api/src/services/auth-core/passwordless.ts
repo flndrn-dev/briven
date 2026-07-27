@@ -10,11 +10,15 @@ import { log } from '../../lib/logger.js';
 import { env } from '../../env.js';
 import { getEnginePool } from './db.js';
 import {
+  authEmailSubject,
   sendBrivenEngineEmail,
   sendBrivenEngineSms,
 } from './delivery.js';
 import { createEngineSession } from './native-session.js';
-import { getBrivenEngineAppOrigins } from './project-config.js';
+import {
+  getBrivenEngineAppOrigins,
+  getBrivenEngineBranding,
+} from './project-config.js';
 import { projectIdToTenantId } from './project-map.js';
 
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -257,25 +261,54 @@ export async function createPasswordlessCode(input: {
   };
 
   if (channel === 'email' && email) {
+    // Brand name from Auth → Branding (e.g. "mavi pay"), never hardcode "Briven Auth".
+    const branding = input.projectId
+      ? await getBrivenEngineBranding(input.projectId)
+      : null;
+    const appName = branding?.senderName?.trim() || 'your app';
+    const expiryMinutes = Math.round(CODE_TTL_MS / 60000);
+
     const base = await resolveMagicLinkBaseUrl({
       explicit: input.magicLinkBaseUrl,
       projectId: input.projectId,
       requestOrigin: input.requestOrigin,
     });
-    const urlWithLinkCode = linkCode
-      ? `${base}?preAuthSessionId=${encodeURIComponent(preAuthSessionId)}&linkCode=${encodeURIComponent(linkCode)}&deviceId=${encodeURIComponent(deviceId)}`
-      : undefined;
-    const bodyParts = [
-      userInputCode ? `Your Briven Auth code: ${userInputCode}` : null,
-      urlWithLinkCode ? `Magic link: ${urlWithLinkCode}` : null,
-      `Expires in ${CODE_TTL_MS / 60000} minutes.`,
+    // Only build a magic-link URL when this flow actually requested one.
+    // OTP-only must not include a link (and vice versa for magic-link-only).
+    const urlWithLinkCode =
+      linkCode && flowType !== 'USER_INPUT_CODE'
+        ? `${base}?preAuthSessionId=${encodeURIComponent(preAuthSessionId)}&linkCode=${encodeURIComponent(linkCode)}&deviceId=${encodeURIComponent(deviceId)}`
+        : undefined;
+    const otpForEmail =
+      userInputCode && flowType !== 'MAGIC_LINK' ? userInputCode : undefined;
+
+    const subject =
+      otpForEmail && !urlWithLinkCode
+        ? authEmailSubject(appName, 'code', otpForEmail)
+        : authEmailSubject(appName, 'sign-in');
+
+    // Plain-text fallback for clients that ignore HTML (still no dual-channel leak).
+    const textParts = [
+      otpForEmail ? `Your ${appName} Auth code: ${otpForEmail}` : null,
+      urlWithLinkCode
+        ? `Sign in to ${appName}: open the button in the HTML version of this email, or visit:\n${urlWithLinkCode}`
+        : null,
+      `Expires in ${expiryMinutes} minutes.`,
+      `If you didn't request this, you can ignore this email.`,
     ].filter(Boolean);
+
     const sent = await sendBrivenEngineEmail({
       email,
-      subject: 'Your Briven Auth sign-in',
-      body: bodyParts.join('\n'),
+      subject,
+      body: textParts.join('\n\n'),
       type: 'PASSWORDLESS_LOGIN',
       projectId: input.projectId,
+      // Structured fields drive the professional HTML (button / big code).
+      url: urlWithLinkCode ?? null,
+      code: otpForEmail ?? null,
+      expiryMinutes,
+      title: `sign in to ${appName}`,
+      ctaLabel: 'sign in',
     });
     delivery = {
       ok: sent.ok,
@@ -283,12 +316,17 @@ export async function createPasswordlessCode(input: {
       message: sent.message,
     };
   } else if (channel === 'sms' && phone) {
+    const branding = input.projectId
+      ? await getBrivenEngineBranding(input.projectId)
+      : null;
+    const appName = branding?.senderName?.trim() || 'your app';
     const sent = await sendBrivenEngineSms({
       phoneNumber: phone,
       userInputCode,
       codeLifetime: CODE_TTL_MS,
       type: 'PASSWORDLESS_LOGIN',
       projectId: input.projectId,
+      userContext: { appName, projectId: input.projectId },
     });
     delivery = {
       ok: sent.ok,

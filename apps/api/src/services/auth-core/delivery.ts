@@ -84,16 +84,40 @@ export function getAuthEmailDeliveryStatus(): {
 function bodyFromSms(input: SmsDeliveryInput): string {
   if (input.bodyOverride?.trim()) return input.bodyOverride.trim();
   if (input.type === 'DASHBOARD_TEST') {
-    return 'Briven Auth test: SMS is working for this project. This is not a login code.';
+    return 'Auth test: SMS is working for this project. This is not a login code.';
   }
+  // Prefer project brand when callers put it on userContext.appName.
+  const appName =
+    typeof input.userContext?.appName === 'string' &&
+    input.userContext.appName.trim()
+      ? String(input.userContext.appName).trim()
+      : 'your app';
   const parts = [
-    input.userInputCode ? `Your Briven Auth code: ${input.userInputCode}` : null,
+    input.userInputCode
+      ? `Your ${appName} Auth code: ${input.userInputCode}`
+      : null,
     input.urlWithLinkCode ? `Sign in: ${input.urlWithLinkCode}` : null,
     input.codeLifetime
       ? `This code expires in ${Math.round(input.codeLifetime / 1000 / 60)} minutes.`
       : null,
   ].filter(Boolean);
-  return parts.join('\n') || 'Your Briven Auth message';
+  return parts.join('\n') || `Your ${appName} Auth message`;
+}
+
+/** Subject lines for project Auth emails (uses dashboard branding name). */
+export function authEmailSubject(
+  appName: string,
+  kind: 'sign-in' | 'code',
+  code?: string | null,
+): string {
+  const name = appName.trim() || 'your app';
+  if (kind === 'code') {
+    const c = code?.trim();
+    return c
+      ? `Your ${name} Auth code: ${c}`
+      : `Your ${name} Auth code`;
+  }
+  return `Your ${name} Auth sign-in`;
 }
 
 /**
@@ -141,19 +165,25 @@ export function buildBrivenEngineAuthEmailHtml(input: {
     ? brandUrl.replace(/^https?:\/\//i, '').replace(/\/$/, '')
     : null;
 
-  let main = '';
-  if (input.url && sanitizeLogoUrl(input.url) /* reuse URL sanitizer */) {
+  // Structured content only — never dump a raw magic-link URL as the main body.
+  // OTP-only → big code. Magic-link-only → button. Both → code then button.
+  // Plain `body` is a last-resort fallback (password reset, generic notices).
+  const chunks: string[] = [];
+  if (input.code && String(input.code).trim()) {
+    const code = escapeHtml(String(input.code).trim());
+    chunks.push(`
+          <p style="margin:0 0 16px 0;color:#9ba3af;font-size:15px;line-height:1.6">enter this code to finish signing in. it expires in ${expiry} minutes.</p>
+          <p style="margin:0 0 24px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.35em;text-align:center;background:#1a1d24;border-radius:10px;padding:20px 16px;border:1px solid #2a2e36;color:#f5f7fa">${code}</p>`);
+  }
+  if (input.url && sanitizeLogoUrl(input.url) /* https/localhost only */) {
     const href = sanitizeLogoUrl(input.url)!;
     const label = escapeHtml(input.ctaLabel?.trim() || 'sign in');
-    main = `
+    chunks.push(`
           <p style="margin:0 0 24px 0;color:#9ba3af;font-size:15px;line-height:1.6">click the button below to sign in. this link expires in ${expiry} minutes.</p>
-          <p style="margin:0 0 24px 0"><a href="${escapeHtml(href)}" style="display:inline-block;background:${escapeHtml(color)};color:#0a0b0d;padding:12px 24px;border-radius:10px;font-weight:500;font-family:system-ui,sans-serif;text-decoration:none">${label}</a></p>`;
-  } else if (input.code && String(input.code).trim()) {
-    const code = escapeHtml(String(input.code).trim());
-    main = `
-          <p style="margin:0 0 16px 0;color:#9ba3af;font-size:15px;line-height:1.6">enter this code to finish signing in. it expires in ${expiry} minutes.</p>
-          <p style="margin:0 0 24px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.35em;text-align:center;background:#1a1d24;border-radius:10px;padding:20px 16px;border:1px solid #2a2e36;color:#f5f7fa">${code}</p>`;
-  } else {
+          <p style="margin:0 0 24px 0"><a href="${escapeHtml(href)}" style="display:inline-block;background:${escapeHtml(color)};color:#0a0b0d;padding:12px 24px;border-radius:10px;font-weight:500;font-family:system-ui,sans-serif;text-decoration:none">${label}</a></p>`);
+  }
+  let main = chunks.join('');
+  if (!main) {
     const lines = escapeHtml(input.body ?? '')
       .split('\n')
       .map((line) => (line ? line : '&nbsp;'))
@@ -221,25 +251,32 @@ export async function sendBrivenEngineEmail(
   const branding = input.projectId
     ? await getBrivenEngineBranding(input.projectId)
     : { ...DEFAULT_BRIVEN_ENGINE_BRANDING };
+  const appName = branding.senderName || DEFAULT_BRIVEN_ENGINE_BRANDING.senderName;
+  const hasCode = Boolean(input.code && String(input.code).trim());
+  const hasUrl = Boolean(input.url && String(input.url).trim());
+  // Prefer structured fields: OTP-only → "Auth code"; magic link → "Auth sign-in".
   const subject =
     input.subject ??
-    (input.code
-      ? `your ${branding.senderName} sign-in code: ${input.code}`
-      : `your sign-in link to ${branding.senderName}`);
-  const text =
-    input.body ??
-    (input.url
-      ? `sign in to ${branding.senderName}\n\n${input.url}\n\nthis link expires in ${input.expiryMinutes ?? 10} minutes. if you didn't request it, ignore this email.`
-      : input.code
-        ? `sign in to ${branding.senderName}\n\nyour code: ${input.code}\n\nthis code expires in ${input.expiryMinutes ?? 10} minutes. if you didn't request it, ignore this email.`
-        : `${branding.senderName} message`);
+    (hasCode && !hasUrl
+      ? authEmailSubject(appName, 'code', input.code)
+      : authEmailSubject(appName, 'sign-in'));
+  const expiry = input.expiryMinutes ?? 10;
+  const defaultText = [
+    hasCode ? `Your ${appName} Auth code: ${String(input.code).trim()}` : null,
+    hasUrl ? `Sign in to ${appName}: ${String(input.url).trim()}` : null,
+    `This expires in ${expiry} minutes. If you didn't request it, ignore this email.`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const text = input.body ?? (defaultText || `${appName} message`);
   const html = buildBrivenEngineAuthEmailHtml({
     body: text,
     branding,
-    url: input.url,
-    code: input.code,
+    // Never pass the other channel's field when callers omit it.
+    url: hasUrl ? input.url : null,
+    code: hasCode ? input.code : null,
     expiryMinutes: input.expiryMinutes,
-    title: input.title,
+    title: input.title ?? `sign in to ${appName}`,
     ctaLabel: input.ctaLabel,
   });
 
@@ -569,10 +606,8 @@ export function passwordlessEmailDeliveryService() {
         const expiryMinutes = input.codeLifetime
           ? Math.max(1, Math.round(input.codeLifetime / 1000 / 60))
           : 10;
-        const bodyParts = [
-          input.userInputCode ? `Your code: ${input.userInputCode}` : null,
-          input.urlWithLinkCode ? `Magic link: ${input.urlWithLinkCode}` : null,
-        ].filter(Boolean);
+        // Structured only: OTP emails get `code`, magic-link emails get `url`.
+        // Do not force both into plain body text (that produced ugly dual emails).
         await sendBrivenEngineEmail({
           email: input.email,
           type: input.type,
@@ -585,7 +620,6 @@ export function passwordlessEmailDeliveryService() {
           url: input.urlWithLinkCode ?? null,
           code: input.userInputCode ?? null,
           expiryMinutes,
-          body: bodyParts.join('\n') || 'Briven Auth message',
         });
       },
     },
