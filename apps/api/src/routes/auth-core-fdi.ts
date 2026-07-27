@@ -620,6 +620,18 @@ authCoreFdiRouter.delete(`${FDI}/totp/devices/:deviceId`, async (c) => {
 
 // ─── Phase 5: Passkeys (WebAuthn) ────────────────────────────────────
 
+function requestOriginFrom(c: { req: { header: (n: string) => string | undefined } }): string | null {
+  const o = c.req.header('origin')?.trim();
+  if (o) return o;
+  const ref = c.req.header('referer')?.trim();
+  if (!ref) return null;
+  try {
+    return new URL(ref).origin;
+  } catch {
+    return null;
+  }
+}
+
 authCoreFdiRouter.post(`${FDI}/webauthn/register/options`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
   const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
@@ -627,7 +639,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/options`, async (c) => {
   if (!userId) {
     return c.json({ status: 'UNAUTHORISED', engine: 'briven-engine' }, 401);
   }
-  let body: { userName?: string; rpId?: string } = {};
+  let body: { userName?: string; rpId?: string; expectedOrigin?: string } = {};
   try {
     body = await c.req.json();
   } catch {
@@ -639,6 +651,8 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/options`, async (c) => {
     projectId: tenant?.projectId,
     tenantId: tenant?.tenantId,
     rpId: body.rpId,
+    expectedOrigin: body.expectedOrigin,
+    requestOrigin: requestOriginFrom(c),
   });
   if (result.status !== 'OK') {
     return c.json({ ...result, engine: 'briven-engine' }, 400);
@@ -648,6 +662,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/options`, async (c) => {
 
 authCoreFdiRouter.post(`${FDI}/webauthn/register/finish`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
+  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
   const userId = await sessionUserId(c);
   if (!userId) {
     return c.json({ status: 'UNAUTHORISED', engine: 'briven-engine' }, 401);
@@ -658,6 +673,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/finish`, async (c) => {
     publicKey?: string;
     transports?: string[];
     response?: unknown;
+    credential?: unknown;
     rpId?: string;
     expectedOrigin?: string;
   } = {};
@@ -675,10 +691,12 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/finish`, async (c) => {
     credentialId: body.credentialId,
     publicKey: body.publicKey,
     transports: body.transports,
+    projectId: tenant?.projectId,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    response: body.response as any,
+    response: (body.response ?? body.credential) as any,
     rpId: body.rpId,
     expectedOrigin: body.expectedOrigin,
+    requestOrigin: requestOriginFrom(c),
   });
   if (result.status !== 'OK') {
     return c.json({ ...result, engine: 'briven-engine' }, 400);
@@ -689,7 +707,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/finish`, async (c) => {
 authCoreFdiRouter.post(`${FDI}/webauthn/signin/options`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
   const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
-  let body: { userId?: string; rpId?: string } = {};
+  let body: { userId?: string; rpId?: string; expectedOrigin?: string } = {};
   try {
     body = await c.req.json();
   } catch {
@@ -700,6 +718,8 @@ authCoreFdiRouter.post(`${FDI}/webauthn/signin/options`, async (c) => {
     projectId: tenant?.projectId,
     tenantId: tenant?.tenantId,
     rpId: body.rpId,
+    expectedOrigin: body.expectedOrigin,
+    requestOrigin: requestOriginFrom(c),
   });
   if (result.status !== 'OK') {
     return c.json({ ...result, engine: 'briven-engine' }, 400);
@@ -714,6 +734,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/signin/finish`, async (c) => {
     challengeId?: string;
     credentialId?: string;
     response?: unknown;
+    credential?: unknown;
     rpId?: string;
     expectedOrigin?: string;
   } = {};
@@ -729,10 +750,11 @@ authCoreFdiRouter.post(`${FDI}/webauthn/signin/finish`, async (c) => {
     challengeId: body.challengeId,
     credentialId: body.credentialId,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    response: body.response as any,
+    response: (body.response ?? body.credential) as any,
     projectId: tenant?.projectId,
     rpId: body.rpId,
     expectedOrigin: body.expectedOrigin,
+    requestOrigin: requestOriginFrom(c),
   });
   if (result.status !== 'OK') {
     return c.json({ ...result, engine: 'briven-engine' }, 400);

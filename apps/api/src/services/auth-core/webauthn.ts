@@ -1,5 +1,8 @@
 /**
  * briven-engine passkeys on Doltgres with @simplewebauthn/server verification.
+ *
+ * rpId / expectedOrigin MUST match the app host the user is on (e.g.
+ * pay.mavifinans.sh for mavi pay) — never hard-code briven.tech for tenant apps.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -20,6 +23,7 @@ import { log } from '../../lib/logger.js';
 import { getEnginePool } from './db.js';
 import { isAuthCoreInitialized } from './engine.js';
 import { createEngineSession } from './native-session.js';
+import { getBrivenEngineAppOrigins, getBrivenEngineBranding } from './project-config.js';
 import { projectIdToTenantId } from './project-map.js';
 
 function resolveTenant(projectId?: string, tenantId?: string): string {
@@ -28,23 +32,116 @@ function resolveTenant(projectId?: string, tenantId?: string): string {
   return 'public';
 }
 
-function rpIdFrom(input?: string): string {
-  if (input) return input;
+function normalizeHttpOrigin(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
   try {
-    return new URL(env.BRIVEN_WEB_ORIGIN ?? 'http://localhost:3000').hostname;
+    const u = new URL(raw.trim());
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.protocol === 'http:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') {
+      return null;
+    }
+    return `${u.protocol}//${u.host}`;
   } catch {
-    return 'localhost';
+    return null;
   }
 }
 
-function originFrom(rpId: string): string {
-  const web = env.BRIVEN_WEB_ORIGIN ?? 'http://localhost:3000';
+/**
+ * rpId must equal the origin hostname, or be a parent domain of it
+ * (WebAuthn registrable-domain rule, simplified).
+ */
+export function rpIdMatchesOrigin(rpId: string, origin: string): boolean {
   try {
-    const u = new URL(web);
-    return u.origin;
+    const host = new URL(origin).hostname.toLowerCase();
+    const rp = rpId.toLowerCase().replace(/^\./, '');
+    if (!rp || !host) return false;
+    return host === rp || host.endsWith(`.${rp}`);
   } catch {
-    return rpId === 'localhost' ? 'http://localhost:3000' : `https://${rpId}`;
+    return false;
   }
+}
+
+/**
+ * Resolve which website "owns" this passkey ceremony.
+ *
+ * Priority:
+ *  1) explicit expectedOrigin / rpId from the app (mavi sends window.location)
+ *  2) browser Origin header (proxied by first-party /api/auth)
+ *  3) project's Allowed Domains list
+ *  4) last resort: BRIVEN_WEB_ORIGIN (hosted Briven only — not tenant apps)
+ */
+export async function resolveWebAuthnRp(input: {
+  projectId?: string;
+  rpId?: string | null;
+  expectedOrigin?: string | null;
+  /** Origin header from the browser (or first-party proxy). */
+  requestOrigin?: string | null;
+}): Promise<
+  | { ok: true; rpId: string; expectedOrigin: string; rpName: string }
+  | { ok: false; message: string }
+> {
+  const allowed = input.projectId
+    ? await getBrivenEngineAppOrigins(input.projectId)
+    : [];
+
+  const candidates: string[] = [];
+  const push = (raw: string | null | undefined) => {
+    const o = normalizeHttpOrigin(raw);
+    if (o && !candidates.includes(o)) candidates.push(o);
+  };
+  push(input.expectedOrigin);
+  push(input.requestOrigin);
+  for (const a of allowed) push(a);
+
+  // Hosted dashboard only — never preferred when the project has its own apps.
+  if (candidates.length === 0) {
+    push(env.BRIVEN_WEB_ORIGIN ?? null);
+  }
+
+  let expectedOrigin: string | null = null;
+  for (const o of candidates) {
+    if (allowed.length === 0 || allowed.includes(o)) {
+      expectedOrigin = o;
+      break;
+    }
+  }
+  // If Allowed Domains is empty, still accept https app origin from the request
+  // (first-day projects before they finish the domain checklist).
+  if (!expectedOrigin && candidates[0]) {
+    expectedOrigin = candidates[0];
+  }
+  if (!expectedOrigin) {
+    return {
+      ok: false,
+      message:
+        'Passkey needs an app origin. Open your app over HTTPS and add it under Auth → Allowed Domains.',
+    };
+  }
+
+  let rpId = (input.rpId ?? '').trim().toLowerCase() || null;
+  if (rpId && !rpIdMatchesOrigin(rpId, expectedOrigin)) {
+    // Ignore a mismatched client rpId; derive from origin instead.
+    rpId = null;
+  }
+  if (!rpId) {
+    try {
+      rpId = new URL(expectedOrigin).hostname;
+    } catch {
+      return { ok: false, message: 'invalid passkey origin' };
+    }
+  }
+
+  let rpName = 'Briven Auth';
+  if (input.projectId) {
+    try {
+      const brand = await getBrivenEngineBranding(input.projectId);
+      if (brand.senderName?.trim()) rpName = brand.senderName.trim();
+    } catch {
+      /* keep default */
+    }
+  }
+
+  return { ok: true, rpId, expectedOrigin, rpName };
 }
 
 function b64urlToBuffer(s: string): Buffer {
@@ -59,6 +156,8 @@ export async function createRegistrationOptions(input: {
   projectId?: string;
   tenantId?: string;
   rpId?: string;
+  expectedOrigin?: string;
+  requestOrigin?: string | null;
 }): Promise<
   | {
       status: 'OK';
@@ -73,7 +172,13 @@ export async function createRegistrationOptions(input: {
     return { status: 'ERROR', message: 'engine not ready' };
   }
   const tenantId = resolveTenant(input.projectId, input.tenantId);
-  const rpID = rpIdFrom(input.rpId);
+  const rp = await resolveWebAuthnRp({
+    projectId: input.projectId,
+    rpId: input.rpId,
+    expectedOrigin: input.expectedOrigin,
+    requestOrigin: input.requestOrigin,
+  });
+  if (!rp.ok) return { status: 'ERROR', message: rp.message };
   const pool = getEnginePool();
 
   const existing = await pool.query(
@@ -89,8 +194,8 @@ export async function createRegistrationOptions(input: {
   }));
 
   const options = await generateRegistrationOptions({
-    rpName: 'Briven Auth',
-    rpID,
+    rpName: rp.rpName,
+    rpID: rp.rpId,
     userName: input.userName,
     userID: new TextEncoder().encode(input.userId),
     userDisplayName: input.userName,
@@ -104,12 +209,16 @@ export async function createRegistrationOptions(input: {
 
   const challengeId = `wac_${randomBytes(12).toString('hex')}`;
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-  await pool.query(
-    `INSERT INTO be_webauthn_challenges
-      (challenge_id, tenant_id, user_id, challenge, type, expires_at)
-     VALUES ($1, $2, $3, $4, 'registration', $5)`,
-    [challengeId, tenantId, input.userId, options.challenge, expiresAt.toISOString()],
-  );
+  await insertWebauthnChallenge(pool, {
+    challengeId,
+    tenantId,
+    userId: input.userId,
+    challenge: options.challenge,
+    type: 'registration',
+    expiresAt: expiresAt.toISOString(),
+    rpId: rp.rpId,
+    expectedOrigin: rp.expectedOrigin,
+  });
 
   return {
     status: 'OK',
@@ -118,6 +227,116 @@ export async function createRegistrationOptions(input: {
     engine: 'briven-engine',
     storage: 'doltgres',
   };
+}
+
+let rpColumnsReady: Promise<boolean> | null = null;
+/** Best-effort: add rp_id / expected_origin on challenges (Doltgres/Postgres). */
+async function ensureWebauthnRpColumns(
+  pool: ReturnType<typeof getEnginePool>,
+): Promise<boolean> {
+  if (!rpColumnsReady) {
+    rpColumnsReady = (async () => {
+      try {
+        await pool.query(
+          `ALTER TABLE be_webauthn_challenges ADD COLUMN IF NOT EXISTS rp_id TEXT`,
+        );
+        await pool.query(
+          `ALTER TABLE be_webauthn_challenges ADD COLUMN IF NOT EXISTS expected_origin TEXT`,
+        );
+        return true;
+      } catch (err) {
+        log.warn('webauthn_rp_columns_ensure_failed', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+        rpColumnsReady = null;
+        return false;
+      }
+    })();
+  }
+  return rpColumnsReady;
+}
+
+async function insertWebauthnChallenge(
+  pool: ReturnType<typeof getEnginePool>,
+  row: {
+    challengeId: string;
+    tenantId: string;
+    userId: string | null;
+    challenge: string;
+    type: 'registration' | 'authentication';
+    expiresAt: string;
+    rpId: string;
+    expectedOrigin: string;
+  },
+): Promise<void> {
+  const hasCols = await ensureWebauthnRpColumns(pool);
+  if (hasCols) {
+    try {
+      await pool.query(
+        `INSERT INTO be_webauthn_challenges
+          (challenge_id, tenant_id, user_id, challenge, type, expires_at, rp_id, expected_origin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          row.challengeId,
+          row.tenantId,
+          row.userId,
+          row.challenge,
+          row.type,
+          row.expiresAt,
+          row.rpId,
+          row.expectedOrigin,
+        ],
+      );
+      return;
+    } catch {
+      /* fall through to legacy insert */
+    }
+  }
+  await pool.query(
+    `INSERT INTO be_webauthn_challenges
+      (challenge_id, tenant_id, user_id, challenge, type, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      row.challengeId,
+      row.tenantId,
+      row.userId,
+      row.challenge,
+      row.type,
+      row.expiresAt,
+    ],
+  );
+}
+
+async function loadWebauthnChallenge(
+  pool: ReturnType<typeof getEnginePool>,
+  challengeId: string,
+  type: 'registration' | 'authentication',
+): Promise<{
+  challenge: string;
+  tenant_id: string;
+  expires_at: string | Date;
+  user_id?: string | null;
+  rp_id?: string | null;
+  expected_origin?: string | null;
+} | null> {
+  await ensureWebauthnRpColumns(pool);
+  try {
+    const ch = await pool.query(
+      `SELECT challenge, tenant_id, expires_at, user_id, rp_id, expected_origin
+       FROM be_webauthn_challenges
+       WHERE challenge_id = $1 AND type = $2 LIMIT 1`,
+      [challengeId, type],
+    );
+    return (ch.rows[0] as never) ?? null;
+  } catch {
+    const ch = await pool.query(
+      `SELECT challenge, tenant_id, expires_at, user_id
+       FROM be_webauthn_challenges
+       WHERE challenge_id = $1 AND type = $2 LIMIT 1`,
+      [challengeId, type],
+    );
+    return (ch.rows[0] as never) ?? null;
+  }
 }
 
 export async function finishRegistration(input: {
@@ -132,6 +351,7 @@ export async function finishRegistration(input: {
   projectId?: string;
   expectedOrigin?: string;
   rpId?: string;
+  requestOrigin?: string | null;
 }): Promise<{
   status: 'OK' | 'ERROR';
   message?: string;
@@ -142,19 +362,7 @@ export async function finishRegistration(input: {
     return { status: 'ERROR', message: 'engine not ready' };
   }
   const pool = getEnginePool();
-  const ch = await pool.query(
-    `SELECT challenge, tenant_id, expires_at, user_id FROM be_webauthn_challenges
-     WHERE challenge_id = $1 AND type = 'registration' LIMIT 1`,
-    [input.challengeId],
-  );
-  const row = ch.rows[0] as
-    | {
-        challenge: string;
-        tenant_id: string;
-        expires_at: string | Date;
-        user_id: string | null;
-      }
-    | undefined;
+  const row = await loadWebauthnChallenge(pool, input.challengeId, 'registration');
   if (!row || row.user_id !== input.userId) {
     return { status: 'ERROR', message: 'invalid challenge' };
   }
@@ -162,8 +370,16 @@ export async function finishRegistration(input: {
     return { status: 'ERROR', message: 'challenge expired' };
   }
 
-  const rpID = rpIdFrom(input.rpId);
-  const expectedOrigin = input.expectedOrigin ?? originFrom(rpID);
+  const rp = await resolveWebAuthnRp({
+    projectId: input.projectId,
+    // Prefer values bound at options-create time (cannot be spoofed mid-flow).
+    rpId: row.rp_id || input.rpId,
+    expectedOrigin: row.expected_origin || input.expectedOrigin,
+    requestOrigin: input.requestOrigin,
+  });
+  if (!rp.ok) return { status: 'ERROR', message: rp.message };
+  const rpID = rp.rpId;
+  const expectedOrigin = rp.expectedOrigin;
 
   let credentialId: string;
   let publicKey: string;
@@ -237,6 +453,8 @@ export async function createAuthenticationOptions(input: {
   tenantId?: string;
   userId?: string;
   rpId?: string;
+  expectedOrigin?: string;
+  requestOrigin?: string | null;
 }): Promise<
   | {
       status: 'OK';
@@ -251,7 +469,13 @@ export async function createAuthenticationOptions(input: {
     return { status: 'ERROR', message: 'engine not ready' };
   }
   const tenantId = resolveTenant(input.projectId, input.tenantId);
-  const rpID = rpIdFrom(input.rpId);
+  const rp = await resolveWebAuthnRp({
+    projectId: input.projectId,
+    rpId: input.rpId,
+    expectedOrigin: input.expectedOrigin,
+    requestOrigin: input.requestOrigin,
+  });
+  if (!rp.ok) return { status: 'ERROR', message: rp.message };
   const pool = getEnginePool();
 
   let allowCredentials:
@@ -272,25 +496,23 @@ export async function createAuthenticationOptions(input: {
   }
 
   const options = await generateAuthenticationOptions({
-    rpID,
+    rpID: rp.rpId,
     allowCredentials,
     userVerification: 'preferred',
   });
 
   const challengeId = `wac_${randomBytes(12).toString('hex')}`;
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-  await pool.query(
-    `INSERT INTO be_webauthn_challenges
-      (challenge_id, tenant_id, user_id, challenge, type, expires_at)
-     VALUES ($1, $2, $3, $4, 'authentication', $5)`,
-    [
-      challengeId,
-      tenantId,
-      input.userId ?? null,
-      options.challenge,
-      expiresAt.toISOString(),
-    ],
-  );
+  await insertWebauthnChallenge(pool, {
+    challengeId,
+    tenantId,
+    userId: input.userId ?? null,
+    challenge: options.challenge,
+    type: 'authentication',
+    expiresAt: expiresAt.toISOString(),
+    rpId: rp.rpId,
+    expectedOrigin: rp.expectedOrigin,
+  });
 
   return {
     status: 'OK',
@@ -309,6 +531,7 @@ export async function finishAuthentication(input: {
   projectId?: string;
   expectedOrigin?: string;
   rpId?: string;
+  requestOrigin?: string | null;
 }): Promise<
   | {
       status: 'OK';
@@ -327,14 +550,7 @@ export async function finishAuthentication(input: {
     return { status: 'ERROR', message: 'engine not ready' };
   }
   const pool = getEnginePool();
-  const ch = await pool.query(
-    `SELECT challenge, tenant_id, expires_at FROM be_webauthn_challenges
-     WHERE challenge_id = $1 AND type = 'authentication' LIMIT 1`,
-    [input.challengeId],
-  );
-  const row = ch.rows[0] as
-    | { challenge: string; tenant_id: string; expires_at: string | Date }
-    | undefined;
+  const row = await loadWebauthnChallenge(pool, input.challengeId, 'authentication');
   if (!row) return { status: 'ERROR', message: 'invalid challenge' };
   if (new Date(row.expires_at).getTime() < Date.now()) {
     return { status: 'ERROR', message: 'challenge expired' };
@@ -365,14 +581,19 @@ export async function finishAuthentication(input: {
   let newCounter = Number(c.counter) + 1;
 
   if (input.response) {
-    const rpID = rpIdFrom(input.rpId);
-    const expectedOrigin = input.expectedOrigin ?? originFrom(rpID);
+    const rp = await resolveWebAuthnRp({
+      projectId: input.projectId,
+      rpId: row.rp_id || input.rpId,
+      expectedOrigin: row.expected_origin || input.expectedOrigin,
+      requestOrigin: input.requestOrigin,
+    });
+    if (!rp.ok) return { status: 'ERROR', message: rp.message };
     try {
       const verification = await verifyAuthenticationResponse({
         response: input.response,
         expectedChallenge: row.challenge,
-        expectedOrigin,
-        expectedRPID: rpID,
+        expectedOrigin: rp.expectedOrigin,
+        expectedRPID: rp.rpId,
         credential: {
           id: credentialId,
           publicKey: b64urlToBuffer(c.public_key),
