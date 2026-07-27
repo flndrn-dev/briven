@@ -9,6 +9,7 @@
  */
 
 import {
+  deleteTenantSecret,
   getTenantSecret,
   hasTenantSecret,
   setTenantSecret,
@@ -786,6 +787,29 @@ export async function setBrivenEngineProviderSecrets(
     );
   }
   return { ok: true, engine: 'briven-engine' };
+}
+
+/**
+ * Revoke OAuth provider settings for a project: delete client id, secret,
+ * and any extra keys (e.g. Apple). UI goes back to empty / not configured.
+ */
+export async function clearBrivenEngineProviderSecrets(
+  projectId: string,
+  thirdPartyId: BrivenSocialProviderId,
+): Promise<{ ok: true; engine: 'briven-engine'; thirdPartyId: BrivenSocialProviderId }> {
+  const names = [
+    clientIdName(thirdPartyId),
+    clientSecretName(thirdPartyId),
+    legacyClientIdName(thirdPartyId),
+    legacyClientSecretName(thirdPartyId),
+  ];
+  if (thirdPartyId === 'apple') {
+    names.push(extraName('apple', 'keyId'), extraName('apple', 'teamId'));
+  }
+  for (const name of names) {
+    await deleteTenantSecret(projectId, SERVICE, name);
+  }
+  return { ok: true, engine: 'briven-engine', thirdPartyId };
 }
 
 /**

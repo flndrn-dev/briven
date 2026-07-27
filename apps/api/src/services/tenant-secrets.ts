@@ -129,3 +129,25 @@ export async function hasTenantSecret(
     .limit(1);
   return row !== undefined;
 }
+
+/**
+ * Permanently remove a secret row. Idempotent — missing row is success.
+ */
+export async function deleteTenantSecret(
+  projectId: string,
+  service: TenantService,
+  name: string,
+): Promise<boolean> {
+  const db = getDb();
+  const deleted = await db
+    .delete(tenantSecrets)
+    .where(
+      and(
+        eq(tenantSecrets.projectId, projectId),
+        eq(tenantSecrets.service, service),
+        eq(tenantSecrets.name, name),
+      ),
+    )
+    .returning({ id: tenantSecrets.id });
+  return deleted.length > 0;
+}

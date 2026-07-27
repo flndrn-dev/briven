@@ -17,6 +17,7 @@ import {
   setBrivenEngineBranding,
   setBrivenEngineJwtClaims,
   setBrivenEngineMethodFlags,
+  clearBrivenEngineProviderSecrets,
   setBrivenEngineProviderSecrets,
   setBrivenEngineSmsSecrets,
   setBrivenEngineUsernameLogin,
@@ -278,6 +279,59 @@ authCoreProjectRouter.put(
         {
           engine: BRIVEN_ENGINE_ID,
           code: 'save_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        500,
+      );
+    }
+  },
+);
+
+/**
+ * Revoke OAuth provider secrets for a project (delete client id + secret).
+ * UI returns to empty / not configured.
+ */
+authCoreProjectRouter.delete(
+  '/v1/auth-core/projects/:projectId/providers/:thirdPartyId',
+  async (c) => {
+    const projectId = c.req.param('projectId');
+    const thirdPartyIdRaw = c.req.param('thirdPartyId');
+    const thirdPartyId = thirdPartyIdRaw as BrivenSocialProviderId;
+    if (!SOCIAL_IDS.has(thirdPartyId)) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'bad_request',
+          message: `unknown OAuth provider: ${thirdPartyIdRaw}`,
+        },
+        400,
+      );
+    }
+    try {
+      const result = await clearBrivenEngineProviderSecrets(
+        projectId,
+        thirdPartyId,
+      );
+      void recordBrivenEngineAudit({
+        action: 'config.oauth_secrets.revoked',
+        projectId,
+        metadata: { thirdPartyId },
+      });
+      const config = await getBrivenEngineProjectConfig(projectId);
+      const cleared = config.providers.find(
+        (p) => p.thirdPartyId === thirdPartyId,
+      );
+      return c.json({
+        ...result,
+        config,
+        savedProvider: cleared ?? null,
+        message: `${thirdPartyId} client id and secret deleted for this project`,
+      });
+    } catch (err) {
+      return c.json(
+        {
+          engine: BRIVEN_ENGINE_ID,
+          code: 'revoke_failed',
           message: err instanceof Error ? err.message : String(err),
         },
         500,

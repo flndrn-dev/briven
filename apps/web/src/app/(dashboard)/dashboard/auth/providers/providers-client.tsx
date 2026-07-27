@@ -492,6 +492,62 @@ export function AuthProvidersClient({
     }
   }
 
+  async function revokeOauth(providerId: string, providerName: string): Promise<void> {
+    if (!projectId) return;
+    const ok = window.confirm(
+      `Revoke ${providerName} OAuth for this project?\n\n` +
+        `Client ID and client secret will be deleted. The fields go empty again. ` +
+        `Apps using this provider will stop signing in until you paste new secrets.`,
+    );
+    if (!ok) return;
+    setPendingId(`revoke:${providerId}`);
+    setErr(null);
+    setOkMsg(null);
+    try {
+      const res = await fetch(
+        `/api/dashboard/auth-core/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(providerId)}`,
+        { method: 'DELETE', credentials: 'include' },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+        config?: ProjectConfig;
+      };
+      if (!res.ok) {
+        throw new Error(body.message ?? body.code ?? `http ${res.status}`);
+      }
+      setDrafts((prev) => ({
+        ...prev,
+        [providerId]: { clientId: '', clientSecret: '' },
+      }));
+      await load(projectId);
+      setConfig((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          providers: prev.providers.map((p) =>
+            p.thirdPartyId === providerId
+              ? {
+                  ...p,
+                  configured: false,
+                  hasClientId: false,
+                  hasClientSecret: false,
+                }
+              : p,
+          ),
+        };
+      });
+      if (body.config) setConfig(body.config);
+      setOkMsg(
+        `${providerName} revoked — client id and secret deleted. Paste new secrets to enable again.`,
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'revoke failed');
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   async function saveAllOpenOauth(): Promise<void> {
     const toSave = openIds.filter((id) => {
       const d = drafts[id];
@@ -962,7 +1018,9 @@ export function AuthProvidersClient({
                   clientId: '',
                   clientSecret: '',
                 };
-                const pending = pendingId === p.thirdPartyId;
+                const pending =
+                  pendingId === p.thirdPartyId ||
+                  pendingId === `revoke:${p.thirdPartyId}`;
                 return (
                   <div
                     key={p.thirdPartyId}
@@ -1004,15 +1062,16 @@ export function AuthProvidersClient({
                       </code>
                       {p.thirdPartyId === 'konnos' ? (
                         <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
-                          mavi pay example:{' '}
+                          SuperTokens-style: redirect_uri is the OAuth callback, not
+                          your post-login page. mavi pay:{' '}
                           <span className="text-[var(--color-text)]">
-                            https://pay.mavifinans.sh/login/oauth/callback
+                            https://pay.mavifinans.sh/auth/callback
                           </span>
                           . Local:{' '}
                           <span className="text-[var(--color-text)]">
-                            http://localhost:3000/login/oauth/callback
+                            http://localhost:3000/auth/callback
                           </span>
-                          . Do not use api.briven.tech for first-party app login.
+                          . Must match the Konnos app field character-for-character.
                         </p>
                       ) : null}
                     </label>
@@ -1076,8 +1135,22 @@ export function AuthProvidersClient({
                         className="rounded-md px-4 py-2 font-mono text-xs font-medium text-black disabled:opacity-50"
                         style={{ background: '#FFFD74' }}
                       >
-                        {pending ? 'saving…' : `save ${p.name}`}
+                        {pending && pendingId === p.thirdPartyId
+                          ? 'saving…'
+                          : `save ${p.name}`}
                       </button>
+                      {p.configured || p.hasClientId || p.hasClientSecret ? (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => void revokeOauth(p.thirdPartyId, p.name)}
+                          className="rounded-md border border-[var(--color-border)] px-4 py-2 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-red-500/40 hover:text-red-300 disabled:opacity-50"
+                        >
+                          {pendingId === `revoke:${p.thirdPartyId}`
+                            ? 'revoking…'
+                            : `revoke ${p.name}`}
+                        </button>
+                      ) : null}
                     </div>
                     {p.configured ? (
                       <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
