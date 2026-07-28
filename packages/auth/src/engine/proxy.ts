@@ -97,6 +97,33 @@ export async function proxyBrivenEngineAuth(
     headers.set('x-briven-project-id', opts.projectId);
   }
 
+  // Forward real visitor IP so Auth emails can show Location + geo.
+  // Without this, the API only sees the app host and geo shows "Unknown".
+  const incomingFwd = request.headers.get('x-forwarded-for');
+  const incomingReal =
+    request.headers.get('x-real-ip') ||
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim();
+  // Best-effort client IP from the incoming request (Next may expose via headers).
+  let clientIp =
+    request.headers.get('x-briven-client-ip')?.trim() ||
+    incomingReal ||
+    incomingFwd?.split(',')[0]?.trim() ||
+    null;
+  // Node/Next: some runtimes put peer address in x-forwarded-for already.
+  if (clientIp) {
+    headers.set('x-briven-client-ip', clientIp);
+    // Append so the API's left-most public hop is the browser when possible.
+    if (incomingFwd) {
+      if (!incomingFwd.includes(clientIp)) {
+        headers.set('x-forwarded-for', `${clientIp}, ${incomingFwd}`);
+      }
+    } else {
+      headers.set('x-forwarded-for', clientIp);
+    }
+    if (!headers.has('x-real-ip')) headers.set('x-real-ip', clientIp);
+  }
+
   const method = request.method.toUpperCase();
   const hasBody = method !== 'GET' && method !== 'HEAD';
 

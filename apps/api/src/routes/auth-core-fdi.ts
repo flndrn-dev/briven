@@ -346,11 +346,12 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
       }
     })() ??
     undefined;
-  const clientIp =
-    c.req.header('cf-connecting-ip')?.trim() ||
-    c.req.header('x-real-ip')?.trim() ||
-    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-    null;
+  // Prefer x-briven-client-ip (set by first-party app proxy) so Location
+  // geo uses the end-user IP, not the app-server hop.
+  const { clientIpFromHeaders } = await import(
+    '../services/auth-core/auth-email-context.js'
+  );
+  const clientIp = clientIpFromHeaders((n) => c.req.header(n));
   const userAgent = c.req.header('user-agent') ?? null;
   const result = await createPasswordlessCode({
     email: body.email,

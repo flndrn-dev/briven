@@ -161,56 +161,49 @@ describe('briven-engine auth email branding HTML', () => {
 
   test('request meta block is rendered on OTP and magic-link emails', () => {
     const meta = {
-      platform: 'Chrome browser on macOS device',
-      deviceLocation: 'Ghent, East Flanders, Belgium (109.128.54.152)',
-      time: 'July 25, 2026 10:48:35 AM GMT+2',
+      platform: 'Chrome on macOS',
+      deviceLocation: 'Ghent, Belgium · 109.128.54.152',
+      time: '28 July 2026, 12:10:23 (GMT+2)',
+    };
+    const brandingBase = {
+      logoUrl: null as string | null,
+      primaryColor: '#0ea5e9',
+      senderName: 'mavi pay',
+      senderDomain: null as string | null,
+      senderLocalPart: null as string | null,
+      senderEmail: null as string | null,
+      brandUrl: null as string | null,
+      footerNote: null as string | null,
+      footerLoveName: null as string | null,
+      footerOrgName: null as string | null,
+      footerTagline: null as string | null,
+      footerCity: null as string | null,
+      footerCountry: null as string | null,
+      footerShowLove: false,
+      footerShowTagline: false,
+      footerShowAddress: false,
     };
     const otp = buildBrivenEngineAuthEmailHtml({
       code: '123456',
       requestMeta: meta,
-      branding: {
-        logoUrl: null,
-        primaryColor: '#0ea5e9',
-        senderName: 'mavi pay',
-        brandUrl: null,
-        footerNote: null,
-        footerLoveName: null,
-        footerOrgName: null,
-        footerTagline: null,
-        footerCity: null,
-        footerCountry: null,
-        footerShowLove: false,
-        footerShowTagline: false,
-        footerShowAddress: false,
-      },
+      branding: brandingBase,
     });
-    expect(otp).toContain('Platform');
-    expect(otp).toContain('Device location');
+    expect(otp).toContain('Device &amp; browser');
+    expect(otp).toContain('Location');
+    expect(otp).toContain('Sent at');
     expect(otp).toContain('109.128.54.152');
-    expect(otp).toContain('Time');
     expect(otp).toContain('GMT+2');
+    expect(otp).toContain('<svg');
+    expect(otp).not.toContain('💻');
 
     const link = buildBrivenEngineAuthEmailHtml({
       url: 'https://pay.mavifinans.sh/auth/verify?t=1',
       requestMeta: meta,
-      branding: {
-        logoUrl: null,
-        primaryColor: '#0ea5e9',
-        senderName: 'mavi pay',
-        brandUrl: null,
-        footerNote: null,
-        footerLoveName: null,
-        footerOrgName: null,
-        footerTagline: null,
-        footerCity: null,
-        footerCountry: null,
-        footerShowLove: false,
-        footerShowTagline: false,
-        footerShowAddress: false,
-      },
+      branding: brandingBase,
     });
     expect(link).toContain('click the button below');
-    expect(link).toContain('Chrome browser on macOS device');
+    expect(link).toContain('Chrome on macOS');
+    expect(link).toContain('Sent at');
   });
 
   test('escapes plain body fallback', () => {
@@ -220,6 +213,9 @@ describe('briven-engine auth email branding HTML', () => {
         logoUrl: null,
         primaryColor: '#112233',
         senderName: 'App',
+        senderDomain: null,
+        senderLocalPart: null,
+        senderEmail: null,
         brandUrl: null,
         footerNote: null,
         footerLoveName: null,

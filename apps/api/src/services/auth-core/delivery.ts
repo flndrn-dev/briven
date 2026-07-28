@@ -323,40 +323,117 @@ export async function sendBrivenEngineEmail(
     ),
   });
 
-  // SuperTokens-style: per-project From: (senderName + domain/email).
-  // Without this, every project shows as platform "briven <noreply@briven.tech>".
+  // SuperTokens-style From: display name from branding.
+  // Custom domains (noreply@pando.so) only work when platform SMTP is
+  // configured and that domain is authorized. Mittera only accepts
+  // verified domains (briven.tech) — using an unverified domain returns
+  // 400 and the user never gets OTP/magic-link mail.
   const platformDomain = (env.BRIVEN_DOMAIN ?? 'briven.tech').replace(/^@/, '');
-  const fromHeader = buildAuthEmailFromHeader(branding, platformDomain);
+  const senderInfo = getEmailSenderInfo();
+  const customDomainRequested = Boolean(
+    branding.senderDomain?.trim() || branding.senderEmail?.trim(),
+  );
+  // Safe From for current transport:
+  // - SMTP primary → full custom From when set
+  // - mittera / dev → keep project display name, platform mailbox only
+  let fromHeader = buildAuthEmailFromHeader(
+    senderInfo.activeTransport === 'smtp'
+      ? branding
+      : {
+          senderName: branding.senderName,
+          senderDomain: null,
+          senderLocalPart: null,
+          senderEmail: null,
+        },
+    platformDomain,
+  );
+  if (customDomainRequested && senderInfo.activeTransport !== 'smtp') {
+    log.info('briven_engine_email_from_fallback', {
+      reason: 'custom_domain_requires_smtp',
+      senderDomain: branding.senderDomain,
+      using: fromHeader,
+    });
+  }
+
+  const payload = {
+    to: input.email,
+    subject,
+    text,
+    html,
+    projectId: input.projectId ?? null,
+  };
 
   // Same chain as platform operator mail: SMTP → mittera → dev stdout.
   try {
     await sendTransactional('briven_engine_auth', {
-      to: input.email,
-      subject,
-      text,
-      html,
-      projectId: input.projectId ?? null,
+      ...payload,
       from: fromHeader ?? undefined,
     });
-    const sender = getEmailSenderInfo();
     return {
       ok: true,
       channel: 'email',
       engine: 'briven-engine',
-      mode: sender.activeTransport,
+      mode: senderInfo.activeTransport,
       message:
-        sender.activeTransport === 'smtp'
+        senderInfo.activeTransport === 'smtp'
           ? fromHeader
             ? `sent via platform SMTP as ${fromHeader}`
             : 'sent via platform SMTP'
-          : sender.activeTransport === 'mittera'
-            ? 'sent via mittera (set BRIVEN_SMTP_* for guaranteed inbox delivery)'
+          : senderInfo.activeTransport === 'mittera'
+            ? fromHeader
+              ? `sent via mittera as ${fromHeader}`
+              : 'sent via mittera'
             : 'logged to stdout (dev; set BRIVEN_SMTP_* for real email)',
     };
   } catch (err) {
-    log.warn('briven_engine_email_send_failed', {
-      message: err instanceof Error ? err.message : String(err),
-    });
+    const msg = err instanceof Error ? err.message : String(err);
+    // Last-chance: provider rejected custom From → retry platform mailbox.
+    const domainRejected =
+      /domain/i.test(msg) &&
+      (/from/i.test(msg) || /verified/i.test(msg) || /wrong/i.test(msg));
+    if (domainRejected && fromHeader) {
+      const safeFrom = buildAuthEmailFromHeader(
+        {
+          senderName: branding.senderName,
+          senderDomain: null,
+          senderLocalPart: null,
+          senderEmail: null,
+        },
+        platformDomain,
+      );
+      try {
+        log.warn('briven_engine_email_retry_platform_from', {
+          message: msg,
+          safeFrom,
+        });
+        await sendTransactional('briven_engine_auth', {
+          ...payload,
+          from: safeFrom ?? undefined,
+        });
+        return {
+          ok: true,
+          channel: 'email',
+          engine: 'briven-engine',
+          mode: getEmailSenderInfo().activeTransport,
+          message: `sent after From fallback (${safeFrom ?? 'platform'})`,
+        };
+      } catch (retryErr) {
+        log.warn('briven_engine_email_send_failed', {
+          message:
+            retryErr instanceof Error ? retryErr.message : String(retryErr),
+          afterRetry: true,
+        });
+        return {
+          ok: false,
+          channel: 'email',
+          engine: 'briven-engine',
+          mode: 'error',
+          message:
+            retryErr instanceof Error ? retryErr.message : String(retryErr),
+        };
+      }
+    }
+    log.warn('briven_engine_email_send_failed', { message: msg });
     if (env.BRIVEN_ENV !== 'production') {
       log.debug('briven_engine_email_dev_body', {
         email: input.email,
@@ -368,7 +445,7 @@ export async function sendBrivenEngineEmail(
       channel: 'email',
       engine: 'briven-engine',
       mode: 'error',
-      message: err instanceof Error ? err.message : String(err),
+      message: msg,
     };
   }
 }

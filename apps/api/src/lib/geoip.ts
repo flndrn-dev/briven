@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+
 import { open, type CityResponse, type Reader } from 'maxmind';
 
 import { env } from '../env.js';
@@ -11,13 +13,46 @@ export interface GeoLookup {
 
 let readerPromise: Promise<Reader<CityResponse> | null> | null = null;
 
+/** Common install locations when BRIVEN_GEOIP_DB_PATH is unset. */
+const GEOIP_CANDIDATES = [
+  '/var/lib/GeoIP/GeoLite2-City.mmdb',
+  '/usr/share/GeoIP/GeoLite2-City.mmdb',
+  '/usr/local/share/GeoIP/GeoLite2-City.mmdb',
+  '/data/geoip/GeoLite2-City.mmdb',
+  '/app/data/GeoLite2-City.mmdb',
+];
+
+function resolveGeoipPath(): string | null {
+  if (env.BRIVEN_GEOIP_DB_PATH?.trim()) return env.BRIVEN_GEOIP_DB_PATH.trim();
+  for (const p of GEOIP_CANDIDATES) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
 async function getReader(): Promise<Reader<CityResponse> | null> {
-  if (!env.BRIVEN_GEOIP_DB_PATH) return null;
   if (!readerPromise) {
-    readerPromise = open<CityResponse>(env.BRIVEN_GEOIP_DB_PATH).catch((err: unknown) => {
-      log.warn('geoip_db_open_failed', { path: env.BRIVEN_GEOIP_DB_PATH, message: err instanceof Error ? err.message : String(err) });
+    const path = resolveGeoipPath();
+    if (!path) {
+      readerPromise = Promise.resolve(null);
+      log.warn('geoip_db_missing', {
+        message:
+          'No GeoLite2-City.mmdb — set BRIVEN_GEOIP_DB_PATH so Auth emails can show city/country',
+      });
       return null;
-    });
+    }
+    readerPromise = open<CityResponse>(path)
+      .then((r) => {
+        log.info('geoip_db_open_ok', { path });
+        return r;
+      })
+      .catch((err: unknown) => {
+        log.warn('geoip_db_open_failed', {
+          path,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      });
   }
   return readerPromise;
 }

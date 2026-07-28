@@ -420,6 +420,12 @@ services:
       BRIVEN_IMGPROXY_ENDPOINT: https://media.${BRIVEN_DOMAIN}/_t
       BRIVEN_IMGPROXY_KEY: ${BRIVEN_IMGPROXY_KEY:-}
       BRIVEN_IMGPROXY_SALT: ${BRIVEN_IMGPROXY_SALT:-}
+      # Self-hosted MaxMind GeoLite2-City for Auth email Location (city/country).
+      # Host file: /var/lib/GeoIP/GeoLite2-City.mmdb (bind-mounted below).
+      BRIVEN_GEOIP_DB_PATH: ${BRIVEN_GEOIP_DB_PATH:-/var/lib/GeoIP/GeoLite2-City.mmdb}
+    volumes:
+      # Read-only city DB for Auth email geo (device location line).
+      - /var/lib/GeoIP:/var/lib/GeoIP:ro
     healthcheck:
       # /info is documented to never 500 (apps/api/Dockerfile). bun ships in
       # the api image and has a built-in fetch.

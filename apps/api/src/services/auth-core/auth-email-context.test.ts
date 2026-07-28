@@ -4,6 +4,7 @@ import {
   AUTH_EMAIL_TIMEZONE,
   authEmailRequestMetaHtml,
   authEmailRequestMetaText,
+  clientIpFromHeaders,
   formatAuthEmailDeviceLocation,
   formatAuthEmailPlatform,
   formatAuthEmailTime,
@@ -13,13 +14,13 @@ describe('auth email request meta', () => {
   test('platform from Chrome on macOS', () => {
     const ua =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
-    expect(formatAuthEmailPlatform(ua)).toBe('Chrome browser on macOS device');
+    expect(formatAuthEmailPlatform(ua)).toBe('Chrome on macOS');
   });
 
-  test('platform from Safari on iOS', () => {
+  test('platform from Safari on iPhone', () => {
     const ua =
       'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-    expect(formatAuthEmailPlatform(ua)).toBe('Safari browser on iOS device');
+    expect(formatAuthEmailPlatform(ua)).toBe('Safari on iPhone');
   });
 
   test('device location with geo + IP', () => {
@@ -28,12 +29,12 @@ describe('auth email request meta', () => {
         { city: 'Ghent', region: 'East Flanders', country: 'Belgium' },
         '109.128.54.152',
       ),
-    ).toBe('Ghent, East Flanders, Belgium (109.128.54.152)');
+    ).toBe('Ghent, Belgium · 109.128.54.152');
   });
 
   test('device location IP only when geo missing', () => {
     expect(formatAuthEmailDeviceLocation(null, '1.2.3.4')).toBe(
-      'Unknown location (1.2.3.4)',
+      'Location unavailable · 1.2.3.4',
     );
   });
 
@@ -46,28 +47,49 @@ describe('auth email request meta', () => {
     expect(t).toContain('July');
     expect(t).toContain('2026');
     expect(t).toContain('25');
-    expect(t).toMatch(/AM|PM/);
-    // Brussels summer is GMT+2 / CEST
-    expect(t).toMatch(/GMT\+2|CEST|UTC\+2/);
+    expect(t).toMatch(/10:48:35/);
+    expect(t).toMatch(/GMT\+2|UTC\+2|\+02/);
   });
 
-  test('html and text include all three labels', () => {
+  test('html uses Lucide SVG icons not emoji and Sent at label', () => {
     const meta = {
-      platform: 'Chrome browser on macOS device',
-      deviceLocation: 'Ghent, East Flanders, Belgium (109.128.54.152)',
-      time: 'July 25, 2026 10:48:35 AM GMT+2',
+      platform: 'Chrome on macOS',
+      deviceLocation: 'Ghent, Belgium · 109.128.54.152',
+      time: '28 July 2026, 12:10:23 (GMT+2)',
     };
     const html = authEmailRequestMetaHtml(meta);
-    expect(html).toContain('Platform');
-    expect(html).toContain('Device location');
-    expect(html).toContain('Time');
-    expect(html).toContain('Chrome browser on macOS device');
+    expect(html).toContain('Device &amp; browser');
+    expect(html).toContain('Location');
+    expect(html).toContain('Sent at');
+    expect(html).toContain('Chrome on macOS');
     expect(html).toContain('109.128.54.152');
+    expect(html).toContain('<svg');
+    expect(html).toContain('viewBox="0 0 24 24"');
+    expect(html).not.toContain('💻');
+    expect(html).not.toContain('📍');
+    expect(html).not.toContain('🕐');
     expect(html).not.toContain('<script>');
 
     const text = authEmailRequestMetaText(meta);
-    expect(text).toContain('Platform: Chrome browser on macOS device');
-    expect(text).toContain('Device location: Ghent');
-    expect(text).toContain('Time: July 25');
+    expect(text).toContain('Device & browser: Chrome on macOS');
+    expect(text).toContain('Location: Ghent');
+    expect(text).toContain('Sent at: 28 July');
+  });
+
+  test('clientIpFromHeaders prefers x-briven-client-ip', () => {
+    const h = (n: string) => {
+      if (n === 'x-briven-client-ip') return '203.0.113.50';
+      if (n === 'x-forwarded-for') return '10.0.0.1, 203.0.113.50';
+      return null;
+    };
+    expect(clientIpFromHeaders(h)).toBe('203.0.113.50');
+  });
+
+  test('clientIpFromHeaders skips private hop for public client', () => {
+    const h = (n: string) => {
+      if (n === 'x-forwarded-for') return '10.0.0.5, 203.0.113.99';
+      return null;
+    };
+    expect(clientIpFromHeaders(h)).toBe('203.0.113.99');
   });
 });
