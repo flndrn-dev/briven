@@ -102,7 +102,7 @@ export default async function CustomersPage() {
           <p className="mt-3 max-w-2xl leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
             we collect a short writeup per project we host — what you migrated from, what stuck out,
             what we should fix. zero marketing pressure; the goal is the operator runbook getting
-            better every month. open a thread in the alpha discord or email the team.
+            better every month. email the team or open a support thread via docs.briven.tech.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link

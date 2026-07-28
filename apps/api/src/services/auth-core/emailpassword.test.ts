@@ -40,4 +40,16 @@ describe('briven-engine password hash (Phase 2)', () => {
     const bad = await verifyPasswordFlexible('wrong', stored);
     expect(bad.ok).toBe(false);
   });
+
+  test('import:argon2id foreign hash verifies and flags upgrade', async () => {
+    const raw = await Bun.password.hash('ArgonMigrate!42', {
+      algorithm: 'argon2id',
+    });
+    const stored = `import:argon2:${raw}`;
+    const ok = await verifyPasswordFlexible('ArgonMigrate!42', stored);
+    expect(ok.ok).toBe(true);
+    expect(ok.upgradeToBriven).toBe(true);
+    const bad = await verifyPasswordFlexible('nope', stored);
+    expect(bad.ok).toBe(false);
+  });
 });

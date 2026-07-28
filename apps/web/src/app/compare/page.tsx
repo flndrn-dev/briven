@@ -90,8 +90,8 @@ export default async function CompareHubPage() {
         </div>
 
         <p className="mt-10 font-mono text-xs text-[var(--color-text-subtle)]">
-          missing a comparison you want? open an issue on the repo or ask in the alpha discord. we
-          add a comparison page when at least three operators ask the same migration question.
+          missing a comparison you want? open an issue on the repo or email support. we add a
+          comparison page when enough operators ask the same migration question.
         </p>
       </section>
 

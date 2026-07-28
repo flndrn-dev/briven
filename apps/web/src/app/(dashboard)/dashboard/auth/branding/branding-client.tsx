@@ -633,7 +633,15 @@ export function AuthBrandingClient({
             <code className="text-[var(--color-text)]">
               Pando &lt;noreply@pando.so&gt;
             </code>
-            . Domain must be allowed on your mail provider (SPF/DKIM).
+            .
+            <br />
+            <strong>Important:</strong> custom domains only send when Briven
+            SMTP is set up and that domain is verified there. Until then we
+            still send as{' '}
+            <code className="text-[var(--color-text)]">
+              YourBrand &lt;noreply@briven.tech&gt;
+            </code>{' '}
+            so OTP / magic-link mail never silently fails.
           </p>
         </div>
         <label className="flex flex-col gap-1 font-mono text-xs">

@@ -90,6 +90,23 @@ export async function assignBrivenEngineRole(
     };
   }
   const name = role.trim().toLowerCase();
+  if (!name || name.length > 64 || !/^[a-z0-9][a-z0-9._-]*$/.test(name)) {
+    return {
+      ok: false,
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      message: 'invalid role name',
+    };
+  }
+  const uid = userId?.trim();
+  if (!uid) {
+    return {
+      ok: false,
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      message: 'userId required',
+    };
+  }
   const tenantId =
     opts?.tenantId ??
     (opts?.projectId ? projectIdToTenantId(opts.projectId) : 'public');
@@ -106,17 +123,110 @@ export async function assignBrivenEngineRole(
       message: 'role does not exist',
     };
   }
+  // be_users primary key is `id` (beu_…), not user_id — user_id only exists on be_user_roles.
+  const userRow = await pool.query(
+    `SELECT id FROM be_users WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    [uid, tenantId],
+  );
+  if (!userRow.rowCount) {
+    return {
+      ok: false,
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      message: 'user does not exist in this tenant',
+    };
+  }
   const has = await pool.query(
     `SELECT 1 FROM be_user_roles WHERE tenant_id = $1 AND user_id = $2 AND role_name = $3`,
-    [tenantId, userId, name],
+    [tenantId, uid, name],
   );
   if (!has.rowCount) {
     await pool.query(
       `INSERT INTO be_user_roles (tenant_id, user_id, role_name) VALUES ($1, $2, $3)`,
-      [tenantId, userId, name],
+      [tenantId, uid, name],
     );
   }
   return { ok: true, engine: 'briven-engine', storage: 'doltgres', message: 'assigned' };
+}
+
+export async function unassignBrivenEngineRole(
+  userId: string,
+  role: string,
+  opts?: { projectId?: string; tenantId?: string },
+): Promise<{ ok: boolean; engine: 'briven-engine'; storage: 'doltgres'; message?: string }> {
+  if (!isAuthCoreInitialized()) {
+    return {
+      ok: false,
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      message: 'engine not ready',
+    };
+  }
+  const name = role.trim().toLowerCase();
+  const uid = userId?.trim();
+  if (!name || !uid) {
+    return {
+      ok: false,
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      message: 'userId and role required',
+    };
+  }
+  const tenantId =
+    opts?.tenantId ??
+    (opts?.projectId ? projectIdToTenantId(opts.projectId) : 'public');
+  const pool = getEnginePool();
+  const res = await pool.query(
+    `DELETE FROM be_user_roles WHERE tenant_id = $1 AND user_id = $2 AND role_name = $3`,
+    [tenantId, uid, name],
+  );
+  return {
+    ok: true,
+    engine: 'briven-engine',
+    storage: 'doltgres',
+    message: (res.rowCount ?? 0) > 0 ? 'unassigned' : 'not_assigned',
+  };
+}
+
+export async function deleteBrivenEngineRole(
+  role: string,
+  opts?: { projectId?: string; tenantId?: string },
+): Promise<{ ok: boolean; engine: 'briven-engine'; storage: 'doltgres'; message?: string }> {
+  if (!isAuthCoreInitialized()) {
+    return {
+      ok: false,
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      message: 'engine not ready',
+    };
+  }
+  const name = role.trim().toLowerCase();
+  if (!name) {
+    return {
+      ok: false,
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      message: 'role required',
+    };
+  }
+  const tenantId =
+    opts?.tenantId ??
+    (opts?.projectId ? projectIdToTenantId(opts.projectId) : 'public');
+  const pool = getEnginePool();
+  await pool.query(
+    `DELETE FROM be_user_roles WHERE tenant_id = $1 AND role_name = $2`,
+    [tenantId, name],
+  );
+  const res = await pool.query(
+    `DELETE FROM be_roles WHERE tenant_id = $1 AND role_name = $2`,
+    [tenantId, name],
+  );
+  return {
+    ok: (res.rowCount ?? 0) > 0,
+    engine: 'briven-engine',
+    storage: 'doltgres',
+    message: (res.rowCount ?? 0) > 0 ? 'deleted' : 'not_found',
+  };
 }
 
 export async function getBrivenEngineUserRoles(

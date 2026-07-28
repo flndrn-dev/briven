@@ -140,6 +140,7 @@ const STATEMENTS = [
     provider_type TEXT NOT NULL,
     code_verifier TEXT,
     redirect_uri TEXT,
+    return_to TEXT,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
@@ -294,6 +295,23 @@ async function ensureBeTenantsDisabledColumn(): Promise<void> {
   }
 }
 
+/** AUTH-HARDEN-90: OIDC app return URL — Doltgres has no ADD COLUMN IF NOT EXISTS. */
+async function ensureBeSsoStatesReturnToColumn(): Promise<void> {
+  const pool = getEnginePool();
+  try {
+    const probe = await pool.query(
+      `SELECT 1 AS ok FROM information_schema.columns
+       WHERE table_name = 'be_sso_states' AND column_name = 'return_to' LIMIT 1`,
+    );
+    if ((probe.rowCount ?? 0) > 0 || (probe.rows?.length ?? 0) > 0) return;
+    await pool.query(`ALTER TABLE be_sso_states ADD COLUMN return_to TEXT`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/already exists|duplicate/i.test(message)) return;
+    log.warn('briven_engine_sso_return_to_col', { message });
+  }
+}
+
 /** Doltgres often lacks ADD COLUMN IF NOT EXISTS — probe then add. */
 async function ensureBeUsersModerationColumns(): Promise<void> {
   const pool = getEnginePool();
@@ -344,6 +362,7 @@ export async function bootstrapBrivenEngineSchema(): Promise<void> {
   }
   await ensureBeUsersModerationColumns();
   await ensureBeTenantsDisabledColumn();
+  await ensureBeSsoStatesReturnToColumn();
   log.info('briven_engine_schema_ready', {
     engine: 'briven-engine',
     storage: 'doltgres',

@@ -9,6 +9,11 @@ export interface GeoLookup {
   city: string | null;
   region: string | null;
   country: string | null;
+  /** MaxMind location centroid — used for nearest-city fallback when city is null. */
+  latitude: number | null;
+  longitude: number | null;
+  /** Approximate accuracy radius in km (MaxMind). */
+  accuracyRadiusKm: number | null;
 }
 
 let readerPromise: Promise<Reader<CityResponse> | null> | null = null;
@@ -83,8 +88,32 @@ export async function lookupIp(ip: string | null | undefined): Promise<GeoLookup
     if (response) {
       const city = response.city?.names?.en ?? null;
       const region = response.subdivisions?.[0]?.names?.en ?? null;
-      const country = response.country?.names?.en ?? response.registered_country?.names?.en ?? null;
-      if (city || region || country) return { city, region, country };
+      const country =
+        response.country?.names?.en ??
+        response.registered_country?.names?.en ??
+        null;
+      const latitude =
+        typeof response.location?.latitude === 'number'
+          ? response.location.latitude
+          : null;
+      const longitude =
+        typeof response.location?.longitude === 'number'
+          ? response.location.longitude
+          : null;
+      const accuracyRadiusKm =
+        typeof response.location?.accuracy_radius === 'number'
+          ? response.location.accuracy_radius
+          : null;
+      if (city || region || country || (latitude != null && longitude != null)) {
+        return {
+          city,
+          region,
+          country,
+          latitude,
+          longitude,
+          accuracyRadiusKm,
+        };
+      }
     }
   } catch {
     // Local MaxMind DB read failure — return null; caller stores the raw IP only.

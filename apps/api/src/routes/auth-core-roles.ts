@@ -11,8 +11,10 @@ import { BRIVEN_ENGINE_ID, isAuthCoreInitialized } from '../services/auth-core/e
 import {
   assignBrivenEngineRole,
   createBrivenEngineRole,
+  deleteBrivenEngineRole,
   getBrivenEngineUserRoles,
   listBrivenEngineRoles,
+  unassignBrivenEngineRole,
 } from '../services/auth-core/roles.js';
 import type { AppEnv } from '../types/app-env.js';
 
@@ -88,6 +90,57 @@ authCoreRolesRouter.post('/v1/auth-core/roles/assign', async (c) => {
     await assignBrivenEngineRole(body.userId, body.role, {
       projectId: projectGate.projectId,
       tenantId: body.tenantId,
+    }),
+  );
+});
+
+authCoreRolesRouter.post('/v1/auth-core/roles/unassign', async (c) => {
+  let body: {
+    userId?: string;
+    role?: string;
+    projectId?: string;
+    tenantId?: string;
+  } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+  if (!body.userId || !body.role) {
+    return c.json(
+      { engine: BRIVEN_ENGINE_ID, code: 'userId_and_role_required' },
+      400,
+    );
+  }
+  const projectGate = await requireDashboardProjectAdmin(c, body.projectId);
+  if (projectGate instanceof Response) return projectGate;
+  return c.json(
+    await unassignBrivenEngineRole(body.userId, body.role, {
+      projectId: projectGate.projectId,
+      tenantId: body.tenantId,
+    }),
+  );
+});
+
+authCoreRolesRouter.delete('/v1/auth-core/roles', async (c) => {
+  let body: { role?: string; projectId?: string; tenantId?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+  // Also allow ?role=&projectId=
+  const role = body.role ?? c.req.query('role') ?? undefined;
+  const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+  if (!role) {
+    return c.json({ engine: BRIVEN_ENGINE_ID, code: 'role_required' }, 400);
+  }
+  const projectGate = await requireDashboardProjectAdmin(c, projectId);
+  if (projectGate instanceof Response) return projectGate;
+  return c.json(
+    await deleteBrivenEngineRole(role, {
+      projectId: projectGate.projectId,
+      tenantId: body.tenantId ?? c.req.query('tenantId') ?? undefined,
     }),
   );
 });

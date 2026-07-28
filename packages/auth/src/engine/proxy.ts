@@ -32,6 +32,12 @@ export type BrivenEngineProxyOptions = {
   fdiBasePath?: string;
   /** Optional fixed project id stamped on every hop */
   projectId?: string;
+  /**
+   * Server-side publishable key `pk_briven_auth_…` injected as Authorization
+   * when the browser request has none. Prefer env BRIVEN_AUTH_PUBLIC_KEY —
+   * keeps the key off the client when using first-party proxy only.
+   */
+  publicKey?: string;
   fetch?: typeof globalThis.fetch;
 };
 
@@ -95,6 +101,15 @@ export async function proxyBrivenEngineAuth(
   headers.set('x-briven-engine', BRIVEN_ENGINE_ID);
   if (opts.projectId) {
     headers.set('x-briven-project-id', opts.projectId);
+  }
+  // FDI lock: inject server publishable key when browser omitted Authorization.
+  const pk = opts.publicKey?.trim();
+  if (
+    pk &&
+    pk.startsWith('pk_briven_auth_') &&
+    !headers.has('authorization')
+  ) {
+    headers.set('authorization', `Bearer ${pk}`);
   }
 
   // Forward real visitor IP so Auth emails can show Location + geo.

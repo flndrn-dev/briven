@@ -288,7 +288,13 @@ authCoreSsoRouter.post('/v1/auth-core/sso/saml/:connectionId/acs', async (c) => 
 
 authCoreSsoRouter.get('/v1/auth-core/sso/oidc/:connectionId', async (c) => {
   try {
-    const { redirectUrl } = await startOidcLogin(c.req.param('connectionId'));
+    // Optional ?returnTo=https://app.example.com/after-login (sanitized server-side)
+    const returnTo = c.req.query('returnTo') ?? c.req.query('return_to') ?? null;
+    const { redirectUrl } = await startOidcLogin(
+      c.req.param('connectionId'),
+      undefined,
+      returnTo,
+    );
     return c.redirect(redirectUrl, 302);
   } catch (err) {
     return c.json(
@@ -326,6 +332,10 @@ authCoreSsoRouter.get(
         path: '/',
         maxAge: 60 * 60 * 24 * 30,
       });
+      // Prefer redirect into the app when returnTo was stored at start.
+      if (result.returnTo) {
+        return c.redirect(result.returnTo, 302);
+      }
       return c.json({
         engine: BRIVEN_ENGINE_ID,
         status: 'OK',
@@ -334,6 +344,8 @@ authCoreSsoRouter.get(
         projectId: result.projectId,
         tenantId: result.tenantId,
         sessionHandle: result.sessionHandle,
+        message:
+          'OIDC login ok — pass returnTo on start URL to redirect into your app',
       });
     } catch (err) {
       return c.json(

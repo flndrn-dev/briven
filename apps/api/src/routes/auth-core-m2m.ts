@@ -158,6 +158,36 @@ authCoreM2mRouter.delete(
  * Accepts JSON or form body; optional HTTP Basic client_id:client_secret.
  */
 authCoreM2mRouter.post('/v1/auth-core/oauth/token', async (c) => {
+  // Abuse throttle (credential stuffing) — SuperTokens-style protect token endpoint.
+  try {
+    const { getRedis } = await import('../lib/redis.js');
+    const redis = getRedis();
+    const ip =
+      c.req.header('cf-connecting-ip')?.trim() ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      c.req.header('x-real-ip')?.trim() ||
+      'unknown';
+    if (redis) {
+      const windowSec = 60;
+      const max = 30;
+      const key = `rl:m2m:token:${ip}`;
+      const n = await redis.incr(key);
+      if (n === 1) await redis.expire(key, windowSec);
+      if (n > max) {
+        return c.json(
+          {
+            error: 'rate_limited',
+            error_description: 'too many token requests — try again shortly',
+            engine: BRIVEN_ENGINE_ID,
+          },
+          429,
+        );
+      }
+    }
+  } catch {
+    /* fail open if redis unavailable */
+  }
+
   let clientId = '';
   let clientSecret = '';
   let grantType = '';

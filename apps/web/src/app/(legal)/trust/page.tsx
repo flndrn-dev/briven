@@ -5,7 +5,7 @@ export default function TrustPage() {
     <>
       <h1 className="font-mono text-2xl text-[var(--color-text)]">trust</h1>
       <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
-        last updated 2026-07-19 · beta · operated by flndrn Limited (Cyprus)
+        last updated 2026-07-28 · production · operated by flndrn Limited (Cyprus)
       </p>
 
       <h2 className="mt-10 font-mono text-lg text-[var(--color-text)]">enterprise auth</h2>

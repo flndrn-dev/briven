@@ -14,6 +14,7 @@ import {
 } from '../services/auth-core/emailpassword.js';
 import {
   createEngineSession,
+  refreshEngineSession,
   revokeEngineSession,
 } from '../services/auth-core/native-session.js';
 import {
@@ -353,6 +354,9 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
   );
   const clientIp = clientIpFromHeaders((n) => c.req.header(n));
   const userAgent = c.req.header('user-agent') ?? null;
+  // Brave usually spoofs Chrome in User-Agent; Sec-CH-UA carries the real brand.
+  const clientHintsUa =
+    c.req.header('sec-ch-ua') ?? c.req.header('Sec-CH-UA') ?? null;
   const result = await createPasswordlessCode({
     email: body.email,
     phoneNumber: body.phoneNumber,
@@ -363,6 +367,7 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
     requestOrigin,
     clientIp,
     userAgent,
+    clientHintsUa,
   });
   if (result.status !== 'OK') {
     return c.json({ ...result, engine: 'briven-engine' }, 400);
@@ -600,10 +605,59 @@ authCoreFdiRouter.post(`${FDI}/signinup`, async (c) => {
   });
 });
 
+/**
+ * SuperTokens-style session refresh.
+ * Body optional: { refreshToken } — else sRefreshToken cookie.
+ * Rotates handle: old session deleted, new cookies set.
+ */
 authCoreFdiRouter.post(`${FDI}/session/refresh`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  // Minimal: client should re-signin if session expired; full refresh later.
-  return c.json({ status: 'UNAUTHORISED' }, 401);
+  let body: { refreshToken?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+  const fromCookie = (() => {
+    const cookie = c.req.header('cookie') ?? '';
+    const m = /(?:^|;\s*)sRefreshToken=([^;]+)/.exec(cookie);
+    return m?.[1] ? decodeURIComponent(m[1]) : undefined;
+  })();
+  const refreshToken = body.refreshToken?.trim() || fromCookie;
+  if (!refreshToken) {
+    return c.json(
+      {
+        status: 'UNAUTHORISED',
+        engine: 'briven-engine',
+        message: 'refresh token required (cookie sRefreshToken or body.refreshToken)',
+      },
+      401,
+    );
+  }
+  try {
+    const session = await refreshEngineSession(refreshToken);
+    if (!session) {
+      return c.json(
+        { status: 'UNAUTHORISED', engine: 'briven-engine', message: 'invalid or expired refresh token' },
+        401,
+      );
+    }
+    setSessionCookies(c, session);
+    c.header('x-briven-engine', 'briven-engine');
+    c.header('x-briven-session-handle', session.sessionHandle);
+    return c.json({
+      status: 'OK',
+      engine: 'briven-engine',
+      storage: 'doltgres',
+      session: { handle: session.sessionHandle, userId: session.userId },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'user_held' || msg === 'user_archived') {
+      return c.json({ status: 'UNAUTHORISED', engine: 'briven-engine', message: msg }, 401);
+    }
+    throw err;
+  }
 });
 
 // ─── Phase 5: TOTP MFA ───────────────────────────────────────────────

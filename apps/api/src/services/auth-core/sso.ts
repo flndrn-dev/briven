@@ -434,6 +434,8 @@ async function resolveOidcUrls(config: OidcConfig): Promise<{
 export async function startOidcLogin(
   connectionId: string,
   redirectUri?: string,
+  /** App URL to send the browser after login (sanitized like SAML RelayState). */
+  returnTo?: string | null,
 ): Promise<{ redirectUrl: string; state: string }> {
   const conn = await getEngineSsoConnection(connectionId);
   if (!conn || conn.deactivatedAt) throw new Error('connection not found');
@@ -449,17 +451,30 @@ export async function startOidcLogin(
   const callback =
     redirectUri ||
     `${env.BRIVEN_API_ORIGIN}/v1/auth-core/sso/oidc/${connectionId}/callback`;
+  // Sanitize return URL against project allowed origins (same idea as SAML RelayState).
+  let safeReturn: string | null = null;
+  if (returnTo?.trim()) {
+    try {
+      const { sanitizeRelayState } = await import('../auth-hardening.js');
+      const { getBrivenEngineAppOrigins } = await import('./project-config.js');
+      const origins = await getBrivenEngineAppOrigins(conn.projectId);
+      safeReturn = sanitizeRelayState(returnTo.trim(), origins) ?? null;
+    } catch {
+      safeReturn = null;
+    }
+  }
   const pool = getEnginePool();
   await pool.query(
     `INSERT INTO be_sso_states
-      (state_id, connection_id, project_id, provider_type, code_verifier, redirect_uri, expires_at)
-     VALUES ($1,$2,$3,'oidc',$4,$5,$6)`,
+      (state_id, connection_id, project_id, provider_type, code_verifier, redirect_uri, return_to, expires_at)
+     VALUES ($1,$2,$3,'oidc',$4,$5,$6,$7)`,
     [
       state,
       connectionId,
       conn.projectId,
       codeVerifier,
       callback,
+      safeReturn,
       new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     ],
   );
@@ -485,6 +500,8 @@ export async function completeOidcLogin(input: {
   email: string;
   projectId: string;
   tenantId: string;
+  /** Safe app return URL when startOidcLogin stored one */
+  returnTo: string | null;
 }> {
   const conn = await getEngineSsoConnection(input.connectionId);
   if (!conn || conn.deactivatedAt) throw new Error('connection not found');
@@ -498,6 +515,7 @@ export async function completeOidcLogin(input: {
     | {
         code_verifier: string | null;
         redirect_uri: string | null;
+        return_to?: string | null;
         expires_at: Date | string;
       }
     | undefined;
@@ -604,6 +622,7 @@ export async function completeOidcLogin(input: {
     email,
     projectId: conn.projectId,
     tenantId: conn.tenantId,
+    returnTo: stateRow.return_to?.trim() || null,
   };
 }
 

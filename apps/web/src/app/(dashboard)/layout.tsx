@@ -36,11 +36,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="font-mono text-sm">briven</span>
             <span className="font-mono text-xs text-[var(--color-text-subtle)]">· tech</span>
             <span
-              aria-label="beta v1"
-              title="briven is in public beta — production-ready, on track for GA later this year"
+              aria-label="live"
+              title="Briven hosted platform — production"
               className="ml-1 inline-flex items-center rounded-[var(--radius-full)] border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-primary)]"
             >
-              beta v1
+              live
             </span>
           </Link>
 

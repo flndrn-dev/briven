@@ -224,7 +224,7 @@ export default async function BillingPage({
         </dl>
         <p className="font-mono text-xs text-[var(--color-text-subtle)]">
           today these are soft caps — the meter records every invocation but billing only
-          tracks the included bucket. overage billing arrives with the public beta. your
+          tracks the included bucket. overage billing follows your plan. your
           per-project page shows live usage against each cap.
         </p>
       </section>
@@ -246,7 +246,7 @@ export default async function BillingPage({
         </dl>
         <p className="font-mono text-xs text-[var(--color-text-subtle)]">
           live operational health is at <a className="underline underline-offset-2" href="https://docs.briven.tech/status">docs.briven.tech/status</a>.
-          formal credit-eligible SLA terms ship with the public beta — current targets are
+          formal credit-eligible SLA terms are available for enterprise contracts — current targets are
           operational commitments, not contractual.
         </p>
       </section>

@@ -75,16 +75,32 @@ export function AuthSessionsClient({ projects }: { projects: AuthV2ProjectRow[] 
     setBusy(true);
     setErr(null);
     try {
-      const [dRes, sRes] = await Promise.all([
+      // Devices stay on project-local table; sessions prefer briven-engine be_sessions.
+      const [dRes, engineSess, legacySess] = await Promise.all([
         fetch(`/api/v1/projects/${pid}/auth/users/${uid}/devices`, { credentials: 'include' }),
+        fetch(
+          `/api/v1/auth-core/session/list?userId=${encodeURIComponent(uid)}&projectId=${encodeURIComponent(pid)}`,
+          { credentials: 'include' },
+        ),
         fetch(`/api/v1/projects/${pid}/auth/users/${uid}/sessions`, { credentials: 'include' }),
       ]);
       if (dRes.ok) {
         const b = (await dRes.json()) as { items?: DeviceRow[] };
         setDevices(b.items ?? []);
       } else setDevices([]);
-      if (sRes.ok) {
-        const b = (await sRes.json()) as { items?: SessionRow[] };
+      if (engineSess.ok) {
+        const b = (await engineSess.json()) as { handles?: string[] };
+        const handles = b.handles ?? [];
+        setSessions(
+          handles.map((h) => ({
+            id: h,
+            createdAt: '',
+            expiresAt: null,
+            hint: 'briven-engine session',
+          })),
+        );
+      } else if (legacySess.ok) {
+        const b = (await legacySess.json()) as { items?: SessionRow[] };
         setSessions(b.items ?? []);
       } else setSessions([]);
     } finally {
@@ -104,10 +120,19 @@ export function AuthSessionsClient({ projects }: { projects: AuthV2ProjectRow[] 
     if (!projectId || !userId) return;
     setNote(null);
     setErr(null);
-    const res = await fetch(
-      `/api/v1/projects/${projectId}/auth/users/${userId}/sessions/${sessionId}/revoke`,
-      { method: 'POST', credentials: 'include' },
-    );
+    // Prefer engine revoke (be_sessions handle); fall back to legacy project sessions.
+    let res = await fetch(`/api/v1/auth-core/session/revoke`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionHandle: sessionId, projectId }),
+    });
+    if (!res.ok) {
+      res = await fetch(
+        `/api/v1/projects/${projectId}/auth/users/${userId}/sessions/${sessionId}/revoke`,
+        { method: 'POST', credentials: 'include' },
+      );
+    }
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { message?: string };
       setErr(body.message ?? `revoke failed (${res.status})`);

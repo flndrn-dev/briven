@@ -29,17 +29,17 @@ const SUBPROCESSORS: readonly Subprocessor[] = [
     name: 'mittera.eu',
     purpose: 'Transactional email delivery (magic-link sign-in, email verification, project invitations, account notices)',
     location: 'EU (operator-controlled)',
-    status: 'planned',
+    status: 'active',
     notes:
-      "Sister product to briven, also operated by the briven Operator. Outbound sends authenticate with a Bearer API key (POST https://api.mittera.eu/api/v1/emails); delivery / bounce / complaint events come back to https://api.briven.tech/mittera-webhook signed with HMAC-SHA256 of `${ts_ms}.${body}` and verified against BRIVEN_MITTERA_WEBHOOK_SECRET. Until BRIVEN_MITTERA_API_URL and BRIVEN_MITTERA_API_KEY are configured, magic-link emails print to the api container stdout for first-user bootstrap.",
+      'Transactional email for Auth and platform notices (magic links, OTP, invites, account mail). Operated alongside Briven. Card data never flows through Mittera.',
   },
   {
     name: 'Polar Software Inc.',
     purpose: 'Subscription billing, checkout, invoicing, taxation',
     location: 'United States; EU-resident processors via Stripe Connect',
-    status: 'planned',
+    status: 'active',
     notes:
-      'Activated when paid tiers launch. Polar handles all card data; no card details ever touch briven infrastructure.',
+      'Used for paid plans and checkout. Polar handles card data; no card details are stored on Briven infrastructure.',
   },
   {
     name: 'Backblaze, Inc. (B2 Cloud Storage)',
@@ -72,7 +72,7 @@ export default function SubprocessorsPage() {
     <>
       <h1 className="font-mono text-2xl text-[var(--color-text)]">subprocessors</h1>
       <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
-        last updated 2026-05-10 · phase 0 private alpha
+        last updated 2026-07-28 · production · briven.tech
       </p>
 
       <p className="mt-8">

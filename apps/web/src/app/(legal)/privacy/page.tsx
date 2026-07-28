@@ -5,7 +5,7 @@ export default function PrivacyPage() {
     <>
       <h1 className="font-mono text-2xl text-[var(--color-text)]">privacy policy</h1>
       <p className="mt-2 font-mono text-xs text-[var(--color-text-subtle)]">
-        last updated 2026-05-10 · phase 0 private alpha
+        last updated 2026-07-28 · production · briven.tech
       </p>
 
       <p className="mt-8">
@@ -44,8 +44,8 @@ export default function PrivacyPage() {
           investigations without de-anonymising you.
         </li>
         <li>
-          <strong>Billing data</strong> (when paid tiers launch) — billing email and a token from
-          our payment processor. We do not store card or bank-account details on briven
+          <strong>Billing data</strong> (when you use a paid plan) — billing email and a token from
+          our payment processor. We do not store card or bank-account details on Briven
           infrastructure; the processor handles all of that.
         </li>
       </ul>

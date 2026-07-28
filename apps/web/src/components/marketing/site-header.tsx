@@ -22,11 +22,11 @@ export function SiteHeader({ user }: { user: SiteHeaderUser | null }) {
           · tech
         </span>
         <span
-          aria-label="beta v1"
-          title="briven is in public beta — production-ready, on track for GA later this year"
+          aria-label="live"
+          title="Briven hosted platform — production"
           className="ml-1 inline-flex items-center rounded-[var(--radius-full)] border border-[var(--color-border-primary)] bg-[var(--color-primary-subtle)] px-1.5 py-0.5 font-mono uppercase tracking-wider text-[var(--color-primary)] text-[10px]"
         >
-          beta v1
+          live
         </span>
       </Link>
 

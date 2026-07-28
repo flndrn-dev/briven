@@ -265,6 +265,8 @@ export async function createPasswordlessCode(input: {
   requestOrigin?: string | null;
   /** User-Agent of the browser that requested the code (for email meta). */
   userAgent?: string | null;
+  /** Sec-CH-UA client hint (Brave vs Chrome). */
+  clientHintsUa?: string | null;
   /** Client IP that requested the code (for email meta + geo). */
   clientIp?: string | null;
 }): Promise<CreatePasswordlessCodeResult> {
@@ -404,6 +406,7 @@ export async function createPasswordlessCode(input: {
       title: `sign in to ${appName}`,
       ctaLabel: 'sign in',
       userAgent: input.userAgent,
+      clientHintsUa: input.clientHintsUa,
       clientIp: input.clientIp,
     });
     delivery = {

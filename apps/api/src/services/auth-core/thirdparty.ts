@@ -164,6 +164,7 @@ const OAUTH_ENDPOINTS: Record<SupportedSocial, OAuthProviderEndpoints> = {
 
 const ALL_SOCIAL = Object.keys(OAUTH_ENDPOINTS) as SupportedSocial[];
 
+/** In-memory fallback when Redis is down (single-node only). Prefer Redis. */
 const OAUTH_STATE = new Map<
   string,
   {
@@ -175,11 +176,65 @@ const OAUTH_STATE = new Map<
   }
 >();
 
+const OAUTH_STATE_TTL_MS = 15 * 60 * 1000;
+const OAUTH_STATE_REDIS_PREFIX = 'oauth:st:';
+
+type OauthStateValue = {
+  projectId: string;
+  thirdPartyId: SupportedSocial;
+  createdAt: number;
+  codeVerifier?: string;
+};
+
 function cleanState(): void {
-  const cutoff = Date.now() - 15 * 60 * 1000;
+  const cutoff = Date.now() - OAUTH_STATE_TTL_MS;
   for (const [k, v] of OAUTH_STATE) {
     if (v.createdAt < cutoff) OAUTH_STATE.delete(k);
   }
+}
+
+async function putOauthState(state: string, value: OauthStateValue): Promise<void> {
+  cleanState();
+  OAUTH_STATE.set(state, value);
+  try {
+    const { getRedis } = await import('../../lib/redis.js');
+    const redis = getRedis();
+    if (redis) {
+      await redis.set(
+        `${OAUTH_STATE_REDIS_PREFIX}${state}`,
+        JSON.stringify(value),
+        'PX',
+        OAUTH_STATE_TTL_MS,
+      );
+    }
+  } catch {
+    /* memory remains */
+  }
+}
+
+async function takeOauthState(state: string): Promise<OauthStateValue | null> {
+  cleanState();
+  try {
+    const { getRedis } = await import('../../lib/redis.js');
+    const redis = getRedis();
+    if (redis) {
+      const key = `${OAUTH_STATE_REDIS_PREFIX}${state}`;
+      const raw = await redis.get(key);
+      if (raw) {
+        await redis.del(key);
+        try {
+          return JSON.parse(raw) as OauthStateValue;
+        } catch {
+          return null;
+        }
+      }
+    }
+  } catch {
+    /* fall through to memory */
+  }
+  const mem = OAUTH_STATE.get(state) ?? null;
+  if (mem) OAUTH_STATE.delete(state);
+  return mem;
 }
 
 function isSupported(id: string): id is SupportedSocial {
@@ -285,14 +340,13 @@ export async function getAuthorisationUrl(input: {
     };
   }
 
-  cleanState();
   const state = randomBytes(16).toString('hex');
   let codeVerifier: string | undefined;
   if (thirdPartyId === 'twitter') {
     // PKCE plain (simple); production apps may prefer S256 later
     codeVerifier = randomBytes(32).toString('base64url');
   }
-  OAUTH_STATE.set(state, {
+  await putOauthState(state, {
     projectId: input.projectId ?? '',
     thirdPartyId,
     createdAt: Date.now(),
@@ -351,13 +405,12 @@ export async function exchangeCodeForProfile(input: {
   let projectId = input.projectId;
   let codeVerifier: string | undefined;
   if (input.state) {
-    const st = OAUTH_STATE.get(input.state);
+    const st = await takeOauthState(input.state);
     if (!st || st.thirdPartyId !== thirdPartyId) {
       return { status: 'ERROR', message: 'invalid or expired OAuth state' };
     }
     if (st.projectId) projectId = st.projectId;
     codeVerifier = st.codeVerifier;
-    OAUTH_STATE.delete(input.state);
   }
 
   const endpoints = OAUTH_ENDPOINTS[thirdPartyId];

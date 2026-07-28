@@ -434,7 +434,11 @@ async function maybeUseCustomTemplate(
 async function renderCtxForProject(
   projectId: string,
   config: AuthConfig,
-  request?: { userAgent?: string | null; clientIp?: string | null },
+  request?: {
+    userAgent?: string | null;
+    clientHintsUa?: string | null;
+    clientIp?: string | null;
+  },
 ): Promise<RenderContext> {
   // Prefer briven-engine branding (dashboard Auth → branding) for logo + footer.
   let engine: BrivenEngineBranding | null = null;
@@ -451,9 +455,10 @@ async function renderCtxForProject(
   const footerNote = engine?.footerNote ?? null;
   const footerLines = engine ? buildAuthEmailFooterLines(engine) : [];
   const requestMeta =
-    request?.userAgent || request?.clientIp
+    request?.userAgent || request?.clientIp || request?.clientHintsUa
       ? await resolveAuthEmailRequestMeta({
           userAgent: request.userAgent,
+          clientHintsUa: request.clientHintsUa,
           clientIp: request.clientIp,
         })
       : null;
@@ -470,6 +475,7 @@ async function renderCtxForProject(
 
 export type AuthMailRequestContext = {
   userAgent?: string | null;
+  clientHintsUa?: string | null;
   clientIp?: string | null;
 };
 

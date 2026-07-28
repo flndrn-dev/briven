@@ -21,6 +21,12 @@ export const BRIVEN_ENGINE_ID = 'briven-engine' as const;
 export type BrivenEngineClientOptions = {
   readonly projectId: string;
   /**
+   * Publishable Auth key `pk_briven_auth_…` (required for FDI after Batch A lock).
+   * Prefer injecting this on the **server proxy** so the browser never needs it;
+   * when calling the API directly (server-side or local), pass it here.
+   */
+  readonly publicKey?: string;
+  /**
    * Base path for FDI calls. Default `/api/auth` (first-party proxy on app).
    * For direct API (server-side only / local): full origin + `/v1/auth-core/fdi`.
    */
@@ -51,16 +57,20 @@ export type BrivenEngineClient = {
   signUpEmailPassword: (input: {
     email: string;
     password: string;
+    turnstileToken?: string;
   }) => Promise<BrivenEngineResult<unknown>>;
   /** EmailPassword sign in */
   signInEmailPassword: (input: {
     email: string;
     password: string;
+    turnstileToken?: string;
   }) => Promise<BrivenEngineResult<unknown>>;
   /** Passwordless: create code (email or phone — SMS included) */
   createPasswordlessCode: (input: {
     email?: string;
     phoneNumber?: string;
+    /** Cloudflare Turnstile token when platform captcha is required */
+    turnstileToken?: string;
   }) => Promise<BrivenEngineResult<unknown>>;
   /** Passwordless: consume user input code */
   consumePasswordlessCode: (input: {
@@ -116,6 +126,11 @@ export function createBrivenEngineClient(
     const headers = new Headers(init?.headers);
     headers.set('x-briven-project-id', opts.projectId);
     headers.set('x-briven-engine', BRIVEN_ENGINE_ID);
+    // FDI lock: Bearer pk required (proxy may also inject; client sends when known).
+    const pk = opts.publicKey?.trim();
+    if (pk && pk.startsWith('pk_briven_auth_') && !headers.has('authorization')) {
+      headers.set('authorization', `Bearer ${pk}`);
+    }
     if (!headers.has('content-type') && init?.body) {
       headers.set('content-type', 'application/json');
     }
@@ -155,7 +170,7 @@ export function createBrivenEngineClient(
       const res = await fdi('/signout', { method: 'POST', body: '{}' });
       return jsonResult(res);
     },
-    signUpEmailPassword: async ({ email, password }) => {
+    signUpEmailPassword: async ({ email, password, turnstileToken }) => {
       const res = await fdi('/signup', {
         method: 'POST',
         body: JSON.stringify({
@@ -163,12 +178,13 @@ export function createBrivenEngineClient(
             { id: 'email', value: email },
             { id: 'password', value: password },
           ],
+          ...(turnstileToken ? { turnstileToken } : {}),
         }),
         headers: { rid: 'emailpassword' },
       });
       return jsonResult(res);
     },
-    signInEmailPassword: async ({ email, password }) => {
+    signInEmailPassword: async ({ email, password, turnstileToken }) => {
       const res = await fdi('/signin', {
         method: 'POST',
         body: JSON.stringify({
@@ -176,6 +192,7 @@ export function createBrivenEngineClient(
             { id: 'email', value: email },
             { id: 'password', value: password },
           ],
+          ...(turnstileToken ? { turnstileToken } : {}),
         }),
         headers: { rid: 'emailpassword' },
       });
@@ -185,6 +202,7 @@ export function createBrivenEngineClient(
       const body: Record<string, string> = {};
       if (input.email) body.email = input.email;
       if (input.phoneNumber) body.phoneNumber = input.phoneNumber;
+      if (input.turnstileToken) body.turnstileToken = input.turnstileToken;
       const res = await fdi('/signinup/code', {
         method: 'POST',
         body: JSON.stringify(body),

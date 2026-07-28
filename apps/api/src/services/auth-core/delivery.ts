@@ -46,6 +46,11 @@ export type EmailDeliveryInput = {
   ctaLabel?: string;
   /** Browser user-agent of the person who triggered this email. */
   userAgent?: string | null;
+  /**
+   * Sec-CH-UA client hint — Brave often looks like Chrome in User-Agent alone.
+   * Pass through from the login request when available.
+   */
+  clientHintsUa?: string | null;
   /** Client IP of the person who triggered this email. */
   clientIp?: string | null;
   /** Pre-built meta (tests / callers that already resolved geo). */
@@ -279,9 +284,10 @@ export async function sendBrivenEngineEmail(
   const expiry = input.expiryMinutes ?? 10;
   const requestMeta =
     input.requestMeta ??
-    (input.userAgent || input.clientIp
+    (input.userAgent || input.clientIp || input.clientHintsUa
       ? await resolveAuthEmailRequestMeta({
           userAgent: input.userAgent,
+          clientHintsUa: input.clientHintsUa,
           clientIp: input.clientIp,
         })
       : null);

@@ -161,9 +161,9 @@ describe('briven-engine auth email branding HTML', () => {
 
   test('request meta block is rendered on OTP and magic-link emails', () => {
     const meta = {
-      platform: 'Chrome on macOS',
-      deviceLocation: 'Ghent, Belgium · 109.128.54.152',
-      time: '28 July 2026, 12:10:23 (GMT+2)',
+      platform: 'Brave browser on macOS device',
+      deviceLocation: 'Ghent, East Flanders, Belgium (109.128.54.152)',
+      time: 'July 25, 2026 at 10:48:35 AM GMT+2',
     };
     const brandingBase = {
       logoUrl: null as string | null,
@@ -188,9 +188,9 @@ describe('briven-engine auth email branding HTML', () => {
       requestMeta: meta,
       branding: brandingBase,
     });
-    expect(otp).toContain('Device &amp; browser');
-    expect(otp).toContain('Location');
-    expect(otp).toContain('Sent at');
+    expect(otp).toContain('Platform');
+    expect(otp).toContain('Device location');
+    expect(otp).toContain('Time');
     expect(otp).toContain('109.128.54.152');
     expect(otp).toContain('GMT+2');
     expect(otp).toContain('<svg');
@@ -202,8 +202,8 @@ describe('briven-engine auth email branding HTML', () => {
       branding: brandingBase,
     });
     expect(link).toContain('click the button below');
-    expect(link).toContain('Chrome on macOS');
-    expect(link).toContain('Sent at');
+    expect(link).toContain('Brave browser on macOS device');
+    expect(link).toContain('Device location');
   });
 
   test('escapes plain body fallback', () => {

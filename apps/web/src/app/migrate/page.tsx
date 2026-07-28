@@ -11,7 +11,7 @@ import { getSessionUser } from '../../lib/session';
 export const metadata: Metadata = {
   title: 'migrate to briven — convex, supabase, firebase, prisma, drizzle',
   description:
-    'we move your project to briven for you. free during beta. your current platform stays untouched until you press the cutover button.',
+    'We move your project to Briven for you. Migration help is available for operators. Your current platform stays untouched until you cut over.',
 };
 
 interface SourceCard {
@@ -85,8 +85,8 @@ const PROMISES: readonly { title: string; body: string }[] = [
     body: 'an operator pulls your schema, ports your handlers, and copies your data. you review every step in the dashboard before anything goes live.',
   },
   {
-    title: 'free during beta',
-    body: 'we’re not charging for migration help in the launch window. after beta, concierge moves are paid; the dashboard wizard stays free.',
+    title: 'migration help available',
+    body: 'we’re not charging for migration help in the launch window. Concierge moves may be scheduled with the team; the dashboard wizard stays free to start.',
   },
 ];
 
@@ -110,7 +110,7 @@ export default async function MigratePage() {
         </h1>
         <p className="mt-6 max-w-2xl leading-[1.6] text-[var(--color-text-muted)] text-[var(--text-body)]">
           we move convex, supabase, firebase, mongodb, drizzle, prisma, raw postgres, hasura
-          and nextauth projects to briven for you. free during the beta. your current
+          and nextauth projects to briven for you. with operator help. your current
           platform keeps running the entire time — nothing is moved, deleted, or modified
           until you press cutover.
         </p>
@@ -210,7 +210,7 @@ export default async function MigratePage() {
               migrations@flndrn.com
             </a>{' '}
             with a one-paragraph description of where your project lives today and we&apos;ll
-            scope a free beta migration for you. supabase / firebase / mongodb / hasura /
+            scope a migration for you. supabase / firebase / mongodb / hasura /
             nextauth / drizzle / prisma / convex / raw postgres covered; everything else
             we&apos;ll quote.
           </p>

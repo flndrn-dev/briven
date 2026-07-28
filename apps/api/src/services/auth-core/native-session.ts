@@ -143,6 +143,49 @@ export async function listSessionHandles(userId: string): Promise<string[]> {
   return res.rows.map((r: { session_handle: string }) => r.session_handle);
 }
 
+/**
+ * SuperTokens-style session refresh: prove refresh token → new session handle,
+ * revoke the old handle. Access cookie value remains the opaque session handle.
+ */
+export async function refreshEngineSession(
+  refreshToken: string,
+): Promise<EngineSession | null> {
+  const raw = refreshToken?.trim();
+  if (!raw) return null;
+  const pool = getEnginePool();
+  const res = await pool.query(
+    `SELECT session_handle, user_id, tenant_id, expires_at
+     FROM be_sessions
+     WHERE refresh_token_hash = $1
+     LIMIT 1`,
+    [hash(raw)],
+  );
+  const row = res.rows[0] as
+    | {
+        session_handle: string;
+        user_id: string;
+        tenant_id: string;
+        expires_at: Date | string;
+      }
+    | undefined;
+  if (!row) return null;
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    await pool.query(`DELETE FROM be_sessions WHERE session_handle = $1`, [
+      row.session_handle,
+    ]);
+    return null;
+  }
+  // Rotate: mint new session then drop old (atomic enough for v1).
+  const next = await createEngineSession({
+    userId: row.user_id,
+    tenantId: row.tenant_id,
+  });
+  await pool.query(`DELETE FROM be_sessions WHERE session_handle = $1`, [
+    row.session_handle,
+  ]);
+  return next;
+}
+
 /** Recent active sessions for yellow dashboard (optionally one tenant). */
 export async function listRecentEngineSessions(
   limit = 50,
