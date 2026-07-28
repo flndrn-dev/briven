@@ -108,13 +108,16 @@ function getSmtpTransporter(): Transporter {
 }
 
 /**
- * The From: SMTP sends use. Prefers the explicit BRIVEN_SMTP_FROM (e.g.
- * "Briven <noreply@briven.tech>") so the operator can align it with their
- * provider's verified sender; falls back to a per-call override, then the
- * global fromAddress().
+ * The From: SMTP sends use.
+ * Prefer per-call override first (project Auth branding:
+ * `Pando <noreply@pando.so>`) — SuperTokens-style multi-app senders.
+ * Then platform BRIVEN_SMTP_FROM, then global default.
+ *
+ * Note: the mail provider must allow the domain (SPF/DKIM). Unverified
+ * custom domains may bounce; operators set domain in Auth → branding.
  */
 function smtpFrom(args: SendArgs): string {
-  return env.BRIVEN_SMTP_FROM ?? args.from ?? fromAddress();
+  return args.from ?? env.BRIVEN_SMTP_FROM ?? fromAddress();
 }
 
 /**

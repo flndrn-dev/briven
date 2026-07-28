@@ -55,10 +55,9 @@ function detectAlgo(hash: string, declared?: string): string {
 }
 
 /**
- * Store foreign hash as `algo$` + raw so we can verify later.
- * Engine sign-in currently verifies briven-engine scrypt; foreign hashes
- * are imported for migration completeness — users may need reset if algo
- * not yet verified on sign-in path.
+ * Store foreign hash as `import:algo:raw` so sign-in can verify via
+ * `verifyPasswordFlexible` (bcrypt / argon2 via Bun.password), then upgrade
+ * the row to briven scrypt on first successful login.
  */
 function storeForeignHash(algo: string, hash: string): string {
   return `import:${algo}:${hash}`;

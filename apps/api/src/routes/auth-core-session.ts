@@ -9,6 +9,7 @@
 import { Hono } from 'hono';
 
 import { requireAuthCoreDashboard } from '../middleware/auth-core-guard.js';
+import { requireDashboardProjectAdmin } from '../services/auth-core/dashboard-project-auth.js';
 import {
   listSessionsForUser,
   revokeAllSessionsForUser,
@@ -90,12 +91,22 @@ authCoreSessionRouter.get('/v1/auth-core/session/list', async (c) => {
   if (!isAuthCoreInitialized()) {
     return c.json({ code: 'auth_core_sdk_not_ready' }, 503);
   }
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
   const userId = c.req.query('userId');
   if (!userId) {
     return c.json({ code: 'userId_required' }, 400);
   }
   const handles = await listSessionsForUser(userId);
-  return c.json({ userId, handles, count: handles.length });
+  return c.json({
+    userId,
+    handles,
+    count: handles.length,
+    projectId: projectGate.projectId,
+  });
 });
 
 /** Yellow dashboard: recent active sessions across tenants. */
@@ -110,8 +121,13 @@ authCoreSessionRouter.get('/v1/auth-core/session/recent', async (c) => {
       503,
     );
   }
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
   const limit = Number(c.req.query('limit') ?? '50');
-  const projectId = c.req.query('projectId') ?? undefined;
+  const projectId = projectGate.projectId;
   let tenantId = c.req.query('tenantId') ?? undefined;
   if (!tenantId && projectId) {
     try {
@@ -141,12 +157,22 @@ authCoreSessionRouter.post('/v1/auth-core/session/revoke', async (c) => {
   if (!isAuthCoreInitialized()) {
     return c.json({ code: 'auth_core_sdk_not_ready' }, 503);
   }
-  let body: { sessionHandle?: string; userId?: string; all?: boolean } = {};
+  let body: {
+    sessionHandle?: string;
+    userId?: string;
+    all?: boolean;
+    projectId?: string;
+  } = {};
   try {
     body = await c.req.json();
   } catch {
     body = {};
   }
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    body.projectId ?? c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
 
   if (body.all && body.userId) {
     const n = await revokeAllSessionsForUser(body.userId);

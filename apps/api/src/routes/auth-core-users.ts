@@ -18,6 +18,7 @@ import { Hono } from 'hono';
 
 import { requireAuthCoreDashboard } from '../middleware/auth-core-guard.js';
 import { BRIVEN_ENGINE_ID, isAuthCoreInitialized } from '../services/auth-core/engine.js';
+import { requireDashboardProjectAdmin } from '../services/auth-core/dashboard-project-auth.js';
 import {
   archiveBrivenEngineUser,
   deleteBrivenEngineUser,
@@ -63,9 +64,14 @@ authCoreUsersRouter.get('/v1/auth-core/users', async (c) => {
       503,
     );
   }
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
   const limit = Number(c.req.query('limit') ?? '50');
   const paginationToken = c.req.query('paginationToken') ?? undefined;
-  const projectId = c.req.query('projectId') ?? undefined;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(
     projectId,
     c.req.query('tenantId') ?? undefined,
@@ -77,7 +83,7 @@ authCoreUsersRouter.get('/v1/auth-core/users', async (c) => {
   });
   return c.json({
     ...result,
-    projectId: projectId ?? null,
+    projectId,
     tenantId: tenantId ?? null,
   });
 });
@@ -86,8 +92,13 @@ authCoreUsersRouter.get('/v1/auth-core/users/:userId', async (c) => {
   if (!isAuthCoreInitialized()) {
     return c.json({ engine: BRIVEN_ENGINE_ID, code: 'auth_core_sdk_not_ready' }, 503);
   }
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
   const userId = c.req.param('userId');
-  const projectId = c.req.query('projectId') ?? undefined;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(
     projectId,
     c.req.query('tenantId') ?? undefined,
@@ -99,7 +110,7 @@ authCoreUsersRouter.get('/v1/auth-core/users/:userId', async (c) => {
       404,
     );
   }
-  return c.json({ engine: BRIVEN_ENGINE_ID, user, projectId: projectId ?? null });
+  return c.json({ engine: BRIVEN_ENGINE_ID, user, projectId });
 });
 
 /** GDPR-style JSON export for one end-user (no password hashes). */
@@ -107,8 +118,13 @@ authCoreUsersRouter.get('/v1/auth-core/users/:userId/export', async (c) => {
   if (!isAuthCoreInitialized()) {
     return c.json({ engine: BRIVEN_ENGINE_ID, code: 'auth_core_sdk_not_ready' }, 503);
   }
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
   const userId = c.req.param('userId');
-  const projectId = c.req.query('projectId') ?? undefined;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(
     projectId,
     c.req.query('tenantId') ?? undefined,
@@ -127,6 +143,11 @@ authCoreUsersRouter.get('/v1/auth-core/users/:userId/export', async (c) => {
 });
 
 authCoreUsersRouter.get('/v1/auth-core/users/:userId/metadata', async (c) => {
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
   const userId = c.req.param('userId');
   const metadata = await getBrivenEngineUserMetadata(userId);
   if (metadata == null && !isAuthCoreInitialized()) {
@@ -136,6 +157,11 @@ authCoreUsersRouter.get('/v1/auth-core/users/:userId/metadata', async (c) => {
 });
 
 authCoreUsersRouter.put('/v1/auth-core/users/:userId/metadata', async (c) => {
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
   const userId = c.req.param('userId');
   let body: Record<string, unknown> = {};
   try {
@@ -175,7 +201,12 @@ async function moderationBody(c: {
 authCoreUsersRouter.post('/v1/auth-core/users/:userId/hold', async (c) => {
   const userId = c.req.param('userId');
   const body = await moderationBody(c);
-  const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    body.projectId ?? c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(projectId, undefined);
   const ok = await holdBrivenEngineUser(userId, {
     reason: body.reason,
@@ -193,7 +224,12 @@ authCoreUsersRouter.post('/v1/auth-core/users/:userId/hold', async (c) => {
 authCoreUsersRouter.post('/v1/auth-core/users/:userId/unhold', async (c) => {
   const userId = c.req.param('userId');
   const body = await moderationBody(c);
-  const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    body.projectId ?? c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(projectId, undefined);
   const ok = await unholdBrivenEngineUser(userId, { tenantId });
   if (!ok) {
@@ -208,7 +244,12 @@ authCoreUsersRouter.post('/v1/auth-core/users/:userId/unhold', async (c) => {
 authCoreUsersRouter.post('/v1/auth-core/users/:userId/archive', async (c) => {
   const userId = c.req.param('userId');
   const body = await moderationBody(c);
-  const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    body.projectId ?? c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(projectId, undefined);
   const ok = await archiveBrivenEngineUser(userId, {
     reason: body.reason,
@@ -231,7 +272,12 @@ authCoreUsersRouter.post('/v1/auth-core/users/:userId/archive', async (c) => {
 authCoreUsersRouter.post('/v1/auth-core/users/:userId/unarchive', async (c) => {
   const userId = c.req.param('userId');
   const body = await moderationBody(c);
-  const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    body.projectId ?? c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(projectId, undefined);
   const ok = await unarchiveBrivenEngineUser(userId, { tenantId });
   if (!ok) {
@@ -246,7 +292,12 @@ authCoreUsersRouter.post('/v1/auth-core/users/:userId/unarchive', async (c) => {
 authCoreUsersRouter.post('/v1/auth-core/users/:userId/delete', async (c) => {
   const userId = c.req.param('userId');
   const body = await moderationBody(c);
-  const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+  const projectGate = await requireDashboardProjectAdmin(
+    c,
+    body.projectId ?? c.req.query('projectId'),
+  );
+  if (projectGate instanceof Response) return projectGate;
+  const projectId = projectGate.projectId;
   const tenantId = await resolveTenantId(projectId, undefined);
   // Safety: require explicit confirm in body
   if (body.confirm !== 'delete') {
@@ -275,7 +326,12 @@ authCoreUsersRouter.post(
   async (c) => {
     const userId = c.req.param('userId');
     const body = await moderationBody(c);
-    const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+    const projectGate = await requireDashboardProjectAdmin(
+      c,
+      body.projectId ?? c.req.query('projectId'),
+    );
+    if (projectGate instanceof Response) return projectGate;
+    const projectId = projectGate.projectId;
     const tenantId = await resolveTenantId(projectId, undefined);
     // Scope: ensure user belongs to tenant when project provided
     if (tenantId) {
@@ -303,7 +359,12 @@ authCoreUsersRouter.post(
     const userId = c.req.param('userId');
     const sessionHandle = c.req.param('sessionHandle');
     const body = await moderationBody(c);
-    const projectId = body.projectId ?? c.req.query('projectId') ?? undefined;
+    const projectGate = await requireDashboardProjectAdmin(
+      c,
+      body.projectId ?? c.req.query('projectId'),
+    );
+    if (projectGate instanceof Response) return projectGate;
+    const projectId = projectGate.projectId;
     const tenantId = await resolveTenantId(projectId, undefined);
     if (tenantId) {
       const user = await getBrivenEngineUser(userId, { tenantId });

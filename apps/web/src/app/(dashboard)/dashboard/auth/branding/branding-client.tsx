@@ -9,6 +9,12 @@ interface BrandingState {
   logoUrl: string;
   primaryColor: string;
   senderName: string;
+  /** Domain for From address, e.g. pando.so → noreply@pando.so */
+  senderDomain: string;
+  /** Local part before @ (default noreply) */
+  senderLocalPart: string;
+  /** Full From email override (wins over local@domain) */
+  senderEmail: string;
   brandUrl: string;
   footerNote: string;
   /** Email footer line 1: made with ♥ {loveName} by {orgName} */
@@ -27,6 +33,9 @@ const DEFAULT: BrandingState = {
   logoUrl: '',
   primaryColor: '#00e87a',
   senderName: 'Briven Auth',
+  senderDomain: '',
+  senderLocalPart: 'noreply',
+  senderEmail: '',
   brandUrl: '',
   footerNote: '',
   footerLoveName: '',
@@ -38,6 +47,26 @@ const DEFAULT: BrandingState = {
   footerShowTagline: false,
   footerShowAddress: false,
 };
+
+/** Live From: preview matching server buildAuthEmailFromHeader. */
+function previewFromHeader(f: BrandingState): string {
+  const name = f.senderName.trim() || 'Briven Auth';
+  const needsQuote = /[\s",;:<>@()\\[\]]/.test(name);
+  const display = needsQuote ? `"${name}"` : name;
+  const full = f.senderEmail.trim().toLowerCase();
+  if (full.includes('@')) return `${display} <${full}>`;
+  const domain = f.senderDomain
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/^https?:\/\//, '')
+    .split('/')[0];
+  if (domain) {
+    const local = (f.senderLocalPart.trim() || 'noreply').toLowerCase();
+    return `${display} <${local}@${domain}>`;
+  }
+  return `${display} <noreply@briven.tech>`;
+}
 
 /** Preview lines matching server buildAuthEmailFooterLines. */
 function previewFooterLines(f: BrandingState): string[] {
@@ -87,12 +116,18 @@ function applyBrandingPayload(
     footerShowLove?: boolean;
     footerShowTagline?: boolean;
     footerShowAddress?: boolean;
+    senderDomain?: string | null;
+    senderLocalPart?: string | null;
+    senderEmail?: string | null;
   },
 ): BrandingState {
   return {
     logoUrl: b.logoUrl ?? '',
     primaryColor: b.primaryColor ?? DEFAULT.primaryColor,
     senderName: b.senderName ?? DEFAULT.senderName,
+    senderDomain: b.senderDomain ?? '',
+    senderLocalPart: b.senderLocalPart ?? DEFAULT.senderLocalPart,
+    senderEmail: b.senderEmail ?? '',
     brandUrl: b.brandUrl ?? '',
     footerNote: b.footerNote ?? '',
     footerLoveName: b.footerLoveName ?? '',
@@ -286,6 +321,9 @@ export function AuthBrandingClient({
       const payload = {
         primaryColor: form.primaryColor.trim() || DEFAULT.primaryColor,
         senderName: form.senderName.trim() || DEFAULT.senderName,
+        senderDomain: form.senderDomain.trim() || null,
+        senderLocalPart: form.senderLocalPart.trim() || null,
+        senderEmail: form.senderEmail.trim() || null,
         brandUrl: form.brandUrl.trim() || null,
         footerNote: form.footerNote.trim() || null,
         footerLoveName: form.footerLoveName.trim() || null,
@@ -341,7 +379,7 @@ export function AuthBrandingClient({
         );
       }
       setProof(
-        `saved · “${payload.senderName}” · ${payload.primaryColor} — refresh keeps these settings`,
+        `saved · “${payload.senderName}” · From: ${previewFromHeader(form)} — refresh keeps these settings`,
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'save failed');
@@ -570,13 +608,90 @@ export function AuthBrandingClient({
           onChange={(e) =>
             setForm((f) => ({ ...f, senderName: e.target.value }))
           }
+          placeholder="Pando"
           className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
           style={{ borderColor: 'var(--auth-accent-border)' }}
         />
         <span className="text-[10px] text-[var(--color-text-muted)]">
-          Shown as “sign in to …”, email From name, and footer.
+          Shown as “sign in to …”, mailbox display name (From:), and footer.
         </span>
       </label>
+
+      {/* Per-project From: — SuperTokens-style sender (not always briven.tech) */}
+      <div
+        className="flex flex-col gap-3 rounded-md border p-4"
+        style={{ borderColor: 'var(--color-border-subtle)' }}
+      >
+        <div>
+          <p className="font-mono text-xs text-[var(--color-text)]">
+            email From address
+          </p>
+          <p className="mt-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+            What your users see in Outlook/Gmail as the sender. Example for
+            Pando: name <strong>Pando</strong> + domain{' '}
+            <strong>pando.so</strong> →{' '}
+            <code className="text-[var(--color-text)]">
+              Pando &lt;noreply@pando.so&gt;
+            </code>
+            . Domain must be allowed on your mail provider (SPF/DKIM).
+          </p>
+        </div>
+        <label className="flex flex-col gap-1 font-mono text-xs">
+          <span className="text-[var(--color-text-muted)]">
+            sender domain (e.g. pando.so)
+          </span>
+          <input
+            value={form.senderDomain}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, senderDomain: e.target.value }))
+            }
+            placeholder="pando.so"
+            className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
+            style={{ borderColor: 'var(--auth-accent-border)' }}
+          />
+        </label>
+        <label className="flex flex-col gap-1 font-mono text-xs">
+          <span className="text-[var(--color-text-muted)]">
+            local part before @ (default noreply)
+          </span>
+          <input
+            value={form.senderLocalPart}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, senderLocalPart: e.target.value }))
+            }
+            placeholder="noreply"
+            className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
+            style={{ borderColor: 'var(--auth-accent-border)' }}
+          />
+        </label>
+        <label className="flex flex-col gap-1 font-mono text-xs">
+          <span className="text-[var(--color-text-muted)]">
+            full From email (optional override)
+          </span>
+          <input
+            value={form.senderEmail}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, senderEmail: e.target.value }))
+            }
+            placeholder="auth@pando.so"
+            className="rounded-md border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
+            style={{ borderColor: 'var(--auth-accent-border)' }}
+          />
+          <span className="text-[10px] text-[var(--color-text-muted)]">
+            If set, this full address wins over local@domain.
+          </span>
+        </label>
+        <p
+          className="rounded-md border px-3 py-2 font-mono text-[11px] text-[var(--color-text)]"
+          style={{
+            borderColor: 'var(--auth-accent-border)',
+            background: 'var(--color-surface)',
+          }}
+        >
+          <span className="text-[var(--color-text-muted)]">preview From: </span>
+          {previewFromHeader(form)}
+        </p>
+      </div>
 
       <label className="flex flex-col gap-1 font-mono text-xs">
         <span className="text-[var(--color-text-muted)]">

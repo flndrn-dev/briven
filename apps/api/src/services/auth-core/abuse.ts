@@ -101,6 +101,7 @@ export function brivenEngineFdiRateLimit(): MiddlewareHandler {
       );
     }
     await next();
+    return;
   };
 }
 

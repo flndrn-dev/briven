@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
-import { hashPassword, verifyPassword } from './emailpassword.js';
+import {
+  hashPassword,
+  verifyPassword,
+  verifyPasswordFlexible,
+} from './emailpassword.js';
 
 describe('briven-engine password hash (Phase 2)', () => {
   test('hashes and verifies correct password', () => {
@@ -24,5 +28,16 @@ describe('briven-engine password hash (Phase 2)', () => {
   test('malformed stored hash fails closed', () => {
     expect(verifyPassword('x', 'not-a-hash')).toBe(false);
     expect(verifyPassword('x', '')).toBe(false);
+  });
+
+  test('import:bcrypt foreign hash verifies and flags upgrade', async () => {
+    const raw = await Bun.password.hash('MigrateMe!99', { algorithm: 'bcrypt', cost: 4 });
+    const stored = `import:bcrypt:${raw}`;
+    expect(verifyPassword('MigrateMe!99', stored)).toBe(false); // sync path rejects foreign
+    const ok = await verifyPasswordFlexible('MigrateMe!99', stored);
+    expect(ok.ok).toBe(true);
+    expect(ok.upgradeToBriven).toBe(true);
+    const bad = await verifyPasswordFlexible('wrong', stored);
+    expect(bad.ok).toBe(false);
   });
 });

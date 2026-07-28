@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 
 import { requireAuthCoreDashboard } from '../middleware/auth-core-guard.js';
+import { requireDashboardProjectAdmin } from '../services/auth-core/dashboard-project-auth.js';
 import { BRIVEN_ENGINE_ID } from '../services/auth-core/engine.js';
 import {
   importBrivenEngineUsers,
@@ -49,14 +50,24 @@ authCoreMigrationRouter.post('/v1/auth-core/migration/users', async (c) => {
     );
   }
   // Stamp top-level projectId onto rows that omit it (dashboard migration UX).
-  const projectId =
-    typeof body.projectId === 'string' && body.projectId.startsWith('p_')
-      ? body.projectId
-      : null;
+  const projectGate = await requireDashboardProjectAdmin(c, body.projectId);
+  if (projectGate instanceof Response) return projectGate;
+  const projectId = projectGate.projectId;
   const users = body.users.map((u) => ({
     ...u,
-    projectId: u.projectId ?? projectId ?? undefined,
+    projectId: u.projectId ?? projectId,
   }));
+  // Reject rows that try to import into a different project.
+  if (users.some((u) => u.projectId && u.projectId !== projectId)) {
+    return c.json(
+      {
+        engine: BRIVEN_ENGINE_ID,
+        code: 'project_mismatch',
+        message: 'all users must target the same projectId as the request',
+      },
+      403,
+    );
+  }
   const result = await importBrivenEngineUsers(users);
   return c.json(result, result.ok ? 200 : 503);
 });

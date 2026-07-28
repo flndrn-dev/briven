@@ -68,6 +68,30 @@ export type BrivenEngineClient = {
     userInputCode: string;
     deviceId: string;
   }) => Promise<BrivenEngineResult<unknown>>;
+  /** Passkeys: start sign-in (browser then finishes with navigator.credentials.get) */
+  passkeySignInOptions: (input?: {
+    rpId?: string;
+    expectedOrigin?: string;
+  }) => Promise<BrivenEngineResult<unknown>>;
+  /** Passkeys: finish sign-in */
+  passkeySignInFinish: (input: {
+    challengeId: string;
+    credential: unknown;
+    rpId?: string;
+    expectedOrigin?: string;
+  }) => Promise<BrivenEngineResult<unknown>>;
+  /** Passkeys: start register (needs existing session cookie) */
+  passkeyRegisterOptions: (input?: {
+    rpId?: string;
+    expectedOrigin?: string;
+  }) => Promise<BrivenEngineResult<unknown>>;
+  /** Passkeys: finish register */
+  passkeyRegisterFinish: (input: {
+    challengeId: string;
+    credential: unknown;
+    rpId?: string;
+    expectedOrigin?: string;
+  }) => Promise<BrivenEngineResult<unknown>>;
   /** Raw FDI helper */
   fdi: (path: string, init?: RequestInit) => Promise<Response>;
 };
@@ -173,6 +197,50 @@ export function createBrivenEngineClient(
         method: 'POST',
         body: JSON.stringify(input),
         headers: { rid: 'passwordless' },
+      });
+      return jsonResult(res);
+    },
+    passkeySignInOptions: async (input = {}) => {
+      const res = await fdi('/webauthn/signin/options', {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: { rid: 'webauthn' },
+      });
+      return jsonResult(res);
+    },
+    passkeySignInFinish: async (input) => {
+      const res = await fdi('/webauthn/signin/finish', {
+        method: 'POST',
+        body: JSON.stringify({
+          challengeId: input.challengeId,
+          credential: input.credential,
+          response: input.credential,
+          rpId: input.rpId,
+          expectedOrigin: input.expectedOrigin,
+        }),
+        headers: { rid: 'webauthn' },
+      });
+      return jsonResult(res);
+    },
+    passkeyRegisterOptions: async (input = {}) => {
+      const res = await fdi('/webauthn/register/options', {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: { rid: 'webauthn' },
+      });
+      return jsonResult(res);
+    },
+    passkeyRegisterFinish: async (input) => {
+      const res = await fdi('/webauthn/register/finish', {
+        method: 'POST',
+        body: JSON.stringify({
+          challengeId: input.challengeId,
+          credential: input.credential,
+          response: input.credential,
+          rpId: input.rpId,
+          expectedOrigin: input.expectedOrigin,
+        }),
+        headers: { rid: 'webauthn' },
       });
       return jsonResult(res);
     },

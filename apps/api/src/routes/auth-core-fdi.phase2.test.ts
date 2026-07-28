@@ -29,23 +29,24 @@ describe('Phase 2 FDI routes mounted', () => {
     app.route('/', authCoreSessionRouter);
   });
 
-  test('signup returns not-ready or field error (not 404)', async () => {
+  test('signup without project/key is unauthorized (not 404)', async () => {
     const res = await app.request('http://localhost/v1/auth-core/fdi/signup', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
     });
-    expect([400, 503]).toContain(res.status);
+    // Locked FDI: 401 without project+pk; 503 if engine not ready.
+    expect([401, 403, 400, 503]).toContain(res.status);
     expect(res.status).not.toBe(404);
   });
 
-  test('signin returns not-ready or field error (not 404)', async () => {
+  test('signin without project/key is unauthorized (not 404)', async () => {
     const res = await app.request('http://localhost/v1/auth-core/fdi/signin', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
     });
-    expect([400, 503]).toContain(res.status);
+    expect([401, 403, 400, 503]).toContain(res.status);
     expect(res.status).not.toBe(404);
   });
 

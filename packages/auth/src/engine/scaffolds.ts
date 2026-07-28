@@ -100,6 +100,17 @@ const code = await auth.createPasswordlessCode({
 // show user the SMS, then:
 // await auth.consumePasswordlessCode({ preAuthSessionId, deviceId, userInputCode });
 `.trim(),
+
+  passkeySignIn: `
+// Passkey sign-in (browser) — first-party proxy required
+const start = await auth.passkeySignInOptions({
+  rpId: window.location.hostname,
+  expectedOrigin: window.location.origin,
+});
+// if start.ok: navigator.credentials.get({ publicKey: start.data.options })
+// then auth.passkeySignInFinish({ challengeId, credential, rpId, expectedOrigin })
+// First-time users: sign in with magic link/OTP, then register a passkey.
+`.trim(),
 } as const;
 
 export function listBrivenEngineScaffolds(): string[] {

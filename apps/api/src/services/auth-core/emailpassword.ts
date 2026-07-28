@@ -19,14 +19,48 @@ export function hashPassword(
   return { hash: `${s}:${derived}`, salt: s };
 }
 
-/** Exported for unit tests. Constant-time compare. */
+/** Exported for unit tests. Constant-time compare (briven-engine scrypt). */
 export function verifyPassword(password: string, stored: string): boolean {
+  // Foreign migration hashes use verifyPasswordFlexible (async).
+  if (stored.startsWith('import:')) return false;
   const [salt, hash] = stored.split(':');
   if (!salt || !hash) return false;
+  // Reject if more than one colon (e.g. accidental import: prefix mishandled)
+  if (stored.split(':').length !== 2) return false;
   const derived = scryptSync(password, salt, 64);
   const expected = Buffer.from(hash, 'hex');
   if (derived.length !== expected.length) return false;
   return timingSafeEqual(derived, expected);
+}
+
+/**
+ * Verify briven scrypt **or** foreign hashes imported as
+ * `import:bcrypt:$2b$…` / `import:argon2:$argon2id$…` (migration).
+ * On foreign success, caller should rehash to briven scrypt (upgrade).
+ */
+export async function verifyPasswordFlexible(
+  password: string,
+  stored: string,
+): Promise<{ ok: boolean; upgradeToBriven?: boolean }> {
+  if (stored.startsWith('import:bcrypt:')) {
+    const raw = stored.slice('import:bcrypt:'.length);
+    try {
+      const ok = await Bun.password.verify(password, raw);
+      return { ok, upgradeToBriven: ok };
+    } catch {
+      return { ok: false };
+    }
+  }
+  if (stored.startsWith('import:argon2:')) {
+    const raw = stored.slice('import:argon2:'.length);
+    try {
+      const ok = await Bun.password.verify(password, raw);
+      return { ok, upgradeToBriven: ok };
+    } catch {
+      return { ok: false };
+    }
+  }
+  return { ok: verifyPassword(password, stored) };
 }
 
 export type SignUpResult =
@@ -45,9 +79,18 @@ export async function signUpEmailPassword(input: {
   /** Optional username (stored in metadata; enables username login when project flag on). */
   username?: string;
 }): Promise<SignUpResult> {
-  const tenantId =
-    input.tenantId ??
-    (input.projectId ? projectIdToTenantId(input.projectId) : 'public');
+  let tenantId = input.tenantId;
+  if (!tenantId && input.projectId) {
+    tenantId = projectIdToTenantId(input.projectId);
+  }
+  if (!tenantId) {
+    // Production must not use shared public tenant (security deep-test C1).
+    const { env } = await import('../../env.js');
+    if (env.BRIVEN_ENV === 'production') {
+      throw new Error('project id required for sign-up');
+    }
+    tenantId = 'public';
+  }
   const email = input.email.trim().toLowerCase();
   const username = input.username?.trim().toLowerCase() || null;
   if (username && !/^[a-z0-9_]{3,32}$/.test(username)) {
@@ -115,9 +158,17 @@ export async function signInEmailPassword(input: {
    */
   allowUsername?: boolean;
 }): Promise<SignInResult> {
-  const tenantId =
-    input.tenantId ??
-    (input.projectId ? projectIdToTenantId(input.projectId) : 'public');
+  let tenantId = input.tenantId;
+  if (!tenantId && input.projectId) {
+    tenantId = projectIdToTenantId(input.projectId);
+  }
+  if (!tenantId) {
+    const { env } = await import('../../env.js');
+    if (env.BRIVEN_ENV === 'production') {
+      return { status: 'WRONG_CREDENTIALS_ERROR' };
+    }
+    tenantId = 'public';
+  }
   const login = input.email.trim().toLowerCase();
   const pool = getEnginePool();
 
@@ -154,7 +205,7 @@ export async function signInEmailPassword(input: {
   const row = res.rows[0] as
     | { id: string; email: string; tenant_id: string; password_hash: string }
     | undefined;
-  if (!row || !verifyPassword(input.password, row.password_hash)) {
+  if (!row) {
     const { recordBrivenEngineAudit } = await import('./audit.js');
     void recordBrivenEngineAudit({
       action: 'signin.password.fail',
@@ -163,6 +214,25 @@ export async function signInEmailPassword(input: {
       metadata: { login },
     });
     return { status: 'WRONG_CREDENTIALS_ERROR' };
+  }
+  const check = await verifyPasswordFlexible(input.password, row.password_hash);
+  if (!check.ok) {
+    const { recordBrivenEngineAudit } = await import('./audit.js');
+    void recordBrivenEngineAudit({
+      action: 'signin.password.fail',
+      tenantId,
+      projectId: input.projectId,
+      metadata: { login },
+    });
+    return { status: 'WRONG_CREDENTIALS_ERROR' };
+  }
+  // Migration: after first successful foreign-hash login, upgrade to briven scrypt.
+  if (check.upgradeToBriven) {
+    const { hash } = hashPassword(input.password);
+    await pool.query(
+      `UPDATE be_password_hashes SET password_hash = $1, updated_at = NOW() WHERE user_id = $2`,
+      [hash, row.id],
+    );
   }
   const { recordBrivenEngineAudit } = await import('./audit.js');
   void recordBrivenEngineAudit({

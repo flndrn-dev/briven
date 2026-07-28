@@ -136,8 +136,9 @@ export default async function proxy(req: NextRequest): Promise<NextResponse> {
     const hasSession =
       req.cookies.has(SESSION_COOKIE_PROD) || req.cookies.has(SESSION_COOKIE_DEV);
     if (!hasSession) {
-      const url = nextUrl.clone();
-      url.pathname = '/signin';
+      // Fresh /signin URL — don't keep leftover query from the original
+      // path (e.g. ?tier=pro would leak onto sign-in as a dead param).
+      const url = new URL('/signin', nextUrl.origin);
       url.searchParams.set('next', nextUrl.pathname + nextUrl.search);
       return NextResponse.redirect(url);
     }

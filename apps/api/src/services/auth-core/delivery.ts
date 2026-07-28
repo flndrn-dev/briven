@@ -23,6 +23,7 @@ import {
 import {
   DEFAULT_BRIVEN_ENGINE_BRANDING,
   buildAuthEmailFooterLines,
+  buildAuthEmailFromHeader,
   getBrivenEngineBranding,
   getBrivenEngineSmsSecrets,
   type BrivenEngineBranding,
@@ -316,7 +317,16 @@ export async function sendBrivenEngineEmail(
     type: input.type,
     hasBody: Boolean(input.body),
     senderName: branding.senderName,
+    senderDomain: branding.senderDomain,
+    hasCustomFrom: Boolean(
+      branding.senderDomain || branding.senderEmail || branding.senderName,
+    ),
   });
+
+  // SuperTokens-style: per-project From: (senderName + domain/email).
+  // Without this, every project shows as platform "briven <noreply@briven.tech>".
+  const platformDomain = (env.BRIVEN_DOMAIN ?? 'briven.tech').replace(/^@/, '');
+  const fromHeader = buildAuthEmailFromHeader(branding, platformDomain);
 
   // Same chain as platform operator mail: SMTP → mittera → dev stdout.
   try {
@@ -326,6 +336,7 @@ export async function sendBrivenEngineEmail(
       text,
       html,
       projectId: input.projectId ?? null,
+      from: fromHeader ?? undefined,
     });
     const sender = getEmailSenderInfo();
     return {
@@ -335,7 +346,9 @@ export async function sendBrivenEngineEmail(
       mode: sender.activeTransport,
       message:
         sender.activeTransport === 'smtp'
-          ? 'sent via platform SMTP'
+          ? fromHeader
+            ? `sent via platform SMTP as ${fromHeader}`
+            : 'sent via platform SMTP'
           : sender.activeTransport === 'mittera'
             ? 'sent via mittera (set BRIVEN_SMTP_* for guaranteed inbox delivery)'
             : 'logged to stdout (dev; set BRIVEN_SMTP_* for real email)',

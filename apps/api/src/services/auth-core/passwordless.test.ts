@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   hashSecret,
+  isMagicLinkBaseAllowed,
   matchPasswordlessSecret,
   pickMagicLinkAppOrigin,
   sixDigitCode,
@@ -64,5 +65,22 @@ describe('passwordless pure helpers (Phase 3)', () => {
 
   test('empty input fails', () => {
     expect(matchPasswordlessSecret(hashSecret('1'), {})).toBe(false);
+  });
+
+  test('isMagicLinkBaseAllowed rejects evil origins when allowlist set', () => {
+    expect(
+      isMagicLinkBaseAllowed(
+        'https://evil.example/phish',
+        ['https://pay.mavifinans.sh'],
+        'https://pay.mavifinans.sh',
+      ),
+    ).toBe(false);
+    expect(
+      isMagicLinkBaseAllowed(
+        'https://pay.mavifinans.sh/auth/verify',
+        ['https://pay.mavifinans.sh'],
+        'https://pay.mavifinans.sh',
+      ),
+    ).toBe(true);
   });
 });

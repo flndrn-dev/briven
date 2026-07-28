@@ -58,15 +58,27 @@ export default async function UpgradePage({
 
   if (!res.ok) {
     const errBody = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+    const code = errBody.code ?? '';
+    const notConfigured =
+      code === 'polar_not_configured' ||
+      code === 'unknown_tier' ||
+      res.status === 503;
     return (
       <main className="mx-auto max-w-lg px-6 py-16 font-mono text-sm">
-        <h1 className="text-xl">couldn&apos;t start checkout</h1>
+        <h1 className="text-xl">
+          {notConfigured ? 'paid plans not switched on yet' : 'couldn\u2019t start checkout'}
+        </h1>
         <p className="mt-2 text-[var(--color-text-muted)]">
-          {errBody.message ?? errBody.code ?? `http ${res.status}`}
+          {notConfigured
+            ? 'the price buttons work, but the card payment setup (Polar product IDs + access token) is not filled in on the server yet. free tier still works.'
+            : (errBody.message ?? errBody.code ?? `http ${res.status}`)}
         </p>
-        <p className="mt-6">
-          <a href="/dashboard/settings" className="text-[var(--color-text-link)]">
-            back to settings
+        <p className="mt-6 flex flex-wrap gap-4">
+          <a href="/pricing" className="text-[var(--color-text-link)]">
+            back to pricing
+          </a>
+          <a href="/dashboard/billing" className="text-[var(--color-text-link)]">
+            billing
           </a>
         </p>
       </main>

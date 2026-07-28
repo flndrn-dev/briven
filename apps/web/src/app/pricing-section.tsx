@@ -25,7 +25,8 @@ interface Tier {
  * gives 500 MB); Briven Pro = 50 GB db vs Supabase Pro 8 GB; Team €99 vs $599.
  */
 // NOTE: tier prices (€0/29/99) approved by Jürgen 2026-06-15; limits competitor-
-// tuned. Paid billing activates when mavi-pay ships (parked until then).
+// tuned. Paid CTAs hit /dashboard/billing/upgrade?tier=… → Polar checkout when
+// BRIVEN_POLAR_PRO/TEAM_PRODUCT_ID + ACCESS_TOKEN are set on the API.
 const TIERS: readonly Tier[] = [
   {
     id: 'free',

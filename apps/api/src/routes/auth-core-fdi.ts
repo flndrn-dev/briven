@@ -2,7 +2,8 @@
  * briven-engine FDI-compatible routes — implemented on Doltgres only.
  * No SuperTokens Core process.
  *
- * Public end-user endpoints (apps proxy here first-party).
+ * End-user recipes (apps proxy first-party). Locked: project + pk_briven_auth_
+ * required; soft-disable + method flags enforced (security deep-test 2026-07-27).
  */
 
 import { Hono } from 'hono';
@@ -44,13 +45,43 @@ import {
 import { env } from '../env.js';
 import { requireTurnstileIfConfigured } from '../services/auth-core/abuse.js';
 import { isAuthCoreInitialized } from '../services/auth-core/engine.js';
-import { resolveAuthTenantFromHeaders } from '../services/auth-core/request-tenant.js';
+import {
+  methodFlagDenied,
+  requireFdiProjectKey,
+  type FdiProjectContext,
+} from '../services/auth-core/fdi-guard.js';
+import {
+  consumeMfaChallenge,
+  issueMfaChallenge,
+} from '../services/auth-core/mfa-challenge.js';
+import { getBrivenEngineAppOrigins } from '../services/auth-core/project-config.js';
 import { verifyAuthCoreSession } from '../services/auth-core/session.js';
 import type { AppEnv } from '../types/app-env.js';
 
-export const authCoreFdiRouter = new Hono<AppEnv>();
+type FdiEnv = AppEnv & {
+  Variables: AppEnv['Variables'] & {
+    fdiCtx: FdiProjectContext;
+  };
+};
+
+export const authCoreFdiRouter = new Hono<FdiEnv>();
 
 const FDI = '/v1/auth-core/fdi';
+
+/** Lock every FDI recipe behind project + public auth key. */
+authCoreFdiRouter.use(`${FDI}/*`, async (c, next) => {
+  if (c.req.method.toUpperCase() === 'OPTIONS') {
+    await next();
+    return;
+  }
+  const ctx = await requireFdiProjectKey(c);
+  if (ctx instanceof Response) {
+    return ctx;
+  }
+  c.set('fdiCtx', ctx);
+  await next();
+  return;
+});
 
 /** Cookie holds session handle (Doltgres lookup key). Secure in production. */
 function setSessionCookies(
@@ -102,7 +133,14 @@ function notReady() {
 
 authCoreFdiRouter.post(`${FDI}/signup`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
+  const denied = methodFlagDenied(fdi.methods, 'emailPassword');
+  if (denied) {
+    return c.json(
+      { status: 'METHOD_DISABLED', engine: 'briven-engine', message: denied },
+      403,
+    );
+  }
   let body: {
     formFields?: Array<{ id: string; value: string }>;
     email?: string;
@@ -127,8 +165,8 @@ authCoreFdiRouter.post(`${FDI}/signup`, async (c) => {
   const result = await signUpEmailPassword({
     email,
     password,
-    tenantId: tenant?.tenantId,
-    projectId: tenant?.projectId,
+    tenantId: fdi.tenantId,
+    projectId: fdi.projectId,
   });
   if (result.status !== 'OK') {
     return c.json({ status: result.status });
@@ -137,11 +175,10 @@ authCoreFdiRouter.post(`${FDI}/signup`, async (c) => {
     userId: result.user.id,
     tenantId: result.user.tenantId,
   });
-  // Phase 2: cookie value = session handle (lookup key on Doltgres).
   setSessionCookies(c, session);
   c.header('x-briven-engine', 'briven-engine');
   c.header('x-briven-session-handle', session.sessionHandle);
-  if (tenant) c.header('x-briven-tenant-id', tenant.tenantId);
+  c.header('x-briven-tenant-id', fdi.tenantId);
   return c.json({
     status: 'OK',
     user: { id: result.user.id, emails: [result.user.email] },
@@ -156,7 +193,14 @@ authCoreFdiRouter.post(`${FDI}/signup`, async (c) => {
 
 authCoreFdiRouter.post(`${FDI}/signin`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
+  const denied = methodFlagDenied(fdi.methods, 'emailPassword');
+  if (denied) {
+    return c.json(
+      { status: 'METHOD_DISABLED', engine: 'briven-engine', message: denied },
+      403,
+    );
+  }
   let body: {
     formFields?: Array<{ id: string; value: string }>;
     email?: string;
@@ -181,22 +225,28 @@ authCoreFdiRouter.post(`${FDI}/signin`, async (c) => {
   const result = await signInEmailPassword({
     email,
     password,
-    tenantId: tenant?.tenantId,
-    projectId: tenant?.projectId,
+    tenantId: fdi.tenantId,
+    projectId: fdi.projectId,
   });
   if (result.status !== 'OK') {
     return c.json({ status: result.status });
   }
-  // Phase 5: if TOTP enrolled, require second factor before issuing session.
+  // SuperTokens-style MFA: first factor OK → challenge; no session yet.
   if (await userHasVerifiedTotp(result.user.id)) {
+    const mfaChallenge = issueMfaChallenge({
+      userId: result.user.id,
+      tenantId: result.user.tenantId,
+    });
     return c.json({
       status: 'MFA_REQUIRED',
       factor: 'totp',
       userId: result.user.id,
       tenantId: result.user.tenantId,
+      mfaChallenge,
       engine: 'briven-engine',
       storage: 'doltgres',
-      message: 'password ok — send TOTP code to /v1/auth-core/fdi/totp/verify',
+      message:
+        'password ok — POST /v1/auth-core/fdi/totp/verify with userId, code, mfaChallenge',
     });
   }
   const session = await createEngineSession({
@@ -241,17 +291,48 @@ authCoreFdiRouter.post(`${FDI}/signout`, async (c) => {
 /** Passwordless: create email/SMS code (magic link + OTP). Phase 3. */
 authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   let body: {
     email?: string;
     phoneNumber?: string;
     flowType?: 'USER_INPUT_CODE' | 'MAGIC_LINK' | 'USER_INPUT_CODE_AND_MAGIC_LINK';
     magicLinkBaseUrl?: string;
+    turnstileToken?: string;
   } = {};
   try {
     body = await c.req.json();
   } catch {
     body = {};
+  }
+  // SuperTokens-style: when platform Turnstile secret is set, require captcha
+  // on passwordless send (same as email/password) to stop abuse.
+  const plCap = await captchaGate(body as Record<string, unknown>);
+  if (plCap) return plCap;
+  const flow = body.flowType ?? 'USER_INPUT_CODE';
+  if (body.phoneNumber) {
+    const d = methodFlagDenied(fdi.methods, 'passwordlessSms');
+    if (d) {
+      return c.json(
+        { status: 'METHOD_DISABLED', engine: 'briven-engine', message: d },
+        403,
+      );
+    }
+  } else if (flow === 'MAGIC_LINK') {
+    const d = methodFlagDenied(fdi.methods, 'magicLink');
+    if (d) {
+      return c.json(
+        { status: 'METHOD_DISABLED', engine: 'briven-engine', message: d },
+        403,
+      );
+    }
+  } else {
+    const d = methodFlagDenied(fdi.methods, 'passwordlessEmail');
+    if (d) {
+      return c.json(
+        { status: 'METHOD_DISABLED', engine: 'briven-engine', message: d },
+        403,
+      );
+    }
   }
   const requestOrigin =
     c.req.header('origin') ??
@@ -274,8 +355,8 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
   const result = await createPasswordlessCode({
     email: body.email,
     phoneNumber: body.phoneNumber,
-    projectId: tenant?.projectId,
-    tenantId: tenant?.tenantId,
+    projectId: fdi.projectId,
+    tenantId: fdi.tenantId,
     flowType: body.flowType,
     magicLinkBaseUrl: body.magicLinkBaseUrl,
     requestOrigin,
@@ -303,7 +384,7 @@ authCoreFdiRouter.post(`${FDI}/signinup/code`, async (c) => {
 /** Passwordless: consume OTP or magic link. Phase 3. */
 authCoreFdiRouter.post(`${FDI}/signinup/code/consume`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   let body: {
     preAuthSessionId?: string;
     deviceId?: string;
@@ -330,8 +411,8 @@ authCoreFdiRouter.post(`${FDI}/signinup/code/consume`, async (c) => {
     deviceId: body.deviceId,
     userInputCode: body.userInputCode,
     linkCode: body.linkCode,
-    projectId: tenant?.projectId,
-    tenantId: tenant?.tenantId,
+    projectId: fdi.projectId,
+    tenantId: fdi.tenantId,
   });
   if (result.status !== 'OK') {
     return c.json(
@@ -360,13 +441,58 @@ authCoreFdiRouter.post(`${FDI}/signinup/code/consume`, async (c) => {
 /** Social: get Google/GitHub authorisation URL (Phase 4). */
 authCoreFdiRouter.get(`${FDI}/authorisationurl`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   const thirdPartyId = (c.req.query('thirdPartyId') ?? '') as SupportedSocial;
   const redirectURI = c.req.query('redirectURI') ?? '';
+  // redirectURI origin must be on project Allowed Domains (open-redirect guard).
+  if (redirectURI) {
+    try {
+      const origins = await getBrivenEngineAppOrigins(fdi.projectId);
+      const allowed = new Set(
+        origins.map((o) => {
+          try {
+            return new URL(o.includes('://') ? o : `https://${o}`).origin;
+          } catch {
+            return '';
+          }
+        }).filter(Boolean),
+      );
+      const redirectOrigin = new URL(redirectURI).origin;
+      if (allowed.size > 0 && !allowed.has(redirectOrigin)) {
+        return c.json(
+          {
+            status: 'BAD_REQUEST',
+            engine: 'briven-engine',
+            message: 'redirectURI origin is not on Allowed Domains',
+          },
+          400,
+        );
+      }
+      if (allowed.size === 0 && env.BRIVEN_ENV === 'production') {
+        return c.json(
+          {
+            status: 'BAD_REQUEST',
+            engine: 'briven-engine',
+            message: 'configure Allowed Domains before OAuth',
+          },
+          400,
+        );
+      }
+    } catch {
+      return c.json(
+        {
+          status: 'BAD_REQUEST',
+          engine: 'briven-engine',
+          message: 'invalid redirectURI',
+        },
+        400,
+      );
+    }
+  }
   const result = await getAuthorisationUrl({
     thirdPartyId,
     redirectURI,
-    projectId: tenant?.projectId ?? c.req.query('projectId') ?? undefined,
+    projectId: fdi.projectId,
   });
   if (result.status !== 'OK') {
     return c.json({ ...result, engine: 'briven-engine' }, 400);
@@ -377,7 +503,7 @@ authCoreFdiRouter.get(`${FDI}/authorisationurl`, async (c) => {
 /** Social: complete sign-in with OAuth authorization code */
 authCoreFdiRouter.post(`${FDI}/signinup`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   let body: {
     thirdPartyId?: SupportedSocial;
     redirectURI?: string;
@@ -411,8 +537,8 @@ authCoreFdiRouter.post(`${FDI}/signinup`, async (c) => {
         emailVerified: body.testProfile.emailVerified ?? true,
         name: body.testProfile.name ?? null,
       },
-      projectId: tenant?.projectId,
-      tenantId: tenant?.tenantId,
+      projectId: fdi.projectId,
+      tenantId: fdi.tenantId,
     });
     if (result.status !== 'OK') {
       return c.json({ ...result, engine: 'briven-engine' }, 400);
@@ -450,7 +576,7 @@ authCoreFdiRouter.post(`${FDI}/signinup`, async (c) => {
     thirdPartyId: body.thirdPartyId,
     code: body.code,
     redirectURI: body.redirectURI,
-    projectId: tenant?.projectId,
+    projectId: fdi.projectId,
     state: body.state,
   });
   if (result.status !== 'OK') {
@@ -497,7 +623,7 @@ async function sessionUserId(c: {
 /** Enroll TOTP (needs existing session). */
 authCoreFdiRouter.post(`${FDI}/totp/setup`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   const userId = await sessionUserId(c);
   if (!userId) {
     return c.json(
@@ -512,8 +638,8 @@ authCoreFdiRouter.post(`${FDI}/totp/setup`, async (c) => {
     body = {};
   }
   const created = await createTotpDevice(userId, body.deviceName ?? 'authenticator', {
-    projectId: tenant?.projectId,
-    tenantId: tenant?.tenantId,
+    projectId: fdi.projectId,
+    tenantId: fdi.tenantId,
   });
   if (!created.ok) {
     return c.json({ status: 'ERROR', ...created }, 400);
@@ -561,12 +687,17 @@ authCoreFdiRouter.post(`${FDI}/totp/setup/verify`, async (c) => {
 
 /**
  * Second factor after password when MFA_REQUIRED.
- * Body: { userId, code, tenantId? }
+ * Body: { userId, code, mfaChallenge } — challenge issued at password step.
  */
 authCoreFdiRouter.post(`${FDI}/totp/verify`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
-  let body: { userId?: string; code?: string; tenantId?: string } = {};
+  const fdi = c.get('fdiCtx');
+  let body: {
+    userId?: string;
+    code?: string;
+    tenantId?: string;
+    mfaChallenge?: string;
+  } = {};
   try {
     body = await c.req.json();
   } catch {
@@ -578,11 +709,22 @@ authCoreFdiRouter.post(`${FDI}/totp/verify`, async (c) => {
       400,
     );
   }
+  const chal = await consumeMfaChallenge(body.mfaChallenge ?? '', body.userId);
+  if (!chal.ok) {
+    return c.json(
+      {
+        status: 'MFA_CHALLENGE_ERROR',
+        engine: 'briven-engine',
+        message: chal.message,
+      },
+      401,
+    );
+  }
   const ok = await verifyUserTotp(body.userId, body.code);
   if (!ok.ok) {
     return c.json({ status: 'WRONG_CREDENTIALS_ERROR', engine: 'briven-engine' }, 401);
   }
-  const tenantId = body.tenantId ?? tenant?.tenantId ?? 'public';
+  const tenantId = chal.tenantId || fdi.tenantId;
   const session = await createEngineSession({
     userId: body.userId,
     tenantId,
@@ -634,7 +776,7 @@ function requestOriginFrom(c: { req: { header: (n: string) => string | undefined
 
 authCoreFdiRouter.post(`${FDI}/webauthn/register/options`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   const userId = await sessionUserId(c);
   if (!userId) {
     return c.json({ status: 'UNAUTHORISED', engine: 'briven-engine' }, 401);
@@ -648,8 +790,8 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/options`, async (c) => {
   const result = await createRegistrationOptions({
     userId,
     userName: body.userName ?? userId,
-    projectId: tenant?.projectId,
-    tenantId: tenant?.tenantId,
+    projectId: fdi.projectId,
+    tenantId: fdi.tenantId,
     rpId: body.rpId,
     expectedOrigin: body.expectedOrigin,
     requestOrigin: requestOriginFrom(c),
@@ -662,7 +804,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/options`, async (c) => {
 
 authCoreFdiRouter.post(`${FDI}/webauthn/register/finish`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   const userId = await sessionUserId(c);
   if (!userId) {
     return c.json({ status: 'UNAUTHORISED', engine: 'briven-engine' }, 401);
@@ -691,7 +833,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/finish`, async (c) => {
     credentialId: body.credentialId,
     publicKey: body.publicKey,
     transports: body.transports,
-    projectId: tenant?.projectId,
+    projectId: fdi.projectId,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     response: (body.response ?? body.credential) as any,
     rpId: body.rpId,
@@ -706,7 +848,14 @@ authCoreFdiRouter.post(`${FDI}/webauthn/register/finish`, async (c) => {
 
 authCoreFdiRouter.post(`${FDI}/webauthn/signin/options`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
+  const denied = methodFlagDenied(fdi.methods, 'passkeys');
+  if (denied) {
+    return c.json(
+      { status: 'METHOD_DISABLED', engine: 'briven-engine', message: denied },
+      403,
+    );
+  }
   let body: { userId?: string; rpId?: string; expectedOrigin?: string } = {};
   try {
     body = await c.req.json();
@@ -715,8 +864,8 @@ authCoreFdiRouter.post(`${FDI}/webauthn/signin/options`, async (c) => {
   }
   const result = await createAuthenticationOptions({
     userId: body.userId,
-    projectId: tenant?.projectId,
-    tenantId: tenant?.tenantId,
+    projectId: fdi.projectId,
+    tenantId: fdi.tenantId,
     rpId: body.rpId,
     expectedOrigin: body.expectedOrigin,
     requestOrigin: requestOriginFrom(c),
@@ -729,7 +878,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/signin/options`, async (c) => {
 
 authCoreFdiRouter.post(`${FDI}/webauthn/signin/finish`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
-  const tenant = resolveAuthTenantFromHeaders((n) => c.req.header(n));
+  const fdi = c.get('fdiCtx');
   let body: {
     challengeId?: string;
     credentialId?: string;
@@ -751,7 +900,7 @@ authCoreFdiRouter.post(`${FDI}/webauthn/signin/finish`, async (c) => {
     credentialId: body.credentialId,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     response: (body.response ?? body.credential) as any,
-    projectId: tenant?.projectId,
+    projectId: fdi.projectId,
     rpId: body.rpId,
     expectedOrigin: body.expectedOrigin,
     requestOrigin: requestOriginFrom(c),

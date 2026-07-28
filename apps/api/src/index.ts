@@ -42,6 +42,7 @@ import { authCoreProjectRouter } from './routes/auth-core-project.js';
 import { authCoreSsoRouter } from './routes/auth-core-sso.js';
 import { authCoreRouter } from './routes/auth-core.js';
 import { initAuthCoreSdk } from './services/auth-core/engine.js';
+import { brivenEngineFdiRateLimit } from './services/auth-core/abuse.js';
 // Option B Phase 7+: yellow tabs + enterprise SAML/OIDC on briven-engine.
 import { billingRouter } from './routes/billing.js';
 import { brandingPublicRouter } from './routes/branding-public.js';
@@ -176,6 +177,8 @@ app.route('/', meRouter);
 // Briven Auth Option B Phase 7: FDI login + yellow dashboard + keys/providers/enterprise.
 // Platform operator login stays on authRouter (/v1/auth/* Better Auth for briven.tech).
 app.route('/', authCoreStatusRouter);
+// FDI abuse protection (IP rate limit) — must run before FDI handlers.
+app.use('/v1/auth-core/fdi/*', brivenEngineFdiRateLimit());
 app.route('/', authCoreFdiRouter);
 app.route('/', authCoreSessionRouter);
 app.route('/', authCoreLoginMethodsRouter);

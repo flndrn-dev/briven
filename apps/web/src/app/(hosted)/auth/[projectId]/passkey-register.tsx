@@ -4,13 +4,16 @@ import { useState } from 'react';
 
 interface Props {
   projectId: string;
+  /** Optional publishable pk_briven_auth_… */
+  authPublicKey?: string | null;
 }
 
 // ── base64url helpers ────────────────────────────────────────────────────────
 
 function base64urlToUint8Array(b64: string): Uint8Array<ArrayBuffer> {
   const base64 = b64.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(base64);
+  const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
+  const binary = atob(base64 + pad);
   const bytes = new Uint8Array(binary.length) as Uint8Array<ArrayBuffer>;
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
@@ -39,28 +42,33 @@ interface WebAuthnCreationOptions {
   attestation?: AttestationConveyancePreference;
 }
 
-interface ErrorBody {
-  code?: string;
-  message?: string;
-  error?: { code?: string; message?: string };
-}
-
 /**
- * "Register a passkey" button for the hosted account page.
+ * Register a passkey — briven-engine FDI (session cookie required).
  *
- * Flow (@better-auth/passkey@1.6.9, two-leg WebAuthn ceremony — endpoint ids
- * confirmed from the installed plugin dist):
- *   1. GET  /api/v1/auth-tenant/passkey/generate-register-options — creation
- *      options (requires a fresh session; this lives on the post-login account
- *      page so the cookie rides along)
- *   2. navigator.credentials.create() — browser creates the passkey
- *   3. POST /api/v1/auth-tenant/passkey/verify-registration — body { response }
- *      (the serialised credential) to verify and store
+ * SuperTokens model: sign in first (magic link / OTP / password), then add passkey.
  */
-export function PasskeyRegister({ projectId }: Props) {
+export function PasskeyRegister({ projectId, authPublicKey }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  async function fdi(path: string, body: Record<string, unknown>): Promise<Response> {
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      'x-briven-project-id': projectId,
+      rid: 'webauthn',
+      'st-auth-mode': 'cookie',
+    };
+    if (authPublicKey?.startsWith('pk_briven_auth_')) {
+      headers.authorization = `Bearer ${authPublicKey}`;
+    }
+    return fetch(`/api/auth${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body: JSON.stringify(body),
+    });
+  }
 
   async function handleRegister(): Promise<void> {
     if (!window.PublicKeyCredential) {
@@ -71,23 +79,34 @@ export function PasskeyRegister({ projectId }: Props) {
     setError(null);
     setSuccess(false);
     try {
-      // Step 1: registration options (plugin requires a fresh session). GET.
-      const optRes = await fetch('/api/v1/auth-tenant/passkey/generate-register-options', {
-        method: 'GET',
-        credentials: 'include',
-        headers: { 'x-briven-project-id': projectId },
-      });
-      if (!optRes.ok) {
-        if (optRes.status === 404 || optRes.status === 501) {
-          throw new Error('passkey registration is not available for this account');
-        }
-        const err = (await optRes.json().catch(() => ({}))) as ErrorBody;
-        throw new Error(err.error?.message ?? err.message ?? err.code ?? `http ${optRes.status}`);
-      }
-      const opts = (await optRes.json()) as WebAuthnCreationOptions;
+      const rpId = window.location.hostname;
+      const expectedOrigin = window.location.origin;
 
-      // Step 2: browser creates the passkey. Challenge + every credential id
-      // arrive base64url-encoded and must be decoded to byte buffers.
+      const optRes = await fdi('/webauthn/register/options', { rpId, expectedOrigin });
+      if (!optRes.ok) {
+        if (optRes.status === 401) {
+          throw new Error('sign in first, then add a passkey');
+        }
+        const err = (await optRes.json().catch(() => ({}))) as {
+          message?: string;
+          code?: string;
+        };
+        throw new Error(err.message ?? err.code ?? `http ${optRes.status}`);
+      }
+      const data = (await optRes.json()) as {
+        status?: string;
+        challengeId?: string;
+        options?: WebAuthnCreationOptions;
+      };
+      if (data.status && data.status !== 'OK') {
+        throw new Error(data.status);
+      }
+      const challengeId = String(data.challengeId ?? '');
+      const opts = (data.options ?? data) as WebAuthnCreationOptions;
+      if (!opts.challenge || !challengeId) {
+        throw new Error('passkey registration challenge missing');
+      }
+
       const credential = (await navigator.credentials.create({
         publicKey: {
           challenge: base64urlToUint8Array(opts.challenge),
@@ -112,42 +131,33 @@ export function PasskeyRegister({ projectId }: Props) {
       if (!credential) throw new Error('passkey creation was cancelled');
 
       const attestation = credential.response as AuthenticatorAttestationResponse;
-
-      // Step 3: serialise the credential to @simplewebauthn JSON, wrapped in
-      // `{ response }`, and verify. The plugin joins `response.transports`
-      // unconditionally, so it must be present (empty array when none).
-      const verRes = await fetch('/api/v1/auth-tenant/passkey/verify-registration', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'content-type': 'application/json',
-          'x-briven-project-id': projectId,
+      const credentialJson = {
+        id: credential.id,
+        rawId: uint8ArrayToBase64url(new Uint8Array(credential.rawId)),
+        type: credential.type,
+        clientExtensionResults: credential.getClientExtensionResults(),
+        authenticatorAttachment: credential.authenticatorAttachment ?? undefined,
+        response: {
+          clientDataJSON: uint8ArrayToBase64url(new Uint8Array(attestation.clientDataJSON)),
+          attestationObject: uint8ArrayToBase64url(new Uint8Array(attestation.attestationObject)),
+          transports: attestation.getTransports ? attestation.getTransports() : [],
         },
-        body: JSON.stringify({
-          response: {
-            id: credential.id,
-            rawId: uint8ArrayToBase64url(new Uint8Array(credential.rawId)),
-            type: credential.type,
-            clientExtensionResults: credential.getClientExtensionResults(),
-            authenticatorAttachment: credential.authenticatorAttachment ?? undefined,
-            response: {
-              clientDataJSON: uint8ArrayToBase64url(new Uint8Array(attestation.clientDataJSON)),
-              attestationObject: uint8ArrayToBase64url(
-                new Uint8Array(attestation.attestationObject),
-              ),
-              transports: attestation.getTransports ? attestation.getTransports() : [],
-            },
-          },
-        }),
+      };
+
+      const verRes = await fdi('/webauthn/register/finish', {
+        challengeId,
+        credential: credentialJson,
+        response: credentialJson,
+        rpId,
+        expectedOrigin,
       });
-
       if (!verRes.ok) {
-        const err = (await verRes.json().catch(() => ({}))) as ErrorBody;
-        throw new Error(
-          err.error?.message ?? err.message ?? err.code ?? 'passkey registration failed',
-        );
+        const err = (await verRes.json().catch(() => ({}))) as {
+          message?: string;
+          code?: string;
+        };
+        throw new Error(err.message ?? err.code ?? 'passkey registration failed');
       }
-
       setSuccess(true);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
@@ -161,25 +171,23 @@ export function PasskeyRegister({ projectId }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-4">
-      <p className="font-mono text-[11px] text-[var(--color-text-subtle)]">passkey</p>
-      {success ? (
-        <p className="font-mono text-xs text-[var(--color-text-muted)]">
-          passkey registered — you can now sign in without a password.
-        </p>
-      ) : (
-        <button
-          type="button"
-          onClick={() => void handleRegister()}
-          disabled={pending}
-          className="self-start rounded-md border border-[var(--color-border)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
-        >
-          {pending ? 'registering…' : 'register a passkey'}
-        </button>
-      )}
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => void handleRegister()}
+        disabled={pending || success}
+        className="w-full rounded-md border border-[var(--color-border)] px-3 py-2 font-mono text-xs text-[var(--color-text-muted)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
+      >
+        {success ? 'passkey saved' : pending ? 'waiting for passkey…' : 'add a passkey'}
+      </button>
       {error ? (
         <p className="font-mono text-[11px] text-[var(--color-error)]" role="alert">
           {error}
+        </p>
+      ) : null}
+      {success ? (
+        <p className="font-mono text-[11px] text-[var(--color-text-muted)]">
+          next time you can sign in with this passkey on this site
         </p>
       ) : null}
     </div>

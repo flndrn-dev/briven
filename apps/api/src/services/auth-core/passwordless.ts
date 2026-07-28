@@ -62,20 +62,60 @@ export function pickMagicLinkAppOrigin(
   return norm[0] ?? null;
 }
 
+function normalizeToOrigin(urlOrOrigin: string): string | null {
+  try {
+    const withProto = urlOrOrigin.includes('://')
+      ? urlOrOrigin
+      : `https://${urlOrOrigin}`;
+    const u = new URL(withProto);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether an explicit magic-link base is allowed for this project.
+ * Origin must be in Allowed Domains, or match the browser Origin if that
+ * Origin is also allowlisted (or Allowed Domains empty and Origin matches
+ * exactly — only non-production).
+ */
+export function isMagicLinkBaseAllowed(
+  explicitBase: string,
+  allowedOrigins: string[],
+  requestOrigin?: string | null,
+): boolean {
+  const explicitOrigin = normalizeToOrigin(explicitBase);
+  if (!explicitOrigin) return false;
+
+  const normAllowed = allowedOrigins
+    .map((o) => normalizeToOrigin(o))
+    .filter((o): o is string => Boolean(o));
+
+  if (normAllowed.includes(explicitOrigin)) return true;
+
+  // If Allowed Domains empty: only permit exact browser Origin in non-prod.
+  if (normAllowed.length === 0) {
+    if (env.BRIVEN_ENV === 'production') return false;
+    if (!requestOrigin) return false;
+    const ro = normalizeToOrigin(requestOrigin);
+    return ro === explicitOrigin;
+  }
+
+  // Request Origin allowlisted and explicit base is same origin as request.
+  if (requestOrigin) {
+    const ro = normalizeToOrigin(requestOrigin);
+    if (ro && normAllowed.includes(ro) && ro === explicitOrigin) return true;
+  }
+  return false;
+}
+
 export async function resolveMagicLinkBaseUrl(input: {
   explicit?: string | null;
   projectId?: string;
   requestOrigin?: string | null;
-}): Promise<string> {
-  const explicit = input.explicit?.trim();
-  if (explicit) {
-    // App may send full verify path or just origin.
-    if (/\/auth\/verify\/?$/i.test(explicit) || /\/login\/magic\/?$/i.test(explicit)) {
-      return explicit.replace(/\/$/, '');
-    }
-    return `${explicit.replace(/\/$/, '')}/auth/verify`;
-  }
-
+}): Promise<{ ok: true; base: string } | { ok: false; message: string }> {
   let origins: string[] = [];
   if (input.projectId) {
     try {
@@ -85,11 +125,37 @@ export async function resolveMagicLinkBaseUrl(input: {
     }
   }
 
-  const picked = pickMagicLinkAppOrigin(origins, input.requestOrigin);
-  if (picked) return `${picked}/auth/verify`;
+  const explicit = input.explicit?.trim();
+  if (explicit) {
+    if (!isMagicLinkBaseAllowed(explicit, origins, input.requestOrigin)) {
+      return {
+        ok: false,
+        message:
+          'magicLinkBaseUrl origin is not on this project Allowed Domains list',
+      };
+    }
+    if (/\/auth\/verify\/?$/i.test(explicit) || /\/login\/magic\/?$/i.test(explicit)) {
+      return { ok: true, base: explicit.replace(/\/$/, '') };
+    }
+    return { ok: true, base: `${explicit.replace(/\/$/, '')}/auth/verify` };
+  }
 
-  // Last resort for local engine tests only — not for multi-tenant product mail.
-  return `${(env.BRIVEN_WEB_ORIGIN ?? 'http://localhost:3000').replace(/\/$/, '')}/auth/verify`;
+  const picked = pickMagicLinkAppOrigin(origins, input.requestOrigin);
+  if (picked) return { ok: true, base: `${picked}/auth/verify` };
+
+  // Non-production local engine tests only.
+  if (env.BRIVEN_ENV !== 'production') {
+    return {
+      ok: true,
+      base: `${(env.BRIVEN_WEB_ORIGIN ?? 'http://localhost:3000').replace(/\/$/, '')}/auth/verify`,
+    };
+  }
+
+  return {
+    ok: false,
+    message:
+      'no Allowed Domains for magic links — add your app origin under Auth → Domains',
+  };
 }
 
 /** Exported for unit tests. */
@@ -135,10 +201,22 @@ export function matchPasswordlessSecret(
 function resolveTenant(input: {
   tenantId?: string;
   projectId?: string;
-}): string {
-  if (input.tenantId) return input.tenantId;
-  if (input.projectId) return projectIdToTenantId(input.projectId);
-  return 'public';
+}): { ok: true; tenantId: string } | { ok: false; message: string } {
+  if (input.tenantId) return { ok: true, tenantId: input.tenantId };
+  if (input.projectId) {
+    try {
+      return { ok: true, tenantId: projectIdToTenantId(input.projectId) };
+    } catch {
+      return { ok: false, message: 'invalid project id' };
+    }
+  }
+  if (env.BRIVEN_ENV === 'production') {
+    return {
+      ok: false,
+      message: 'project id required (shared public tenant disabled in production)',
+    };
+  }
+  return { ok: true, tenantId: 'public' };
 }
 
 async function ensureTenant(tenantId: string, projectId?: string): Promise<void> {
@@ -209,7 +287,11 @@ export async function createPasswordlessCode(input: {
       ? 'USER_INPUT_CODE'
       : 'USER_INPUT_CODE_AND_MAGIC_LINK');
 
-  const tenantId = resolveTenant(input);
+  const tenantRes = resolveTenant(input);
+  if (!tenantRes.ok) {
+    return { status: 'BAD_REQUEST', message: tenantRes.message };
+  }
+  const tenantId = tenantRes.tenantId;
   await ensureTenant(tenantId, input.projectId);
 
   const preAuthSessionId = `pas_${randomBytes(16).toString('hex')}`;
@@ -272,15 +354,23 @@ export async function createPasswordlessCode(input: {
     const appName = branding?.senderName?.trim() || 'your app';
     const expiryMinutes = Math.round(CODE_TTL_MS / 60000);
 
-    const base = await resolveMagicLinkBaseUrl({
+    const baseRes = await resolveMagicLinkBaseUrl({
       explicit: input.magicLinkBaseUrl,
       projectId: input.projectId,
       requestOrigin: input.requestOrigin,
     });
+    if (!baseRes.ok) {
+      // Magic-link flows must not send phishing URLs; OTP-only can continue
+      // without a link when base resolution fails.
+      if (flowType !== 'USER_INPUT_CODE' && linkCode) {
+        return { status: 'BAD_REQUEST', message: baseRes.message };
+      }
+    }
+    const base = baseRes.ok ? baseRes.base : null;
     // Only build a magic-link URL when this flow actually requested one.
     // OTP-only must not include a link (and vice versa for magic-link-only).
     const urlWithLinkCode =
-      linkCode && flowType !== 'USER_INPUT_CODE'
+      base && linkCode && flowType !== 'USER_INPUT_CODE'
         ? `${base}?preAuthSessionId=${encodeURIComponent(preAuthSessionId)}&linkCode=${encodeURIComponent(linkCode)}&deviceId=${encodeURIComponent(deviceId)}`
         : undefined;
     const otpForEmail =

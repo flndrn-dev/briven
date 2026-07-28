@@ -14,6 +14,7 @@
  */
 
 import { Hono } from 'hono';
+import { sanitizeRelayState } from '../services/auth-hardening.js';
 import { setCookie } from 'hono/cookie';
 
 import {
@@ -248,11 +249,22 @@ authCoreSsoRouter.post('/v1/auth-core/sso/saml/:connectionId/acs', async (c) => 
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
     });
-    const relay =
-      typeof body.RelayState === 'string' && body.RelayState.startsWith('http')
-        ? body.RelayState
-        : null;
-    if (relay) return c.redirect(relay, 302);
+    // Open-redirect guard: only allowlisted origins (or relative paths).
+    let allowedOrigins: string[] = [];
+    try {
+      const { getBrivenEngineAppOrigins } = await import(
+        '../services/auth-core/project-config.js'
+      );
+      if (result.projectId) {
+        allowedOrigins = await getBrivenEngineAppOrigins(result.projectId);
+      }
+    } catch {
+      allowedOrigins = [];
+    }
+    const relayRaw =
+      typeof body.RelayState === 'string' ? body.RelayState : null;
+    const relay = sanitizeRelayState(relayRaw, allowedOrigins);
+    if (relay && relay !== '/') return c.redirect(relay, 302);
     return c.json({
       engine: BRIVEN_ENGINE_ID,
       status: 'OK',

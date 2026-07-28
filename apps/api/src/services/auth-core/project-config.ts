@@ -114,7 +114,27 @@ const USERNAME_LOGIN_SECRET = 'briven_engine_username_login';
 export type BrivenEngineBranding = {
   logoUrl: string | null;
   primaryColor: string;
+  /**
+   * Display name in the mailbox From: line, e.g. `Pando` →
+   * `Pando <noreply@pando.so>`. SuperTokens-style per-app sender name.
+   */
   senderName: string;
+  /**
+   * Domain for From: address, e.g. `pando.so` → `noreply@pando.so`.
+   * Must be authorized on your mail provider (SPF/DKIM). Null = use
+   * platform domain but still the project `senderName` as display name.
+   */
+  senderDomain: string | null;
+  /**
+   * Local part before @ (default `noreply`). Only used with senderDomain.
+   * e.g. `hello` + `pando.so` → `hello@pando.so`.
+   */
+  senderLocalPart: string | null;
+  /**
+   * Full From email override (takes precedence over local@domain).
+   * e.g. `auth@pando.so`. Must still be authorized on the mail provider.
+   */
+  senderEmail: string | null;
   /**
    * Public brand site shown in the email footer as `{name} · {brandUrl}`.
    * e.g. `https://mavi.app` or `briven.tech`. Null = show name only.
@@ -144,6 +164,9 @@ export const DEFAULT_BRIVEN_ENGINE_BRANDING: BrivenEngineBranding = {
   logoUrl: null,
   primaryColor: '#FFFD74',
   senderName: 'Briven Auth',
+  senderDomain: null,
+  senderLocalPart: null,
+  senderEmail: null,
   brandUrl: null,
   footerNote: null,
   footerLoveName: null,
@@ -155,6 +178,54 @@ export const DEFAULT_BRIVEN_ENGINE_BRANDING: BrivenEngineBranding = {
   footerShowTagline: false,
   footerShowAddress: false,
 };
+
+const DOMAIN_RE =
+  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOCAL_PART_RE = /^[a-z0-9][a-z0-9._+-]{0,63}$/i;
+
+/**
+ * Build RFC-ish From: for project Auth emails.
+ * SuperTokens model: each app sets its own from name + address via email delivery config.
+ *
+ *   senderEmail set     → `Name <senderEmail>`
+ *   senderDomain set    → `Name <local@senderDomain>` (local defaults noreply)
+ *   only senderName     → `Name <noreply@BRIVEN_DOMAIN>` (display fixed; domain platform)
+ *   nothing useful      → null (caller uses platform default)
+ */
+export function buildAuthEmailFromHeader(
+  b: Pick<
+    BrivenEngineBranding,
+    'senderName' | 'senderDomain' | 'senderLocalPart' | 'senderEmail'
+  >,
+  platformDomain = 'briven.tech',
+): string | null {
+  const name = (b.senderName ?? '').trim().slice(0, 80) || 'Briven Auth';
+  let address: string | null = null;
+
+  const full = (b.senderEmail ?? '').trim().toLowerCase();
+  if (full && EMAIL_RE.test(full) && full.length <= 200) {
+    address = full;
+  } else {
+    const domain = (b.senderDomain ?? '').trim().toLowerCase().replace(/^@/, '');
+    if (domain && DOMAIN_RE.test(domain)) {
+      let local = (b.senderLocalPart ?? 'noreply').trim().toLowerCase();
+      if (!local || !LOCAL_PART_RE.test(local)) local = 'noreply';
+      address = `${local}@${domain}`;
+    } else if (name && name.toLowerCase() !== 'briven auth') {
+      // At least show the project brand name with platform mailbox.
+      const pd = platformDomain.replace(/^@/, '').toLowerCase() || 'briven.tech';
+      address = `noreply@${pd}`;
+    }
+  }
+  if (!address) return null;
+
+  const needsQuote = /[\s",;:<>@()\\[\]]/.test(name);
+  const display = needsQuote
+    ? `"${name.replace(/\\/g, '').replace(/"/g, '')}"`
+    : name;
+  return `${display} <${address}>`;
+}
 
 /** Plain footer lines for email HTML/text (empty strings filtered out). */
 export function buildAuthEmailFooterLines(
@@ -308,10 +379,37 @@ function normalizeBranding(
   const boolOr = (v: unknown, fallback: boolean): boolean =>
     typeof v === 'boolean' ? v : fallback;
 
+  let senderDomain: string | null = null;
+  if (typeof input?.senderDomain === 'string' && input.senderDomain.trim()) {
+    const d = input.senderDomain
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, '')
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]!
+      .slice(0, 200);
+    if (DOMAIN_RE.test(d)) senderDomain = d;
+  }
+
+  let senderLocalPart: string | null = null;
+  if (typeof input?.senderLocalPart === 'string' && input.senderLocalPart.trim()) {
+    const lp = input.senderLocalPart.trim().toLowerCase().slice(0, 64);
+    if (LOCAL_PART_RE.test(lp)) senderLocalPart = lp;
+  }
+
+  let senderEmail: string | null = null;
+  if (typeof input?.senderEmail === 'string' && input.senderEmail.trim()) {
+    const em = input.senderEmail.trim().toLowerCase().slice(0, 200);
+    if (EMAIL_RE.test(em)) senderEmail = em;
+  }
+
   return {
     logoUrl,
     primaryColor: color,
     senderName: name,
+    senderDomain,
+    senderLocalPart,
+    senderEmail,
     brandUrl,
     footerNote,
     footerLoveName: strOrNull(input?.footerLoveName, 80),
@@ -360,6 +458,24 @@ export async function setBrivenEngineBranding(
           : input.logoUrl,
     primaryColor: input.primaryColor ?? current.primaryColor,
     senderName: input.senderName ?? current.senderName,
+    senderDomain:
+      input.senderDomain === undefined
+        ? current.senderDomain
+        : input.senderDomain === null || input.senderDomain === ''
+          ? null
+          : input.senderDomain,
+    senderLocalPart:
+      input.senderLocalPart === undefined
+        ? current.senderLocalPart
+        : input.senderLocalPart === null || input.senderLocalPart === ''
+          ? null
+          : input.senderLocalPart,
+    senderEmail:
+      input.senderEmail === undefined
+        ? current.senderEmail
+        : input.senderEmail === null || input.senderEmail === ''
+          ? null
+          : input.senderEmail,
     brandUrl:
       input.brandUrl === undefined
         ? current.brandUrl
@@ -417,6 +533,13 @@ async function loadMethodFlags(
   } catch {
     return { ...DEFAULT_METHOD_FLAGS };
   }
+}
+
+/** Public read of method flags for FDI recipe gates. */
+export async function getBrivenEngineMethodFlags(
+  projectId: string,
+): Promise<BrivenEngineMethodFlags> {
+  return loadMethodFlags(projectId);
 }
 
 function normalizeOrigin(raw: string): string | null {
