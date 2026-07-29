@@ -43,7 +43,15 @@ export async function verifyCliToken(token: string): Promise<CliTokenPayload> {
   if (payload.scope !== 'cli') {
     throw new Error('cli-jwt: wrong scope');
   }
-  if (typeof payload.sub !== 'string' || !payload.sub.startsWith('u_')) {
+  // Platform users (Better Auth) use opaque nanoid ids, not u_… engine ids.
+  // The users-table lookup in requireAuth is the real existence check.
+  // Reject empty / absurd subjects only (flndrn 2026-07-29: invalid cli token
+  // after successful Allow because sub was WUKq… without a u_ prefix).
+  if (
+    typeof payload.sub !== 'string' ||
+    payload.sub.length < 8 ||
+    payload.sub.length > 128
+  ) {
     throw new Error('cli-jwt: missing or invalid subject');
   }
   return payload as CliTokenPayload;

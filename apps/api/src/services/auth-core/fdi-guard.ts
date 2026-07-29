@@ -29,7 +29,10 @@ function projectIdFromHeaders(c: Context): string | null {
   const raw =
     c.req.header('x-briven-project-id') ??
     c.req.header('x-project-id') ??
-    c.req.header('briven-project-id');
+    c.req.header('briven-project-id') ??
+    // GET authorisationurl from <a href> cannot set headers — allow query.
+    c.req.query('briven_project_id') ??
+    c.req.query('projectId');
   const id = raw?.trim() ?? '';
   if (!id.startsWith('p_')) return null;
   return id;
@@ -40,6 +43,30 @@ function bearerToken(c: Context): string | null {
   if (!auth.toLowerCase().startsWith('bearer ')) return null;
   const token = auth.slice('bearer '.length).trim();
   return token || null;
+}
+
+/**
+ * Hosted Briven Auth UI (briven.tech/auth/…) is first-party IdP login.
+ * SuperTokens-style: the IdP host is trusted; third-party apps still need pk.
+ * Pure helper — unit-tested.
+ */
+export function isHostedPlatformOrigin(
+  originHeader: string | null | undefined,
+  refererHeader: string | null | undefined,
+  webOrigin: string,
+): boolean {
+  const allowed = webOrigin.replace(/\/$/, '').toLowerCase();
+  if (!allowed) return false;
+  const candidates: string[] = [];
+  if (originHeader?.trim()) candidates.push(originHeader.trim());
+  if (refererHeader?.trim()) {
+    try {
+      candidates.push(new URL(refererHeader.trim()).origin);
+    } catch {
+      /* ignore bad referer */
+    }
+  }
+  return candidates.some((c) => c.replace(/\/$/, '').toLowerCase() === allowed);
 }
 
 function deny(
@@ -75,47 +102,59 @@ export async function requireFdiProjectKey(
   }
 
   const token = bearerToken(c);
-  if (!token || !token.startsWith('pk_briven_auth_')) {
+  const hosted = isHostedPlatformOrigin(
+    c.req.header('origin'),
+    c.req.header('referer'),
+    env.BRIVEN_WEB_ORIGIN,
+  );
+
+  // Third-party apps: require pk_briven_auth_. Hosted IdP pages on briven.tech
+  // may omit the browser key (still project-scoped + Auth-enabled).
+  let keyId = 'hosted_platform';
+  let scope = 'read-write';
+
+  if (token && token.startsWith('pk_briven_auth_')) {
+    let resolved: Awaited<ReturnType<typeof resolveAuthSdkKey>>;
+    try {
+      resolved = await resolveAuthSdkKey(token);
+    } catch {
+      resolved = null;
+    }
+    if (!resolved) {
+      return deny(c, 401, {
+        status: 'UNAUTHORIZED',
+        code: 'invalid_auth_key',
+        message: 'invalid or revoked Auth public key',
+      });
+    }
+    if (resolved.projectId !== projectId) {
+      return deny(c, 403, {
+        status: 'FORBIDDEN',
+        code: 'project_key_mismatch',
+        message: 'Auth public key does not belong to this project',
+      });
+    }
+    const method = c.req.method.toUpperCase();
+    if (
+      resolved.scope === 'read' &&
+      method !== 'GET' &&
+      method !== 'HEAD' &&
+      method !== 'OPTIONS'
+    ) {
+      return deny(c, 403, {
+        status: 'FORBIDDEN',
+        code: 'key_scope_readonly',
+        message: 'this Auth key is read-only; mint a read-write key for sign-in',
+      });
+    }
+    keyId = resolved.keyId;
+    scope = resolved.scope;
+  } else if (!hosted) {
     return deny(c, 401, {
       status: 'UNAUTHORIZED',
       code: 'auth_key_required',
       message:
         'Authorization: Bearer pk_briven_auth_… required for Auth end-user APIs',
-    });
-  }
-
-  let resolved: Awaited<ReturnType<typeof resolveAuthSdkKey>>;
-  try {
-    resolved = await resolveAuthSdkKey(token);
-  } catch {
-    resolved = null;
-  }
-  if (!resolved) {
-    return deny(c, 401, {
-      status: 'UNAUTHORIZED',
-      code: 'invalid_auth_key',
-      message: 'invalid or revoked Auth public key',
-    });
-  }
-  if (resolved.projectId !== projectId) {
-    return deny(c, 403, {
-      status: 'FORBIDDEN',
-      code: 'project_key_mismatch',
-      message: 'Auth public key does not belong to this project',
-    });
-  }
-
-  const method = c.req.method.toUpperCase();
-  if (
-    resolved.scope === 'read' &&
-    method !== 'GET' &&
-    method !== 'HEAD' &&
-    method !== 'OPTIONS'
-  ) {
-    return deny(c, 403, {
-      status: 'FORBIDDEN',
-      code: 'key_scope_readonly',
-      message: 'this Auth key is read-only; mint a read-write key for sign-in',
     });
   }
 
@@ -143,8 +182,8 @@ export async function requireFdiProjectKey(
   return {
     projectId: map.projectId,
     tenantId: map.tenantId,
-    keyId: resolved.keyId,
-    scope: resolved.scope,
+    keyId,
+    scope,
     methods,
   };
 }

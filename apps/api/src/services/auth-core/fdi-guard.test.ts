@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { methodFlagDenied } from './fdi-guard.js';
+import { isHostedPlatformOrigin, methodFlagDenied } from './fdi-guard.js';
 
 /**
  * FDI lock unit tests — SuperTokens-style: app proves itself with project + pk.
@@ -60,5 +60,33 @@ describe('fdi lock response codes (contract)', () => {
     expect(codes).toContain('project_required');
     expect(codes).toContain('auth_key_required');
     expect(codes.length).toBe(6);
+  });
+});
+
+describe('isHostedPlatformOrigin (IdP hosted UI)', () => {
+  test('matches Origin to web origin', () => {
+    expect(
+      isHostedPlatformOrigin('https://briven.tech', null, 'https://briven.tech'),
+    ).toBe(true);
+  });
+
+  test('matches Referer origin when Origin empty', () => {
+    expect(
+      isHostedPlatformOrigin(
+        null,
+        'https://briven.tech/auth/p_x/otp?callbackURL=%2F',
+        'https://briven.tech',
+      ),
+    ).toBe(true);
+  });
+
+  test('rejects foreign app origins (still need pk)', () => {
+    expect(
+      isHostedPlatformOrigin(
+        'https://mavi.example',
+        null,
+        'https://briven.tech',
+      ),
+    ).toBe(false);
   });
 });

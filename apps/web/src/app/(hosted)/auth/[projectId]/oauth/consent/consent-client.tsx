@@ -71,9 +71,9 @@ export function ConsentClient({
       };
       if (!res.ok) {
         if (res.status === 401) {
-          // Send to login, then back here
+          // Send to engine login, then back here (must set sAccessToken)
           const back = `/auth/${projectId}/oauth/consent?challenge=${encodeURIComponent(challenge)}`;
-          window.location.href = `/auth/${projectId}/otp?callbackURL=${encodeURIComponent(back)}`;
+          window.location.href = `/auth/${projectId}/sign-in?callbackURL=${encodeURIComponent(back)}`;
           return;
         }
         throw new Error(body.error_description ?? body.error ?? `http ${res.status}`);

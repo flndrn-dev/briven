@@ -171,8 +171,11 @@ app.route('/', mediaRouter);
 
 app.route('/', rootRouter);
 app.route('/', healthRouter);
-app.route('/', authRouter);
+// CLI token mint MUST mount before Better Auth's /v1/auth/* catch-all.
+// Otherwise POST /v1/auth/cli-token is swallowed by Better Auth → 404 →
+// dashboard "Allow CLI" shows a 500 error page (flndrn 2026-07-29).
 app.route('/', authCliRouter);
+app.route('/', authRouter);
 app.route('/', meRouter);
 // Briven Auth Option B Phase 7: FDI login + yellow dashboard + keys/providers/enterprise.
 // Platform operator login stays on authRouter (/v1/auth/* Better Auth for briven.tech).

@@ -91,13 +91,35 @@ async function ensureTable(): Promise<void> {
   tableReady = true;
 }
 
-/** Briven's own origins — always trusted, independent of the DB/cache. */
+/**
+ * Briven's own origins — always trusted, independent of the DB/cache.
+ * Includes product host aliases (app./admin./www.) for the apex in
+ * BRIVEN_WEB_ORIGIN — Traefik serves the dashboard on briven.tech AND
+ * app.briven.tech; CLI Allow was failing CSRF on the app host (2026-07-29).
+ */
 export function brivenOwnOrigins(): string[] {
-  return [
+  const list = new Set<string>();
+  for (const o of [
     env.BRIVEN_WEB_ORIGIN,
     env.BRIVEN_STUDIO_ORIGIN,
-    ...(env.BRIVEN_ADMIN_ORIGIN ? [env.BRIVEN_ADMIN_ORIGIN] : []),
-  ].filter(Boolean);
+    env.BRIVEN_ADMIN_ORIGIN,
+    env.BRIVEN_API_ORIGIN,
+  ]) {
+    if (o) list.add(o.replace(/\/$/, ''));
+  }
+  try {
+    const web = new URL(env.BRIVEN_WEB_ORIGIN);
+    const host = web.hostname;
+    // Only add aliases for real product apex hosts (not localhost).
+    if (host && !host.includes('localhost') && host !== '127.0.0.1') {
+      for (const sub of ['app', 'admin', 'www']) {
+        list.add(`${web.protocol}//${sub}.${host}`);
+      }
+    }
+  } catch {
+    /* ignore bad WEB_ORIGIN */
+  }
+  return [...list].filter(Boolean);
 }
 
 /**

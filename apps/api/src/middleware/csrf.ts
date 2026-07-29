@@ -2,7 +2,10 @@ import type { MiddlewareHandler } from 'hono';
 
 import { env } from '../env.js';
 import { log } from '../lib/logger.js';
-import { isRegisteredOrigin } from '../services/auth-origin-allowlist.js';
+import {
+  brivenOwnOrigins,
+  isRegisteredOrigin,
+} from '../services/auth-origin-allowlist.js';
 import type { Session } from './session.js';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -99,9 +102,10 @@ export function shouldRejectAsCsrf(input: {
 }
 
 function trustedOrigins(): string[] {
-  const list = new Set<string>([env.BRIVEN_API_ORIGIN, env.BRIVEN_WEB_ORIGIN]);
+  // Prefer the shared product-origin list (includes app./admin. aliases).
+  const list = new Set<string>(brivenOwnOrigins());
   for (const o of env.BRIVEN_TRUSTED_ORIGINS.split(',').map((s) => s.trim())) {
-    if (o) list.add(o);
+    if (o) list.add(o.replace(/\/$/, ''));
   }
   return [...list];
 }

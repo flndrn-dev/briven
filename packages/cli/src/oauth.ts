@@ -71,10 +71,20 @@ export async function runOAuth(opts: OAuthOptions): Promise<OAuthSuccess> {
     const result = handleCallback(req, state);
     if (result.ok) {
       captured.token = result.token;
-      return htmlResponse(200, 'Authorized. You can close this tab.');
+      return htmlResponse(200, {
+        title: 'CLI authorized',
+        heading: "you're in",
+        body: 'The briven CLI on this computer is authorized. You can close this tab and return to the terminal.',
+        ok: true,
+      });
     }
     captured.error = result.reason;
-    return htmlResponse(400, `Authorization failed: ${result.reason}.`);
+    return htmlResponse(400, {
+      title: 'CLI authorization failed',
+      heading: 'not authorized',
+      body: `Authorization failed: ${result.reason}. Close this tab and run the CLI again.`,
+      ok: false,
+    });
   });
 
   try {
@@ -95,9 +105,82 @@ export async function runOAuth(opts: OAuthOptions): Promise<OAuthSuccess> {
   throw new Error('oauth: timed out waiting for callback');
 }
 
-function htmlResponse(status: number, msg: string): Response {
-  const body = `<!doctype html><meta charset=utf-8><title>briven cli</title><body style="font:14px/1.4 system-ui;padding:2em">${msg}</body>`;
-  return new Response(body, { status, headers: { 'content-type': 'text/html' } });
+/** Dark Briven-styled local callback page (localhost after Allow). */
+function htmlResponse(
+  status: number,
+  content: { title: string; heading: string; body: string; ok: boolean },
+): Response {
+  const accent = content.ok ? '#FFFD74' : '#f87171';
+  const body = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>${escapeHtml(content.title)} · briven</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+      font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: #0a0b0d; color: #e8e8ea; padding: 1.5rem;
+    }
+    .card {
+      width: 100%; max-width: 26rem; border: 1px solid #2a2c32; border-radius: 10px;
+      background: #12141a; padding: 1.5rem;
+    }
+    .brand { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem;
+      color: #9a9ca3; font-size: 12px; letter-spacing: 0.04em; text-transform: lowercase; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: ${accent}; }
+    h1 { margin: 0 0 0.5rem; font-size: 1.15rem; font-weight: 500; color: #f4f4f5; }
+    p { margin: 0 0 1.25rem; color: #9a9ca3; font-size: 13px; }
+    button {
+      width: 100%; border: 0; border-radius: 8px; padding: 0.7rem 1rem; cursor: pointer;
+      font: inherit; font-size: 13px; background: ${accent}; color: #111;
+    }
+    button:hover { filter: brightness(1.05); }
+    .hint { margin-top: 0.85rem; font-size: 11px; color: #6b6e76; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand"><span class="dot" aria-hidden="true"></span>briven · cli</div>
+    <h1>${escapeHtml(content.heading)}</h1>
+    <p>${escapeHtml(content.body)}</p>
+    <button type="button" id="close-btn">close this tab</button>
+    <p class="hint">if the button does nothing, close the tab yourself — the terminal is ready</p>
+  </main>
+  <script>
+    (function () {
+      var btn = document.getElementById('close-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        window.close();
+        // Browsers often block window.close() unless this tab was script-opened.
+        setTimeout(function () {
+          document.body.insertAdjacentHTML(
+            'beforeend',
+            '<p class="hint" style="position:fixed;bottom:1rem;left:0;right:0">browser blocked auto-close — use the tab ×</p>'
+          );
+        }, 200);
+      });
+    })();
+  </script>
+</body>
+</html>`;
+  return new Response(body, {
+    status,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  });
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 async function bindFreePort(): Promise<number> {

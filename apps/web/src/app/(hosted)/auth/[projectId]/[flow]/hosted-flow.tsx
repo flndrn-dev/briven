@@ -57,11 +57,9 @@ interface ErrorBody {
 }
 
 /**
- * Hosted-pages flow forms. Same origin as the dashboard's api proxy
- * (`/api/v1/...`), so cookies set on `briven.tech` are forwarded
- * automatically. Subdomain split (`<tenant>.auth.briven.tech`) lands
- * with the CNAME orchestration runbook (BUILD_PLAN.md "Decisions
- * locked" Q7); the form contract here doesn't change.
+ * Hosted-pages flow forms — briven-engine FDI via first-party `/api/auth/*`.
+ * Sets sAccessToken on briven.tech so OIDC consent (IdP) can see the session.
+ * Legacy /api/v1/auth-tenant is retired (410).
  */
 export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteKey }: Props) {
   const router = useRouter();
@@ -74,11 +72,17 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   const [error, setError] = useState<string | null>(null);
   const [magicSent, setMagicSent] = useState(false);
   const [otpRequested, setOtpRequested] = useState(false);
+  const [preAuthSessionId, setPreAuthSessionId] = useState('');
+  const [deviceId, setDeviceId] = useState('');
+  const [mfaChallenge, setMfaChallenge] = useState('');
+  const [mfaUserId, setMfaUserId] = useState('');
   const [resetDone, setResetDone] = useState(false);
   const [twoFactorMode, setTwoFactorMode] = useState<'totp' | 'backup'>('totp');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
+
+  const cbQ = `callbackURL=${encodeURIComponent(callbackURL)}`;
 
   // Load Cloudflare Turnstile script when a site key is provided.
   useEffect(() => {
@@ -120,25 +124,44 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
     });
   }
 
-  async function post(path: string, body: Record<string, unknown>): Promise<unknown> {
+  async function fdi(
+    path: string,
+    body: Record<string, unknown>,
+    rid?: string,
+  ): Promise<Record<string, unknown>> {
     setPending(true);
     setError(null);
     try {
       const payload = turnstileToken ? { ...body, turnstileToken } : body;
-      const res = await fetch(`/api/v1/auth-tenant${path}`, {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        'x-briven-project-id': projectId,
+        'st-auth-mode': 'cookie',
+      };
+      if (rid) headers.rid = rid;
+      const res = await fetch(`/api/auth${path}`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'content-type': 'application/json',
-          'x-briven-project-id': projectId,
-        },
+        headers,
         body: JSON.stringify(payload),
       });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown> &
+        ErrorBody;
       if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as ErrorBody;
-        throw new Error(err.error?.message ?? err.message ?? err.code ?? `http ${res.status}`);
+        throw new Error(
+          String(
+            data.message ??
+              data.error?.message ??
+              data.code ??
+              data.status ??
+              `http ${res.status}`,
+          ),
+        );
       }
-      return await res.json();
+      if (typeof data.status === 'string' && data.status !== 'OK' && data.status !== 'MFA_REQUIRED') {
+        throw new Error(String(data.message ?? data.status));
+      }
+      return data;
     } finally {
       setPending(false);
     }
@@ -147,15 +170,30 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleSignIn(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      const body = (await post('/sign-in/email', { email, password })) as {
-        twoFactorRedirect?: boolean;
-        user?: { id?: string };
-      };
-      // Password ok but account has 2FA — continue on the challenge page.
-      if (body?.twoFactorRedirect === true) {
-        router.push(
-          `/auth/${projectId}/two-factor?callbackURL=${encodeURIComponent(callbackURL)}`,
-        );
+      const body = await fdi(
+        '/signin',
+        {
+          formFields: [
+            { id: 'email', value: email },
+            { id: 'password', value: password },
+          ],
+        },
+        'emailpassword',
+      );
+      if (body.status === 'MFA_REQUIRED') {
+        const ch = String(body.mfaChallenge ?? '');
+        const uid = String(body.userId ?? '');
+        try {
+          sessionStorage.setItem(
+            `briven_mfa_${projectId}`,
+            JSON.stringify({ mfaChallenge: ch, userId: uid }),
+          );
+        } catch {
+          /* private mode */
+        }
+        setMfaChallenge(ch);
+        setMfaUserId(uid);
+        router.push(`/auth/${projectId}/two-factor?${cbQ}`);
         return;
       }
       router.push(callbackURL);
@@ -167,10 +205,45 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleTwoFactor(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
+      let ch = mfaChallenge;
+      let uid = mfaUserId;
+      if (!ch || !uid) {
+        try {
+          const raw = sessionStorage.getItem(`briven_mfa_${projectId}`);
+          if (raw) {
+            const parsed = JSON.parse(raw) as {
+              mfaChallenge?: string;
+              userId?: string;
+            };
+            ch = parsed.mfaChallenge ?? '';
+            uid = parsed.userId ?? '';
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!ch || !uid) {
+        throw new Error('sign in with password again — two-factor session expired');
+      }
       if (twoFactorMode === 'totp') {
-        await post('/two-factor/verify-totp', { code: twoFactorCode });
+        await fdi(
+          '/totp/verify',
+          {
+            userId: uid,
+            code: twoFactorCode,
+            mfaChallenge: ch,
+          },
+          'totp',
+        );
+        try {
+          sessionStorage.removeItem(`briven_mfa_${projectId}`);
+        } catch {
+          /* ignore */
+        }
       } else {
-        await post('/two-factor/verify-backup-code', { code: twoFactorCode });
+        throw new Error(
+          'backup recovery codes are not finished on hosted login yet — use authenticator',
+        );
       }
       router.push(callbackURL);
     } catch (err) {
@@ -187,7 +260,17 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleSignUp(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      await post('/sign-up/email', { email, password, name: name || undefined });
+      await fdi(
+        '/signup',
+        {
+          formFields: [
+            { id: 'email', value: email },
+            { id: 'password', value: password },
+            ...(name ? [{ id: 'name', value: name }] : []),
+          ],
+        },
+        'emailpassword',
+      );
       router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'sign-up failed');
@@ -197,8 +280,17 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleMagic(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      // Better Auth expects callbackURL (post-click land), not a bare email-only body.
-      await post('/sign-in/magic-link', { email, callbackURL });
+      await fdi(
+        '/signinup/code',
+        {
+          email,
+          flowType: 'MAGIC_LINK',
+          magicLinkBaseUrl: callbackURL.startsWith('http')
+            ? callbackURL
+            : `${window.location.origin}${callbackURL.startsWith('/') ? '' : '/'}${callbackURL}`,
+        },
+        'passwordless',
+      );
       setMagicSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'magic-link request failed');
@@ -208,8 +300,13 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleOtpRequest(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      // Better Auth: POST /email-otp/send-verification-otp (NOT under /sign-in/…).
-      await post('/email-otp/send-verification-otp', { email, type: 'sign-in' });
+      const body = await fdi(
+        '/signinup/code',
+        { email, flowType: 'USER_INPUT_CODE' },
+        'passwordless',
+      );
+      setPreAuthSessionId(String(body.preAuthSessionId ?? ''));
+      setDeviceId(String(body.deviceId ?? ''));
       setOtpRequested(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'otp request failed');
@@ -219,8 +316,15 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   async function handleOtpVerify(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     try {
-      // Better Auth: POST /sign-in/email-otp with { email, otp }.
-      await post('/sign-in/email-otp', { email, otp });
+      await fdi(
+        '/signinup/code/consume',
+        {
+          preAuthSessionId,
+          deviceId,
+          userInputCode: otp,
+        },
+        'passwordless',
+      );
       router.push(callbackURL);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'otp verify failed');
@@ -234,7 +338,8 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
       return;
     }
     try {
-      await post('/reset-password', { token, newPassword });
+      // Password-reset FDI may not be wired on all projects yet.
+      await fdi('/user/password/reset', { token, newPassword }, 'emailpassword');
       setResetDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'password reset failed');
@@ -242,12 +347,17 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
   }
 
   function oauthHref(provider: string): string {
+    // Server returns the provider authorize URL; open via client navigation.
+    // redirectURI must match what the project registered with the social provider.
+    const origin =
+      typeof window !== 'undefined' ? window.location.origin : 'https://briven.tech';
+    const redirectURIOnProviderDashboard = `${origin}/auth/${projectId}/sign-in?${cbQ}`;
     const params = new URLSearchParams({
-      provider,
-      callbackURL,
-      projectId,
+      thirdPartyId: provider,
+      redirectURI: redirectURIOnProviderDashboard,
+      briven_project_id: projectId,
     });
-    return `/api/v1/auth-tenant/sign-in/social?${params.toString()}`;
+    return `/api/auth/authorisationurl?${params.toString()}`;
   }
 
   return (
@@ -416,7 +526,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
       <nav className="flex flex-wrap justify-center gap-3 font-mono text-[11px]">
         {flow !== 'sign-in' ? (
           <Link
-            href={`/auth/${projectId}/sign-in`}
+            href={`/auth/${projectId}/sign-in?${cbQ}`}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
           >
             password sign-in
@@ -424,7 +534,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
         ) : null}
         {flow !== 'sign-up' && flow !== 'two-factor' ? (
           <Link
-            href={`/auth/${projectId}/sign-up`}
+            href={`/auth/${projectId}/sign-up?${cbQ}`}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
           >
             create account
@@ -432,7 +542,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
         ) : null}
         {flow !== 'magic-link' && flow !== 'two-factor' ? (
           <Link
-            href={`/auth/${projectId}/magic-link`}
+            href={`/auth/${projectId}/magic-link?${cbQ}`}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
           >
             magic link
@@ -440,7 +550,7 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
         ) : null}
         {flow !== 'otp' && flow !== 'two-factor' ? (
           <Link
-            href={`/auth/${projectId}/otp`}
+            href={`/auth/${projectId}/otp?${cbQ}`}
             className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
           >
             email code

@@ -165,9 +165,10 @@ authCoreIdpRouter.get('/v1/auth-core/oidc/authorize', async (c) => {
     return c.redirect(consentUrl, 302);
   }
 
-  // Not logged in → hosted login, then consent
+  // Not logged in → hosted login (password + links to OTP/magic), then consent.
+  // Hosted UI uses briven-engine FDI so sAccessToken is set for consent.
   const afterLogin = `${webOrigin()}/auth/${encodeURIComponent(client.projectId)}/oauth/consent?challenge=${encodeURIComponent(authReq.id)}`;
-  const loginUrl = `${webOrigin()}/auth/${encodeURIComponent(client.projectId)}/otp?callbackURL=${encodeURIComponent(afterLogin)}`;
+  const loginUrl = `${webOrigin()}/auth/${encodeURIComponent(client.projectId)}/sign-in?callbackURL=${encodeURIComponent(afterLogin)}`;
   return c.redirect(loginUrl, 302);
 });
 

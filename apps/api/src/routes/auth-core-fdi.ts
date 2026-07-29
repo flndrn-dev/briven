@@ -449,7 +449,11 @@ authCoreFdiRouter.get(`${FDI}/authorisationurl`, async (c) => {
   if (!isAuthCoreInitialized()) return c.json(notReady(), 503);
   const fdi = c.get('fdiCtx');
   const thirdPartyId = (c.req.query('thirdPartyId') ?? '') as SupportedSocial;
-  const redirectURI = c.req.query('redirectURI') ?? '';
+  // Accept both SuperTokens name and our older alias.
+  const redirectURI =
+    c.req.query('redirectURI') ??
+    c.req.query('redirectURIOnProviderDashboard') ??
+    '';
   // redirectURI origin must be on project Allowed Domains (open-redirect guard).
   if (redirectURI) {
     try {

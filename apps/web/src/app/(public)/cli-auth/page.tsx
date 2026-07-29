@@ -35,12 +35,27 @@ function isLoopbackHttp(url: string): boolean {
   }
 }
 
+function mintErrorMessage(code: string): string {
+  if (code === 'no_token' || code.startsWith('mint_failed')) {
+    return 'could not create a CLI token — try again, or sign out and sign in once more';
+  }
+  if (code === 'bad_request') {
+    return 'this link is incomplete — run the CLI again so it opens a fresh Allow page';
+  }
+  return `authorization failed (${code}) — run the CLI again`;
+}
+
 export default async function CliAuthPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string; state?: string; host?: string }>;
+  searchParams: Promise<{
+    redirect?: string;
+    state?: string;
+    host?: string;
+    error?: string;
+  }>;
 }) {
-  const { redirect: redirectUrl, state, host } = await searchParams;
+  const { redirect: redirectUrl, state, host, error } = await searchParams;
 
   if (!redirectUrl || !state) {
     return <ErrorCard reason="missing redirect or state query param" />;
@@ -76,6 +91,14 @@ export default async function CliAuthPage({
         issues a 24-hour session token to the cli on your laptop. revoke with{' '}
         <code>briven logout</code>.
       </p>
+      {error ? (
+        <p
+          className="rounded border border-[var(--color-error)] px-3 py-2 text-xs text-[var(--color-error)]"
+          role="alert"
+        >
+          {mintErrorMessage(error)}
+        </p>
+      ) : null}
       <form className="flex gap-2">
         <button
           formAction={allow.bind(null, { redirectUrl, state })}
