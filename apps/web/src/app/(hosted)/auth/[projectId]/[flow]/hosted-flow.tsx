@@ -18,6 +18,7 @@ interface Props {
 }
 
 const OAUTH_PROVIDERS: ReadonlyArray<string> = [
+  'konnos',
   'google',
   'github',
   'discord',
@@ -31,6 +32,24 @@ const OAUTH_PROVIDERS: ReadonlyArray<string> = [
   'facebook',
   'spotify',
 ];
+
+/** Official Konnos mark — same asset as platform /signin (apps/web/public/konnos.svg). */
+function OAuthProviderMark({ provider }: { provider: string }) {
+  if (provider === 'konnos') {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- tiny static mark, not LCP
+      <img
+        src="/konnos.svg"
+        alt=""
+        width={16}
+        height={16}
+        className="h-4 w-4 shrink-0 object-contain"
+        aria-hidden
+      />
+    );
+  }
+  return null;
+}
 
 const TITLES: Record<FormFlow, string> = {
   'sign-in': 'sign in',
@@ -514,9 +533,10 @@ export function HostedFlow({ projectId, flow, callbackURL, token, turnstileSiteK
               <a
                 key={p}
                 href={oauthHref(p)}
-                className="rounded-md border border-[var(--color-border)] px-3 py-2 text-center font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-2 text-center font-mono text-xs text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
               >
-                {p}
+                <OAuthProviderMark provider={p} />
+                {p === 'konnos' ? 'continue with konnos' : p}
               </a>
             ))}
           </div>

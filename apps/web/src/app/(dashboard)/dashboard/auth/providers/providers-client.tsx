@@ -993,6 +993,17 @@ export function AuthProvidersClient({
                               }
                         }
                       >
+                        {p.thirdPartyId === 'konnos' ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- static mark
+                          <img
+                            src="/konnos.svg"
+                            alt=""
+                            width={14}
+                            height={14}
+                            className="mr-1.5 inline-block h-3.5 w-3.5 align-[-2px] object-contain"
+                            aria-hidden
+                          />
+                        ) : null}
                         {p.name}
                         {isOn ? ' · on' : ' · set up'}
                         {isOpen ? ' · open' : ''}
@@ -1031,6 +1042,17 @@ export function AuthProvidersClient({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-mono text-xs text-[var(--color-text)]">
+                        {p.thirdPartyId === 'konnos' ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- static mark
+                          <img
+                            src="/konnos.svg"
+                            alt=""
+                            width={16}
+                            height={16}
+                            className="mr-1.5 inline-block h-4 w-4 align-[-3px] object-contain"
+                            aria-hidden
+                          />
+                        ) : null}
                         {p.name} — client id &amp; secret
                         {p.configured ? (
                           <span className="ml-2 text-[var(--color-text-muted)]">

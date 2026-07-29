@@ -223,11 +223,20 @@ async function send(label: string, args: SendArgs): Promise<void> {
     return;
   }
 
-  // Primary path: real SMTP provider. mittera accepts sends but never
-  // delivers, so once SMTP is configured it takes precedence over mittera.
+  // Primary path: real SMTP (Resend / Mailgun / SES via SMTP).
+  // If SMTP is misconfigured (bad key), fall through to mittera so Auth OTP
+  // does not hard-fail (flndrn 2026-07-29: 535 invalid login broke krypco OTP).
   if (isSmtpConfigured()) {
-    await sendViaSmtp(label, args);
-    return;
+    try {
+      await sendViaSmtp(label, args);
+      return;
+    } catch (err) {
+      log.warn('smtp_send_failed_fallback_mittera', {
+        label,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // continue to mittera / dev below
+    }
   }
 
   // Fallback: mittera's REST API (kept as the fallback, not deleted).

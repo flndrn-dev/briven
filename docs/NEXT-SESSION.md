@@ -8,8 +8,10 @@
 ## One-line status
 
 **Mavi pay login live:** magic link · email OTP · Konnos OAuth.  
-**Paused:** passkeys retest · SMS/Twilio (compliance / US address).  
-**Full detail:** [`SESSION-RESUME-2026-07-27-AUTH.md`](./SESSION-RESUME-2026-07-27-AUTH.md)
+**AUTH-HARDEN-90 test phase (T1–T8):** evidence filed 2026-07-29 — FDI lock, proxy, refresh contract, M2M fail path, IdP discovery, migration unit, captcha off.  
+**Gold-path app fixes (local):** Mavi legacy proxy remap, Krypco session/me, Konnos JWKS, `@briven/auth` getSession → engine. **Ship Mavi** still needed.  
+**Paused:** passkeys human retest · SMS/Twilio (or N/A).  
+**Full detail:** [`AUTH-HARDEN-TEST-EVIDENCE-2026-07-29.md`](./AUTH-HARDEN-TEST-EVIDENCE-2026-07-29.md) · [`SESSION-RESUME-2026-07-27-AUTH.md`](./SESSION-RESUME-2026-07-27-AUTH.md)
 
 ---
 

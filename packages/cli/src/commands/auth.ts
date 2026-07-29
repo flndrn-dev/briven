@@ -1,6 +1,8 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
+import { apiCall, ApiCallError } from '../api-client.js';
+import { readCredentials, readUserCredential } from '../config.js';
 import { error as printError, banner, step, success, blankLine } from '../output.js';
 import { readProjectConfig } from '../project-config.js';
 
@@ -18,20 +20,22 @@ const BRIVEN_AUTH_KEY =
   process.env.BRIVEN_AUTH_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_BRIVEN_AUTH_KEY!;
 
 /**
- * First-party proxy: browser + magic-link emails hit YOUR host, not a bare
- * api.briven.tech page. Magic links look like:
- *   https://your.app/api/auth/v1/auth-tenant/magic-link/verify?token=…
+ * First-party proxy → briven-engine FDI (live).
+ * Never proxy to /v1/auth-tenant/* (retired → HTTP 410).
+ *   Browser:  /api/auth/signinup/code
+ *   Upstream: /v1/auth-core/fdi/signinup/code
  */
 export async function middleware(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith('/api/auth/')) return NextResponse.next();
 
   let path = req.nextUrl.pathname;
-  // Canonical (emails + SDK): /api/auth/v1/auth-tenant/foo → /v1/auth-tenant/foo
-  if (path.startsWith('/api/auth/v1/auth-tenant')) {
+  if (path.startsWith('/api/auth/v1/auth-core/fdi')) {
     path = path.slice('/api/auth'.length);
+  } else if (path.startsWith('/api/auth/v1/auth-tenant')) {
+    // Old scaffold / emails — rewrite retired bridge → FDI
+    path = path.replace(/^\\/api\\/auth\\/v1\\/auth-tenant/, '/v1/auth-core/fdi');
   } else {
-    // Short form: /api/auth/foo → /v1/auth-tenant/foo
-    path = path.replace(/^\\/api\\/auth/, '/v1/auth-tenant');
+    path = path.replace(/^\\/api\\/auth/, '/v1/auth-core/fdi');
   }
 
   const url = new URL(path, BRIVEN_API_ORIGIN);
@@ -40,7 +44,6 @@ export async function middleware(req: NextRequest) {
   const headers = new Headers(req.headers);
   headers.set('x-briven-project-id', BRIVEN_PROJECT_ID);
   headers.set('authorization', \`Bearer \${BRIVEN_AUTH_KEY}\`);
-  // Pass project id in query for bare GET email clicks (no Authorization header).
   if (!url.searchParams.has('briven_project_id')) {
     url.searchParams.set('briven_project_id', BRIVEN_PROJECT_ID);
   }
@@ -112,14 +115,220 @@ export async function runAuth(argv: readonly string[]): Promise<number> {
   if (cmd === 'scaffold') {
     return runScaffold();
   }
+  if (cmd === 'enable') {
+    return runEnable(argv.slice(1));
+  }
 
   banner('auth');
   step('usage:');
-  step('  briven auth scaffold   — middleware.ts + lib/auth.ts + .env.local seeds');
+  step('  briven auth enable [--origin https://your.app] [--project p_…]');
+  step('      — turn Auth ON (starter pack) + mint pk_briven_auth_… if missing');
+  step('  briven auth scaffold');
+  step('      — middleware.ts + lib/auth.ts + .env.local seeds');
   blankLine();
+  step('agents: prefer `briven auth enable` after `briven connect` / `briven setup`');
   step('docs: https://docs.briven.tech/auth');
-  step('human checklist: AUTH-GO-LIVE-CHECKLIST.md (in the Briven repo)');
   return 0;
+}
+
+interface SetupFinishResponse {
+  ok?: boolean;
+  projectId?: string;
+  actions?: string[];
+  mintedKeyPlaintext?: string | null;
+  status?: {
+    authEnabled?: boolean;
+    methodsReady?: boolean;
+    hasPublicKey?: boolean;
+    originsReady?: boolean;
+  };
+  message?: string;
+  code?: string;
+}
+
+export interface EnableAuthOptions {
+  projectId: string;
+  apiOrigin: string;
+  /** Platform user JWT (CLI login token). */
+  bearer: string;
+  productionOrigin?: string;
+  /** When true, skip banner chrome (used from setup/connect). */
+  quiet?: boolean;
+  cwd?: string;
+}
+
+/**
+ * Enable Auth + starter methods + mint browser key if missing.
+ * Shared by `briven auth enable` and automatic setup/connect.
+ */
+export async function enableAuthForProject(
+  opts: EnableAuthOptions,
+): Promise<{ ok: true; publicKey: string | null; actions: string[] } | { ok: false; message: string }> {
+  const apiOrigin = opts.apiOrigin.replace(/\/$/, '');
+  const body: { productionOrigin?: string } = {};
+  if (opts.productionOrigin?.trim()) {
+    body.productionOrigin = opts.productionOrigin.trim();
+  }
+  try {
+    const result = await apiCall<SetupFinishResponse>(
+      `/v1/auth-core/projects/${encodeURIComponent(opts.projectId)}/setup-finish`,
+      {
+        apiOrigin,
+        bearer: opts.bearer,
+        method: 'POST',
+        body,
+      },
+    );
+    const pk = result.mintedKeyPlaintext?.trim() || null;
+    if (pk) {
+      await mergeEnvLocal(opts.projectId, pk, apiOrigin, opts.cwd);
+    }
+    return { ok: true, publicKey: pk, actions: result.actions ?? [] };
+  } catch (err) {
+    if (err instanceof ApiCallError) {
+      return {
+        ok: false,
+        message: `server rejected: ${err.code} (${err.status}) — ${err.message}`,
+      };
+    }
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : 'auth enable failed',
+    };
+  }
+}
+
+/**
+ * One-shot Auth enable for agents and humans.
+ * Calls platform setup-finish (enable + methods + localhost + mint key).
+ * Needs `briven login` / connect so a CLI user token exists (not only brk_).
+ */
+async function runEnable(argv: readonly string[]): Promise<number> {
+  banner('auth enable');
+
+  let productionOrigin: string | undefined;
+  let projectArg: string | undefined;
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === '--origin' || a === '-o') {
+      productionOrigin = argv[i + 1];
+      i += 1;
+      continue;
+    }
+    if (a === '--project' || a === '-p') {
+      projectArg = argv[i + 1];
+      i += 1;
+      continue;
+    }
+    if (a?.startsWith('--origin=')) {
+      productionOrigin = a.slice('--origin='.length);
+      continue;
+    }
+    if (a?.startsWith('--project=')) {
+      projectArg = a.slice('--project='.length);
+    }
+  }
+
+  const user = await readUserCredential();
+  if (!user?.token) {
+    printError('no platform login in the CLI');
+    step('run: briven login   (or briven connect) so agents have a user token');
+    step('then: briven auth enable');
+    return 1;
+  }
+
+  const file = await readCredentials();
+  const local = await readProjectConfig();
+  const projectId =
+    projectArg?.trim() || local?.projectId?.trim() || file.default || undefined;
+  if (!projectId) {
+    printError('no project id — link a project first');
+    step('run: briven projects use <p_…>   or pass --project p_…');
+    return 1;
+  }
+
+  const apiOrigin = user.apiOrigin.replace(/\/$/, '');
+  step(`project  ${projectId}`);
+  step(`origin   ${apiOrigin}`);
+  if (productionOrigin) step(`app URL  ${productionOrigin}`);
+
+  const result = await enableAuthForProject({
+    projectId,
+    apiOrigin,
+    bearer: user.token,
+    productionOrigin,
+  });
+  if (!result.ok) {
+    printError(result.message);
+    if (result.message.includes('401') || result.message.includes('403')) {
+      step('need admin access on this project + fresh `briven login`');
+    }
+    return 1;
+  }
+
+  blankLine();
+  for (const action of result.actions) {
+    step(`  · ${action}`);
+  }
+  if (result.publicKey) {
+    blankLine();
+    success('browser public key (copy once — not shown again):');
+    step(result.publicKey);
+  } else {
+    step('public key already present — check dashboard Auth → API keys');
+  }
+  blankLine();
+  success('Auth enable finished');
+  step('next: briven auth scaffold   (if app files not wired yet)');
+  step('      pnpm add @briven/auth');
+  step('      prove login on an Allowed Domain / origin');
+  return 0;
+}
+
+/** Seed or update .env.local with project id + public key (never overwrites other keys blindly). */
+async function mergeEnvLocal(
+  projectId: string,
+  publicKey: string,
+  apiOrigin: string,
+  cwd: string = process.cwd(),
+): Promise<void> {
+  const envPath = resolve(cwd, '.env.local');
+  const lines = [
+    `NEXT_PUBLIC_BRIVEN_API_ORIGIN=${apiOrigin}`,
+    `NEXT_PUBLIC_BRIVEN_PROJECT_ID=${projectId}`,
+    `NEXT_PUBLIC_BRIVEN_AUTH_KEY=${publicKey}`,
+    `BRIVEN_AUTH_PUBLIC_KEY=${publicKey}`,
+  ];
+  try {
+    let existing = '';
+    try {
+      existing = await readFile(envPath, 'utf8');
+    } catch {
+      existing = '';
+    }
+    if (!existing) {
+      await writeFile(envPath, `${lines.join('\n')}\n`, { flag: 'wx' });
+      step('wrote .env.local with the new public key');
+      return;
+    }
+    let next = existing;
+    const upsert = (key: string, value: string) => {
+      const re = new RegExp(`^${key}=.*$`, 'm');
+      if (re.test(next)) {
+        next = next.replace(re, `${key}=${value}`);
+      } else {
+        next = `${next.trimEnd()}\n${key}=${value}\n`;
+      }
+    };
+    upsert('NEXT_PUBLIC_BRIVEN_API_ORIGIN', apiOrigin);
+    upsert('NEXT_PUBLIC_BRIVEN_PROJECT_ID', projectId);
+    upsert('NEXT_PUBLIC_BRIVEN_AUTH_KEY', publicKey);
+    upsert('BRIVEN_AUTH_PUBLIC_KEY', publicKey);
+    await writeFile(envPath, next.endsWith('\n') ? next : `${next}\n`);
+    step('updated .env.local with project id + public key');
+  } catch {
+    step('could not write .env.local — paste the public key yourself');
+  }
 }
 
 async function runScaffold(): Promise<number> {
@@ -176,13 +385,12 @@ async function runScaffold(): Promise<number> {
   step('  .env.local (if it was missing)');
   blankLine();
   step('Clerk-simple next steps (do in order):');
-  step('  1. Dashboard → Auth → Enable (once). Starter pack turns magic+OTP+passkey ON.');
-  step('  2. Auth → API keys → create pk_briven_auth_… (read-write) — paste into .env.local');
-  step('  3. Auth → Allowed Domains → add your real site (localhost:3000 often pre-seeded)');
-  step('  4. pnpm add @briven/auth   (or npm i @briven/auth)');
+  step('  1. briven auth enable   (or Dashboard → Auth → Enable once)');
+  step('  2. Public key lands in .env.local when enable mints one');
+  step('  3. Add real site origin: briven auth enable --origin https://your.app');
+  step('  4. pnpm add @briven/auth');
   step('  5. Copy lib/auth.sign-in.example into a real page (or hostedPageURL sign-in)');
-  step('  6. Deploy THIS app after any auth code change — GitHub green ≠ live site');
-  step('  7. Prove: email code or magic link works on the Allowed Domain');
+  step('  6. Deploy THIS app after any auth code change');
   step('  Tip: if agents say "providers OFF", re-check THIS project — not another MCP binding.');
   link('https://docs.briven.tech/auth');
   return 0;

@@ -13,6 +13,7 @@ import { createInterface } from 'node:readline';
 
 import { ApiCallError } from './api-client.js';
 import { generate, type SchemaSnapshot } from './codegen.js';
+import { enableAuthForProject } from './commands/auth.js';
 import { runInit } from './commands/init.js';
 import { runStorage } from './commands/storage.js';
 import { mergeEnvFile } from './env-file.js';
@@ -503,8 +504,16 @@ async function createNew(
     if (st !== 0) return st;
   }
 
+  // Auth on by default for new CLI projects (Clerk-simple path).
+  await enableAuthInSetup({
+    cwd: args.cwd,
+    apiOrigin: args.origins.apiOrigin,
+    token,
+    projectId: created.id,
+  });
+
   blankLine();
-  success('folder fully wired (project + CLI key + S3)');
+  success('folder fully wired (project + CLI key + S3 + Auth)');
   printDone(args, created.id, created.slug);
   return 0;
 }
@@ -564,8 +573,16 @@ async function finishExisting(
   const st = await ensureStorageInSetup(project.id);
   if (st !== 0) return st;
 
+  // Ensure Auth is on when attaching (idempotent if already enabled).
+  await enableAuthInSetup({
+    cwd: args.cwd,
+    apiOrigin: args.origins.apiOrigin,
+    token,
+    projectId: project.id,
+  });
+
   blankLine();
-  success(`folder fully wired to ${project.slug} (project + CLI key + S3)`);
+  success(`folder fully wired to ${project.slug} (project + CLI key + S3 + Auth)`);
   printDone(args, project.id, project.slug);
   return 0;
 }
@@ -597,14 +614,50 @@ async function ensureStorageInSetup(projectId: string): Promise<number> {
   }
 }
 
+/**
+ * Turn Briven Auth on as part of setup/connect (idempotent).
+ * Writes pk_briven_auth_… into .env.local when a new key is minted.
+ * Non-fatal: setup still succeeds if Auth enable fails (network / permissions).
+ */
+async function enableAuthInSetup(args: {
+  cwd: string;
+  apiOrigin: string;
+  token: string;
+  projectId: string;
+}): Promise<void> {
+  step('enabling Briven Auth (starter pack + browser key)…');
+  const result = await enableAuthForProject({
+    projectId: args.projectId,
+    apiOrigin: args.apiOrigin,
+    bearer: args.token,
+    quiet: true,
+    cwd: args.cwd,
+  });
+  if (!result.ok) {
+    step(`auth enable skipped: ${result.message}`);
+    step('later: briven auth enable');
+    return;
+  }
+  for (const action of result.actions) {
+    step(`  · ${action}`);
+  }
+  if (result.publicKey) {
+    success('Auth on · browser public key saved to .env.local');
+  } else {
+    success('Auth on · browser public key already present');
+  }
+}
+
 function printDone(args: SetupArgs, projectId: string, slug: string): void {
   step(`project   ${slug} (${projectId})`);
   step(`dashboard ${args.origins.dashboardOrigin}/dashboard/projects/${projectId}`);
   step('storage   S3 bucket + key in .env.local (BRIVEN_STORAGE_* / AWS_*)');
+  step('auth      enabled (or run: briven auth enable)');
   blankLine();
   step('next:');
-  step('  briven deploy     push schema + functions once');
-  step('  briven dev        watch mode (push on save)');
+  step('  briven auth scaffold   optional app middleware + sign-in files');
+  step('  briven deploy          push schema + functions once');
+  step('  briven dev             watch mode (push on save)');
   printLink('https://docs.briven.tech/connect');
 }
 

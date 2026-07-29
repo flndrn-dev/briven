@@ -43,6 +43,7 @@ import {
   type OrgPermission,
   type OrgRole,
   type Passkey,
+  providerLogoDataUri,
   type SessionResponse,
   type SignInResult,
   type SimpleResult,
@@ -256,6 +257,7 @@ export interface BrivenSignInProps {
 }
 
 const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
+  'konnos',
   'google',
   'github',
   'discord',
@@ -265,6 +267,24 @@ const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
   'linkedin',
   'gitlab',
 ];
+
+function oauthButtonChildren(provider: OAuthProvider): Array<VNode | string> | string {
+  const logo = providerLogoDataUri(provider);
+  const label = `continue with ${provider}`;
+  if (!logo) return label;
+  return [
+    h('img', {
+      src: logo,
+      alt: '',
+      width: 20,
+      height: 20,
+      'aria-hidden': true,
+      class: 'briven-auth-oauth-logo',
+      style: { width: '20px', height: '20px', objectFit: 'contain', flexShrink: '0' },
+    }),
+    label,
+  ];
+}
 
 export const BrivenSignIn = {
   name: 'BrivenSignIn',
@@ -428,8 +448,14 @@ export const BrivenSignIn = {
                       'data-briven-auth-provider': provider,
                       onClick: () => handleOAuth(provider),
                       class: 'briven-auth-oauth-button',
+                      style: {
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                      },
                     },
-                    `continue with ${provider}`,
+                    oauthButtonChildren(provider),
                   ),
                 ),
               )
@@ -575,8 +601,14 @@ export const BrivenSignUp = {
                       'data-briven-auth-provider': provider,
                       onClick: () => handleOAuth(provider),
                       class: 'briven-auth-oauth-button',
+                      style: {
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                      },
                     },
-                    `continue with ${provider}`,
+                    oauthButtonChildren(provider),
                   ),
                 ),
               )

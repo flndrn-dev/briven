@@ -186,6 +186,26 @@ async function createProject(argv: readonly string[]): Promise<number> {
       success(`cli key stored (····${suffix}) · default set`);
     }
 
+    // New projects get Auth on immediately (same as briven setup).
+    try {
+      const { enableAuthForProject } = await import('./auth.js');
+      step('enabling Briven Auth…');
+      const auth = await enableAuthForProject({
+        projectId: project.id,
+        apiOrigin: user.apiOrigin,
+        bearer: user.token,
+        quiet: true,
+      });
+      if (auth.ok) {
+        success('Auth on (starter pack + browser key)');
+      } else {
+        step(`auth enable skipped: ${auth.message}`);
+        step('later: briven auth enable --project ' + project.id);
+      }
+    } catch {
+      step('auth enable skipped — run: briven auth enable --project ' + project.id);
+    }
+
     const origins = resolveOrigins();
     step(`dashboard: ${origins.dashboardOrigin}/dashboard/projects/${project.id}`);
     blankLine();

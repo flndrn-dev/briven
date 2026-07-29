@@ -47,6 +47,7 @@ import {
   type OrgPermission,
   type OrgRole,
   type Passkey,
+  providerLogoDataUri,
   type SessionResponse,
   type SignInResult,
   type SimpleResult,
@@ -356,6 +357,7 @@ export interface BrivenSignInProps {
 }
 
 const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
+  'konnos',
   'google',
   'github',
   'discord',
@@ -365,6 +367,35 @@ const DEFAULT_PROVIDERS: ReadonlyArray<OAuthProvider> = [
   'linkedin',
   'gitlab',
 ];
+
+/** OAuth button children: official logo (when we ship one) + label. */
+function oauthButtonChildren(provider: OAuthProvider): ReactNode {
+  const logo = providerLogoDataUri(provider);
+  const label = `continue with ${provider}`;
+  if (!logo) return label;
+  return createElement(
+    'span',
+    {
+      className: 'briven-auth-oauth-button-inner',
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+      },
+    },
+    createElement('img', {
+      src: logo,
+      alt: '',
+      width: 20,
+      height: 20,
+      'aria-hidden': true,
+      className: 'briven-auth-oauth-logo',
+      style: { width: 20, height: 20, objectFit: 'contain', flexShrink: 0 },
+    }),
+    label,
+  );
+}
 
 /**
  * Drop-in sign-in component. Renders email+password, magic-link, and the
@@ -460,8 +491,14 @@ export function BrivenSignIn(props: BrivenSignInProps) {
             'data-briven-auth-provider': provider,
             onClick: () => handleOAuth(provider),
             className: 'briven-auth-oauth-button',
+            style: {
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            },
           },
-          `continue with ${provider}`,
+          oauthButtonChildren(provider),
         ),
       ),
     [providers, handleOAuth],
@@ -668,8 +705,14 @@ export function BrivenSignUp(props: BrivenSignUpProps) {
             'data-briven-auth-provider': provider,
             onClick: () => handleOAuth(provider),
             className: 'briven-auth-oauth-button',
+            style: {
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            },
           },
-          `continue with ${provider}`,
+          oauthButtonChildren(provider),
         ),
       ),
     [providers, handleOAuth],

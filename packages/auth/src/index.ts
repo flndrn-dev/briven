@@ -27,6 +27,7 @@
  */
 
 export type OAuthProvider =
+  | 'konnos'
   | 'google'
   | 'github'
   | 'discord'
@@ -39,6 +40,12 @@ export type OAuthProvider =
   | 'dropbox'
   | 'facebook'
   | 'spotify';
+
+export {
+  KONNOS_LOGO_DATA_URI,
+  PROVIDER_LOGO_DATA_URI,
+  providerLogoDataUri,
+} from './provider-logos.js';
 
 export interface CreateBrivenAuthOptions {
   /** briven project id (`p_<ulid>`). Required. */
@@ -486,7 +493,11 @@ export interface BrivenAuthClient {
 }
 
 const DEFAULT_API_ORIGIN = 'https://api.briven.tech';
+/** Retired Better Auth bridge — kept only for non-passwordless legacy paths still migrating. */
 const BRIDGE_PREFIX = '/v1/auth-tenant';
+/** Live briven-engine FDI (passwordless OTP/magic, sessions). Never use auth-tenant for login. */
+const FDI_PREFIX = '/v1/auth-core/fdi';
+const PREAUTH_STORAGE_KEY = 'briven_pl_preauth';
 
 /* ── WebAuthn helpers (Better Auth returns PublicKeyCredential*OptionsJSON) ─ */
 
@@ -585,41 +596,6 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     return (await res.json()) as T;
   }
 
-  /**
-   * POST that surfaces HTTP status. Needed for magic-link / OTP send so a 404
-   * or 500 is not reported as ok:true (Better Auth returns empty/error JSON).
-   */
-  async function postRaw(
-    path: string,
-    body: Record<string, unknown> | null,
-  ): Promise<{ ok: boolean; status: number; json: unknown; message?: string }> {
-    const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'content-type': 'application/json',
-        'x-briven-project-id': opts.projectId,
-        authorization: `Bearer ${opts.publicKey}`,
-      },
-      body: body === null ? undefined : JSON.stringify(body),
-    });
-    let json: unknown = null;
-    try {
-      json = await res.json();
-    } catch {
-      json = null;
-    }
-    const message =
-      json && typeof json === 'object'
-        ? String(
-            (json as { message?: string; error?: { message?: string } }).message ??
-              (json as { error?: { message?: string } }).error?.message ??
-              '',
-          ) || undefined
-        : undefined;
-    return { ok: res.ok, status: res.status, json, message };
-  }
-
   async function get<T>(path: string): Promise<T> {
     const res = await fetchImpl(`${apiOrigin}${BRIDGE_PREFIX}${path}`, {
       credentials: 'include',
@@ -629,6 +605,27 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
     });
     return (await res.json()) as T;
+  }
+
+  /**
+   * Session verify URL (briven-engine). SuperTokens-style: cookie on app host
+   * via first-party `/api/auth` proxy, or direct API when apiOrigin is the API.
+   * Never use retired /v1/auth-tenant/get-session.
+   */
+  function sessionMeUrl(): string {
+    const base = apiOrigin.replace(/\/$/, '');
+    if (base.endsWith('/api/auth') || /\/api\/auth$/i.test(base)) {
+      return `${base}/session/me`;
+    }
+    return `${base}/v1/auth-core/session/me`;
+  }
+
+  function signOutUrl(): string {
+    const base = apiOrigin.replace(/\/$/, '');
+    if (base.endsWith('/api/auth') || /\/api\/auth$/i.test(base)) {
+      return `${base}/signout`;
+    }
+    return `${base}${FDI_PREFIX}/signout`;
   }
 
   async function patch<T>(path: string, body: Record<string, unknown>): Promise<T> {
@@ -708,17 +705,39 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async magicLink(input) {
         try {
-          // Better Auth field is `callbackURL` (not redirectTo). Map the SDK name.
-          const body = await postRaw('/sign-in/magic-link', {
-            email: input.email,
-            ...(input.redirectTo ? { callbackURL: input.redirectTo } : {}),
+          // briven-engine FDI (auth-tenant magic-link is 410).
+          const res = await fetchImpl(`${apiOrigin}${FDI_PREFIX}/signinup/code`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json',
+              'x-briven-project-id': opts.projectId,
+              authorization: `Bearer ${opts.publicKey}`,
+              rid: 'passwordless',
+            },
+            body: JSON.stringify({ email: input.email }),
           });
-          if (!body.ok) {
+          const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          if (!res.ok || json.status !== 'OK') {
             return {
               ok: false as const,
-              code: body.status === 429 ? ('rate_limited' as const) : ('unknown' as const),
-              message: body.message ?? 'magic link send failed',
+              code: res.status === 429 ? ('rate_limited' as const) : ('unknown' as const),
+              message:
+                typeof json.message === 'string'
+                  ? json.message
+                  : 'magic link send failed',
             };
+          }
+          if (typeof window !== 'undefined' && json.preAuthSessionId && json.deviceId) {
+            sessionStorage.setItem(
+              PREAUTH_STORAGE_KEY,
+              JSON.stringify({
+                preAuthSessionId: json.preAuthSessionId,
+                deviceId: json.deviceId,
+                email: input.email,
+              }),
+            );
           }
           return { ok: true as const };
         } catch {
@@ -727,18 +746,37 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async otpRequest(input) {
         try {
-          // Better Auth emailOTP: POST /email-otp/send-verification-otp
-          // (NOT /sign-in/email-otp/send-verification-otp — that path is 404).
-          const body = await postRaw('/email-otp/send-verification-otp', {
-            email: input.email,
-            type: 'sign-in',
+          // briven-engine FDI passwordless (NOT retired /v1/auth-tenant/*).
+          const res = await fetchImpl(`${apiOrigin}${FDI_PREFIX}/signinup/code`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json',
+              'x-briven-project-id': opts.projectId,
+              authorization: `Bearer ${opts.publicKey}`,
+              rid: 'passwordless',
+            },
+            body: JSON.stringify({ email: input.email }),
           });
-          if (!body.ok) {
+          const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          if (!res.ok || json.status !== 'OK') {
             return {
               ok: false as const,
-              code: body.status === 429 ? ('rate_limited' as const) : ('unknown' as const),
-              message: body.message ?? 'otp send failed',
+              code: res.status === 429 ? ('rate_limited' as const) : ('unknown' as const),
+              message:
+                typeof json.message === 'string' ? json.message : 'otp send failed',
             };
+          }
+          if (typeof window !== 'undefined' && json.preAuthSessionId && json.deviceId) {
+            sessionStorage.setItem(
+              PREAUTH_STORAGE_KEY,
+              JSON.stringify({
+                preAuthSessionId: json.preAuthSessionId,
+                deviceId: json.deviceId,
+                email: input.email,
+              }),
+            );
           }
           return { ok: true as const };
         } catch {
@@ -747,25 +785,65 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
       },
       async otpVerify(input) {
         try {
-          // Better Auth emailOTP sign-in: POST /sign-in/email-otp with { email, otp }
-          // (NOT /sign-in/email-otp/verify — that path is 404).
-          const body = await postRaw('/sign-in/email-otp', {
-            email: input.email,
-            otp: input.otp,
+          let preAuthSessionId: string | undefined;
+          let deviceId: string | undefined;
+          if (typeof window !== 'undefined') {
+            try {
+              const raw = sessionStorage.getItem(PREAUTH_STORAGE_KEY);
+              if (raw) {
+                const s = JSON.parse(raw) as {
+                  preAuthSessionId?: string;
+                  deviceId?: string;
+                  email?: string;
+                };
+                preAuthSessionId = s.preAuthSessionId;
+                deviceId = s.deviceId;
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          if (!preAuthSessionId || !deviceId) {
+            return {
+              ok: false as const,
+              code: 'unknown' as const,
+              message: 'request a new email code first',
+            };
+          }
+          const res = await fetchImpl(`${apiOrigin}${FDI_PREFIX}/signinup/code/consume`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json',
+              'x-briven-project-id': opts.projectId,
+              authorization: `Bearer ${opts.publicKey}`,
+              rid: 'passwordless',
+            },
+            body: JSON.stringify({
+              preAuthSessionId,
+              deviceId,
+              userInputCode: input.otp,
+            }),
           });
-          if (!body.ok) {
+          const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          if (!res.ok || (json.status && json.status !== 'OK')) {
             return {
               ok: false as const,
               code:
-                body.status === 429
+                res.status === 429
                   ? ('rate_limited' as const)
-                  : body.status === 400 || body.status === 401
+                  : res.status === 400 || res.status === 401
                     ? ('invalid_credentials' as const)
                     : ('unknown' as const),
-              message: body.message ?? 'otp verify failed',
+              message:
+                typeof json.message === 'string' ? json.message : 'otp verify failed',
             };
           }
-          return asSignInResult(body.json);
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(PREAUTH_STORAGE_KEY);
+          }
+          return asSignInResult(json);
         } catch {
           return { ok: false, code: 'network_error', message: 'network error' };
         }
@@ -1739,27 +1817,49 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     },
     async signOut() {
       try {
-        await post<unknown>('/sign-out', null);
-        return { ok: true };
+        const res = await fetchImpl(signOutUrl(), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'content-type': 'application/json',
+            'x-briven-project-id': opts.projectId,
+            authorization: `Bearer ${opts.publicKey}`,
+          },
+          body: '{}',
+        });
+        return { ok: res.ok || res.status === 200 };
       } catch {
         return { ok: false };
       }
     },
     async getSession() {
       try {
-        const body = await get<unknown>('/get-session');
-        if (body && typeof body === 'object') {
-          const b = body as {
-            user?: { id?: string };
-            session?: { expiresAt?: string };
-          };
-          if (b.user?.id && b.session?.expiresAt) {
-            return {
-              authenticated: true,
-              userId: b.user.id,
-              expiresAt: b.session.expiresAt,
-            };
-          }
+        const res = await fetchImpl(sessionMeUrl(), {
+          credentials: 'include',
+          headers: {
+            accept: 'application/json',
+            'x-briven-project-id': opts.projectId,
+            authorization: `Bearer ${opts.publicKey}`,
+          },
+        });
+        const body = (await res.json().catch(() => null)) as {
+          authenticated?: boolean;
+          userId?: string;
+          user?: { id?: string; email?: string | null; name?: string | null };
+          sessionHandle?: string;
+          expiresAt?: string;
+          session?: { expiresAt?: string };
+        } | null;
+        if (!body || typeof body !== 'object') {
+          return { authenticated: false };
+        }
+        const userId = body.userId ?? body.user?.id;
+        if (body.authenticated === true && userId) {
+          const expiresAt =
+            body.expiresAt ??
+            body.session?.expiresAt ??
+            new Date(Date.now() + 7 * 86_400_000).toISOString();
+          return { authenticated: true, userId, expiresAt };
         }
         return { authenticated: false };
       } catch {
@@ -1768,10 +1868,29 @@ export function createBrivenAuth(opts: CreateBrivenAuthOptions): BrivenAuthClien
     },
     async getUser() {
       try {
-        const body = await get<unknown>('/get-session');
-        if (body && typeof body === 'object') {
-          const b = body as { user?: User };
-          return b.user ?? null;
+        const res = await fetchImpl(sessionMeUrl(), {
+          credentials: 'include',
+          headers: {
+            accept: 'application/json',
+            'x-briven-project-id': opts.projectId,
+            authorization: `Bearer ${opts.publicKey}`,
+          },
+        });
+        const body = (await res.json().catch(() => null)) as {
+          authenticated?: boolean;
+          user?: User;
+          userId?: string;
+        } | null;
+        if (body?.user) return body.user;
+        if (body?.authenticated && body.userId) {
+          return {
+            id: body.userId,
+            email: '',
+            emailVerified: false,
+            name: null,
+            image: null,
+            createdAt: new Date(0).toISOString(),
+          };
         }
         return null;
       } catch {

@@ -74,7 +74,7 @@ export async function runOAuth(opts: OAuthOptions): Promise<OAuthSuccess> {
       return htmlResponse(200, {
         title: 'CLI authorized',
         heading: "you're in",
-        body: 'The briven CLI on this computer is authorized. You can close this tab and return to the terminal.',
+        body: 'The briven CLI on this computer is authorized. Return to the terminal — you can close this tab.',
         ok: true,
       });
     }
@@ -140,30 +140,62 @@ function htmlResponse(
       font: inherit; font-size: 13px; background: ${accent}; color: #111;
     }
     button:hover { filter: brightness(1.05); }
+    button:disabled { opacity: 0.7; cursor: default; }
     .hint { margin-top: 0.85rem; font-size: 11px; color: #6b6e76; text-align: center; }
+    kbd {
+      display: inline-block; padding: 0.1em 0.4em; border: 1px solid #3a3d45; border-radius: 4px;
+      background: #1a1c22; font: inherit; font-size: 11px; color: #e8e8ea;
+    }
   </style>
 </head>
 <body>
-  <main class="card">
+  <main class="card" id="card">
     <div class="brand"><span class="dot" aria-hidden="true"></span>briven · cli</div>
-    <h1>${escapeHtml(content.heading)}</h1>
-    <p>${escapeHtml(content.body)}</p>
-    <button type="button" id="close-btn">close this tab</button>
-    <p class="hint">if the button does nothing, close the tab yourself — the terminal is ready</p>
+    <h1 id="heading">${escapeHtml(content.heading)}</h1>
+    <p id="body">${escapeHtml(content.body)}</p>
+    <button type="button" id="close-btn">done — close this tab</button>
+    <p class="hint" id="hint">
+      tip: browsers often block auto-close. use the tab × or
+      <kbd>⌘W</kbd> / <kbd>Ctrl+W</kbd> — the terminal already finished.
+    </p>
   </main>
   <script>
     (function () {
       var btn = document.getElementById('close-btn');
+      var heading = document.getElementById('heading');
+      var body = document.getElementById('body');
+      var hint = document.getElementById('hint');
       if (!btn) return;
+
+      function showManualCloseHelp() {
+        if (heading) heading.textContent = "you're done";
+        if (body) {
+          body.innerHTML =
+            'Login already succeeded in the terminal. ' +
+            'This tab cannot close itself (browser rule). ' +
+            'Press <kbd>⌘W</kbd> (Mac) or <kbd>Ctrl+W</kbd> (Windows/Linux), or click the tab ×.';
+        }
+        btn.textContent = 'ok — use ⌘W / Ctrl+W to close';
+        btn.disabled = true;
+        if (hint) hint.textContent = 'safe to ignore this page — briven is already connected';
+      }
+
+      function tryClose() {
+        // Tabs opened by redirect (not window.open) are usually not closable by script.
+        // That is a browser security rule — not a Briven bug.
+        try { window.close(); } catch (e) {}
+        try {
+          window.open('', '_self');
+          window.close();
+        } catch (e2) {}
+      }
+
       btn.addEventListener('click', function () {
-        window.close();
-        // Browsers often block window.close() unless this tab was script-opened.
+        tryClose();
+        // If we're still here, the browser blocked close — explain clearly.
         setTimeout(function () {
-          document.body.insertAdjacentHTML(
-            'beforeend',
-            '<p class="hint" style="position:fixed;bottom:1rem;left:0;right:0">browser blocked auto-close — use the tab ×</p>'
-          );
-        }, 200);
+          if (!window.closed) showManualCloseHelp();
+        }, 150);
       });
     })();
   </script>

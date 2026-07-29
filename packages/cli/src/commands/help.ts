@@ -9,7 +9,7 @@ commands:
   storage           MinIO/S3 for this project (setup | status) — also run by setup/connect
   init              scaffold briven/ folder only (no cloud) — prefer \`setup\`
   projects          project lifecycle: list, create, use, unlink, set-default
-  auth              manage Briven Auth (scaffold middleware, configure providers)
+  auth              manage Briven Auth (enable for agents, scaffold middleware)
   login             store a dashboard api key for a project (manual path)
   logout            forget stored credentials
   whoami            verify stored credentials against the server
