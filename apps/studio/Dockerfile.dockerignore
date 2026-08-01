@@ -1,0 +1,25 @@
+# Dockerfile-specific ignore for the STUDIO build ONLY (BuildKit picks up
+# `<dockerfile>.dockerignore` before the root .dockerignore).
+#
+# The root .dockerignore excludes `apps/studio/*` to keep the fork's ~660MB of
+# source out of the web/api build contexts. But the STUDIO image obviously
+# needs that source, so this file re-includes it while still stripping the
+# heavy/irrelevant stuff. web/api builds are unaffected (they fall back to the
+# root .dockerignore, which still excludes studio).
+node_modules
+**/node_modules
+.next
+**/.next
+.turbo
+**/.turbo
+dist
+**/dist
+.github
+.vscode
+.idea
+.DS_Store
+.env
+.env.*
+docs
+apps/runtime/data
+apps/api/data
