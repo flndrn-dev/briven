@@ -54,7 +54,7 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: set up qemu (for arm64 cross-build)
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
