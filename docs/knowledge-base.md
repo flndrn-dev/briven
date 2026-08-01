@@ -785,3 +785,68 @@ Also written into project root **`CLAUDE.md`**. Skipping this step is a rule vio
 2. Doltgres = **Postgres family** (port 5432, `pg` driver). Missing feature ≠ abandon the product.
 3. Prefer workarounds (SQL rewrite, session settings, driver, version, config) over stock Postgres.
 4. **Notify flndrn** with: error text, which doc URL you used, options A/B/C — **before** switching architecture.
+
+## Doltgres version pinning + upgrade process (flndrn, 2026-08-01)
+
+**Rule:** Keep our Doltgres version in step with upstream. When DoltHub ships a new
+`dolthub/doltgresql` release, we evaluate and (after testing) move our pinned version
+along — because their releases carry the lock/concurrency/panic fixes we depend on.
+Do this as a **manual, tested process** — NOT an auto-updater/Watchtower/host-side poller
+(forbidden by `infra/CLAUDE.md`).
+
+- **Where the version is pinned:** `infra/dokploy/compose.dokploy.yml` — the `doltgres`,
+  `dolt-backup`, and init services all use `image: dolthub/doltgresql:<version>` (a readable
+  version tag, not an opaque `@sha256` digest, so the version is visible + bumpable).
+  Current pin: **`0.57.2`** (upgraded from `0.56.6` on 2026-08-01).
+- **Watch for new releases:** https://github.com/dolthub/doltgresql/releases and
+  https://github.com/dolthub/doltgresql/issues (customer-tagged issues show active fixes).
+- **Upgrade procedure (tested, no-guess):**
+  1. Read the new release notes for lock / GC / panic / connection-stability fixes.
+  2. **Validate data-read on a throwaway first:** `docker run` the new image on a fresh
+     volume (fresh-init), `cp -a` a copy of the live db dirs in, start, and confirm it reads
+     them (`select count(*) from information_schema.tables …` on `briven_control`). Doltgres
+     upgrades are forward-compatible in practice (0.56.6 → 0.57.2 read cleanly, no migration).
+  3. Set **`behavior.auto_gc_behavior.enable: false`** in `config.yaml` (see incident below).
+  4. Bump the tag in BOTH the repo compose and France `/code` compose, swap the prepared data
+     into the live volume, and recreate via `scripts/safe-redeploy-service.sh doltgres`.
+  5. Verify version (`select dolt_version()`), all DBs serve, API boots, then **watch it hold
+     under load** past the previous failure window before calling it done.
+
+## INCIDENT 2026-08-01 — Doltgres locked-under-load → whole platform 404 (ROOT-CAUSE FIXED)
+
+**Symptom:** `api.briven.tech` returns Traefik `404 page not found` on every route (incl.
+`/health`); `api` container crash-loops stuck at `applying migrations…`; Doltgres is "healthy"
+but serves **zero** databases — every `psql` connect (even `postgres`/`template1`) returns
+`FATAL: "database X does not exist"`, and trace logs show `database "briven_control" is locked
+by another dolt process … holds an exclusive write lock` **even with the server stopped and no
+other process alive**. Recurs within **4–50 minutes** of normal API write load. All 22 DB dirs
+on disk are intact (`.dolt/noms` valid) — **not** data loss.
+
+**Root cause:** Doltgres **`0.56.6`** (our pin) has a database-lock defect under concurrent
+write load. Upstream `0.57.1` shipped a **lock-subsystem rewrite** (`LockSubsystem.TryLock`)
+and `0.56.9` fixed an INSERT panic (a regression since `0.56.5` — our `0.56.6` was affected).
+`0.56.6` also predates the `auto_gc_behavior` config, and `0.57.1` **enabled auto-GC by default**
+(auto-GC "breaks all open connections"). NOT related to issue #2600 (that's app-level advisory
+locks). Verified against release notes, not guessed.
+
+**The SOLID fix (on Doltgres, per DOLTGRES-FIRST — no Postgres):**
+1. **Upgrade `0.56.6` → `0.57.2`** (validated: 0.57.2 reads 0.56.6 data unchanged; `briven_control`
+   51 tables, `briven_engine` 23 — no migration).
+2. **Disable auto-GC** in `config.yaml`: under `behavior:` add
+   `auto_gc_behavior:\n    enable: false` (only valid on 0.57.x — 0.56.6 rejects the key with
+   `field auto_gc_behavior not found`, which is how you know you must upgrade first).
+3. Recreate doltgres on 0.57.2 with the prepared data; restart API; watch it hold under load.
+
+**Emergency triage (temporary, if you must restore before upgrading):** a `cp -a` of each DB
+dir to **fresh inodes** clears the stale lock and the server serves again — but on `0.56.6` it
+re-jams under load within minutes-to-an-hour. It is NOT a fix; only the version upgrade is.
+Recipe that reliably serves: **fresh-init an EMPTY volume (entrypoint), then copy the DB dirs
+in** — a populated-but-uninitialized data-dir will NOT serve; and never leave `*.dirty`/rollback
+DB copies **inside** the data-dir (Doltgres enumerates every subdir and one bad copy aborts the
+whole multi-DB load).
+
+**Gotchas hit during the fix:** (a) the `dolt-backup` job's `dolt_backup(sync-url)` writes to
+every live DB and **accelerates the lock/GC failure** — keep it disabled until its method is
+reworked to cold snapshots; (b) a stray `docker run --rm` doltgres can linger and hold the
+volume lock — always `docker rm -f`; (c) load secrets into a shell var from `docker inspect …
+DOLTGRES_PASSWORD` / `.env.prod` — never literal in a command.

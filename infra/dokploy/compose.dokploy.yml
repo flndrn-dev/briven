@@ -101,7 +101,7 @@ services:
   # into the named volume during the maintenance window). Never change this
   # path without checking `config.yaml` inside the volume.
   doltgres:
-    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
+    image: dolthub/doltgresql:0.57.2
     restart: unless-stopped
     logging: *briven-logging
     environment:
@@ -109,8 +109,10 @@ services:
       DOLTGRES_PASSWORD: ${BRIVEN_DOLTGRES_PASSWORD}
     volumes:
       - doltgres_data:/var/lib/doltgres
-      # Dolt-native backups land here (written by the server itself); the
-      # dolt-backup service triggers them. See that service for details.
+      # Dolt-native backups land here (written by the server itself); the host
+      # systemd job infra/backups/briven-backup.sh triggers them (gentle, one
+      # DB at a time). The old in-compose dolt-backup sidecar was REMOVED
+      # 2026-08-01 — its un-throttled per-DB loop helped lock DoltGres under load.
       - doltgres_backups:/backups
     healthcheck:
       # pg_isready ships in the doltgresql image and needs no password.
@@ -124,95 +126,18 @@ services:
     labels:
       - 'briven_logs=true'
 
-  # ─── data-plane backup ──────────────────────────────────────────────────
-  # REAL DoltGres backup (replaces the old placeholder sleep loop).
+  # ─── data-plane backup: moved to the host systemd job (2026-08-01) ──────
+  # The in-compose `dolt-backup` sidecar was REMOVED. Its un-throttled loop of
+  # `dolt_backup('sync-url', …)` over every DB helped lock DoltGres 0.56.6 under
+  # load (full-platform outage, see docs/knowledge-base.md → INCIDENT 2026-08-01).
+  # Backups now run from infra/backups/briven-backup.sh (systemd timer): a GENTLE,
+  # one-DB-at-a-time, throttled `dolt_backup` pass on the fixed 0.57.2 engine,
+  # plus off-site mirror. Restorable via `dolt backup restore`.
   #
-  # Why NOT pg_dump: tested 2026-06-26 against dolthub/doltgresql:latest
-  # (v0.56.6) — `pg_dump` aborts immediately with
-  #   "ERROR: SET TRANSACTION is not yet supported"
-  # because pg_dump opens a REPEATABLE READ READ ONLY snapshot transaction
-  # that DoltGres does not implement. So pg_dump CANNOT back up the data
-  # plane. (The control plane is real Postgres and is dumped separately by
-  # the host timers in infra/backups/.)
-  #
-  # What works (verified same day): Dolt's own backup, invoked over the
-  # Postgres wire with `SELECT dolt_backup('sync-url', '<file-url>')`. It
-  # writes a full, version-history-preserving Dolt archive (manifest +
-  # .darc) — re-running it re-syncs in place, so one backup dir per database
-  # already contains every commit (time-travel restore, not just a snapshot).
-  #
-  # This sidecar reuses the doltgresql image (it has `psql`), enumerates the
-  # data-plane databases each run, and asks the doltgres SERVER to back each
-  # one up into the shared `doltgres_backups` volume.
-  #
-  # OFF-SITE follow-up: mirroring the `doltgres_backups` volume to MinIO/B2/R2
-  # is done today by the host systemd timers in infra/backups/ (mc-based, see
-  # briven-backup.sh). Folding an `mc mirror /backups -> minio` step into this
-  # service needs an image carrying both psql and mc; tracked as a follow-up.
-  dolt-backup:
-    # Pinned to the SAME digest as the doltgres service (2026-07-07 window) —
-    # the sidecar's psql must always match the server's engine version.
-    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
-    restart: unless-stopped
-    logging: *briven-logging
-    depends_on:
-      doltgres:
-        condition: service_healthy
-    environment:
-      PGHOST: doltgres
-      PGPORT: '5432'
-      PGUSER: postgres
-      PGPASSWORD: ${BRIVEN_DOLTGRES_PASSWORD}
-      BRIVEN_BACKUP_INTERVAL_SECONDS: ${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}
-    volumes:
-      - doltgres_backups:/backups
-      # Read-only view of the server's data dir, ONLY so auth.db (the engine's
-      # users/grants file — corrupted once on 2026-07-07, nothing backed it up)
-      # can be snapshotted alongside the dolt backups below.
-      - doltgres_data:/doltgres-data:ro
-    entrypoint: ['/bin/sh', '-c']
-    command:
-      - |
-        set -eu
-        echo "dolt-backup: starting (interval=${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}s)"
-        while true; do
-          ts="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "[dolt-backup $$ts] enumerating data-plane databases"
-          # All non-template databases on the doltgres server (one per project,
-          # plus the default `postgres`). -tA = tuples only, unaligned.
-          dbs="$$(psql -tA -d postgres -c \
-            "SELECT datname FROM pg_database WHERE datname NOT IN ('template0','template1')")"
-          for db in $$dbs; do
-            echo "[dolt-backup $$ts] backing up $$db -> file:///backups/$$db"
-            if psql -d "$$db" -c \
-                 "SELECT dolt_backup('sync-url', 'file:///backups/$$db');" >/dev/null; then
-              echo "[dolt-backup $$ts] ok $$db"
-            else
-              echo "[dolt-backup $$ts] WARN backup failed for $$db"
-            fi
-          done
-          # auth.db snapshot — tiny file, changes only on role/grant edits.
-          # Keep the newest 14 copies (2 weeks at the daily default interval).
-          if [ -f /doltgres-data/auth.db ]; then
-            mkdir -p /backups/auth-db
-            if cp /doltgres-data/auth.db "/backups/auth-db/auth.db.$$ts"; then
-              echo "[dolt-backup $$ts] ok auth.db snapshot"
-              ls -1t /backups/auth-db | tail -n +15 | while read -r old; do
-                rm -f "/backups/auth-db/$$old"
-              done
-            else
-              echo "[dolt-backup $$ts] WARN auth.db snapshot failed"
-            fi
-          else
-            echo "[dolt-backup $$ts] WARN auth.db not found in data dir"
-          fi
-          echo "[dolt-backup $$ts] run complete; sleeping"
-          sleep "$${BRIVEN_BACKUP_INTERVAL_SECONDS:-86400}"
-        done
-    networks:
-      - briven
-    labels:
-      - 'briven_logs=true'
+  # NOTE (still true): `pg_dump` CANNOT back up the DoltGres data plane — it opens
+  # a REPEATABLE READ READ ONLY snapshot txn DoltGres doesn't implement
+  # ("SET TRANSACTION is not yet supported"). Dolt-native `dolt_backup` is the
+  # only data-plane backup path; pg_dump is a stock-Postgres control-plane helper.
 
   # ─── briven-engine Auth DB (DOLTGRES ONLY — non-negotiable) ───────────
   # HARD RULE: the COMPLETE Briven project is Doltgres. New parts do not get
@@ -221,7 +146,7 @@ services:
   # briven-engine = Briven API code + tables in Doltgres DB `briven_engine`.
   # Create/migrate: API `ensureBrivenEngineDatabase` + schema bootstrap.
   briven-engine-db-init:
-    image: dolthub/doltgresql@sha256:0483137d0309598d3b0c111dff85d565077bd91cb0524ce00bb832929d5d5ddc
+    image: dolthub/doltgresql:0.57.2
     restart: 'no'
     logging: *briven-logging
     depends_on:

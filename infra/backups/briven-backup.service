@@ -1,5 +1,5 @@
 [Unit]
-Description=briven.tech — daily pg_dump of briven_control + briven_data to MinIO
+Description=briven.tech — daily DoltGres-native backup (all DBs, gentle/throttled) + pg_dump secondary + off-site mirror
 Documentation=https://code.konnos.org/flndrn/briven/src/branch/main/infra/backups
 Requires=docker.service
 After=docker.service network-online.target
