@@ -850,3 +850,32 @@ every live DB and **accelerates the lock/GC failure** — keep it disabled until
 reworked to cold snapshots; (b) a stray `docker run --rm` doltgres can linger and hold the
 volume lock — always `docker rm -f`; (c) load secrets into a shell var from `docker inspect …
 DOLTGRES_PASSWORD` / `.env.prod` — never literal in a command.
+
+### 2026-08-02 — REBOOT-SAFETY PROVEN LIVE (corrects the "restart doesn't recover" belief)
+
+A controlled live test on France settled the open question of whether 0.57.2 survives a
+restart/host-reboot:
+
+1. `docker restart` the **healthy** live doltgres → **all 24 databases re-served within 8s**,
+   `briven_control` reachable, held steady across 64s of polling.
+2. `docker restart` the api → healthy + public `/health`+`/ready` = **200 within 8s**, routing
+   intact (`/v1/` → 404, not 5xx).
+
+**Conclusion:** Doltgres 0.57.2 is **reboot-safe.** The earlier "a plain `docker restart` does
+NOT recover it" note was **wrong-cause** — those restarts were of a container **already poisoned
+by a full-deploy recreate under load**; restarting an already-broken container can't help, but
+restarting a *healthy* one is clean (which is all a host reboot does).
+
+**The ONE remaining outage trigger** is a **full Dokploy deploy** (`compose up --build
+--remove-orphans`) that **recreates** doltgres while it's under write load (re-runs the entrypoint
+on a live-but-busy data dir). So "100% production solid" = two locks, not a code change:
+- **autoDeploy OFF** (verified via Dokploy API 2026-08-02: `briven-france` compose
+  `autoDeploy: false`) — a git push can no longer auto-rebuild.
+- **Service-scoped redeploys only** (`scripts/safe-redeploy-service.sh <svc>`, never recreates
+  doltgres). Full `compose.deploy` only for the "red-panel → one green" rule (gotcha #13).
+
+Proven-good under every normal op: **load** (373k-req + 10-writer stress, 0 errors), **restart/
+reboot** (above), **`dolt_backup`+restart** (throwaway). Data is never lost — a not-serving state
+keeps every DB dir intact on the `_doltgres_data` volume; recovery recipe is the fresh-init+copy
+above. (Note: the Dokploy panel may show `composeStatus: error` from the 08-01 failed run — that
+is a stale **badge**, not live health; the running stack is healthy.)
