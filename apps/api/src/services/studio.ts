@@ -119,24 +119,45 @@ export async function getTableColumns(
   tableName: string,
 ): Promise<readonly ColumnInfo[]> {
   await assertTableExists(projectId, tableName);
-  // Single query: information_schema.columns LEFT JOINed against the
-  // table's PK column set, plus a LEFT JOIN against information_schema's
-  // FK metadata so each column row can carry its (table.column) reference
-  // if there is one. PK columns come from information_schema.statistics
-  // (index_name = 'PRIMARY'), NOT pg_index — DoltGres rejects the pg_index
-  // join ("operator does not exist: smallint = int2vector"); same
-  // workaround as listIndexes below. Verified live against DoltGres.
-  const rows = (await runInProjectDatabase(projectId, async (tx) =>
-    tx.unsafe(
+  // DoltGres 0.57.2 PANICS if information_schema.columns is JOINed against
+  // another information_schema view — the hash-join planner throws
+  // "interface conversion: types.StringType is not sql.ExtendedType: missing
+  // method ConvertToType" and 500s the whole request (this broke every Studio
+  // row insert, because insertRows calls getTableColumns first). Each view
+  // queried on its OWN is fine, so we fetch columns, PK columns and FK columns
+  // as three separate single-view queries and merge them in TS. Verified live
+  // against DoltGres 0.57.2 (2026-08-02); same class of engine workaround as
+  // the pg_index avoidance (PK comes from information_schema.statistics, not
+  // pg_index, which DoltGres also rejects).
+  return runInProjectDatabase(projectId, async (tx) => {
+    const colRows = (await tx.unsafe(
       `
-    WITH pk_cols AS (
+      SELECT column_name, data_type, is_nullable, column_default, ordinal_position
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1
+      ORDER BY ordinal_position
+    `,
+      [tableName],
+    )) as Array<{
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      column_default: string | null;
+      ordinal_position: number;
+    }>;
+
+    const pkRows = (await tx.unsafe(
+      `
       SELECT column_name
       FROM information_schema.statistics
-      WHERE table_schema = 'public'
-        AND table_name = $1
-        AND index_name = 'PRIMARY'
-    ),
-    fk_cols AS (
+      WHERE table_schema = 'public' AND table_name = $1 AND index_name = 'PRIMARY'
+    `,
+      [tableName],
+    )) as Array<{ column_name: string }>;
+    const pkCols = new Set(pkRows.map((r) => r.column_name));
+
+    const fkRows = (await tx.unsafe(
+      `
       SELECT
         kcu.column_name,
         ccu.table_name AS fk_table,
@@ -151,44 +172,23 @@ export async function getTableColumns(
       WHERE tc.constraint_type = 'FOREIGN KEY'
         AND tc.table_schema = 'public'
         AND tc.table_name = $1
-    )
-    SELECT
-      c.column_name,
-      c.data_type,
-      c.is_nullable,
-      c.column_default,
-      c.ordinal_position,
-      (pk.column_name IS NOT NULL) AS is_primary_key,
-      fk.fk_table,
-      fk.fk_column
-    FROM information_schema.columns c
-    LEFT JOIN pk_cols pk ON pk.column_name = c.column_name
-    LEFT JOIN fk_cols fk ON fk.column_name = c.column_name
-    WHERE c.table_schema = 'public' AND c.table_name = $1
-    ORDER BY c.ordinal_position
-  `,
+    `,
       [tableName],
-    ),
-  )) as Array<{
-    column_name: string;
-    data_type: string;
-    is_nullable: string;
-    column_default: string | null;
-    ordinal_position: number;
-    is_primary_key: boolean;
-    fk_table: string | null;
-    fk_column: string | null;
-  }>;
-  return rows.map((row) => ({
-    name: row.column_name,
-    dataType: row.data_type,
-    nullable: row.is_nullable === 'YES',
-    defaultExpr: row.column_default,
-    ordinalPosition: row.ordinal_position,
-    isPrimaryKey: Boolean(row.is_primary_key),
-    references:
-      row.fk_table && row.fk_column ? { table: row.fk_table, column: row.fk_column } : null,
-  }));
+    )) as Array<{ column_name: string; fk_table: string; fk_column: string }>;
+    const fkByCol = new Map(
+      fkRows.map((r) => [r.column_name, { table: r.fk_table, column: r.fk_column }]),
+    );
+
+    return colRows.map((row) => ({
+      name: row.column_name,
+      dataType: row.data_type,
+      nullable: row.is_nullable === 'YES',
+      defaultExpr: row.column_default,
+      ordinalPosition: row.ordinal_position,
+      isPrimaryKey: pkCols.has(row.column_name),
+      references: fkByCol.get(row.column_name) ?? null,
+    }));
+  });
 }
 
 const MAX_LIMIT = 200;
