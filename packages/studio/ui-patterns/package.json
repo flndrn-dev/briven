@@ -859,7 +859,7 @@
     "config": "workspace:*",
     "jsdom": "^26.1.0",
     "next-router-mock": "^0.9.13",
-    "tailwindcss": "^4.2.4",
+    "tailwindcss": "^4.3.3",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "unified": "^11.0.5",
