@@ -41,7 +41,7 @@ catalogs:
       version: 4.18.1
     next:
       specifier: 16.2.6
-      version: 16.2.6
+      version: 16.2.10
     next-themes:
       specifier: ^0.4.6
       version: 0.4.6
@@ -649,8 +649,8 @@ importers:
         specifier: ^7.0.1
         version: 7.0.1(react@19.2.6)
       use-stick-to-bottom:
-        specifier: ^1.1.1
-        version: 1.1.4(react@19.2.6)
+        specifier: ^1.1.6
+        version: 1.1.6(react@19.2.6)
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
@@ -1207,13 +1207,13 @@ importers:
         version: 0.7.9
       flags:
         specifier: ^4.0.0
-        version: 4.0.6(@opentelemetry/api@1.9.1)(next@16.2.6(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        version: 4.0.6(@opentelemetry/api@1.9.1)(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       lodash:
         specifier: 'catalog:'
         version: 4.18.1
       next:
         specifier: 'catalog:'
-        version: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        version: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       next-themes:
         specifier: 'catalog:'
         version: 0.4.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1296,7 +1296,7 @@ importers:
         version: 0.436.0(react@19.2.6)
       next:
         specifier: 'catalog:'
-        version: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        version: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react:
         specifier: 'catalog:'
         version: 19.2.6
@@ -1330,7 +1330,7 @@ importers:
         version: 26.1.0
       next-router-mock:
         specifier: ^0.9.13
-        version: 0.9.13(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+        version: 0.9.13(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
       tailwindcss:
         specifier: 'catalog:'
         version: 4.2.4
@@ -1688,7 +1688,7 @@ importers:
         version: 0.52.2
       next:
         specifier: 'catalog:'
-        version: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        version: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       next-themes:
         specifier: 'catalog:'
         version: 0.4.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1818,7 +1818,7 @@ importers:
         version: 26.1.0
       next-router-mock:
         specifier: ^0.9.13
-        version: 0.9.13(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+        version: 0.9.13(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
       tailwindcss:
         specifier: ^4.2.4
         version: 4.2.4
@@ -2453,11 +2453,11 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==}
@@ -7288,8 +7288,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  baseline-browser-mapping@2.10.43:
-    resolution: {integrity: sha512-AjYpR78kDWAY3Efj+cDTFH9t9SCoL7OoTp1BOb0mQV7S+6CiLwnWM3FyxhJtdPufDFKzmCSFoUncKjWgJEZTCQ==}
+  baseline-browser-mapping@2.10.44:
+    resolution: {integrity: sha512-T3ghW+sl/ZJ8w1v/yQx3qvJ9040DWoLBz8JT/CILbAKcFyG9b2MRe75v6W5uXjv6uH1lumK2Kv46y2zSkcej0Q==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -8401,8 +8401,8 @@ packages:
     resolution: {integrity: sha512-Qohcme7V1inbAfvjItgw0EaxVX5q2rdVEZHRBrEQdRZTssLDGsL8Lwrznl8oQ/6kuTJONLaDcGjkNP247XEhcA==}
     engines: {node: '>=10.13.0'}
 
-  enhanced-resolve@5.24.2:
-    resolution: {integrity: sha512-rpsZEGT1jFuve6QlpyRp9ckQ+kN61hvF9BzCPyMdaKTm8UJce96KBn3sorXOFXlzjPrs3Vc4T1NsSroZ3PxlFw==}
+  enhanced-resolve@5.24.3:
+    resolution: {integrity: sha512-PwKooW9JUzh5chmYfHM3IQl5OkK2u2Nm011MgeZrss3JmFraUx/fqrf78kk8GUMYoibx/14MdwTl/1WKkG7TpQ==}
     engines: {node: '>=10.13.0'}
 
   entities@4.5.0:
@@ -13217,8 +13217,8 @@ packages:
       '@types/react':
         optional: true
 
-  use-stick-to-bottom@1.1.4:
-    resolution: {integrity: sha512-2w/lydkrwhWMv1vCaEhYbzMDhgbwIodHpAHPV0/xKJErRkbjDEUe1EWmvr6Fwb+qhiERjc1EWgAEZaSaF69CpA==}
+  use-stick-to-bottom@1.1.6:
+    resolution: {integrity: sha512-z3Up8jYQGTkUCsGBnwg6/wj70KgXoW5Kz1AAc1j8MtQuYMBo6ZsdhrIXoegxa7gaMMilgQYyTohTrt3p94jHog==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -19846,7 +19846,7 @@ snapshots:
 
   baseline-browser-mapping@2.10.40: {}
 
-  baseline-browser-mapping@2.10.43: {}
+  baseline-browser-mapping@2.10.44: {}
 
   better-auth@1.6.23(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@electric-sql/pglite@0.4.5)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(bun-types@1.3.13)(kysely@0.29.4)(mysql2@3.22.5(@types/node@26.1.1))(pg@8.21.0)(postgres@3.4.9))(mysql2@3.22.5(@types/node@26.1.1))(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(svelte@5.55.4(@typescript-eslint/types@8.59.2))(vitest@4.1.7)(vue@3.5.32(typescript@6.0.3)):
     dependencies:
@@ -19995,7 +19995,7 @@ snapshots:
 
   browserslist@4.28.6:
     dependencies:
-      baseline-browser-mapping: 2.10.43
+      baseline-browser-mapping: 2.10.44
       caniuse-lite: 1.0.30001806
       electron-to-chromium: 1.5.393
       node-releases: 2.0.51
@@ -20889,7 +20889,7 @@ snapshots:
       graceful-fs: 4.2.11
       tapable: 2.3.3
 
-  enhanced-resolve@5.24.2:
+  enhanced-resolve@5.24.3:
     dependencies:
       graceful-fs: 4.2.11
       tapable: 2.3.3
@@ -21714,13 +21714,13 @@ snapshots:
       mlly: 1.8.2
       rollup: 4.60.2
 
-  flags@4.0.6(@opentelemetry/api@1.9.1)(next@16.2.6(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
+  flags@4.0.6(@opentelemetry/api@1.9.1)(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
     dependencies:
       '@edge-runtime/cookies': 5.0.2
       jose: 5.10.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      next: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      next: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
 
@@ -24111,6 +24111,11 @@ snapshots:
 
   neo-async@2.6.2: {}
 
+  next-router-mock@0.9.13(next@16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6):
+    dependencies:
+      next: 16.2.10(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react: 19.2.6
+
   next-router-mock@0.9.13(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6):
     dependencies:
       next: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -24175,7 +24180,6 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
-    optional: true
 
   next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
     dependencies:
@@ -26864,7 +26868,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  use-stick-to-bottom@1.1.4(react@19.2.6):
+  use-stick-to-bottom@1.1.6(react@19.2.6):
     dependencies:
       react: 19.2.6
 
@@ -27193,7 +27197,7 @@ snapshots:
       acorn-import-phases: 1.0.4(acorn@8.17.0)
       browserslist: 4.28.6
       chrome-trace-event: 1.0.4
-      enhanced-resolve: 5.24.2
+      enhanced-resolve: 5.24.3
       es-module-lexer: 2.3.1
       eslint-scope: 5.1.1
       events: 3.3.0
