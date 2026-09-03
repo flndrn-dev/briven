@@ -7,9 +7,6 @@ http. made in Flanders by [flndrn](https://flndrn.com).
 
 **site:** [briven.tech](https://briven.tech)
 
-briven is **not** a Doltgres rebuild. it is real postgresql 18 with pgvector
-already on.
-
 ## what it is
 
 - real postgresql 18 — any postgres client
