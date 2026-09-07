@@ -849,7 +849,7 @@
     "@types/common-tags": "^1.8.4",
     "@types/js-yaml": "^4.0.9",
     "@types/lodash": "^4.17.5",
-    "@types/mdast": "^3.0.0",
+    "@types/mdast": "^4.0.4",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
