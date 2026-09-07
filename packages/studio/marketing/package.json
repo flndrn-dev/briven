@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "config": "workspace:*",
-    "tailwindcss": "^4.2.4",
+    "tailwindcss": "^4.3.3",
     "tsconfig": "workspace:",
     "typescript": "catalog:"
   },
